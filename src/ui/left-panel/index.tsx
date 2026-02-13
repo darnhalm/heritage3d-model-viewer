@@ -13,16 +13,6 @@ const toggleCollapsed = () => {
     }
 };
 
-let leftPanel: any;
-const openPanel = () => {
-    if (!leftPanel) {
-        leftPanel = document.getElementById('panel-left');
-    }
-    if (leftPanel && leftPanel.classList.contains('collapsed')) {
-        leftPanel.classList.remove('collapsed');
-    }
-};
-
 const bytesToSizeString = (bytes: number): string => {
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
     if (bytes === 0) return 'n/a';
@@ -132,15 +122,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         // we require this setTimeout because panel isn't yet created and so fails
         // otherwise.
         setTimeout(() => toggleCollapsed());
-    }
-
-    componentDidUpdate(prevProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>): void {
-        if (!this.isMobile &&
-            !this.props.observerData.ui.fullscreen &&
-             this.props.observerData.scene.nodes !== '[]' &&
-             prevProps.observerData.scene.nodes === '[]') {
-            openPanel();
-        }
     }
 
     render() {

@@ -59,6 +59,7 @@ const observerData: ObserverData = {
         fullscreen: false,
         active: null,
         spinner: false,
+        loadProgress: 0,
         error: null
     },
     camera: {
@@ -75,8 +76,8 @@ const observerData: ObserverData = {
         options: JSON.stringify(['None'].concat(skyboxes.map(s => s.label)).map(l => ({ v: l, t: l }))),
         exposure: 0,
         rotation: 0,
-        background: 'Infinite Sphere',
-        backgroundColor: { r: 0.4, g: 0.45, b: 0.5 },
+        background: 'Solid Color',
+        backgroundColor: { r: 134 / 255, g: 152 / 255, b: 174 / 255 },
         blur: 1,
         domeProjection: {
             domeRadius: 20,
@@ -84,14 +85,14 @@ const observerData: ObserverData = {
         }
     },
     light: {
-        enabled: false,
+        enabled: true,
         color: { r: 1, g: 1, b: 1 },
         intensity: 1,
         follow: false,
-        shadow: false
+        shadow: true
     },
     shadowCatcher: {
-        enabled: false,
+        enabled: true,
         intensity: 0.4
     },
     debug: {
@@ -102,7 +103,7 @@ const observerData: ObserverData = {
         bounds: false,
         skeleton: false,
         axes: false,
-        grid: true,
+        grid: false,
         normals: 0
     },
     animation: {
@@ -233,16 +234,6 @@ const main = () => {
     });
 
     const skyboxUrls = new Map(skyboxes.map(s => [s.label, `static/${s.url}`]));
-
-    // hide / show spinner when loading files
-    observer.on('ui.spinner:set', (value: boolean) => {
-        const spinner = document.getElementById('spinner');
-        if (value) {
-            spinner.classList.remove('pcui-hidden');
-        } else {
-            spinner.classList.add('pcui-hidden');
-        }
-    });
 
     if (!url.searchParams.has('default')) {
         // handle options

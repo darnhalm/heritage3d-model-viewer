@@ -1,5 +1,5 @@
 import { Observer } from '@playcanvas/observer';
-import { Container, Spinner } from '@playcanvas/pcui/react';
+import { Container, Progress } from '@playcanvas/pcui/react';
 import React from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
@@ -62,7 +62,11 @@ class App extends React.Component<{ observer: Observer }> {
                 <PopupPanel observerData={this.state} setProperty={this._setStateProperty} />
                 <ErrorBox observerData={this.state} setProperty={this._setStateProperty} />
                 <WarningsBox observerData={this.state} setProperty={this._setStateProperty} />
-                <Spinner id="spinner" size={30} hidden={true} />
+                {this.state?.ui?.spinner && (
+                    <div className="load-progress-wrapper">
+                        <Progress value={this.state.ui.loadProgress ?? 0} />
+                    </div>
+                )}
             </div>
         </div>;
     }

@@ -93,6 +93,11 @@ const bbox = new BoundingBox();
 const FOCUS_FOV = 75;
 const ZOOM_SCALE_MIN = 0.01;
 
+const doubleTapDelay = 400;
+const doubleTapRadius = 45;
+const RIPPLE_CAMERA_DELAY_MS = 380;
+const RIPPLE_REMOVE_MS = 900;
+
 // override global pick to pack depth instead of meshInstance id
 const pickDepthGlsl = /* glsl */ `
 vec4 packFloat(float depth) {
@@ -215,6 +220,14 @@ class Viewer {
     picker: Picker = null;
 
     cursorWorld = new Vec3();
+
+    rippleContainer: HTMLDivElement | null = null;
+
+    lastTapTime = 0;
+
+    lastTapX = 0;
+
+    lastTapY = 0;
 
     loadTimestamp?: number = null;
 
@@ -447,11 +460,35 @@ class Viewer {
         this.picker = new Picker(app, camera);
         this.cursorWorld = new Vec3();
 
-        // double click handler
-        canvas.addEventListener('dblclick', async (event) => {
-            const result = await this.picker.pick(event.offsetX, event.offsetY);
-            if (result) {
-                this.cameraControls.reset(result, this.camera.getPosition());
+        // ripple container over canvas (pointer-events: none)
+        const wrapper = this.canvas.parentElement;
+        if (wrapper) {
+            this.rippleContainer = document.createElement('div');
+            this.rippleContainer.className = 'ripple-container';
+            wrapper.appendChild(this.rippleContainer);
+        }
+
+        // double click: pick → ripple → after 380ms center camera
+        canvas.addEventListener('dblclick', (event: MouseEvent) => {
+            this._pickAndCenterAt(event.offsetX, event.offsetY);
+        });
+
+        // double tap (mobile): same as dblclick when second tap within delay and radius
+        canvas.addEventListener('touchend', (event: TouchEvent) => {
+            if (event.changedTouches.length !== 1) return;
+            const touch = event.changedTouches[0];
+            const rect = canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            const now = Date.now();
+            if (now - this.lastTapTime < doubleTapDelay &&
+                Math.hypot(x - this.lastTapX, y - this.lastTapY) <= doubleTapRadius) {
+                this._pickAndCenterAt(x, y);
+                this.lastTapTime = 0;
+            } else {
+                this.lastTapTime = now;
+                this.lastTapX = x;
+                this.lastTapY = y;
             }
         });
 
@@ -507,6 +544,37 @@ class Viewer {
 
             this.multiframe.blend = 1.0;
         });
+    }
+
+    private _showRipple(x: number, y: number) {
+        if (!this.rippleContainer) return;
+        const el = document.createElement('div');
+        el.className = 'ripple-element';
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        const dot = document.createElement('div');
+        dot.className = 'ripple-dot';
+        el.appendChild(dot);
+        const delays = [0, 0.12, 0.24];
+        for (let i = 0; i < 3; i++) {
+            const ring = document.createElement('div');
+            ring.className = 'ripple-ring';
+            ring.style.animationDelay = `${delays[i]}s`;
+            el.appendChild(ring);
+        }
+        this.rippleContainer.appendChild(el);
+        setTimeout(() => {
+            el.remove();
+        }, RIPPLE_REMOVE_MS);
+    }
+
+    private async _pickAndCenterAt(x: number, y: number) {
+        const result = await this.picker.pick(x, y);
+        if (!result) return;
+        this._showRipple(x, y);
+        setTimeout(() => {
+            this.cameraControls.reset(result, this.camera.getPosition());
+        }, RIPPLE_CAMERA_DELAY_MS);
     }
 
     private getSelectedMeshInstances() {
@@ -1114,7 +1182,7 @@ class Viewer {
     }
 
     // load gltf model given its url and list of external urls
-    private loadGltf(gltfUrl: File, externalUrls: Array<File>, warnings: string[]) {
+    private loadGltf(gltfUrl: File, externalUrls: Array<File>, warnings: string[], onProgress?: (progress: number) => void) {
         return new Promise((resolve, reject) => {
             // provide buffer view callback so we can handle models compressed with MeshOptimizer
             // https://github.com/zeux/meshoptimizer
@@ -1266,12 +1334,17 @@ class Viewer {
             });
             containerAsset.on('load', () => resolve(containerAsset));
             containerAsset.on('error', (err: string) => reject(err));
+            if (onProgress) {
+                containerAsset.on('progress', (receivedBytes: number, totalBytes: number) => {
+                    onProgress(totalBytes > 0 ? receivedBytes / totalBytes : 0);
+                });
+            }
             this.app.assets.add(containerAsset);
             this.app.assets.load(containerAsset);
         });
     }
 
-    private loadPly(url: File, externalUrls: Array<File>) {
+    private loadPly(url: File, externalUrls: Array<File>, onProgress?: (progress: number) => void) {
         const urls: any = {};
         externalUrls.forEach((url) => {
             urls[url.filename] = url.url;
@@ -1283,6 +1356,11 @@ class Viewer {
             });
             asset.on('load', () => resolve(asset));
             asset.on('error', (err: string) => reject(err));
+            if (onProgress) {
+                asset.on('progress', (receivedBytes: number, totalBytes: number) => {
+                    onProgress(totalBytes > 0 ? receivedBytes / totalBytes : 0);
+                });
+            }
             this.app.assets.add(asset);
             this.app.assets.load(asset);
         });
@@ -1324,23 +1402,60 @@ class Viewer {
             const loadTimestamp = Date.now();
 
             this.observer.set('ui.spinner', true);
+            this.observer.set('ui.loadProgress', 0);
             this.observer.set('ui.error', null);
             this.observer.set('ui.warnings', []);
             this.clearCta();
 
-            // Collect warnings during load (e.g., missing textures)
+            // Defer load to next frame so the progress bar can paint at 0%
+            requestAnimationFrame(() => {
             const warnings: string[] = [];
+            const modelFiles = files.filter((f) => this.isModelFilename(f.filename) || this.isGSplatFilename(f.filename));
+            const total = modelFiles.length;
+            const progressPerFile: number[] = new Array(total).fill(0);
 
-            // load asset files
-            const promises = files.map((file) => {
+            const setAggregateProgress = () => {
+                const sum = progressPerFile.reduce((a, b) => a + b, 0);
+                const pct = total > 0 ? Math.round((sum / total) * 90) : 0;
+                this.observer.set('ui.loadProgress', Math.min(90, pct));
+            };
+
+            let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+            const startFallbackProgress = () => {
+                fallbackInterval = setInterval(() => {
+                    const current = this.observer.get('ui.loadProgress') as number;
+                    if (current >= 90) return;
+                    this.observer.set('ui.loadProgress', Math.min(90, current + 5));
+                }, 120);
+            };
+            const stopFallbackProgress = () => {
+                if (fallbackInterval) {
+                    clearInterval(fallbackInterval);
+                    fallbackInterval = null;
+                }
+            };
+
+            const promises = modelFiles.map((file, modelIndex) => {
+                const onProgress = (p: number) => {
+                    progressPerFile[modelIndex] = p;
+                    setAggregateProgress();
+                };
                 return this.isModelFilename(file.filename) ?
-                    this.loadGltf(file, files, warnings) :
-                    this.isGSplatFilename(file.filename) ?
-                        this.loadPly(file, files) :
-                        null;
+                    this.loadGltf(file, files, warnings, onProgress) :
+                    this.loadPly(file, files, onProgress);
             });
 
-            Promise.all(promises)
+            setTimeout(() => {
+                if ((this.observer.get('ui.loadProgress') as number) === 0) startFallbackProgress();
+            }, 300);
+
+            const wrappedPromises = promises.map((p, i) => p.then((asset) => {
+                progressPerFile[i] = 1;
+                setAggregateProgress();
+                return asset;
+            }));
+
+            Promise.all(wrappedPromises)
             .then((assets: Asset[]) => {
                 this.loadTimestamp = loadTimestamp;
 
@@ -1378,7 +1493,12 @@ class Viewer {
                 this.observer.set('ui.error', err?.toString() || err);
             })
             .finally(() => {
-                this.observer.set('ui.spinner', false);
+                stopFallbackProgress();
+                this.observer.set('ui.loadProgress', 100);
+                setTimeout(() => {
+                    this.observer.set('ui.spinner', false);
+                }, 250);
+            });
             });
         } else {
             // load skybox

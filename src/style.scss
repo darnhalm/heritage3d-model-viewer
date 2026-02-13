@@ -98,6 +98,69 @@ body {
     margin: 0;
 }
 
+.ripple-container {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.ripple-element {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    width: 0;
+    height: 0;
+}
+
+.ripple-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    margin: -4px 0 0 -4px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    animation: ripple-dot-in 0.5s ease-out forwards;
+}
+
+.ripple-ring {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 120px;
+    height: 120px;
+    margin-left: -60px;
+    margin-top: -60px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.7);
+    transform: scale(0);
+    animation: ripple-ring-out 0.75s ease-out forwards;
+    opacity: 1;
+}
+
+@keyframes ripple-dot-in {
+    from {
+        opacity: 0;
+        transform: scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes ripple-ring-out {
+    from {
+        transform: scale(0);
+        opacity: 1;
+    }
+    to {
+        transform: scale(1);
+        opacity: 0;
+    }
+}
+
 #application-canvas {
     flex-grow: 1;
     width: 100%;
@@ -841,6 +904,15 @@ input {
     margin: 0;
     left: calc(50% - 15px);
     top: calc(50% - 15px);
+}
+
+.load-progress-wrapper {
+    position: absolute;
+    left: 50%;
+    top: calc(50% + 30px);
+    transform: translateX(-50%);
+    width: min(280px, 80vw);
+    z-index: 10;
 }
 
 #panel-left.collapsed #scene-container, #panel-left.collapsed .header {

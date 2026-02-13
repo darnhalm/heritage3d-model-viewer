@@ -30,6 +30,7 @@ export interface ObserverData {
         fullscreen: boolean,
         active?: string,
         spinner: boolean,
+        loadProgress?: number,
         error?: string,
         warnings?: string[],
     },
