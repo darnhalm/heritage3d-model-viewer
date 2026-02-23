@@ -217,6 +217,17 @@ class CameraControls {
         this._controller.attach(pose.look(position, focus));
     }
 
+    /** Current camera position (orbit: camera entity position). */
+    getPosition(out?: Vec3): Vec3 {
+        const p = this._pose.position;
+        return out ? out.copy(p) : p.clone();
+    }
+
+    /** Current orbit focus point (point the camera looks at). */
+    getFocus(out?: Vec3): Vec3 {
+        return this._pose.getFocus(out);
+    }
+
     update(dt: number) {
         // read inputs (to clear their state) even when disabled
         const { key, button, mouse, wheel } = this._desktopInput.read();

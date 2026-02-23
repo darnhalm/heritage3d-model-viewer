@@ -89,6 +89,17 @@
 | Bounds | Toggle | `debug.bounds` | Bounding box |
 | Normals | Slider (0–1) | `debug.normals` | Визуализация нормалей |
 | Stats | Toggle | `debug.stats` | Статистика (FPS и т.д.) |
+| Measure Mode | Toggle | `measure.enabled` | Включает режим измерений (2 клика по модели: точка A и точка B) |
+| Units | Select | `measure.unit` | Единицы отображения результата: mm / cm / m |
+| 1 Unit = (m) | Numeric | `measure.unitScale` | Масштаб: сколько метров в 1 unit модели |
+| Last Distance | Detail (read-only) | `measure.lastDistance` | Последнее измерение (хранится в метрах, выводится в выбранных единицах) |
+| Points | Detail (read-only) | `measure.pointCount` | Подсказка: ожидание первой или второй точки |
+| CLEAR MEASUREMENT | Button | — | Вызов `viewer.clearMeasurement()` (сброс последнего измерения и текущей точки) |
+
+**Визуализация в сцене (Measure mode):**
+- После первого клика рисуется маркер стартовой точки.
+- После второго клика рисуются маркер второй точки, линия между точками и подпись расстояния у середины линии.
+- Подпись отображается в выбранных единицах `measure.unit` и с учетом `measure.unitScale`.
 
 ---
 
@@ -102,6 +113,12 @@
 | QR code | Canvas `#share-qr` | QR-код с URL для открытия сцены на мобильном (только десктоп) |
 | Share URL | TextInput (read-only) + кнопка копирования `#copy-button` | Текущий URL с параметрами `?load=...` для шаринга |
 | TAKE A SNAPSHOT AS PNG | Button | Вызов `viewer.downloadPngScreenshot()` |
+| EXPORT VIEWER SETTINGS | Button | Вызов `viewer.exportViewerSettings()` — сохраняет текущие настройки сцены (camera, skybox, light, debug, shadowCatcher, measure, enableWebGPU, при орбите — position/focus) в JSON. Имя файла: базовое имя загруженной модели + `.model-viewer-settings.json` (например, `character.model-viewer-settings.json`), при отсутствии модели — `model-viewer.model-viewer-settings.json`. |
+
+**Формат экспорта настроек (model-viewer-settings.json):**  
+Корень: `modelViewerSettingsVersion: 1`, плюс объекты `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, скаляр `enableWebGPU`. В орбитальном режиме в `camera` добавляются массивы `position` и `focus` (три числа). Цвета фона и света сохраняются в HEX (`skybox.backgroundColor`, `light.color` — строка вида `#rrggbb`) для однозначной записи и корректного применения при загрузке.
+
+**Автоподхват настроек из папки модели:** при загрузке модели по HTTP(S) viewer ищет в том же каталоге файл настроек: `имя.model-viewer-settings.json` или с суффиксом в скобках (как при повторном скачивании в Chrome): `имя.model-viewer-settings(1).json`, `(2).json`, … до `(20).json`. Если найдено несколько вариантов, применяется файл с **наибольшим номером в скобках** (наиболее «свежая» версия). Таймаут запросов 5 с. Подхват при одновременном перетаскивании модели и файла настроек не реализован; пожелание — в `docs/FEATURE-WISHES.md`.
 
 **Логика Share URL:**  
 `shareUrl = `${location.origin}${location.pathname}?${sceneData.urls.map(url => `load=${url}`).join('&')}``

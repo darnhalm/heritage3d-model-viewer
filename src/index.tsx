@@ -69,7 +69,9 @@ const observerData: ObserverData = {
         multisampleSupported: true,
         multisample: true,
         hq: true,
-        mode: 'orbit'
+        mode: 'orbit',
+        position: null,
+        focus: null
     },
     skybox: {
         value: 'Paul Lobe Haus',
@@ -164,6 +166,13 @@ const observerData: ObserverData = {
         xrSupported: false,
         xrActive: false
     },
+    measure: {
+        enabled: false,
+        unit: 'm',
+        unitScale: 1,
+        lastDistance: null,
+        pointCount: 0
+    },
     morphs: null,
     enableWebGPU: false,
     centerScene: false
@@ -177,6 +186,7 @@ const saveOptions = (observer: Observer, name: string) => {
         light: options.light,
         debug: options.debug,
         shadowCatcher: options.shadowCatcher,
+        measure: options.measure,
         enableWebGPU: options.enableWebGPU
     }));
 };
@@ -266,6 +276,16 @@ const main = () => {
 
         // make available globally
         window.viewer = viewer;
+
+        // save orbit camera position before unload so it can be restored on next load
+        window.addEventListener('beforeunload', () => {
+            if (viewer?.cameraControls?.mode === 'orbit') {
+                const p = viewer.cameraControls.getPosition();
+                const f = viewer.cameraControls.getFocus();
+                observer.set('camera.position', [p.x, p.y, p.z]);
+                observer.set('camera.focus', [f.x, f.y, f.z]);
+            }
+        });
 
         // get list of files, decode them
         const files: { url: string, filename: string }[] = [];

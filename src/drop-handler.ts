@@ -1,9 +1,5 @@
 import { path } from 'playcanvas';
-
-interface File {
-    url: string,
-    filename?: string
-}
+import type { File } from './types';
 
 type DropHandlerFunc = (files: Array<File>, resetScene: boolean) => void;
 
@@ -93,7 +89,7 @@ const CreateDropHandler = (target: HTMLElement, dropHandler: DropHandlerFunc) =>
         .then((entries: Array<FileSystemFileEntry>) => {
             return Promise.all(entries.map((entry) => {
                 return new Promise((resolve) => {
-                    entry.file((entryFile: any) => {
+                    entry.file((entryFile: globalThis.File) => {
                         resolve({
                             url: URL.createObjectURL(entryFile),
                             filename: entry.fullPath.substring(1)
@@ -111,4 +107,4 @@ const CreateDropHandler = (target: HTMLElement, dropHandler: DropHandlerFunc) =>
     }, false);
 };
 
-export { CreateDropHandler, File };
+export { CreateDropHandler };

@@ -95,6 +95,7 @@ const ZOOM_SCALE_MIN = 0.01;
 
 const doubleTapDelay = 400;
 const doubleTapRadius = 45;
+const MEASURE_CLICK_DRAG_THRESHOLD = 5;
 const RIPPLE_CAMERA_DELAY_MS = 380;
 const RIPPLE_REMOVE_MS = 900;
 
@@ -205,6 +206,8 @@ class Viewer {
 
     debugNormals: DebugLines;
 
+    debugMeasure: DebugLines;
+
     miniStats: MiniStats;
 
     observer: Observer;
@@ -223,11 +226,35 @@ class Viewer {
 
     rippleContainer: HTMLDivElement | null = null;
 
+    measureOverlay: HTMLDivElement | null = null;
+
+    measureSvgEl: SVGSVGElement | null = null;
+
+    measureLineEl: SVGLineElement | null = null;
+
+    measureStartHX: SVGLineElement | null = null;
+
+    measureStartVY: SVGLineElement | null = null;
+
+    measureEndHX: SVGLineElement | null = null;
+
+    measureEndVY: SVGLineElement | null = null;
+
+    measureLabelEl: HTMLDivElement | null = null;
+
     lastTapTime = 0;
 
     lastTapX = 0;
 
     lastTapY = 0;
+
+    private measureClickDown: { clientX: number; clientY: number; canvasX: number; canvasY: number } | null = null;
+
+    private measureIsPotentialClick = false;
+
+    measureStart: Vec3 | null = null;
+
+    measureEnd: Vec3 | null = null;
 
     loadTimestamp?: number = null;
 
@@ -427,6 +454,7 @@ class Viewer {
         this.debugSkeleton = new DebugLines(app, camera);
         this.debugGrid = new DebugLines(app, camera, false);
         this.debugNormals = new DebugLines(app, camera, false);
+        this.debugMeasure = new DebugLines(app, camera, false);
 
         // construct ministats, default off
         this.miniStats = new MiniStats(app);
@@ -466,15 +494,76 @@ class Viewer {
             this.rippleContainer = document.createElement('div');
             this.rippleContainer.className = 'ripple-container';
             wrapper.appendChild(this.rippleContainer);
+
+            this.measureOverlay = document.createElement('div');
+            this.measureOverlay.className = 'measure-overlay';
+            this.measureSvgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            this.measureSvgEl.setAttribute('class', 'measure-svg');
+            this.measureSvgEl.style.display = 'none';
+
+            const mkLine = (cls: string) => {
+                const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                el.setAttribute('class', cls);
+                this.measureSvgEl?.appendChild(el);
+                return el;
+            };
+            this.measureLineEl = mkLine('measure-line');
+            this.measureStartHX = mkLine('measure-cross');
+            this.measureStartVY = mkLine('measure-cross');
+            this.measureEndHX = mkLine('measure-cross');
+            this.measureEndVY = mkLine('measure-cross');
+            this.measureOverlay.appendChild(this.measureSvgEl);
+
+            this.measureLabelEl = document.createElement('div');
+            this.measureLabelEl.className = 'measure-label';
+            this.measureLabelEl.style.display = 'none';
+            this.measureOverlay.appendChild(this.measureLabelEl);
+            wrapper.appendChild(this.measureOverlay);
         }
 
         // double click: pick → ripple → after 380ms center camera
         canvas.addEventListener('dblclick', (event: MouseEvent) => {
+            if (this.observer.get('measure.enabled')) return;
             this._pickAndCenterAt(event.offsetX, event.offsetY);
         });
 
+        // measure mode: pick points only on real click (not on click+orbit drag)
+        const onMeasureMousedown = (event: MouseEvent) => {
+            if (!this.observer.get('measure.enabled')) return;
+            if (event.button !== 0) return;
+            if (event.target !== canvas) return;
+            const rect = canvas.getBoundingClientRect();
+            this.measureClickDown = {
+                clientX: event.clientX,
+                clientY: event.clientY,
+                canvasX: event.clientX - rect.left,
+                canvasY: event.clientY - rect.top
+            };
+            this.measureIsPotentialClick = true;
+        };
+        const onMeasureMousemove = (event: MouseEvent) => {
+            if (!this.measureIsPotentialClick || !this.measureClickDown) return;
+            const dx = event.clientX - this.measureClickDown.clientX;
+            const dy = event.clientY - this.measureClickDown.clientY;
+            if (Math.hypot(dx, dy) > MEASURE_CLICK_DRAG_THRESHOLD) {
+                this.measureIsPotentialClick = false;
+            }
+        };
+        const onMeasureMouseup = (event: MouseEvent) => {
+            if (event.button !== 0) return;
+            if (this.measureIsPotentialClick && this.measureClickDown && this.observer.get('measure.enabled')) {
+                this._pickAndMeasureAt(this.measureClickDown.canvasX, this.measureClickDown.canvasY);
+            }
+            this.measureIsPotentialClick = false;
+            this.measureClickDown = null;
+        };
+        canvas.addEventListener('mousedown', onMeasureMousedown);
+        document.addEventListener('mousemove', onMeasureMousemove);
+        document.addEventListener('mouseup', onMeasureMouseup);
+
         // double tap (mobile): same as dblclick when second tap within delay and radius
         canvas.addEventListener('touchend', (event: TouchEvent) => {
+            if (this.observer.get('measure.enabled')) return;
             if (event.changedTouches.length !== 1) return;
             const touch = event.changedTouches[0];
             const rect = canvas.getBoundingClientRect();
@@ -575,6 +664,110 @@ class Viewer {
         setTimeout(() => {
             this.cameraControls.reset(result, this.camera.getPosition());
         }, RIPPLE_CAMERA_DELAY_MS);
+    }
+
+    private async _pickAndMeasureAt(x: number, y: number) {
+        const p = await this.picker.pick(x, y);
+        if (!p) return;
+
+        const waitingSecondPoint = this.observer.get('measure.pointCount') === 1;
+
+        if (!waitingSecondPoint || !this.measureStart) {
+            this.measureStart = p.clone();
+            this.measureEnd = null;
+            this.observer.set('measure.pointCount', 1);
+            this.observer.set('measure.lastDistance', null);
+            this.renderNextFrame();
+            return;
+        }
+
+        this.measureEnd = p.clone();
+        const rawDistance = this.measureStart.distance(this.measureEnd);
+        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
+        const distanceMeters = rawDistance * (Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1);
+
+        this.observer.set('measure.lastDistance', distanceMeters);
+        this.observer.set('measure.pointCount', 0);
+        this.renderNextFrame();
+    }
+
+    clearMeasurement() {
+        this.measureStart = null;
+        this.measureEnd = null;
+        this.observer.set('measure.pointCount', 0);
+        this.observer.set('measure.lastDistance', null);
+        if (this.measureLabelEl) this.measureLabelEl.style.display = 'none';
+        if (this.measureSvgEl) this.measureSvgEl.style.display = 'none';
+        this.renderNextFrame();
+    }
+
+    private updateMeasurementOverlay() {
+        if (!this.measureSvgEl || !this.measureStart) return;
+        this.measureSvgEl.setAttribute('viewBox', `0 0 ${this.canvas.clientWidth} ${this.canvas.clientHeight}`);
+
+        const dpr = window.devicePixelRatio || 1;
+        const start = this.camera.camera.worldToScreen(this.measureStart);
+        const sx = start.x / dpr;
+        const sy = start.y / dpr;
+        const visStart = start.z > 0;
+
+        const crossSize = 7;
+        const setCross = (hx: SVGLineElement | null, vy: SVGLineElement | null, x: number, y: number, visible: boolean) => {
+            if (!hx || !vy) return;
+            hx.setAttribute('x1', `${x - crossSize}`);
+            hx.setAttribute('y1', `${y}`);
+            hx.setAttribute('x2', `${x + crossSize}`);
+            hx.setAttribute('y2', `${y}`);
+            vy.setAttribute('x1', `${x}`);
+            vy.setAttribute('y1', `${y - crossSize}`);
+            vy.setAttribute('x2', `${x}`);
+            vy.setAttribute('y2', `${y + crossSize}`);
+            const disp = visible ? 'block' : 'none';
+            hx.style.display = disp;
+            vy.style.display = disp;
+        };
+
+        setCross(this.measureStartHX, this.measureStartVY, sx, sy, visStart);
+
+        if (!this.measureEnd) {
+            if (this.measureLineEl) this.measureLineEl.style.display = 'none';
+            if (this.measureEndHX) this.measureEndHX.style.display = 'none';
+            if (this.measureEndVY) this.measureEndVY.style.display = 'none';
+            if (this.measureLabelEl) this.measureLabelEl.style.display = 'none';
+            this.measureSvgEl.style.display = visStart ? 'block' : 'none';
+            return;
+        }
+
+        const end = this.camera.camera.worldToScreen(this.measureEnd);
+        const ex = end.x / dpr;
+        const ey = end.y / dpr;
+        const visEnd = end.z > 0;
+        setCross(this.measureEndHX, this.measureEndVY, ex, ey, visEnd);
+
+        const lineVisible = visStart && visEnd;
+        if (this.measureLineEl) {
+            this.measureLineEl.setAttribute('x1', `${sx}`);
+            this.measureLineEl.setAttribute('y1', `${sy}`);
+            this.measureLineEl.setAttribute('x2', `${ex}`);
+            this.measureLineEl.setAttribute('y2', `${ey}`);
+            this.measureLineEl.style.display = lineVisible ? 'block' : 'none';
+        }
+
+        if (this.measureLabelEl) {
+            const lastMeters = this.observer.get('measure.lastDistance') as number | null;
+            if (Number.isFinite(lastMeters) && lineVisible) {
+                const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
+                const factor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
+                this.measureLabelEl.textContent = `${(lastMeters * factor).toFixed(2)} ${unit}`;
+                this.measureLabelEl.style.left = `${(sx + ex) * 0.5}px`;
+                this.measureLabelEl.style.top = `${(sy + ey) * 0.5}px`;
+                this.measureLabelEl.style.display = 'block';
+            } else {
+                this.measureLabelEl.style.display = 'none';
+            }
+        }
+
+        this.measureSvgEl.style.display = lineVisible || visStart ? 'block' : 'none';
     }
 
     private getSelectedMeshInstances() {
@@ -727,7 +920,15 @@ class Viewer {
             'scene.variant.selected': this.setSelectedVariant.bind(this),
             'scene.selectedCamera': this.setSelectedCamera.bind(this),
 
-            centerScene: this.setCenterScene.bind(this)
+            centerScene: this.setCenterScene.bind(this),
+
+            // measurements
+            'measure.enabled': (enabled: boolean) => {
+                if (!enabled) {
+                    this.clearMeasurement();
+                }
+                this.canvas.style.cursor = enabled ? 'crosshair' : '';
+            }
         };
 
         // store control event keys
@@ -881,6 +1082,22 @@ class Viewer {
     }
 
     private focus(init: boolean) {
+        // restore saved orbit camera position when loading
+        if (init) {
+            const toVec3 = (v: any): Vec3 | null => {
+                if (!v || typeof v !== 'object') return null;
+                const a = Array.isArray(v) ? v : ('0' in v && '1' in v && '2' in v ? [v[0], v[1], v[2]] : null);
+                if (!a || a.length !== 3 || !a.every(Number.isFinite)) return null;
+                return new Vec3(a[0], a[1], a[2]);
+            };
+            const pos = toVec3(this.observer.get('camera.position'));
+            const f = toVec3(this.observer.get('camera.focus'));
+            if (pos && f) {
+                this.initialCameraPosition = pos;
+                this.initialCameraFocus = f;
+            }
+        }
+
         // calculate scene bounding box
         this.calcSceneBounds(bbox, this.selectedNode as Entity);
 
@@ -994,6 +1211,7 @@ class Viewer {
 
         this.meshInstances = [];
         this.resetWireframeMeshes();
+        this.clearMeasurement();
 
         // reset animation state
         this.animTracks = [];
@@ -1152,6 +1370,216 @@ class Viewer {
                 console.error('Failed to capture PNG screenshot from render target:', err);
             });
         });
+    }
+
+    private static rgbToHex(r: number, g: number, b: number): string {
+        const toByte = (x: number) => Math.round(Math.max(0, Math.min(1, Number(x))) * 255);
+        return '#' + [toByte(r), toByte(g), toByte(b)].map((n) => n.toString(16).padStart(2, '0')).join('');
+    }
+
+    private static hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+        const m = /^#([0-9A-Fa-f]{6})$/.exec(hex);
+        if (!m) return null;
+        const n = parseInt(m[1], 16);
+        return { r: ((n >> 16) & 0xff) / 255, g: ((n >> 8) & 0xff) / 255, b: (n & 0xff) / 255 };
+    }
+
+    /** Export current viewer settings (camera, skybox, light, etc.) to a JSON file. */
+    exportViewerSettings() {
+        const options = this.observer.json() as Record<string, unknown>;
+        const skybox = (options.skybox && typeof options.skybox === 'object') ? { ...(options.skybox as Record<string, unknown>) } : {};
+        const light = (options.light && typeof options.light === 'object') ? { ...(options.light as Record<string, unknown>) } : {};
+        if (skybox.backgroundColor && typeof skybox.backgroundColor === 'object' && !Array.isArray(skybox.backgroundColor)) {
+            const c = skybox.backgroundColor as { r?: number; g?: number; b?: number };
+            skybox.backgroundColor = Viewer.rgbToHex(Number(c.r ?? 0), Number(c.g ?? 0), Number(c.b ?? 0));
+        }
+        if (light.color && typeof light.color === 'object' && !Array.isArray(light.color)) {
+            const c = light.color as { r?: number; g?: number; b?: number };
+            light.color = Viewer.rgbToHex(Number(c.r ?? 0), Number(c.g ?? 0), Number(c.b ?? 0));
+        }
+        const data: Record<string, unknown> = {
+            modelViewerSettingsVersion: 1,
+            camera: options.camera,
+            skybox,
+            light,
+            debug: options.debug,
+            shadowCatcher: options.shadowCatcher,
+            measure: options.measure,
+            enableWebGPU: options.enableWebGPU
+        };
+        if (this.cameraControls.mode === 'orbit') {
+            const p = this.cameraControls.getPosition();
+            const f = this.cameraControls.getFocus();
+            (data.camera as Record<string, unknown>).position = [p.x, p.y, p.z];
+            (data.camera as Record<string, unknown>).focus = [f.x, f.y, f.z];
+        }
+        const json = JSON.stringify(data, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const filenames = this.observer.get('scene.filenames') as string[] | undefined;
+        const baseName = (filenames && filenames.length > 0 && filenames[0])
+            ? filenames[0].replace(/\.[^/.]+$/, '') || 'model-viewer'
+            : 'model-viewer';
+        a.download = `${baseName}.model-viewer-settings.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'enableWebGPU'];
+    private static readonly SETTINGS_FILTER_PATHS = ['skybox.options', 'debug.renderMode'];
+
+    /** Reset viewer settings (camera, skybox, light, etc.) to defaults. Call before loading a new model so that if no settings file is found, defaults are shown. */
+    private resetViewerSettingsToDefaults() {
+        const o = this.observer;
+        o.set('camera.fov', 40);
+        o.set('camera.tonemapping', 'Linear');
+        o.set('camera.pixelScale', 1);
+        o.set('camera.multisample', true);
+        o.set('camera.hq', true);
+        o.set('camera.mode', 'orbit');
+        o.set('camera.position', null);
+        o.set('camera.focus', null);
+        o.set('skybox.value', this.skyboxUrls.has('Paul Lobe Haus') ? 'Paul Lobe Haus' : 'None');
+        o.set('skybox.exposure', 0);
+        o.set('skybox.rotation', 0);
+        o.set('skybox.background', 'Solid Color');
+        o.set('skybox.backgroundColor', { r: 134 / 255, g: 152 / 255, b: 174 / 255 });
+        o.set('skybox.blur', 1);
+        o.set('skybox.domeProjection.domeRadius', 20);
+        o.set('skybox.domeProjection.tripodOffset', 0.1);
+        o.set('light.enabled', true);
+        o.set('light.color', { r: 1, g: 1, b: 1 });
+        o.set('light.intensity', 1);
+        o.set('light.follow', false);
+        o.set('light.shadow', true);
+        o.set('shadowCatcher.enabled', true);
+        o.set('shadowCatcher.intensity', 0.4);
+        o.set('debug.renderMode', 'default');
+        o.set('debug.stats', false);
+        o.set('debug.wireframe', false);
+        o.set('debug.wireframeColor', { r: 0, g: 0, b: 0 });
+        o.set('debug.bounds', false);
+        o.set('debug.skeleton', false);
+        o.set('debug.axes', false);
+        o.set('debug.grid', false);
+        o.set('debug.normals', 0);
+        o.set('measure.enabled', false);
+        o.set('measure.unit', 'm');
+        o.set('measure.unitScale', 1);
+        o.set('measure.lastDistance', null);
+        o.set('measure.pointCount', 0);
+        this.measureStart = null;
+        this.syncSkyboxAndLightFromObserver();
+    }
+
+    /** Apply a settings object (e.g. from model-viewer-settings.json) to the observer. */
+    applyViewerSettings(data: Record<string, unknown>) {
+        const filter = Viewer.SETTINGS_FILTER_PATHS;
+        const colorPaths = ['skybox.backgroundColor', 'light.color'];
+        const toRgb = (v: unknown): { r: number; g: number; b: number } | null => {
+            if (typeof v === 'string') return Viewer.hexToRgb(v);
+            if (v && typeof v === 'object' && !Array.isArray(v)) {
+                const o = v as Record<string, unknown>;
+                const r = Number(o.r), g = Number(o.g), b = Number(o.b);
+                if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return { r, g, b };
+            }
+            return null;
+        };
+        const loadRec = (path: string, value: unknown): void => {
+            if (filter.indexOf(path) !== -1) return;
+            if (colorPaths.indexOf(path) !== -1) {
+                const rgb = toRgb(value);
+                if (rgb) {
+                    this.observer.set(path, rgb);
+                    return;
+                }
+            }
+            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                const obj = value as Record<string, unknown>;
+                const keys = path === '' ? Viewer.SETTINGS_APPLY_KEYS.filter((k) => obj[k] !== undefined) : Object.keys(obj);
+                keys.forEach((k) => loadRec(path ? `${path}.${k}` : k, obj[k]));
+            } else {
+                if (path !== 'skybox.value' || value === 'None' || this.skyboxUrls.has(value as string)) {
+                    this.observer.set(path, value);
+                }
+            }
+        };
+        try {
+            loadRec('', data);
+        } catch (_) { /* ignore */ }
+    }
+
+    /** Max (N) in candidate names: base.model-viewer-settings.json, (1)..(N). */
+    private static readonly SETTINGS_CANDIDATE_VERSIONS = 20;
+
+    /** Build candidate URLs for settings file: base.model-viewer-settings.json and base.model-viewer-settings(1).json … (N).json (Chrome adds (1) on re-download). */
+    private static settingsUrlCandidatesForModelUrl(modelUrl: string): { url: string; version: number }[] {
+        const out: { url: string; version: number }[] = [];
+        try {
+            const absoluteUrl =
+                modelUrl.startsWith('http://') || modelUrl.startsWith('https://')
+                    ? modelUrl
+                    : new URL(modelUrl, typeof window !== 'undefined' ? window.location.href : 'http://localhost').href;
+            const u = new URL(absoluteUrl);
+            if (!u.protocol.startsWith('http')) return out;
+            const pathParts = u.pathname.split('/').filter(Boolean);
+            if (pathParts.length === 0) return out;
+            const baseName = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, '') || pathParts[pathParts.length - 1];
+            const dir = pathParts.slice(0, -1);
+            out.push({ url: u.origin + '/' + dir.concat(`${baseName}.model-viewer-settings.json`).join('/'), version: 0 });
+            for (let n = 1; n <= Viewer.SETTINGS_CANDIDATE_VERSIONS; n++) {
+                out.push({ url: u.origin + '/' + dir.concat(`${baseName}.model-viewer-settings(${n}).json`).join('/'), version: n });
+            }
+            return out;
+        } catch {
+            return out;
+        }
+    }
+
+    private static readonly SETTINGS_FETCH_TIMEOUT_MS = 5000;
+
+    /** Fetch settings file next to the model URL (same folder). Tries base and (1)..(N) names; applies the one with highest version number that exists. If none found (e.g. drag with blob URL), resets to defaults. */
+    private tryFetchAndApplySettings(firstModelUrl: string): Promise<void> {
+        const candidates = Viewer.settingsUrlCandidatesForModelUrl(firstModelUrl);
+        if (candidates.length === 0) {
+            this.resetViewerSettingsToDefaults();
+            return Promise.resolve();
+        }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), Viewer.SETTINGS_FETCH_TIMEOUT_MS);
+        const fetchOne = (c: { url: string; version: number }): Promise<{ data: Record<string, unknown>; version: number } | null> =>
+            fetch(c.url, { method: 'GET', signal: controller.signal, cache: 'no-store' })
+                .then((res) => (res.ok ? res.json().then((data: Record<string, unknown>) => ({ data, version: c.version })) : null))
+                .catch((): null => null);
+        return Promise.all(candidates.map(fetchOne))
+            .then((results) => {
+                const ok = results.filter((r): r is { data: Record<string, unknown>; version: number } => r != null && typeof (r as any).data === 'object');
+                if (ok.length === 0) {
+                    this.resetViewerSettingsToDefaults();
+                    return;
+                }
+                const best = ok.reduce((a, b) => (a.version >= b.version ? a : b));
+                this.applyViewerSettings(best.data);
+                this.syncSkyboxAndLightFromObserver();
+            })
+            .catch(() => { this.resetViewerSettingsToDefaults(); })
+            .finally(() => clearTimeout(timeoutId));
+    }
+
+    /** Apply current observer skybox/light to the scene (e.g. after loading settings from file). */
+    private syncSkyboxAndLightFromObserver() {
+        const bgColor = this.observer.get('skybox.backgroundColor') as { r?: number; g?: number; b?: number } | undefined;
+        if (bgColor && typeof bgColor === 'object' && [bgColor.r, bgColor.g, bgColor.b].every((x) => typeof x === 'number')) {
+            this.setBackgroundColor({ r: Number(bgColor.r), g: Number(bgColor.g), b: Number(bgColor.b) });
+        }
+        const background = this.observer.get('skybox.background');
+        if (typeof background === 'string') this.setSkyboxBackground(background);
+        const lc = this.observer.get('light.color') as { r?: number; g?: number; b?: number } | undefined;
+        if (lc && typeof lc === 'object' && [lc.r, lc.g, lc.b].every((x) => typeof x === 'number')) {
+            this.setLightColor({ r: Number(lc.r), g: Number(lc.g), b: Number(lc.b) });
+        }
     }
 
     // adjust camera clipping planes to fit the scene
@@ -1409,6 +1837,7 @@ class Viewer {
 
             // Defer load to next frame so the progress bar can paint at 0%
             requestAnimationFrame(() => {
+            this.resetViewerSettingsToDefaults();
             const warnings: string[] = [];
             const modelFiles = files.filter((f) => this.isModelFilename(f.filename) || this.isGSplatFilename(f.filename));
             const total = modelFiles.length;
@@ -1466,12 +1895,9 @@ class Viewer {
                     }
                 });
 
-                // prepare scene post load
-                this.postSceneLoad();
-
                 // update scene urls
-                const urls = files.map(f => f.url);
-                const filenames = files.map(f => f.filename.split('/').pop());
+                const urls = modelFiles.map(f => f.url);
+                const filenames = modelFiles.map(f => f.filename.split('/').pop());
                 if (resetScene) {
                     this.observer.set('scene.urls', urls);
                     this.observer.set('scene.filenames', filenames);
@@ -1480,13 +1906,18 @@ class Viewer {
                     this.observer.set('scene.filenames', this.observer.get('scene.filenames').concat(filenames));
                 }
 
-                // Show any warnings that occurred during loading
                 if (warnings.length > 0) {
-                    // Log all warnings to console for full details
                     console.warn(`Model loaded with ${warnings.length} warning(s):`);
                     warnings.forEach(w => console.warn(`  - ${w}`));
                     this.observer.set('ui.warnings', warnings);
                 }
+
+                // auto-load settings from model folder (same base name, .model-viewer-settings.json) when model is loaded by URL
+                const firstModelUrl = modelFiles[0]?.url;
+                return this.tryFetchAndApplySettings(firstModelUrl);
+            })
+            .then(() => {
+                this.postSceneLoad();
             })
             .catch((err) => {
                 console.log(err);
@@ -2042,6 +2473,9 @@ class Viewer {
 
         // we perform some special processing on the first frame
         this.firstFrame = true;
+
+        // re-apply skybox/light from observer (in case anything in postSceneLoad used defaults)
+        this.syncSkyboxAndLightFromObserver();
     }
 
     private initSceneBounds() {
@@ -2323,6 +2757,17 @@ class Viewer {
                 }
             }
             this.debugGrid.update();
+        }
+
+        // measurement overlays (thick 2D SVG line + crosses)
+        // keep DebugLines buffer empty so measurements are always overlay-only (never depth-tested / occluded by mesh)
+        this.debugMeasure.clear();
+        this.debugMeasure.update();
+        if (this.measureStart) {
+            this.updateMeasurementOverlay();
+        } else {
+            if (this.measureSvgEl) this.measureSvgEl.style.display = 'none';
+            if (this.measureLabelEl) this.measureLabelEl.style.display = 'none';
         }
 
         // fit camera planes to the scene

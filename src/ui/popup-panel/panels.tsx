@@ -240,6 +240,7 @@ class SettingsPanel extends React.Component <{
         observerData: ObserverData;
         setProperty: SetProperty; }>): boolean {
         return JSON.stringify(nextProps.observerData.debug) !== JSON.stringify(this.props.observerData.debug) ||
+               JSON.stringify(nextProps.observerData.measure) !== JSON.stringify(this.props.observerData.measure) ||
                JSON.stringify(nextProps.observerData.ui) !== JSON.stringify(this.props.observerData.ui) ||
                nextProps.observerData.enableWebGPU !== this.props.observerData.enableWebGPU ||
                nextProps.observerData.runtime.activeDeviceType !== this.props.observerData.runtime.activeDeviceType;
@@ -262,7 +263,11 @@ class SettingsPanel extends React.Component <{
 
         const props = this.props;
         const debugData = props.observerData.debug;
+        const measureData = props.observerData.measure;
         const activeDevice = props.observerData.runtime.activeDeviceType;
+        const meters = measureData.lastDistance;
+        const factor = measureData.unit === 'mm' ? 1000 : (measureData.unit === 'cm' ? 100 : 1);
+        const measuredValue = meters === null ? '-' : `${(meters * factor).toFixed(2)} ${measureData.unit}`;
         return (
             <div className='popup-panel-parent'>
                 <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'settings'}>
@@ -327,6 +332,39 @@ class SettingsPanel extends React.Component <{
                         label='Stats'
                         value={debugData.stats}
                         setProperty={(value: boolean) => props.setProperty('debug.stats', value)}
+                    />
+                    <Label text='Measurement' class='popup-panel-heading' />
+                    <Toggle
+                        label='Measure Mode'
+                        value={measureData.enabled}
+                        setProperty={(value: boolean) => props.setProperty('measure.enabled', value)}
+                    />
+                    <Select
+                        label='Units'
+                        type='string'
+                        options={[
+                            { t: 'millimeters (mm)', v: 'mm' },
+                            { t: 'centimeters (cm)', v: 'cm' },
+                            { t: 'meters (m)', v: 'm' }
+                        ]}
+                        value={measureData.unit}
+                        setProperty={(value: 'mm' | 'cm' | 'm') => props.setProperty('measure.unit', value)}
+                    />
+                    <Numeric
+                        label='1 Unit = (m)'
+                        value={measureData.unitScale}
+                        min={0.000001}
+                        max={1000000}
+                        setProperty={(value: number) => props.setProperty('measure.unitScale', Math.max(0.000001, value))}
+                    />
+                    <Detail label='Last Distance' value={measuredValue} />
+                    <Detail label='Points' value={measureData.pointCount === 0 ? 'Pick first point' : 'Pick second point'} />
+                    <Button
+                        class='secondary'
+                        text='CLEAR MEASUREMENT'
+                        onClick={() => {
+                            if (window.viewer) window.viewer.clearMeasurement();
+                        }}
                     />
                 </Container>
             </div>
@@ -409,6 +447,13 @@ class ViewPanel extends React.Component <{
                         text='TAKE A SNAPSHOT AS PNG'
                         onClick={() => {
                             if (window.viewer) window.viewer.downloadPngScreenshot();
+                        }}
+                    />
+                    <Button
+                        class='secondary'
+                        text='EXPORT VIEWER SETTINGS'
+                        onClick={() => {
+                            if (window.viewer) window.viewer.exportViewerSettings();
                         }}
                     />
                 </Container>

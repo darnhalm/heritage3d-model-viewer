@@ -37,11 +37,13 @@ export interface ObserverData {
     camera: {
         fov: number,
         tonemapping: string,
-        pixelScale: number
+        pixelScale: number,
         multisampleSupported: boolean,
         multisample: boolean,
         hq: boolean,
-        mode: 'orbit' | 'fly'
+        mode: 'orbit' | 'fly',
+        position?: [number, number, number] | null,
+        focus?: [number, number, number] | null
     },
     skybox: {
         value: string,
@@ -151,6 +153,15 @@ export interface ObserverData {
         viewportHeight: number,
         xrSupported: boolean,
         xrActive: boolean
+    },
+    measure: {
+        enabled: boolean,
+        unit: 'mm' | 'cm' | 'm',
+        /** Meters represented by 1 scene/model unit. */
+        unitScale: number,
+        /** Last measured distance in meters. */
+        lastDistance: number | null,
+        pointCount: 0 | 1
     },
     enableWebGPU: boolean,
     centerScene: boolean,
