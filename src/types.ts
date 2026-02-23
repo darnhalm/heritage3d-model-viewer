@@ -161,7 +161,9 @@ export interface ObserverData {
         unitScale: number,
         /** Last measured distance in meters. */
         lastDistance: number | null,
-        pointCount: 0 | 1
+        pointCount: 0 | 1,
+        /** Known real-world distance (in current unit) for recalibrating unitScale. */
+        knownDistance: number
     },
     enableWebGPU: boolean,
     centerScene: boolean,

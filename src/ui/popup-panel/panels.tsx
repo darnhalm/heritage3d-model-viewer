@@ -267,7 +267,8 @@ class SettingsPanel extends React.Component <{
         const activeDevice = props.observerData.runtime.activeDeviceType;
         const meters = measureData.lastDistance;
         const factor = measureData.unit === 'mm' ? 1000 : (measureData.unit === 'cm' ? 100 : 1);
-        const measuredValue = meters === null ? '-' : `${(meters * factor).toFixed(2)} ${measureData.unit}`;
+        const precision = measureData.unit === 'mm' ? 0 : 2;
+        const measuredValue = meters === null ? '-' : `${(meters * factor).toFixed(precision)} ${measureData.unit}`;
         return (
             <div className='popup-panel-parent'>
                 <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'settings'}>
@@ -356,6 +357,21 @@ class SettingsPanel extends React.Component <{
                         min={0.000001}
                         max={1000000}
                         setProperty={(value: number) => props.setProperty('measure.unitScale', Math.max(0.000001, value))}
+                    />
+                    <Numeric
+                        label={`Known distance (${measureData.unit})`}
+                        value={measureData.knownDistance ?? 0}
+                        min={0}
+                        max={1e9}
+                        setProperty={(value: number) => props.setProperty('measure.knownDistance', Math.max(0, value))}
+                    />
+                    <Button
+                        class='secondary'
+                        text='RECALCULATE SCENE SIZE'
+                        onClick={() => {
+                            if (window.viewer) window.viewer.recalculateSceneSize();
+                        }}
+                        enabled={measureData.lastDistance != null && measureData.lastDistance > 0 && (measureData.knownDistance ?? 0) > 0}
                     />
                     <Detail label='Last Distance' value={measuredValue} />
                     <Detail label='Points' value={measureData.pointCount === 0 ? 'Pick first point' : 'Pick second point'} />

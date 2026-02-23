@@ -171,7 +171,8 @@ const observerData: ObserverData = {
         unit: 'm',
         unitScale: 1,
         lastDistance: null,
-        pointCount: 0
+        pointCount: 0,
+        knownDistance: 0
     },
     morphs: null,
     enableWebGPU: false,

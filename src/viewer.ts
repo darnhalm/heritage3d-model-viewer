@@ -701,6 +701,25 @@ class Viewer {
         this.renderNextFrame();
     }
 
+    /** Recalibrate unitScale: user measured two points and knows the real-world distance. Sets unitScale so that lastDistance matches knownDistance. */
+    recalculateSceneSize() {
+        const lastDistance = this.observer.get('measure.lastDistance') as number | null;
+        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
+        const knownDistance = Number(this.observer.get('measure.knownDistance') ?? 0);
+        const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
+        if (lastDistance == null || lastDistance <= 0 || !Number.isFinite(unitScale) || unitScale <= 0 || !Number.isFinite(knownDistance) || knownDistance <= 0) {
+            return;
+        }
+        const factor = unit === 'mm' ? 0.001 : unit === 'cm' ? 0.01 : 1;
+        const knownDistanceMeters = knownDistance * factor;
+        const rawDistance = lastDistance / unitScale;
+        const newUnitScale = knownDistanceMeters / rawDistance;
+        if (!Number.isFinite(newUnitScale) || newUnitScale <= 0) return;
+        this.observer.set('measure.unitScale', newUnitScale);
+        this.observer.set('measure.lastDistance', knownDistanceMeters);
+        this.renderNextFrame();
+    }
+
     private updateMeasurementOverlay() {
         if (!this.measureSvgEl || !this.measureStart) return;
         this.measureSvgEl.setAttribute('viewBox', `0 0 ${this.canvas.clientWidth} ${this.canvas.clientHeight}`);
@@ -758,7 +777,8 @@ class Viewer {
             if (Number.isFinite(lastMeters) && lineVisible) {
                 const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
                 const factor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
-                this.measureLabelEl.textContent = `${(lastMeters * factor).toFixed(2)} ${unit}`;
+                const precision = unit === 'mm' ? 0 : 2;
+                this.measureLabelEl.textContent = `${(lastMeters * factor).toFixed(precision)} ${unit}`;
                 this.measureLabelEl.style.left = `${(sx + ex) * 0.5}px`;
                 this.measureLabelEl.style.top = `${(sy + ey) * 0.5}px`;
                 this.measureLabelEl.style.display = 'block';
@@ -1470,6 +1490,7 @@ class Viewer {
         o.set('measure.unitScale', 1);
         o.set('measure.lastDistance', null);
         o.set('measure.pointCount', 0);
+        o.set('measure.knownDistance', 0);
         this.measureStart = null;
         this.syncSkyboxAndLightFromObserver();
     }

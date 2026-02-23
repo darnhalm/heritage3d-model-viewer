@@ -92,6 +92,8 @@
 | Measure Mode | Toggle | `measure.enabled` | Включает режим измерений (2 клика по модели: точка A и точка B) |
 | Units | Select | `measure.unit` | Единицы отображения результата: mm / cm / m |
 | 1 Unit = (m) | Numeric | `measure.unitScale` | Масштаб: сколько метров в 1 unit модели |
+| Known distance (mm/cm/m) | Numeric | `measure.knownDistance` | Известное реальное расстояние между измеренными точками — для пересчёта масштаба |
+| RECALCULATE SCENE SIZE | Button | — | Вызов `viewer.recalculateSceneSize()` — пересчитывает `unitScale` так, чтобы последнее измерение соответствовало Known distance. Включена только при наличии измерения и ненулевом Known distance |
 | Last Distance | Detail (read-only) | `measure.lastDistance` | Последнее измерение (хранится в метрах, выводится в выбранных единицах) |
 | Points | Detail (read-only) | `measure.pointCount` | Подсказка: ожидание первой или второй точки |
 | CLEAR MEASUREMENT | Button | — | Вызов `viewer.clearMeasurement()` (сброс последнего измерения и текущей точки) |
