@@ -3,16 +3,14 @@ import { UsdzExporter } from 'playcanvas';
 import React from 'react';
 
 import AnimationControls from './animation-controls';
-import { CameraPanel, SkyboxPanel, LightPanel, SettingsPanel, ViewPanel } from './panels';
+import { MeasurementsPanel, ViewPanel, InfoPanel } from './panels';
 import { addEventListenerOnClickOnly } from '../../helpers';
 import { SetProperty, ObserverData } from '../../types';
 
 const PopupPanelControls = (props: { observerData: ObserverData, setProperty: SetProperty }) => {
     return (<>
-        <CameraPanel setProperty={props.setProperty} observerData={props.observerData} />
-        <SkyboxPanel setProperty={props.setProperty} skyboxData={props.observerData.skybox} uiData={props.observerData.ui} />
-        <LightPanel setProperty={props.setProperty} lightData={props.observerData.light} uiData={props.observerData.ui} shadowCatcherData={props.observerData.shadowCatcher}/>
-        <SettingsPanel setProperty={props.setProperty} observerData={props.observerData} />
+        <InfoPanel setProperty={props.setProperty} observerData={props.observerData} />
+        <MeasurementsPanel setProperty={props.setProperty} observerData={props.observerData} />
         <ViewPanel setProperty={props.setProperty} sceneData={props.observerData.scene} uiData={props.observerData.ui} runtimeData={props.observerData.runtime}/>
     </>);
 };
@@ -49,19 +47,68 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
         return (
             <div id='popup-buttons-parent'>
                 <AnimationControls animationData={this.props.observerData.animation} setProperty={this.props.setProperty} />
-                <Button class={buildClass('camera')} icon='E212' width={40} height={40} onClick={() => handleClick('camera')} />
-                <Button class={buildClass('skybox')} icon='E200' width={40} height={40} onClick={() => handleClick('skybox')} />
-                <Button class={buildClass('light')} icon='E194' width={40} height={40} onClick={() => handleClick('light')} />
-                <Button class={buildClass('settings')} icon='E134' width={40} height={40} onClick={() => handleClick('settings')} />
-                <Button class={buildClass('view')} icon='E301' width={40} height={40} onClick={() => handleClick('view')} />
+                <Button
+                    class={buildClass('info').concat('info-button')}
+                    id='info-button'
+                    width={40}
+                    height={40}
+                    onClick={() => handleClick('info')}
+                />
+                <div class='hd-button-wrapper'>
+                    <span class='hd-button-label'>{this.props.observerData.camera.hq ? 'FHD' : 'HD'}</span>
+                    <Button
+                        class={['popup-button', 'hd-button', this.props.observerData.camera.hq ? 'hd-mode' : 'sd-mode']}
+                        id='hd-button'
+                        width={40}
+                        height={40}
+                        onClick={() => {
+                            this.props.setProperty('camera.hq', !this.props.observerData.camera.hq);
+                        }}
+                    />
+                </div>
+                <Button
+                    class={buildClass('measurement').concat('measurement-button')}
+                    id='measurement-button'
+                    width={40}
+                    height={40}
+                    onClick={() => {
+                        const isOpening = this.props.observerData.ui.active !== 'measurement';
+                        handleClick('measurement');
+                        if (isOpening) {
+                            this.props.setProperty('measure.enabled', true);
+                        }
+                    }}
+                />
+                <Button class={buildClass('view').concat('view-button')} id='view-button' width={40} height={40} onClick={() => handleClick('view')} />
+                <Button
+                    class={['popup-button', 'camera-mode-button', this.props.observerData.camera.mode]}
+                    id='camera-mode-button'
+                    width={40}
+                    height={40}
+                    onClick={() => {
+                        const mode = this.props.observerData.camera.mode === 'orbit' ? 'fly' : 'orbit';
+                        this.props.setProperty('camera.mode', mode);
+                    }}
+                />
+                <Button
+                    class={['popup-button', 'fullscreen-button', this.props.observerData.ui.fullscreen ? 'fullscreen-exit' : 'fullscreen-enter']}
+                    id='fullscreen-button'
+                    width={40}
+                    height={40}
+                    onClick={() => {
+                        const el = document.getElementById('application-container');
+                        if (!el) return;
+                        if (document.fullscreenElement) {
+                            document.exitFullscreen?.();
+                        } else {
+                            el.requestFullscreen?.();
+                        }
+                    }}
+                />
             </div>
         );
     }
 }
-
-const toggleCollapsed = () => {
-    document.getElementById('panel-left').classList.toggle('collapsed');
-};
 
 class PopupPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
     link: HTMLAnchorElement;
@@ -105,30 +152,6 @@ class PopupPanel extends React.Component <{ observerData: ObserverData, setPrope
                     }
                 } }
             />
-            <div id='floating-top-parent'>
-                <Button
-                    class='popup-button'
-                    id='fullscreen-button'
-                    icon='E127'
-                    width={40}
-                    height={40}
-                    onClick={() => {
-                        toggleCollapsed();
-                    } }
-                />
-            </div>
-            <div id='floating-bottom-parent'>
-                <Button
-                    class={['popup-button', 'camera-mode-button', this.props.observerData.camera.mode]}
-                    id='camera-mode-button'
-                    width={40}
-                    height={40}
-                    onClick={() => {
-                        const mode = this.props.observerData.camera.mode === 'orbit' ? 'fly' : 'orbit';
-                        this.props.setProperty('camera.mode', mode);
-                    } }
-                />
-            </div>
         </div>);
     }
 }

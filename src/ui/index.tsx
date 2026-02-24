@@ -42,6 +42,7 @@ class App extends React.Component<{ observer: Observer }> {
     };
 
     render() {
+        if (!this.state) return null;
         return <div id="application-container">
             <Container id="panel-left" flex resizable='right' resizeMin={220} resizeMax={800}>
                 <div className="header" style={{ display: 'none' }}>

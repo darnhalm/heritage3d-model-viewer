@@ -220,6 +220,8 @@ class Viewer {
 
     multiframeBusy = false;
 
+    private isCapturingCoverImage = false;
+
     picker: Picker = null;
 
     cursorWorld = new Vec3();
@@ -1092,16 +1094,17 @@ class Viewer {
         return point;
     }
 
-    private calcZoom(sceneSize: number) {
+    private calcZoom(sceneSize: number, forceAspectRatio?: number) {
         const camera = this.camera.camera;
         const d1 = Math.tan(0.5 * FOCUS_FOV * math.DEG_TO_RAD);
         const d2 = Math.tan(0.5 * camera.fov * math.DEG_TO_RAD);
+        const aspect = forceAspectRatio ?? camera.aspectRatio;
 
-        const scale = (d1 / d2) * (1 / camera.aspectRatio);
+        const scale = (d1 / d2) * (1 / aspect);
         return scale * sceneSize + sceneSize;
     }
 
-    private focus(init: boolean) {
+    private focus(init: boolean, forceAspectRatio?: number) {
         // restore saved orbit camera position when loading
         if (init) {
             const toVec3 = (v: any): Vec3 | null => {
@@ -1130,7 +1133,7 @@ class Viewer {
         const focus = this.calcFocalPoint(bbox);
 
         // calculate zoom
-        const zoom = this.calcZoom(sceneSize);
+        const zoom = this.calcZoom(sceneSize, forceAspectRatio);
 
         // check for initial camera position
         if (this.initialCameraPosition) {
@@ -1165,7 +1168,7 @@ class Viewer {
         const heightPixels = device.height;
 
         const old = this.camera.camera.renderTarget;
-        if (old && old.width === widthPixels && old.height === heightPixels) {
+        if (this.isCapturingCoverImage || (old && old.width === widthPixels && old.height === heightPixels)) {
             return;
         }
 
@@ -1390,6 +1393,97 @@ class Viewer {
                 console.error('Failed to capture PNG screenshot from render target:', err);
             });
         });
+    }
+
+    downloadCoverImageScreenshot() {
+        const COVER_SIZE = 1024;
+        const device = this.app.graphicsDevice;
+
+        if (!this.pngExporter) {
+            this.pngExporter = new PngExporter();
+        }
+
+        const filenames = this.observer.get('scene.filenames') as string[];
+        let baseName = 'model-viewer';
+        if (filenames && filenames.length > 0) {
+            const stripped = filenames[0].replace(/\.[^/.]+$/, '');
+            if (stripped) baseName = stripped;
+        }
+        const filename = `${baseName}-cover.png`;
+
+        const savedPosition = this.cameraControls.getPosition().clone();
+        const savedFocus = this.cameraControls.getFocus().clone();
+        const savedRenderTarget = this.camera.camera.renderTarget;
+        const savedMultiframe = this.multiframe?.enabled ?? false;
+
+        if (this.multiframe) this.multiframe.enabled = false;
+
+        this.isCapturingCoverImage = true;
+
+        const createTexture = (w: number, h: number) => new Texture(device, {
+            name: 'cover-rt-texture',
+            width: w,
+            height: h,
+            format: PIXELFORMAT_RGBA8,
+            mipmaps: false,
+            minFilter: FILTER_NEAREST,
+            magFilter: FILTER_NEAREST,
+            addressU: ADDRESS_CLAMP_TO_EDGE,
+            addressV: ADDRESS_CLAMP_TO_EDGE
+        });
+
+        const colorBuffer = createTexture(COVER_SIZE, COVER_SIZE);
+        const depthBuffer = new Texture(device, {
+            name: 'cover-rt-depth',
+            width: COVER_SIZE,
+            height: COVER_SIZE,
+            format: PIXELFORMAT_DEPTH,
+            mipmaps: false
+        });
+
+        const squareRT = new RenderTarget({
+            name: 'viewer-cover-rt',
+            colorBuffer,
+            depthBuffer,
+            flipY: false,
+            samples: 1,
+            autoResolve: false
+        });
+
+        this.camera.camera.renderTarget = squareRT;
+        this.focus(false, 1);
+
+        this.renderNextFrame();
+        this.app.once('postrender', () => {
+            const texture = this.camera.camera.renderTarget?.colorBuffer;
+            if (!texture || texture.width !== COVER_SIZE || texture.height !== COVER_SIZE) {
+                this.cleanupCoverCapture(squareRT, savedRenderTarget, savedFocus, savedPosition, savedMultiframe);
+                return;
+            }
+            texture.read(0, 0, COVER_SIZE, COVER_SIZE).then((typedArray: Uint32Array) => {
+                this.pngExporter.export(
+                    filename,
+                    new Uint32Array(typedArray.buffer.slice(0)),
+                    COVER_SIZE,
+                    COVER_SIZE
+                );
+            }).catch((err: unknown) => {
+                console.error('Failed to capture cover image:', err);
+            }).finally(() => {
+                this.cleanupCoverCapture(squareRT, savedRenderTarget, savedFocus, savedPosition, savedMultiframe);
+            });
+        });
+    }
+
+    private cleanupCoverCapture(squareRT: RenderTarget, savedRT: RenderTarget | null, savedFocus: Vec3, savedPosition: Vec3, savedMultiframe: boolean) {
+        this.isCapturingCoverImage = false;
+        squareRT.colorBuffer?.destroy();
+        squareRT.depthBuffer?.destroy();
+        squareRT.destroy();
+        this.camera.camera.renderTarget = savedRT;
+        this.cameraControls.reset(savedFocus, savedPosition);
+        if (this.multiframe) this.multiframe.enabled = savedMultiframe;
+        this.renderNextFrame();
     }
 
     private static rgbToHex(r: number, g: number, b: number): string {

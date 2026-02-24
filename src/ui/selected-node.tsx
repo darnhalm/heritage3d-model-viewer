@@ -18,6 +18,7 @@ class SelectedNode extends React.Component < { sceneData: ObserverData['scene'] 
 
     render() {
         const scene = this.props.sceneData;
+        if (!scene) return null;
         const hasHierarchy = scene.nodes !== '[]';
         const nodeSelected = scene.selectedNode.path;
         return hasHierarchy && nodeSelected ? (

@@ -1,15 +1,214 @@
-import { Container, Button, Label, TextInput } from '@playcanvas/pcui/react';
+import { Container, Button, Label, TextInput, TreeView, TreeViewItem } from '@playcanvas/pcui/react';
 // @ts-ignore no type defs included
 import QRious from 'qrious';
 import React from 'react';
 
-import { extract } from '../../helpers';
-import { SetProperty, ObserverData } from '../../types';
-import { Detail, Slider, Toggle, Select, ColorPickerControl, ToggleColor, Numeric } from '../components';
+import { extract, addEventListenerOnClickOnly } from '../../helpers';
+import { SetProperty, ObserverData, HierarchyNode } from '../../types';
+import { Detail, Slider, Toggle, Select, ColorPickerControl, ToggleColor, Numeric, Vector } from '../components';
+import MorphTargetPanel from '../left-panel/morph-target-panel';
+import { version as appVersion } from '../../../package.json';
 
 declare global {
     interface Navigator {
       readonly gpu: any;
+    }
+}
+
+const bytesToSizeString = (bytes: number): string => {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    if (bytes === 0) return 'n/a';
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
+    return (i === 0) ? `${bytes} ${sizes[i]}` : `${(bytes / (1024 ** i)).toFixed(1)} ${sizes[i]}`;
+};
+
+type InfoTab = 'controls' | 'model' | 'about';
+type ControlsSubTab = 'desktop' | 'touch';
+
+class InfoPanel extends React.Component <{
+    observerData: ObserverData,
+    setProperty: SetProperty }> {
+    state: { tab: InfoTab; controlsSubTab: ControlsSubTab } = { tab: 'controls', controlsSubTab: 'desktop' };
+
+    render() {
+        const { observerData, setProperty } = this.props;
+        if (!observerData) return null;
+        const scene = observerData.scene;
+        let variantListOptions: Array<{ v: string, t: string }> = [];
+        try {
+            const parsed = JSON.parse(scene?.variants?.list || '[]');
+            variantListOptions = Array.isArray(parsed) ? parsed.map((v: string) => ({ v: String(v), t: String(v) })) : [];
+        } catch {
+            variantListOptions = [];
+        }
+        const hasModel = Boolean(scene && scene.nodes !== '[]');
+
+        return (
+            <div className='popup-panel-parent info-panel-parent' hidden={observerData?.ui?.active !== 'info'}>
+                <Container class={['popup-panel', 'info-panel']} flex>
+                    <div className='info-panel-tabs'>
+                        <button
+                            type='button'
+                            className={'info-tab' + (this.state.tab === 'controls' ? ' active' : '')}
+                            onClick={() => this.setState({ tab: 'controls' })}
+                        >
+                            Controls
+                        </button>
+                        <button
+                            type='button'
+                            className={'info-tab' + (this.state.tab === 'model' ? ' active' : '')}
+                            onClick={() => this.setState({ tab: 'model' })}
+                        >
+                            Model
+                        </button>
+                        <button
+                            type='button'
+                            className={'info-tab' + (this.state.tab === 'about' ? ' active' : '')}
+                            onClick={() => this.setState({ tab: 'about' })}
+                        >
+                            About
+                        </button>
+                    </div>
+                    {this.state.tab === 'controls' && (
+                        <>
+                            <div className='info-panel-subtabs'>
+                                <button
+                                    type='button'
+                                    className={'info-subtab' + (this.state.controlsSubTab === 'desktop' ? ' active' : '')}
+                                    onClick={() => this.setState({ controlsSubTab: 'desktop' })}
+                                >
+                                    Desktop
+                                </button>
+                                <button
+                                    type='button'
+                                    className={'info-subtab' + (this.state.controlsSubTab === 'touch' ? ' active' : '')}
+                                    onClick={() => this.setState({ controlsSubTab: 'touch' })}
+                                >
+                                    Touch
+                                </button>
+                            </div>
+                            {this.state.controlsSubTab === 'desktop' ? (
+                                <div className='info-controls-content'>
+                                    <Label text='Orbit Mode' class='popup-panel-heading' />
+                                    <Detail label='Orbit' value='Left Mouse' />
+                                    <Detail label='Pan' value='Right Mouse' />
+                                    <Detail label='Zoom' value='Mouse Wheel' />
+                                    <Detail label='Set Focus' value='Double Click' />
+                                    <Label text='Fly Mode' class='popup-panel-heading' />
+                                    <Detail label='Look Around' value='Left Mouse' />
+                                    <Detail label='Fly' value='W, S, A, D' />
+                                    <Label text='General' class='popup-panel-heading' />
+                                    <Detail label='Frame Scene' value='F' />
+                                    <Detail label='Reset Camera' value='R' />
+                                </div>
+                            ) : (
+                                <div className='info-controls-content'>
+                                    <Label text='Orbit Mode' class='popup-panel-heading' />
+                                    <Detail label='Orbit' value='One Finger Drag' />
+                                    <Detail label='Pan' value='Two Finger Drag' />
+                                    <Detail label='Zoom' value='Pinch' />
+                                    <Detail label='Set Focus' value='Double Tap' />
+                                    <Label text='Fly Mode' class='popup-panel-heading' />
+                                    <Detail label='Look Around' value='Touch on Right' />
+                                    <Detail label='Fly' value='Touch on Left' />
+                                </div>
+                            )}
+                        </>
+                    )}
+                    {this.state.tab === 'model' && (
+                        <div className='info-panel-model-combined'>
+                            <Label text='Model' class='popup-panel-heading' />
+                            {hasModel ? (
+                                <>
+                                    <Detail label='Filename' value={scene.filenames?.join(', ') || '-'} />
+                                    <Detail label='Meshes' value={scene.meshCount ?? '-'} />
+                                    <Detail label='Materials' value={scene.materialCount ?? '-'} />
+                                    <Detail label='Textures' value={scene.textureCount ?? '-'} />
+                                    <Detail label='Primitives' value={scene.primitiveCount ?? '-'} />
+                                    <Detail label='Verts' value={scene.vertexCount ?? '-'} />
+                                    <Detail label='Mesh VRAM' value={bytesToSizeString(scene.meshVRAM ?? 0)} />
+                                    <Detail label='Texture VRAM' value={bytesToSizeString(scene.textureVRAM ?? 0)} />
+                                    <Detail label='Load time' value={scene.loadTime ?? '-'} />
+                                    {scene.bounds && typeof scene.bounds === 'object' ? (
+                                        <Vector label='Bounds' dimensions={3} value={scene.bounds} enabled={false} />
+                                    ) : (
+                                        <Detail label='Bounds' value='-' />
+                                    )}
+                                    <Select
+                                        label='Variant'
+                                        type='string'
+                                        options={variantListOptions}
+                                        value={scene.variant?.selected ?? ''}
+                                        setProperty={(value: string) => setProperty('scene.variant.selected', value)}
+                                        enabled={variantListOptions.length > 0}
+                                    />
+                                </>
+                            ) : (
+                                <div style={{ color: '#888', fontSize: 13 }}>No model loaded. Drag & drop a glTF/GLB file.</div>
+                            )}
+                            <Label text='Hierarchy' class='popup-panel-heading' />
+                            {hasModel ? (() => {
+                                let modelHierarchy: Array<HierarchyNode> = [];
+                                try {
+                                    modelHierarchy = JSON.parse(scene.nodes || '[]');
+                                    if (!Array.isArray(modelHierarchy)) modelHierarchy = [];
+                                } catch {
+                                    modelHierarchy = [];
+                                }
+                                const mapNodes = (nodes: Array<HierarchyNode>) =>
+                                    nodes.map((node: HierarchyNode) => (
+                                        <TreeViewItem
+                                            key={node.path}
+                                            text={node.name}
+                                            onSelect={(tv: any) => {
+                                                setProperty('scene.selectedNode.path', node.path);
+                                                const remove = addEventListenerOnClickOnly(document.body, () => {
+                                                    tv.selected = false;
+                                                    remove();
+                                                }, 4);
+                                            }}
+                                            onDeselect={() => setProperty('scene.selectedNode.path', '')}
+                                        >
+                                            {mapNodes(node.children || [])}
+                                        </TreeViewItem>
+                                    ));
+                                return modelHierarchy.length > 0 ? (
+                                    <div className='info-panel-hierarchy'>
+                                        <TreeView allowReordering={false} allowDrag={false}>
+                                            {mapNodes(modelHierarchy)}
+                                        </TreeView>
+                                    </div>
+                                ) : (
+                                    <div style={{ color: '#888', fontSize: 13 }}>No hierarchy data.</div>
+                                );
+                            })() : (
+                                <div style={{ color: '#888', fontSize: 13 }}>No model loaded.</div>
+                            )}
+                            <Label text='Stats' class='popup-panel-heading' />
+                            <Toggle
+                                label='Show performance stats'
+                                value={observerData?.debug?.stats ?? false}
+                                setProperty={(value: boolean) => setProperty('debug.stats', value)}
+                            />
+                            <MorphTargetPanel
+                                morphs={observerData.morphs}
+                                progress={observerData.animation?.progress ?? 0}
+                                setProperty={setProperty}
+                            />
+                        </div>
+                    )}
+                    {this.state.tab === 'about' && (
+                        <>
+                            <Label text='About' class='popup-panel-heading' />
+                            <Detail label='Model Viewer' value={`v${appVersion}`} />
+                            <div style={{ color: '#aaa', fontSize: 12, marginTop: 8, marginBottom: 12 }}>PlayCanvas glTF 2.0 viewer. Drag & drop models, images, or use URL.</div>
+                            <a href='https://playcanvas.com/model-viewer' target='_blank' rel='noopener noreferrer' style={{ color: '#6eb3ff', marginBottom: 8, display: 'block' }}>playcanvas.com/model-viewer</a>
+                            <a href='https://github.com/playcanvas/model-viewer' target='_blank' rel='noopener noreferrer' style={{ color: '#6eb3ff' }}>GitHub</a>
+                        </>
+                    )}
+                </Container>
+            </div>
+        );
     }
 }
 
@@ -18,322 +217,27 @@ const arrToRgb = (arr: number[]) => {
     return { r: arr[0], g: arr[1], b: arr[2] };
 };
 
-class CameraPanel extends React.Component <{
+class MeasurementsPanel extends React.Component <{
     observerData: ObserverData,
     setProperty: SetProperty }> {
     shouldComponentUpdate(nextProps: Readonly<{
         observerData: ObserverData;
         setProperty: SetProperty; }>): boolean {
-
-        const keys = ['ui', 'camera', 'debug', 'animation.playing', 'scene.cameras', 'scene.selectedCamera', 'runtime'];
-        const a = extract(nextProps.observerData, keys);
-        const b = extract(this.props.observerData, keys);
-        return JSON.stringify(a) !== JSON.stringify(b);
+        return JSON.stringify(nextProps.observerData.measure) !== JSON.stringify(this.props.observerData.measure) ||
+               JSON.stringify(nextProps.observerData.ui) !== JSON.stringify(this.props.observerData.ui);
     }
 
     render() {
         const props = this.props;
-        const sceneCameras: Array<{ name: string, path: string }> = JSON.parse(props.observerData.scene.cameras);
-        const cameraOptions = [{ v: 'viewer', t: 'Viewer' }].concat(
-            sceneCameras.map(c => ({ v: c.path, t: c.name }))
-        );
-        const selectedCamera = props.observerData.scene.selectedCamera || 'viewer';
-        const isViewerCamera = selectedCamera === 'viewer';
-
-        return (
-            <div className='popup-panel-parent'>
-                <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'camera'}>
-                    <Label text='Camera' class='popup-panel-heading' />
-                    <Select
-                        selectKey={props.observerData.scene.cameras}
-                        label='Active Camera'
-                        type='string'
-                        options={cameraOptions}
-                        value={selectedCamera}
-                        setProperty={(value: string) => props.setProperty('scene.selectedCamera', value === 'viewer' ? '' : value)}
-                        enabled={sceneCameras.length > 0} />
-                    <Slider
-                        label='Fov'
-                        precision={0}
-                        min={35}
-                        max={150}
-                        value={props.observerData.camera.fov}
-                        setProperty={(value: number) => props.setProperty('camera.fov', value)}
-                        enabled={isViewerCamera} />
-                    <Select
-                        label='Tonemap'
-                        type='string'
-                        options={['None', 'Linear', 'Neutral', 'Filmic', 'Hejl', 'ACES', 'ACES2'].map(v => ({ v, t: v }))}
-                        value={props.observerData.camera.tonemapping}
-                        setProperty={(value: number) => props.setProperty('camera.tonemapping', value)} />
-                    <Select
-                        label='Pixel Scale'
-                        value={props.observerData.camera.pixelScale}
-                        type='number'
-                        options={[1, 2, 4, 8, 16].map(v => ({ v: v, t: Number(v).toString() }))}
-                        setProperty={(value: number) => props.setProperty('camera.pixelScale', value)} />
-                    <Detail label='Viewport' value={`${props.observerData.runtime.viewportWidth} x ${props.observerData.runtime.viewportHeight}`} />
-                    <Toggle
-                        label='Multisample'
-                        value={props.observerData.camera.multisample}
-                        enabled={props.observerData.camera.multisampleSupported}
-                        setProperty={(value: boolean) => props.setProperty('camera.multisample', value)}
-                    />
-                    <Toggle
-                        label='High Quality'
-                        value={props.observerData.camera.hq}
-                        enabled={!props.observerData.animation.playing && !props.observerData.debug.stats }
-                        setProperty={(value: boolean) => props.setProperty('camera.hq', value)}
-                    />
-                </Container>
-            </div>
-        );
-    }
-}
-
-class SkyboxPanel extends React.Component <{
-    skyboxData: ObserverData['skybox'],
-    uiData: ObserverData['ui'],
-    setProperty: SetProperty }> {
-    shouldComponentUpdate(nextProps: Readonly<{
-        skyboxData: ObserverData['skybox'];
-        uiData: ObserverData['ui'];
-        setProperty: SetProperty; }>): boolean {
-
-        return JSON.stringify(nextProps.skyboxData) !== JSON.stringify(this.props.skyboxData) ||
-                JSON.stringify(nextProps.uiData) !== JSON.stringify(this.props.uiData);
-    }
-
-    render() {
-        const props = this.props;
-
-        return (
-            <div className='popup-panel-parent'>
-                <Container class='popup-panel' flex hidden={props.uiData.active !== 'skybox'}>
-                    <Label text='Sky' class='popup-panel-heading' />
-                    <Select
-                        label='Environment'
-                        type='string'
-                        options={JSON.parse(props.skyboxData.options)}
-                        value={props.skyboxData.value}
-                        setProperty={(value: string) => props.setProperty('skybox.value', value)} />
-                    <Slider
-                        label='Exposure'
-                        value={props.skyboxData.exposure}
-                        setProperty={(value: number) => props.setProperty('skybox.exposure', value)}
-                        precision={2}
-                        min={-6}
-                        max={6}
-                        enabled={props.skyboxData.value !== 'None'} />
-                    <Slider
-                        label='Rotation'
-                        precision={0}
-                        min={-180}
-                        max={180}
-                        value={props.skyboxData.rotation}
-                        setProperty={(value: number) => props.setProperty('skybox.rotation', value)}
-                        enabled={props.skyboxData.value !== 'None'} />
-                    <Select
-                        label='Background'
-                        type='string'
-                        options={['Solid Color', 'Infinite Sphere', 'Projective Dome', 'Projective Box'].map(v => ({ v, t: v }))}
-                        value={props.skyboxData.background}
-                        setProperty={(value: string) => props.setProperty('skybox.background', value)}
-                        enabled={props.skyboxData.value !== 'None'} />
-                    <ColorPickerControl
-                        label='Background Color'
-                        value={rgbToArr(props.skyboxData.backgroundColor)}
-                        setProperty={(value: number[]) => props.setProperty('skybox.backgroundColor', arrToRgb(value))}
-                        enabled={props.skyboxData.value === 'None' || props.skyboxData.background === 'Solid Color'} />
-                    <Slider
-                        label='Blur'
-                        // type='number'
-                        // options={[0, 1, 2, 3, 4, 5].map(v => ({ v: v, t: v === 0 ? 'Disabled' : `Mip ${v}` }))}
-                        value={props.skyboxData.blur}
-                        setProperty={(value: number) => props.setProperty('skybox.blur', value)}
-                        enabled={props.skyboxData.value !== 'None' && props.skyboxData.background === 'Infinite Sphere'}
-                        min={0}
-                        max={5}
-                        precision={0}
-                        step={1}/>
-                    <Numeric
-                        label='Scale'
-                        value={props.skyboxData.domeProjection.domeRadius}
-                        setProperty={(value: number) => props.setProperty('skybox.domeProjection.domeRadius', value)}
-                        min={0}
-                        max={1000}
-                        enabled={props.skyboxData.value !== 'None' && ['Projective Dome', 'Projective Box'].indexOf(props.skyboxData.background) !== -1} />
-                    <Slider
-                        label='Tripod Offset'
-                        value={props.skyboxData.domeProjection.tripodOffset}
-                        setProperty={(value: number) => props.setProperty('skybox.domeProjection.tripodOffset', value)}
-                        min={0}
-                        max={1}
-                        precision={2}
-                        enabled={props.skyboxData.value !== 'None' && ['Projective Dome', 'Projective Box'].indexOf(props.skyboxData.background) !== -1} />
-                </Container>
-            </div>
-        );
-    }
-}
-
-class LightPanel extends React.Component <{
-    lightData: ObserverData['light'],
-    uiData: ObserverData['ui'],
-    shadowCatcherData: ObserverData['shadowCatcher'],
-    setProperty: SetProperty }> {
-    shouldComponentUpdate(nextProps: Readonly<{
-        lightData: ObserverData['light'];
-        uiData: ObserverData['ui'];
-        setProperty: SetProperty; }>): boolean {
-
-        return JSON.stringify(nextProps.lightData) !== JSON.stringify(this.props.lightData) ||
-               JSON.stringify(nextProps.uiData) !== JSON.stringify(this.props.uiData);
-    }
-
-    render() {
-        const props = this.props;
-
-        return (
-            <div className='popup-panel-parent'>
-                <Container class='popup-panel' flex hidden={props.uiData.active !== 'light'}>
-                    <Label text='Light' class='popup-panel-heading' />
-                    <Toggle
-                        label='Enabled'
-                        value={props.lightData.enabled}
-                        setProperty={(value: boolean) => props.setProperty('light.enabled', value)} />
-                    <Toggle label='Follow Camera'
-                        value={props.lightData.follow}
-                        setProperty={(value: boolean) => props.setProperty('light.follow', value)} />
-                    <ColorPickerControl
-                        label='Color'
-                        value={rgbToArr(props.lightData.color)}
-                        setProperty={(value: number[]) => props.setProperty('light.color', arrToRgb(value))} />
-                    <Slider
-                        label='Intensity'
-                        precision={2} min={0} max={6}
-                        value={props.lightData.intensity}
-                        setProperty={(value: number) => props.setProperty('light.intensity', value)} />
-                    <Toggle
-                        label='Cast Shadow'
-                        value={props.lightData.shadow}
-                        setProperty={(value: boolean) => props.setProperty('light.shadow', value)} />
-                    <Toggle
-                        label='Shadow Catcher'
-                        value={props.shadowCatcherData.enabled}
-                        setProperty={(value: boolean) => props.setProperty('shadowCatcher.enabled', value)} />
-                    <Slider
-                        label='Catcher Intensity'
-                        precision={2} min={0} max={1}
-                        value={props.shadowCatcherData.intensity}
-                        setProperty={(value: number) => props.setProperty('shadowCatcher.intensity', value)} />
-                </Container>
-            </div>
-        );
-    }
-}
-
-class SettingsPanel extends React.Component <{
-    observerData: ObserverData,
-    setProperty: SetProperty }> {
-    shouldComponentUpdate(nextProps: Readonly<{
-        observerData: ObserverData;
-        setProperty: SetProperty; }>): boolean {
-        return JSON.stringify(nextProps.observerData.debug) !== JSON.stringify(this.props.observerData.debug) ||
-               JSON.stringify(nextProps.observerData.measure) !== JSON.stringify(this.props.observerData.measure) ||
-               JSON.stringify(nextProps.observerData.ui) !== JSON.stringify(this.props.observerData.ui) ||
-               nextProps.observerData.enableWebGPU !== this.props.observerData.enableWebGPU ||
-               nextProps.observerData.runtime.activeDeviceType !== this.props.observerData.runtime.activeDeviceType;
-    }
-
-    render() {
-        const renderModeOptions = [
-            { t: 'Default', v: 'default' },
-            { t: 'Lighting', v: 'lighting' },
-            { t: 'Albedo', v: 'albedo' },
-            { t: 'Emissive', v: 'emission' },
-            { t: 'WorldNormal', v: 'world_normal' },
-            { t: 'Metalness', v: 'metalness' },
-            { t: 'Gloss', v: 'gloss' },
-            { t: 'Ao', v: 'ao' },
-            { t: 'Specularity', v: 'specularity' },
-            { t: 'Opacity', v: 'opacity' },
-            { t: 'Uv0', v: 'uv0' }
-        ];
-
-        const props = this.props;
-        const debugData = props.observerData.debug;
         const measureData = props.observerData.measure;
-        const activeDevice = props.observerData.runtime.activeDeviceType;
         const meters = measureData.lastDistance;
         const factor = measureData.unit === 'mm' ? 1000 : (measureData.unit === 'cm' ? 100 : 1);
         const precision = measureData.unit === 'mm' ? 0 : 2;
         const measuredValue = meters === null ? '-' : `${(meters * factor).toFixed(precision)} ${measureData.unit}`;
+
         return (
             <div className='popup-panel-parent'>
-                <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'settings'}>
-                    <Label text='Settings' class='popup-panel-heading' />
-                    <Detail label='Current Device' value={activeDevice === 'webgpu' ? 'WebGPU' : 'WebGL 2'} />
-                    <Toggle
-                        label='Use WebGPU'
-                        value={props.observerData.enableWebGPU}
-                        enabled={navigator.gpu !== undefined}
-                        setProperty={(value: boolean) => {
-                            if (value === props.observerData.enableWebGPU) return;
-                            const message = value ?
-                                'Enable WebGPU? The page will refresh to apply this change.' :
-                                'Disable WebGPU? The page will refresh to apply this change.';
-                            // eslint-disable-next-line no-alert
-                            if (window.confirm(message)) {
-                                props.setProperty('enableWebGPU', value);
-                                setTimeout(() => window.location.reload(), 100);
-                            } else {
-                                // PCUI updates its visual state before onChange - force reset via state round-trip
-                                props.setProperty('enableWebGPU', value);
-                                requestAnimationFrame(() => props.setProperty('enableWebGPU', !value));
-                            }
-                        }}
-                    />
-                    <Select
-                        label='Render Mode'
-                        type='string'
-                        options={renderModeOptions}
-                        value={debugData.renderMode}
-                        setProperty={(value: string) => props.setProperty('debug.renderMode', value)} />
-                    <ToggleColor
-                        label='Wireframe'
-                        booleanValue={debugData.wireframe}
-                        setBooleanProperty={(value: boolean) => props.setProperty('debug.wireframe', value)}
-                        colorValue={rgbToArr(debugData.wireframeColor)}
-                        setColorProperty={(value: number[]) => props.setProperty('debug.wireframeColor', arrToRgb(value))} />
-                    <Toggle
-                        label='Grid'
-                        value={debugData.grid}
-                        setProperty={(value: boolean) => props.setProperty('debug.grid', value)}/>
-                    <Toggle
-                        label='Axes'
-                        value={debugData.axes}
-                        setProperty={(value: boolean) => props.setProperty('debug.axes', value)} />
-                    <Toggle
-                        label='Skeleton'
-                        value={debugData.skeleton}
-                        setProperty={(value: boolean) => props.setProperty('debug.skeleton', value)} />
-                    <Toggle
-                        label='Bounds'
-                        value={debugData.bounds}
-                        setProperty={(value: boolean) => props.setProperty('debug.bounds', value)} />
-                    <Slider
-                        label='Normals'
-                        precision={2}
-                        min={0}
-                        max={1}
-                        setProperty={(value: number) => props.setProperty('debug.normals', value)}
-                        value={debugData.normals} />
-                    <Toggle
-                        label='Stats'
-                        value={debugData.stats}
-                        setProperty={(value: boolean) => props.setProperty('debug.stats', value)}
-                    />
+                <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'measurement'}>
                     <Label text='Measurement' class='popup-panel-heading' />
                     <Toggle
                         label='Measure Mode'
@@ -467,6 +371,13 @@ class ViewPanel extends React.Component <{
                     />
                     <Button
                         class='secondary'
+                        text='COVER IMAGE (1:1)'
+                        onClick={() => {
+                            if (window.viewer) window.viewer.downloadCoverImageScreenshot();
+                        }}
+                    />
+                    <Button
+                        class='secondary'
                         text='EXPORT VIEWER SETTINGS'
                         onClick={() => {
                             if (window.viewer) window.viewer.exportViewerSettings();
@@ -479,9 +390,7 @@ class ViewPanel extends React.Component <{
 }
 
 export {
-    CameraPanel,
-    SkyboxPanel,
-    LightPanel,
-    SettingsPanel,
+    InfoPanel,
+    MeasurementsPanel,
     ViewPanel
 };

@@ -258,6 +258,10 @@ const main = () => {
     // create react ui
     initializeUI(observer);
 
+    document.addEventListener('fullscreenchange', () => {
+        observer.set('ui.fullscreen', !!document.fullscreenElement);
+    });
+
     // create the canvas
     const canvas = document.getElementById('application-canvas') as HTMLCanvasElement;
 
