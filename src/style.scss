@@ -98,6 +98,63 @@ body {
     margin-right: 6px;
 }
 
+.materials-layer-list {
+    margin-bottom: 12px;
+}
+
+.materials-layer-category {
+    margin-bottom: 12px;
+}
+
+.materials-layer-category-title {
+    color: #888;
+    font-size: 11px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    padding: 2px 0;
+}
+
+.materials-layer-item {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    margin-bottom: 2px;
+    border: none;
+    background: rgba(0, 0, 0, 0.2);
+    color: #ccc;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 2px;
+
+    &:hover {
+        background: rgba(0, 0, 0, 0.35);
+        color: #fff;
+    }
+
+    &.selected {
+        background: rgba(110, 179, 255, 0.25);
+        color: #fff;
+        border-left: 3px solid #6eb3ff;
+    }
+}
+
+.materials-layer-normals-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+
+    .materials-layer-item {
+        flex: 0 0 auto;
+        margin-bottom: 0;
+    }
+
+    .pcui-panel-option {
+        flex: 1;
+    }
+}
+
 #canvas-wrapper {
     position: relative;
     width: 0 !important;

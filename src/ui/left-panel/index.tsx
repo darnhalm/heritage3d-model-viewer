@@ -226,18 +226,26 @@ class LightPanel extends React.Component <{ observerData: ObserverData, setPrope
     }
 }
 
-const renderModeOptions = [
-    { t: 'Default', v: 'default' },
-    { t: 'Lighting', v: 'lighting' },
-    { t: 'Albedo', v: 'albedo' },
-    { t: 'Emissive', v: 'emission' },
-    { t: 'WorldNormal', v: 'world_normal' },
-    { t: 'Metalness', v: 'metalness' },
-    { t: 'Gloss', v: 'gloss' },
-    { t: 'Ao', v: 'ao' },
-    { t: 'Specularity', v: 'specularity' },
-    { t: 'Opacity', v: 'opacity' },
-    { t: 'Uv0', v: 'uv0' }
+const renderModeCategories: Array<{
+    title: string;
+    items: Array<{ label: string; value: string }>;
+}> = [
+    { title: 'RENDER', items: [{ label: 'Final Render', value: 'default' }] },
+    {
+        title: 'MATERIAL CHANNELS',
+        items: [
+            { label: 'Base Color', value: 'albedo' },
+            { label: 'Metalness', value: 'metalness' },
+            { label: 'Roughness', value: 'gloss' },
+            { label: 'Normal Map', value: 'world_normal' },
+            { label: 'Specular F0', value: 'specularity' },
+            { label: 'Emissive', value: 'emission' },
+            { label: 'Lighting', value: 'lighting' },
+            { label: 'AO', value: 'ao' },
+            { label: 'Opacity', value: 'opacity' }
+        ]
+    },
+    { title: 'UV', items: [{ label: 'UV Checker', value: 'uv0' }] }
 ];
 
 class SettingsPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
@@ -358,25 +366,59 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     )}
                     {tab === 'materials' && (
                         <Panel headerText='MATERIALS' id='materials-panel' flexShrink={'0'} collapsible={false}>
-                            <Select
-                                label='Render Mode'
-                                type='string'
-                                options={renderModeOptions}
-                                value={observerData?.debug?.renderMode}
-                                setProperty={(value: string) => setProperty('debug.renderMode', value)} />
-                            <ToggleColor
-                                label='Wireframe'
-                                booleanValue={observerData?.debug?.wireframe ?? false}
-                                setBooleanProperty={(value: boolean) => setProperty('debug.wireframe', value)}
-                                colorValue={rgbToArr(observerData?.debug?.wireframeColor ?? { r: 0, g: 0, b: 0 })}
-                                setColorProperty={(value: number[]) => setProperty('debug.wireframeColor', arrToRgb(value))} />
-                            <Slider
-                                label='Normals'
-                                precision={2}
-                                min={0}
-                                max={1}
-                                value={observerData?.debug?.normals ?? 0}
-                                setProperty={(value: number) => setProperty('debug.normals', value)} />
+                            <div className='materials-layer-list'>
+                                {renderModeCategories.map((cat, ci) => (
+                                    <div key={ci} className='materials-layer-category'>
+                                        <div className='materials-layer-category-title'>
+                                            {cat.title} ({cat.items.length})
+                                        </div>
+                                        {cat.items.map((item) => (
+                                            <button
+                                                key={item.value}
+                                                type='button'
+                                                className={'materials-layer-item' + (observerData?.debug?.renderMode === item.value ? ' selected' : '')}
+                                                onClick={() => setProperty('debug.renderMode', item.value)}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                ))}
+                                <div className='materials-layer-category'>
+                                <div className='materials-layer-category-title'>GEOMETRY (2)</div>
+                                <button
+                                    type='button'
+                                    className={'materials-layer-item' + (observerData?.debug?.wireframe ? ' selected' : '')}
+                                    onClick={() => setProperty('debug.wireframe', !observerData?.debug?.wireframe)}
+                                >
+                                    Wireframe
+                                </button>
+                                <div className='materials-layer-normals-row'>
+                                    <button
+                                        type='button'
+                                        className={'materials-layer-item' + ((observerData?.debug?.normals ?? 0) > 0 ? ' selected' : '')}
+                                        onClick={() => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 1)}
+                                    >
+                                        Vertex Normals
+                                    </button>
+                                    {(observerData?.debug?.normals ?? 0) > 0 && (
+                                        <Slider
+                                            label=''
+                                            precision={2}
+                                            min={0}
+                                            max={1}
+                                            value={observerData?.debug?.normals ?? 0}
+                                            setProperty={(value: number) => setProperty('debug.normals', value)} />
+                                    )}
+                                </div>
+                                </div>
+                            </div>
+                            {observerData?.debug?.wireframe && (
+                                <ColorPickerControl
+                                    label='Wireframe Color'
+                                    value={rgbToArr(observerData?.debug?.wireframeColor ?? { r: 0, g: 0, b: 0 })}
+                                    setProperty={(value: number[]) => setProperty('debug.wireframeColor', arrToRgb(value))} />
+                            )}
                         </Panel>
                     )}
                     {tab === 'poi' && <div id='left-tab-poi' />}
