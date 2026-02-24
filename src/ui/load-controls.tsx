@@ -1,7 +1,6 @@
 import { Container, Label, Button, TextInput } from '@playcanvas/pcui/react';
 import React, { useRef, useState } from 'react';
 
-import { version as appVersion } from '../../package.json';
 import { File, SetProperty } from '../types';
 
 const validUrl = (url: string) => {
@@ -59,7 +58,7 @@ const LoadControls = (props: { setProperty: SetProperty }) => {
                 <div className='header'>
                     <img src={'static/playcanvas-logo.png'}/>
                     <div>
-                        <Label text={`MODEL VIEWER v${appVersion}`} />
+                        <Label text='HERITAGE3D Viewer v1.0' />
                     </div>
                     <Button onClick={() => {
                         window.open('https://github.com/playcanvas/model-viewer', '_blank').focus();

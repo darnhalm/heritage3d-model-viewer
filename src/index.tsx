@@ -220,7 +220,7 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
 };
 
 // print out versions of dependent packages
-console.log(`Model Viewer v${modelViewerVersion} | PCUI v${pcuiVersion} (${pcuiRevision}) | PlayCanvas Engine v${engineVersion} (${engineRevision})`);
+console.log(`HERITAGE3D Viewer v${modelViewerVersion} | PCUI v${pcuiVersion} (${pcuiRevision}) | PlayCanvas Engine v${engineVersion} (${engineRevision})`);
 
 const main = () => {
     // initialize the apps state

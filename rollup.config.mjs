@@ -31,6 +31,7 @@ const title = [
 console.log(`${BLUE_OUT}${title}${RESET_OUT}\n`);
 
 const TARGETS = [
+    { src: 'LICENSE' },
     {
         src: 'src/index.html',
         transform: (contents) => {

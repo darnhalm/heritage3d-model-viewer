@@ -7,7 +7,6 @@ import { extract, addEventListenerOnClickOnly } from '../../helpers';
 import { SetProperty, ObserverData, HierarchyNode } from '../../types';
 import { Detail, Slider, Toggle, Select, ColorPickerControl, ToggleColor, Numeric, Vector } from '../components';
 import MorphTargetPanel from '../left-panel/morph-target-panel';
-import { version as appVersion } from '../../../package.json';
 
 declare global {
     interface Navigator {
@@ -220,13 +219,21 @@ class InfoPanel extends React.Component <{
                         </div>
                     )}
                     {this.state.tab === 'about' && (
-                        <>
+                        <div className='info-about-block'>
                             <Label text='About' class='popup-panel-heading' />
-                            <Detail label='Model Viewer' value={`v${appVersion}`} />
-                            <div style={{ color: '#aaa', fontSize: 12, marginTop: 8, marginBottom: 12 }}>PlayCanvas glTF 2.0 viewer. Drag & drop models, images, or use URL.</div>
-                            <a href='https://playcanvas.com/model-viewer' target='_blank' rel='noopener noreferrer' style={{ color: '#6eb3ff', marginBottom: 8, display: 'block' }}>playcanvas.com/model-viewer</a>
-                            <a href='https://github.com/playcanvas/model-viewer' target='_blank' rel='noopener noreferrer' style={{ color: '#6eb3ff' }}>GitHub</a>
-                        </>
+                            <div className='about-title'>HERITAGE3D Viewer v1.0</div>
+                            <div className='about-description'>
+                                This viewer is a modified version of the open-source project
+                                PlayCanvas Model Viewer (MIT License):
+                            </div>
+                            <a href='https://github.com/playcanvas/model-viewer' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/playcanvas/model-viewer</a>
+                            <div className='about-description'>
+                                UI components are based on
+                                PlayCanvas PCUI (MIT License):
+                            </div>
+                            <a href='https://github.com/playcanvas/pcui' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/playcanvas/pcui</a>
+                            <div className='about-project'>HERITAGE3D.RU Project</div>
+                        </div>
                     )}
                 </Container>
             </div>

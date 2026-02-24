@@ -1,6 +1,6 @@
 {
-    "name": "Model Viewer",
-    "short_name": "Model Viewer",
+    "name": "HERITAGE3D Viewer",
+    "short_name": "HERITAGE3D Viewer",
     "description": "Fast and lightweight viewer of glTF 2.0 and Gaussian Splat PLY files.",
     "display": "fullscreen",
     "start_url": "/",

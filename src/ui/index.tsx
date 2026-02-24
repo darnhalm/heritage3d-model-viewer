@@ -10,7 +10,6 @@ import LeftPanel from './left-panel';
 import LoadControls from './load-controls';
 import PopupPanel from './popup-panel';
 import SelectedNode from './selected-node';
-import { version as appVersion } from '../../package.json';
 
 class App extends React.Component<{ observer: Observer }> {
     state: ObserverData = null;
@@ -48,7 +47,7 @@ class App extends React.Component<{ observer: Observer }> {
                 <div className="header" style={{ display: 'none' }}>
                     <div id="title">
                         <img src={'static/playcanvas-logo.png'}/>
-                        <div>{`MODEL VIEWER v${appVersion}`}</div>
+                        <div>HERITAGE3D Viewer v1.0</div>
                     </div>
                 </div>
                 <div id="panel-toggle">
