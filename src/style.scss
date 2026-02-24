@@ -93,7 +93,8 @@ body {
 #camera-panel > .pcui-panel-content,
 #sky-panel > .pcui-panel-content,
 #light-panel > .pcui-panel-content,
-#settings-panel > .pcui-panel-content {
+#settings-panel > .pcui-panel-content,
+#materials-panel > .pcui-panel-content {
     margin-right: 6px;
 }
 
@@ -556,6 +557,28 @@ input {
     background-image: url(./static/icons/share-icon.svg);
 }
 
+.fit-screen-button {
+    background-repeat: no-repeat;
+    background-size: 24px;
+    background-position: center;
+    background-image: url(./static/icons/fit-screen-icon.svg);
+
+    &.fit-screen-button-inline {
+        background-size: 20px;
+    }
+}
+
+.reset-camera-button {
+    background-repeat: no-repeat;
+    background-size: 24px;
+    background-position: center;
+    background-image: url(./static/icons/reset-camera-icon.svg);
+
+    &.reset-camera-button-inline {
+        background-size: 20px;
+    }
+}
+
 .hd-button {
     background-repeat: no-repeat;
     background-size: 24px;
@@ -598,6 +621,62 @@ input {
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+}
+
+.left-panel-tabs-container {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.left-panel-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+}
+
+.left-panel-tab {
+    flex: 1;
+    padding: 6px 8px 6px 28px;
+    border: 1px solid #555;
+    background-color: rgba(40, 40, 40, 0.8);
+    background-repeat: no-repeat;
+    background-size: 16px;
+    background-position: 6px center;
+    color: #aaa;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 2px;
+
+    &:hover {
+        background-color: rgba(50, 50, 50, 0.9);
+        color: #fff;
+    }
+
+    &.active {
+        background-color: rgba(70, 70, 70, 0.95);
+        color: #fff;
+        border-color: #6eb3ff;
+    }
+
+    &.left-panel-tab-scene {
+        background-image: url(./static/icons/tab-settings-icon.svg);
+    }
+
+    &.left-panel-tab-materials {
+        background-image: url(./static/icons/tab-texture-icon.svg);
+    }
+
+    &.left-panel-tab-poi {
+        background-image: url(./static/icons/tab-poi-icon.svg);
+    }
+}
+
+.left-panel-tab-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 #export-settings-row {
@@ -877,6 +956,7 @@ input {
 #sky-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #light-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #settings-panel > .pcui-panel-content > .panel-option:nth-child(even),
+#materials-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #device-panel > .pcui-panel-content > .panel-option:nth-child(even) {
     background-color: rgba(0, 0, 0, 0.1);
 }

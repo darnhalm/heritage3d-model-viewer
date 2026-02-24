@@ -54,18 +54,15 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                     height={40}
                     onClick={() => handleClick('info')}
                 />
-                <div class='hd-button-wrapper'>
-                    <span class='hd-button-label'>{this.props.observerData.camera.hq ? 'FHD' : 'HD'}</span>
-                    <Button
-                        class={['popup-button', 'hd-button', this.props.observerData.camera.hq ? 'hd-mode' : 'sd-mode']}
-                        id='hd-button'
-                        width={40}
-                        height={40}
-                        onClick={() => {
-                            this.props.setProperty('camera.hq', !this.props.observerData.camera.hq);
-                        }}
-                    />
-                </div>
+                <Button
+                    class={['popup-button', 'hd-button', this.props.observerData.camera.hq ? 'hd-mode' : 'sd-mode']}
+                    id='hd-button'
+                    width={40}
+                    height={40}
+                    onClick={() => {
+                        this.props.setProperty('camera.hq', !this.props.observerData.camera.hq);
+                    }}
+                />
                 <Button
                     class={buildClass('measurement').concat('measurement-button')}
                     id='measurement-button'
@@ -80,6 +77,13 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                     }}
                 />
                 <Button class={buildClass('view').concat('view-button')} id='view-button' width={40} height={40} onClick={() => handleClick('view')} />
+                <Button
+                    class={['popup-button', 'fit-screen-button']}
+                    id='fit-screen-button'
+                    width={40}
+                    height={40}
+                    onClick={() => window.viewer?.frameScene?.()}
+                />
                 <Button
                     class={['popup-button', 'camera-mode-button', this.props.observerData.camera.mode]}
                     id='camera-mode-button'

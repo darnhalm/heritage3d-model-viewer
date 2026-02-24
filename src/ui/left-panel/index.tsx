@@ -27,6 +27,8 @@ const exportViewerSettings = (observerData: ObserverData) => {
     URL.revokeObjectURL(url);
 };
 
+type LeftPanelTab = 'scene' | 'materials' | 'poi';
+
 const toggleCollapsed = () => {
     const leftPanel = document.getElementById('panel-left');
     if (leftPanel) {
@@ -271,18 +273,6 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
                         }
                     }}
                 />
-                <Select
-                    label='Render Mode'
-                    type='string'
-                    options={renderModeOptions}
-                    value={debugData?.renderMode}
-                    setProperty={(value: string) => props.setProperty('debug.renderMode', value)} />
-                <ToggleColor
-                    label='Wireframe'
-                    booleanValue={debugData?.wireframe ?? false}
-                    setBooleanProperty={(value: boolean) => props.setProperty('debug.wireframe', value)}
-                    colorValue={rgbToArr(debugData?.wireframeColor ?? { r: 0, g: 0, b: 0 })}
-                    setColorProperty={(value: number[]) => props.setProperty('debug.wireframeColor', arrToRgb(value))} />
                 <Toggle
                     label='Grid'
                     value={debugData?.grid ?? false}
@@ -299,60 +289,99 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
                     label='Bounds'
                     value={debugData?.bounds ?? false}
                     setProperty={(value: boolean) => props.setProperty('debug.bounds', value)} />
-                <Slider
-                    label='Normals'
-                    precision={2}
-                    min={0}
-                    max={1}
-                    value={debugData?.normals ?? 0}
-                    setProperty={(value: number) => props.setProperty('debug.normals', value)} />
             </Panel>
         );
     }
 }
 
 class LeftPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
-    isMobile: boolean;
+    state: { tab: LeftPanelTab } = { tab: 'scene' };
 
-    constructor(props: any) {
-        super(props);
-        this.isMobile = (/Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
-    }
-
-    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>): boolean {
-        const keys = ['camera', 'debug', 'animation', 'scene.cameras', 'scene.selectedCamera', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU'];
+    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab }): boolean {
+        const keys = ['camera', 'debug', 'scene.cameras', 'scene.selectedCamera', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
-        return JSON.stringify(a) !== JSON.stringify(b);
+        return JSON.stringify(a) !== JSON.stringify(b) || nextState.tab !== this.state.tab;
     }
 
     componentDidMount(): void {
-        // set up the control panel toggle button
-        document.getElementById('panel-toggle').addEventListener('click', () => {
-            toggleCollapsed();
-        });
-        document.getElementById('title').addEventListener('click', () => {
-            toggleCollapsed();
-        });
-        // we require this setTimeout because panel isn't yet created and so fails
-        // otherwise.
+        document.getElementById('panel-toggle')?.addEventListener('click', () => toggleCollapsed());
+        document.getElementById('title')?.addEventListener('click', () => toggleCollapsed());
         setTimeout(() => toggleCollapsed());
     }
 
     render() {
+        const { tab } = this.state;
+        const { observerData, setProperty } = this.props;
+
         return (
-            <Container id='scene-container' flex>
-                <CameraPanel observerData={this.props.observerData} setProperty={this.props.setProperty} />
-                <SkyboxPanel observerData={this.props.observerData} setProperty={this.props.setProperty} />
-                <LightPanel observerData={this.props.observerData} setProperty={this.props.setProperty} />
-                <SettingsPanel observerData={this.props.observerData} setProperty={this.props.setProperty} />
-                <div id='export-settings-row'>
-                    <Button
-                        class='secondary'
-                        text='Export viewer settings'
-                        onClick={() => exportViewerSettings(this.props.observerData)}
-                    />
+            <Container id='scene-container' flex class='left-panel-tabs-container'>
+                <div className='left-panel-tabs'>
+                    <button
+                        type='button'
+                        className={'left-panel-tab left-panel-tab-scene' + (tab === 'scene' ? ' active' : '')}
+                        onClick={() => this.setState({ tab: 'scene' })}
+                    >
+                        Settings
+                    </button>
+                    <button
+                        type='button'
+                        className={'left-panel-tab left-panel-tab-materials' + (tab === 'materials' ? ' active' : '')}
+                        onClick={() => this.setState({ tab: 'materials' })}
+                    >
+                        Materials
+                    </button>
+                    <button
+                        type='button'
+                        className={'left-panel-tab left-panel-tab-poi' + (tab === 'poi' ? ' active' : '')}
+                        onClick={() => this.setState({ tab: 'poi' })}
+                    >
+                        POI
+                    </button>
                 </div>
+
+                <div className='left-panel-tab-content'>
+                    {tab === 'scene' && (
+                        <>
+                            <CameraPanel observerData={observerData} setProperty={setProperty} />
+                            <SkyboxPanel observerData={observerData} setProperty={setProperty} />
+                            <LightPanel observerData={observerData} setProperty={setProperty} />
+                            <SettingsPanel observerData={observerData} setProperty={setProperty} />
+                            <div id='export-settings-row'>
+                                <Button
+                                    class='secondary'
+                                    text='Export viewer settings'
+                                    onClick={() => exportViewerSettings(observerData)}
+                                />
+                            </div>
+                        </>
+                    )}
+                    {tab === 'materials' && (
+                        <Panel headerText='MATERIALS' id='materials-panel' flexShrink={'0'} collapsible={false}>
+                            <Select
+                                label='Render Mode'
+                                type='string'
+                                options={renderModeOptions}
+                                value={observerData?.debug?.renderMode}
+                                setProperty={(value: string) => setProperty('debug.renderMode', value)} />
+                            <ToggleColor
+                                label='Wireframe'
+                                booleanValue={observerData?.debug?.wireframe ?? false}
+                                setBooleanProperty={(value: boolean) => setProperty('debug.wireframe', value)}
+                                colorValue={rgbToArr(observerData?.debug?.wireframeColor ?? { r: 0, g: 0, b: 0 })}
+                                setColorProperty={(value: number[]) => setProperty('debug.wireframeColor', arrToRgb(value))} />
+                            <Slider
+                                label='Normals'
+                                precision={2}
+                                min={0}
+                                max={1}
+                                value={observerData?.debug?.normals ?? 0}
+                                setProperty={(value: number) => setProperty('debug.normals', value)} />
+                        </Panel>
+                    )}
+                    {tab === 'poi' && <div id='left-tab-poi' />}
+                </div>
+
                 <div id='scene-scrolly-bits' />
             </Container>
         );

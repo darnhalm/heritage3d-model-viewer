@@ -98,8 +98,30 @@ class InfoPanel extends React.Component <{
                                     <Detail label='Look Around' value='Left Mouse' />
                                     <Detail label='Fly' value='W, S, A, D' />
                                     <Label text='General' class='popup-panel-heading' />
-                                    <Detail label='Frame Scene' value='F' />
-                                    <Detail label='Reset Camera' value='R' />
+                                    <Container class='panel-option'>
+                                        <Label class='panel-label' text='Frame Scene' />
+                                        <div className='panel-value' style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            <Label text='F' />
+                                            <Button
+                                                class={['fit-screen-button', 'fit-screen-button-inline']}
+                                                width={28}
+                                                height={28}
+                                                onClick={() => window.viewer?.frameScene?.()}
+                                            />
+                                        </div>
+                                    </Container>
+                                    <Container class='panel-option'>
+                                        <Label class='panel-label' text='Reset Camera' />
+                                        <div className='panel-value' style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                            <Label text='R' />
+                                            <Button
+                                                class={['reset-camera-button', 'reset-camera-button-inline']}
+                                                width={28}
+                                                height={28}
+                                                onClick={() => window.viewer?.resetCamera?.()}
+                                            />
+                                        </div>
+                                    </Container>
                                 </div>
                             ) : (
                                 <div className='info-controls-content'>

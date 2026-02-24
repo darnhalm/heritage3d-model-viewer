@@ -1724,6 +1724,17 @@ class Viewer {
         this.light.light.normalOffsetBias = far / 1024;
     }
 
+    /** Fit the camera to the scene (same as pressing F). */
+    frameScene() {
+        this.focus(false);
+        this.fitCameraClipPlanes();
+    }
+
+    /** Reset the camera to default position (same as pressing R). */
+    resetCamera() {
+        this.cameraControls.reset(Vec3.ZERO, new Vec3(2, 2, 2));
+    }
+
     // load gltf model given its url and list of external urls
     private loadGltf(gltfUrl: File, externalUrls: Array<File>, warnings: string[], onProgress?: (progress: number) => void) {
         return new Promise((resolve, reject) => {
