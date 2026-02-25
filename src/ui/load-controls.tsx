@@ -56,7 +56,7 @@ const LoadControls = (props: { setProperty: SetProperty }) => {
         <div id='load-controls'>
             <Container class="load-button-panel" enabled flex>
                 <div className='header'>
-                    <img src={'static/playcanvas-logo.png'}/>
+                    <img src={'static/heritage3d-logo.svg'}/>
                     <div>
                         <Label text='HERITAGE3D Viewer v1.0' />
                     </div>

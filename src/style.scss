@@ -410,6 +410,11 @@ input {
     transform: translateX(-50%);
     display: flex;
     align-items: center;
+
+    .pcui-button:hover,
+    .pcui-button.pcui-focus {
+        box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+    }
 }
 
 .popup-button {
@@ -417,6 +422,11 @@ input {
     color: white;
     border: 0px !important;
     background-color: rgba(32, 32, 32, 0.4) !important;
+
+    &:hover,
+    &.pcui-focus {
+        box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+    }
 }
 
 .popup-button.selected {
@@ -1297,6 +1307,14 @@ input {
     margin: 0;
     left: calc(50% - 15px);
     top: calc(50% - 15px);
+
+    path {
+        fill: rgba(255, 255, 255, 0.5) !important;
+    }
+
+    .pcui-spinner-highlight {
+        fill: #fff !important;
+    }
 }
 
 .load-progress-wrapper {
@@ -1306,6 +1324,21 @@ input {
     transform: translateX(-50%);
     width: min(280px, 80vw);
     z-index: 10;
+
+    .pcui-progress-inner {
+        background: #fff !important;
+        background: linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 1) 0%,
+            rgba(255, 255, 255, 1) 25%,
+            rgba(255, 255, 255, 0.7) 26%,
+            rgba(255, 255, 255, 0.7) 50%,
+            rgba(255, 255, 255, 1) 51%,
+            rgba(255, 255, 255, 1) 75%,
+            rgba(255, 255, 255, 0.7) 76%,
+            rgba(255, 255, 255, 0.7) 100%
+        ) !important;
+    }
 }
 
 #panel-left.collapsed #scene-container, #panel-left.collapsed .header {
@@ -1338,6 +1371,11 @@ input {
 
 .pcui-button {
     border-radius: 0px !important;
+
+    &:hover:not(.pcui-disabled):not(.pcui-readonly),
+    &.pcui-focus:not(.pcui-disabled):not(.pcui-readonly) {
+        box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+    }
 }
 
 .pcui-button.secondary {
