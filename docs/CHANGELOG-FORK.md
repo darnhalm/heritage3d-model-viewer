@@ -59,6 +59,7 @@
 
 ## 4. Вспомогательные изменения
 
+- **Иконки во вкладке Materials:** слева от надписей отображаются иконки в `static/icons/` — `final-render-icon.svg` (Final Render), `diffuse-icon.svg` (Base Color), `metalness-icon.svg` (Metalness)
 - **CameraControls:** методы `getPosition()` и `getFocus()` для экспорта позиции и фокуса камеры
 - **Drop handler:** интерфейс `File` вынесен в `types.ts`, типизация `globalThis.File`
 - **Стили (`style.scss`):** классы `.measure-overlay`, `.measure-svg`, `.measure-line`, `.measure-cross`, `.measure-label` для визуализации измерений

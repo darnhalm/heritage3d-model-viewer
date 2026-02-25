@@ -1968,11 +1968,24 @@ class Viewer {
             const modelFiles = files.filter((f) => this.isModelFilename(f.filename) || this.isGSplatFilename(f.filename));
             const total = modelFiles.length;
             const progressPerFile: number[] = new Array(total).fill(0);
+            let lastProgressUpdate = 0;
+            let lastProgressValue = 0;
+            const PROGRESS_THROTTLE_MS = 80;
+            const PROGRESS_MIN_DELTA = 1.5;
 
             const setAggregateProgress = () => {
                 const sum = progressPerFile.reduce((a, b) => a + b, 0);
-                const pct = total > 0 ? Math.round((sum / total) * 90) : 0;
-                this.observer.set('ui.loadProgress', Math.min(90, pct));
+                const pct = total > 0 ? (sum / total) * 90 : 0;
+                const target = Math.min(90, Math.floor(pct * 10) / 10);
+                const now = Date.now();
+                const deltaOk = Math.abs(target - lastProgressValue) >= PROGRESS_MIN_DELTA;
+                const timeOk = now - lastProgressUpdate >= PROGRESS_THROTTLE_MS;
+                if (target >= 90 || deltaOk || timeOk) {
+                    lastProgressUpdate = now;
+                    lastProgressValue = target;
+                    this.observer.set('ui.loadProgress', target);
+                }
+                if (sum > 0 && fallbackInterval) stopFallbackProgress();
             };
 
             let fallbackInterval: ReturnType<typeof setInterval> | null = null;
@@ -1980,8 +1993,8 @@ class Viewer {
                 fallbackInterval = setInterval(() => {
                     const current = this.observer.get('ui.loadProgress') as number;
                     if (current >= 90) return;
-                    this.observer.set('ui.loadProgress', Math.min(90, current + 5));
-                }, 120);
+                    this.observer.set('ui.loadProgress', Math.min(90, current + 3));
+                }, 150);
             };
             const stopFallbackProgress = () => {
                 if (fallbackInterval) {

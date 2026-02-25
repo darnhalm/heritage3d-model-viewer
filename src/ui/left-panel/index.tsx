@@ -498,7 +498,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             <button
                                                 key={item.value}
                                                 type='button'
-                                                className={'materials-layer-item' + (observerData?.debug?.renderMode === item.value ? ' selected' : '')}
+                                                className={'materials-layer-item' + (item.value === 'default' ? ' materials-layer-item-final-render' : '') + (item.value === 'albedo' ? ' materials-layer-item-base-color' : '') + (item.value === 'metalness' ? ' materials-layer-item-metalness' : '') + (item.value === 'gloss' ? ' materials-layer-item-roughness' : '') + (observerData?.debug?.renderMode === item.value ? ' selected' : '')}
                                                 onClick={() => setProperty('debug.renderMode', item.value)}
                                             >
                                                 {item.label}
