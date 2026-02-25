@@ -366,7 +366,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             <SettingsPanel observerData={observerData} setProperty={setProperty} />
                             <div id='export-settings-row'>
                                 <Button
-                                    class='secondary'
+                                    class={['secondary', 'export-settings-button']}
                                     text={t('Export viewer settings', lang)}
                                     onClick={() => exportViewerSettings(observerData)}
                                 />

@@ -419,8 +419,51 @@ class ViewPanel extends React.Component <{
     }
 }
 
+class IDPanel extends React.Component <{
+    observerData: ObserverData,
+    setProperty: SetProperty }> {
+    shouldComponentUpdate(nextProps: Readonly<{
+        observerData: ObserverData;
+        setProperty: SetProperty; }>): boolean {
+        return JSON.stringify(nextProps.observerData.scene?.selectedNode) !== JSON.stringify(this.props.observerData.scene?.selectedNode) ||
+               JSON.stringify(nextProps.observerData.ui) !== JSON.stringify(this.props.observerData.ui);
+    }
+
+    render() {
+        const props = this.props;
+        const scene = props.observerData.scene;
+        const lang = props.observerData?.ui?.language;
+        const path = scene?.selectedNode?.path ?? '';
+        const name = scene?.selectedNode?.name ?? '';
+
+        return (
+            <div className='popup-panel-parent'>
+                <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'id'}>
+                    <Label text={t('ID', lang)} class='popup-panel-heading' />
+                    {path ? (
+                        <>
+                            <Detail label={t('Path', lang)} value={path} />
+                            <Detail label={t('Name', lang)} value={name || '-'} />
+                            <Button
+                                class='secondary'
+                                text={t('Copy path', lang)}
+                                onClick={() => {
+                                    navigator.clipboard?.writeText(path);
+                                }}
+                            />
+                        </>
+                    ) : (
+                        <div style={{ color: '#888', fontSize: 13 }}>{t('Select a node in the hierarchy (Model tab).', lang)}</div>
+                    )}
+                </Container>
+            </div>
+        );
+    }
+}
+
 export {
     InfoPanel,
     MeasurementsPanel,
-    ViewPanel
+    ViewPanel,
+    IDPanel
 };
