@@ -4,6 +4,7 @@ import QRious from 'qrious';
 import React from 'react';
 
 import { extract, addEventListenerOnClickOnly } from '../../helpers';
+import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData, HierarchyNode } from '../../types';
 import { Detail, Slider, Toggle, Select, ColorPickerControl, ToggleColor, Numeric, Vector } from '../components';
 import MorphTargetPanel from '../left-panel/morph-target-panel';
@@ -33,6 +34,7 @@ class InfoPanel extends React.Component <{
         const { observerData, setProperty } = this.props;
         if (!observerData) return null;
         const scene = observerData.scene;
+        const lang = observerData?.ui?.language;
         let variantListOptions: Array<{ v: string, t: string }> = [];
         try {
             const parsed = JSON.parse(scene?.variants?.list || '[]');
@@ -51,21 +53,21 @@ class InfoPanel extends React.Component <{
                             className={'info-tab' + (this.state.tab === 'controls' ? ' active' : '')}
                             onClick={() => this.setState({ tab: 'controls' })}
                         >
-                            Controls
+                            {t('Controls', lang)}
                         </button>
                         <button
                             type='button'
                             className={'info-tab' + (this.state.tab === 'model' ? ' active' : '')}
                             onClick={() => this.setState({ tab: 'model' })}
                         >
-                            Model
+                            {t('Model', lang)}
                         </button>
                         <button
                             type='button'
                             className={'info-tab' + (this.state.tab === 'about' ? ' active' : '')}
                             onClick={() => this.setState({ tab: 'about' })}
                         >
-                            About
+                            {t('About', lang)}
                         </button>
                     </div>
                     {this.state.tab === 'controls' && (
@@ -76,29 +78,29 @@ class InfoPanel extends React.Component <{
                                     className={'info-subtab' + (this.state.controlsSubTab === 'desktop' ? ' active' : '')}
                                     onClick={() => this.setState({ controlsSubTab: 'desktop' })}
                                 >
-                                    Desktop
+                                    {t('Desktop', lang)}
                                 </button>
                                 <button
                                     type='button'
                                     className={'info-subtab' + (this.state.controlsSubTab === 'touch' ? ' active' : '')}
                                     onClick={() => this.setState({ controlsSubTab: 'touch' })}
                                 >
-                                    Touch
+                                    {t('Touch', lang)}
                                 </button>
                             </div>
                             {this.state.controlsSubTab === 'desktop' ? (
                                 <div className='info-controls-content'>
-                                    <Label text='Orbit Mode' class='popup-panel-heading' />
-                                    <Detail label='Orbit' value='Left Mouse' />
-                                    <Detail label='Pan' value='Right Mouse' />
-                                    <Detail label='Zoom' value='Mouse Wheel' />
-                                    <Detail label='Set Focus' value='Double Click' />
-                                    <Label text='Fly Mode' class='popup-panel-heading' />
-                                    <Detail label='Look Around' value='Left Mouse' />
-                                    <Detail label='Fly' value='W, S, A, D' />
-                                    <Label text='General' class='popup-panel-heading' />
+                                    <Label text={t('Orbit Mode', lang)} class='popup-panel-heading' />
+                                    <Detail label={t('Orbit', lang)} value={t('Left Mouse', lang)} />
+                                    <Detail label={t('Pan', lang)} value={t('Right Mouse', lang)} />
+                                    <Detail label={t('Zoom', lang)} value={t('Mouse Wheel', lang)} />
+                                    <Detail label={t('Set Focus', lang)} value={t('Double Click', lang)} />
+                                    <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
+                                    <Detail label={t('Look Around', lang)} value={t('Left Mouse', lang)} />
+                                    <Detail label={t('Fly', lang)} value='W, S, A, D' />
+                                    <Label text={t('General', lang)} class='popup-panel-heading' />
                                     <Container class='panel-option'>
-                                        <Label class='panel-label' text='Frame Scene' />
+                                        <Label class='panel-label' text={t('Frame Scene', lang)} />
                                         <div className='panel-value' style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                             <Label text='F' />
                                             <Button
@@ -110,7 +112,7 @@ class InfoPanel extends React.Component <{
                                         </div>
                                     </Container>
                                     <Container class='panel-option'>
-                                        <Label class='panel-label' text='Reset Camera' />
+                                        <Label class='panel-label' text={t('Reset Camera', lang)} />
                                         <div className='panel-value' style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                             <Label text='R' />
                                             <Button
@@ -124,39 +126,39 @@ class InfoPanel extends React.Component <{
                                 </div>
                             ) : (
                                 <div className='info-controls-content'>
-                                    <Label text='Orbit Mode' class='popup-panel-heading' />
-                                    <Detail label='Orbit' value='One Finger Drag' />
-                                    <Detail label='Pan' value='Two Finger Drag' />
-                                    <Detail label='Zoom' value='Pinch' />
-                                    <Detail label='Set Focus' value='Double Tap' />
-                                    <Label text='Fly Mode' class='popup-panel-heading' />
-                                    <Detail label='Look Around' value='Touch on Right' />
-                                    <Detail label='Fly' value='Touch on Left' />
+                                    <Label text={t('Orbit Mode', lang)} class='popup-panel-heading' />
+                                    <Detail label={t('Orbit', lang)} value={t('One Finger Drag', lang)} />
+                                    <Detail label={t('Pan', lang)} value={t('Two Finger Drag', lang)} />
+                                    <Detail label={t('Zoom', lang)} value={t('Pinch', lang)} />
+                                    <Detail label={t('Set Focus', lang)} value={t('Double Tap', lang)} />
+                                    <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
+                                    <Detail label={t('Look Around', lang)} value={t('Touch on Right', lang)} />
+                                    <Detail label={t('Fly', lang)} value={t('Touch on Left', lang)} />
                                 </div>
                             )}
                         </>
                     )}
                     {this.state.tab === 'model' && (
                         <div className='info-panel-model-combined'>
-                            <Label text='Model' class='popup-panel-heading' />
+                            <Label text={t('Model', lang)} class='popup-panel-heading' />
                             {hasModel ? (
                                 <>
-                                    <Detail label='Filename' value={scene.filenames?.join(', ') || '-'} />
-                                    <Detail label='Meshes' value={scene.meshCount ?? '-'} />
-                                    <Detail label='Materials' value={scene.materialCount ?? '-'} />
-                                    <Detail label='Textures' value={scene.textureCount ?? '-'} />
-                                    <Detail label='Primitives' value={scene.primitiveCount ?? '-'} />
-                                    <Detail label='Verts' value={scene.vertexCount ?? '-'} />
-                                    <Detail label='Mesh VRAM' value={bytesToSizeString(scene.meshVRAM ?? 0)} />
-                                    <Detail label='Texture VRAM' value={bytesToSizeString(scene.textureVRAM ?? 0)} />
-                                    <Detail label='Load time' value={scene.loadTime ?? '-'} />
+                                    <Detail label={t('Filename', lang)} value={scene.filenames?.join(', ') || '-'} />
+                                    <Detail label={t('Meshes', lang)} value={scene.meshCount ?? '-'} />
+                                    <Detail label={t('Materials', lang)} value={scene.materialCount ?? '-'} />
+                                    <Detail label={t('Textures', lang)} value={scene.textureCount ?? '-'} />
+                                    <Detail label={t('Primitives', lang)} value={scene.primitiveCount ?? '-'} />
+                                    <Detail label={t('Verts', lang)} value={scene.vertexCount ?? '-'} />
+                                    <Detail label={t('Mesh VRAM', lang)} value={bytesToSizeString(scene.meshVRAM ?? 0)} />
+                                    <Detail label={t('Texture VRAM', lang)} value={bytesToSizeString(scene.textureVRAM ?? 0)} />
+                                    <Detail label={t('Load time', lang)} value={scene.loadTime ?? '-'} />
                                     {scene.bounds && typeof scene.bounds === 'object' ? (
-                                        <Vector label='Bounds' dimensions={3} value={scene.bounds} enabled={false} />
+                                        <Vector label={t('Bounds', lang)} dimensions={3} value={scene.bounds} enabled={false} />
                                     ) : (
-                                        <Detail label='Bounds' value='-' />
+                                        <Detail label={t('Bounds', lang)} value='-' />
                                     )}
                                     <Select
-                                        label='Variant'
+                                        label={t('Variant', lang)}
                                         type='string'
                                         options={variantListOptions}
                                         value={scene.variant?.selected ?? ''}
@@ -165,9 +167,9 @@ class InfoPanel extends React.Component <{
                                     />
                                 </>
                             ) : (
-                                <div style={{ color: '#888', fontSize: 13 }}>No model loaded. Drag & drop a glTF/GLB file.</div>
+                                <div style={{ color: '#888', fontSize: 13 }}>{t('No model loaded. Drag & drop a glTF/GLB file.', lang)}</div>
                             )}
-                            <Label text='Hierarchy' class='popup-panel-heading' />
+                            <Label text={t('Hierarchy', lang)} class='popup-panel-heading' />
                             {hasModel ? (() => {
                                 let modelHierarchy: Array<HierarchyNode> = [];
                                 try {
@@ -200,14 +202,14 @@ class InfoPanel extends React.Component <{
                                         </TreeView>
                                     </div>
                                 ) : (
-                                    <div style={{ color: '#888', fontSize: 13 }}>No hierarchy data.</div>
+                                    <div style={{ color: '#888', fontSize: 13 }}>{t('No hierarchy data.', lang)}</div>
                                 );
                             })() : (
-                                <div style={{ color: '#888', fontSize: 13 }}>No model loaded.</div>
+                                <div style={{ color: '#888', fontSize: 13 }}>{t('No model loaded.', lang)}</div>
                             )}
-                            <Label text='Stats' class='popup-panel-heading' />
+                            <Label text={t('Stats', lang)} class='popup-panel-heading' />
                             <Toggle
-                                label='Show performance stats'
+                                label={t('Show performance stats', lang)}
                                 value={observerData?.debug?.stats ?? false}
                                 setProperty={(value: boolean) => setProperty('debug.stats', value)}
                             />
@@ -220,19 +222,16 @@ class InfoPanel extends React.Component <{
                     )}
                     {this.state.tab === 'about' && (
                         <div className='info-about-block'>
-                            <Label text='About' class='popup-panel-heading' />
                             <div className='about-title'>HERITAGE3D Viewer v1.0</div>
                             <div className='about-description'>
-                                This viewer is a modified version of the open-source project
-                                PlayCanvas Model Viewer (MIT License):
+                                {t('This viewer is a modified version of the open-source project PlayCanvas Model Viewer (MIT License):', lang)}
                             </div>
                             <a href='https://github.com/playcanvas/model-viewer' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/playcanvas/model-viewer</a>
                             <div className='about-description'>
-                                UI components are based on
-                                PlayCanvas PCUI (MIT License):
+                                {t('UI components are based on PlayCanvas PCUI (MIT License):', lang)}
                             </div>
                             <a href='https://github.com/playcanvas/pcui' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/playcanvas/pcui</a>
-                            <div className='about-project'>HERITAGE3D.RU Project</div>
+                            <div className='about-project'>{t('HERITAGE3D.RU Project', lang)}</div>
                         </div>
                     )}
                 </Container>
@@ -259,6 +258,7 @@ class MeasurementsPanel extends React.Component <{
     render() {
         const props = this.props;
         const measureData = props.observerData.measure;
+        const lang = props.observerData?.ui?.language;
         const meters = measureData.lastDistance;
         const factor = measureData.unit === 'mm' ? 1000 : (measureData.unit === 'cm' ? 100 : 1);
         const precision = measureData.unit === 'mm' ? 0 : 2;
@@ -267,32 +267,32 @@ class MeasurementsPanel extends React.Component <{
         return (
             <div className='popup-panel-parent'>
                 <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'measurement'}>
-                    <Label text='Measurement' class='popup-panel-heading' />
+                    <Label text={t('Measurement', lang)} class='popup-panel-heading' />
                     <Toggle
-                        label='Measure Mode'
+                        label={t('Measure Mode', lang)}
                         value={measureData.enabled}
                         setProperty={(value: boolean) => props.setProperty('measure.enabled', value)}
                     />
                     <Select
-                        label='Units'
+                        label={t('Units', lang)}
                         type='string'
                         options={[
-                            { t: 'millimeters (mm)', v: 'mm' },
-                            { t: 'centimeters (cm)', v: 'cm' },
-                            { t: 'meters (m)', v: 'm' }
+                            { t: t('millimeters (mm)', lang), v: 'mm' },
+                            { t: t('centimeters (cm)', lang), v: 'cm' },
+                            { t: t('meters (m)', lang), v: 'm' }
                         ]}
                         value={measureData.unit}
                         setProperty={(value: 'mm' | 'cm' | 'm') => props.setProperty('measure.unit', value)}
                     />
                     <Numeric
-                        label='1 Unit = (m)'
+                        label={t('1 Unit = (m)', lang)}
                         value={measureData.unitScale}
                         min={0.000001}
                         max={1000000}
                         setProperty={(value: number) => props.setProperty('measure.unitScale', Math.max(0.000001, value))}
                     />
                     <Numeric
-                        label={`Known distance (${measureData.unit})`}
+                        label={`${t('Known distance', lang)} (${measureData.unit})`}
                         value={measureData.knownDistance ?? 0}
                         min={0}
                         max={1e9}
@@ -300,17 +300,17 @@ class MeasurementsPanel extends React.Component <{
                     />
                     <Button
                         class='secondary'
-                        text='RECALCULATE SCENE SIZE'
+                        text={t('RECALCULATE SCENE SIZE', lang)}
                         onClick={() => {
                             if (window.viewer) window.viewer.recalculateSceneSize();
                         }}
                         enabled={measureData.lastDistance != null && measureData.lastDistance > 0 && (measureData.knownDistance ?? 0) > 0}
                     />
-                    <Detail label='Last Distance' value={measuredValue} />
-                    <Detail label='Points' value={measureData.pointCount === 0 ? 'Pick first point' : 'Pick second point'} />
+                    <Detail label={t('Last Distance', lang)} value={measuredValue} />
+                    <Detail label={t('Points', lang)} value={measureData.pointCount === 0 ? t('Pick first point', lang) : t('Pick second point', lang)} />
                     <Button
                         class='secondary'
-                        text='CLEAR MEASUREMENT'
+                        text={t('CLEAR MEASUREMENT', lang)}
                         onClick={() => {
                             if (window.viewer) window.viewer.clearMeasurement();
                         }}
@@ -372,16 +372,17 @@ class ViewPanel extends React.Component <{
 
     render() {
         const props = this.props;
+        const lang = props.uiData?.language;
         return (
             <div className='popup-panel-parent'>
                 <Container id='view-panel' class='popup-panel' flex hidden={props.uiData.active !== 'view'}>
                     { this.hasQRCode ?
                         <>
-                            <Label text='View and share on mobile with QR code' />
+                            <Label text={t('View and share on mobile with QR code', lang)} />
                             <div id='qr-wrapper'>
                                 <canvas id='share-qr' />
                             </div>
-                            <Label text='View and share on mobile with URL' />
+                            <Label text={t('View and share on mobile with URL', lang)} />
                             <div id='share-url-wrapper'>
                                 <TextInput class='secondary' value={this.shareUrl} enabled={false} />
                                 <Button id='copy-button' icon='E126' onClick={() => {
@@ -393,21 +394,21 @@ class ViewPanel extends React.Component <{
                         </> : null }
                     <Button
                         class='secondary'
-                        text='TAKE A SNAPSHOT AS PNG'
+                        text={t('TAKE A SNAPSHOT AS PNG', lang)}
                         onClick={() => {
                             if (window.viewer) window.viewer.downloadPngScreenshot();
                         }}
                     />
                     <Button
                         class='secondary'
-                        text='COVER IMAGE (1:1)'
+                        text={t('COVER IMAGE (1:1)', lang)}
                         onClick={() => {
                             if (window.viewer) window.viewer.downloadCoverImageScreenshot();
                         }}
                     />
                     <Button
                         class='secondary'
-                        text='EXPORT VIEWER SETTINGS'
+                        text={t('EXPORT VIEWER SETTINGS', lang)}
                         onClick={() => {
                             if (window.viewer) window.viewer.exportViewerSettings();
                         }}

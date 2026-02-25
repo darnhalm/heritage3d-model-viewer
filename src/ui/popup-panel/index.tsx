@@ -2,6 +2,7 @@ import { Button } from '@playcanvas/pcui/react';
 import { UsdzExporter } from 'playcanvas';
 import React from 'react';
 
+import { t } from '../../i18n/translations';
 import AnimationControls from './animation-controls';
 import { MeasurementsPanel, ViewPanel, InfoPanel } from './panels';
 import { addEventListenerOnClickOnly } from '../../helpers';
@@ -44,71 +45,89 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
             return (this.props.observerData.ui.active === value) ? ['popup-button', 'selected'] : ['popup-button'];
         };
 
+        const lang = this.props.observerData?.ui?.language;
+        const wrap = (titleText: string, btn: React.ReactNode) => (
+            <span title={titleText} style={{ display: 'contents' }}>{btn}</span>
+        );
         return (
             <div id='popup-buttons-parent'>
-                <AnimationControls animationData={this.props.observerData.animation} setProperty={this.props.setProperty} />
-                <Button
-                    class={buildClass('info').concat('info-button')}
-                    id='info-button'
-                    width={40}
-                    height={40}
-                    onClick={() => handleClick('info')}
-                />
-                <Button
-                    class={['popup-button', 'hd-button', this.props.observerData.camera.hq ? 'hd-mode' : 'sd-mode']}
-                    id='hd-button'
-                    width={40}
-                    height={40}
-                    onClick={() => {
-                        this.props.setProperty('camera.hq', !this.props.observerData.camera.hq);
-                    }}
-                />
-                <Button
-                    class={buildClass('measurement').concat('measurement-button')}
-                    id='measurement-button'
-                    width={40}
-                    height={40}
-                    onClick={() => {
-                        const isOpening = this.props.observerData.ui.active !== 'measurement';
-                        handleClick('measurement');
-                        if (isOpening) {
-                            this.props.setProperty('measure.enabled', true);
-                        }
-                    }}
-                />
-                <Button class={buildClass('view').concat('view-button')} id='view-button' width={40} height={40} onClick={() => handleClick('view')} />
-                <Button
-                    class={['popup-button', 'fit-screen-button']}
-                    id='fit-screen-button'
-                    width={40}
-                    height={40}
-                    onClick={() => window.viewer?.frameScene?.()}
-                />
-                <Button
-                    class={['popup-button', 'camera-mode-button', this.props.observerData.camera.mode]}
-                    id='camera-mode-button'
-                    width={40}
-                    height={40}
-                    onClick={() => {
-                        const mode = this.props.observerData.camera.mode === 'orbit' ? 'fly' : 'orbit';
-                        this.props.setProperty('camera.mode', mode);
-                    }}
-                />
-                <Button
-                    class={['popup-button', 'fullscreen-button', this.props.observerData.ui.fullscreen ? 'fullscreen-exit' : 'fullscreen-enter']}
-                    id='fullscreen-button'
-                    width={40}
-                    height={40}
-                    onClick={() => {
-                        const el = document.getElementById('application-container');
-                        if (!el) return;
-                        if (document.fullscreenElement) {
-                            document.exitFullscreen?.();
-                        } else {
-                            el.requestFullscreen?.();
-                        }
-                    }}
-                />
+                <AnimationControls animationData={this.props.observerData.animation} setProperty={this.props.setProperty} lang={this.props.observerData?.ui?.language} />
+                {wrap(t('Info', lang), (
+                    <Button
+                        class={buildClass('info').concat('info-button')}
+                        id='info-button'
+                        width={40}
+                        height={40}
+                        onClick={() => handleClick('info')}
+                    />
+                ))}
+                {wrap(this.props.observerData.camera.hq ? t('HD mode', lang) : t('SD mode', lang), (
+                    <Button
+                        class={['popup-button', 'hd-button', this.props.observerData.camera.hq ? 'hd-mode' : 'sd-mode']}
+                        id='hd-button'
+                        width={40}
+                        height={40}
+                        onClick={() => {
+                            this.props.setProperty('camera.hq', !this.props.observerData.camera.hq);
+                        }}
+                    />
+                ))}
+                {wrap(t('Measurement', lang), (
+                    <Button
+                        class={buildClass('measurement').concat('measurement-button')}
+                        id='measurement-button'
+                        width={40}
+                        height={40}
+                        onClick={() => {
+                            const isOpening = this.props.observerData.ui.active !== 'measurement';
+                            handleClick('measurement');
+                            if (isOpening) {
+                                this.props.setProperty('measure.enabled', true);
+                            }
+                        }}
+                    />
+                ))}
+                {wrap(t('View & share', lang), (
+                    <Button class={buildClass('view').concat('view-button')} id='view-button' width={40} height={40} onClick={() => handleClick('view')} />
+                ))}
+                {wrap(t('Frame scene', lang), (
+                    <Button
+                        class={['popup-button', 'fit-screen-button']}
+                        id='fit-screen-button'
+                        width={40}
+                        height={40}
+                        onClick={() => window.viewer?.frameScene?.()}
+                    />
+                ))}
+                {wrap(this.props.observerData.camera.mode === 'orbit' ? t('Orbit mode', lang) : t('Fly mode', lang), (
+                    <Button
+                        class={['popup-button', 'camera-mode-button', this.props.observerData.camera.mode]}
+                        id='camera-mode-button'
+                        width={40}
+                        height={40}
+                        onClick={() => {
+                            const mode = this.props.observerData.camera.mode === 'orbit' ? 'fly' : 'orbit';
+                            this.props.setProperty('camera.mode', mode);
+                        }}
+                    />
+                ))}
+                {wrap(this.props.observerData.ui.fullscreen ? t('Exit fullscreen', lang) : t('Fullscreen', lang), (
+                    <Button
+                        class={['popup-button', 'fullscreen-button', this.props.observerData.ui.fullscreen ? 'fullscreen-exit' : 'fullscreen-enter']}
+                        id='fullscreen-button'
+                        width={40}
+                        height={40}
+                        onClick={() => {
+                            const el = document.getElementById('application-container');
+                            if (!el) return;
+                            if (document.fullscreenElement) {
+                                document.exitFullscreen?.();
+                            } else {
+                                el.requestFullscreen?.();
+                            }
+                        }}
+                    />
+                ))}
             </div>
         );
     }
@@ -135,6 +154,7 @@ class PopupPanel extends React.Component <{ observerData: ObserverData, setPrope
         return (<div id='popup' className={this.props.observerData.scene.nodes === '[]' ? 'empty' : null}>
             <PopupPanelControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
             <PopupButtonControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
+            <span title={t('View in AR', this.props.observerData?.ui?.language)} style={{ display: 'contents' }}>
             <Button
                 class='popup-button'
                 id='launch-ar-button'
@@ -156,6 +176,7 @@ class PopupPanel extends React.Component <{ observerData: ObserverData, setPrope
                     }
                 } }
             />
+            </span>
         </div>);
     }
 }

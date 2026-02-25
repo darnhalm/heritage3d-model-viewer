@@ -1,6 +1,7 @@
 import { Button } from '@playcanvas/pcui/react';
 import React from 'react';
 
+import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData } from '../../types';
 import { NakedSelect, NakedSlider } from '../components';
 
@@ -56,11 +57,12 @@ class AnimationSpeedSelect extends React.Component <{ animationData: ObserverDat
 }
 
 
-class AnimationControls extends React.Component <{ animationData: ObserverData['animation'], setProperty: SetProperty }> {
+class AnimationControls extends React.Component <{ animationData: ObserverData['animation'], setProperty: SetProperty, lang?: string }> {
     animationState: ObserverData['animation'];
 
-    shouldComponentUpdate(nextProps: Readonly<{ animationData: ObserverData['animation']; setProperty: SetProperty; }>): boolean {
-        return JSON.stringify(nextProps.animationData) !== JSON.stringify(this.props.animationData);
+    shouldComponentUpdate(nextProps: Readonly<{ animationData: ObserverData['animation']; setProperty: SetProperty; lang?: string }>): boolean {
+        return JSON.stringify(nextProps.animationData) !== JSON.stringify(this.props.animationData) ||
+               nextProps.lang !== this.props.lang;
     }
 
     componentDidUpdate(): void {
@@ -75,9 +77,17 @@ class AnimationControls extends React.Component <{ animationData: ObserverData['
 
         return enabled ? (
             <div className='animation-controls-panel-parent'>
-                <Button class='anim-control-button' width={30} height={30} icon={ props.animationData.playing ? 'E376' : 'E286' } text='' onClick={() => {
+                <span title={props.animationData.playing ? t('Pause', props.lang) : t('Play', props.lang)} style={{ display: 'contents' }}>
+                <Button
+                    class='anim-control-button'
+                    width={30}
+                    height={30}
+                    icon={ props.animationData.playing ? 'E376' : 'E286' }
+                    text=''
+                    onClick={() => {
                     props.setProperty('animation.playing', !this.animationState.playing);
                 }} />
+                </span>
                 <AnimationTrackSelect animationData={this.props.animationData} setProperty={this.props.setProperty} />
                 <NakedSlider
                     id='anim-scrub-slider'

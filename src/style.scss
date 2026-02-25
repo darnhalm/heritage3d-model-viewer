@@ -25,6 +25,15 @@
 .fi-cn { background-image: url('/static/flags/cn.svg'); }
 .fi-cn.fis { background-image: url('/static/flags/cn.svg'); }
 
+/* Toggle switch active state: soft blue instead of green */
+.pcui-boolean-input-toggle.pcui-boolean-input-ticked::after {
+    background-color: #88bce8 !important;
+}
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-boolean-input-ticked:hover::after,
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-boolean-input-ticked:focus::after {
+    background-color: #88bce8 !important;
+}
+
 html {
     height: 100%;
 }
@@ -158,9 +167,9 @@ body {
     }
 
     &.selected {
-        background: rgba(110, 179, 255, 0.25);
+        background: rgba(136, 188, 232, 0.25);
         color: #fff;
-        border-left: 3px solid #6eb3ff;
+        border-left: 3px solid #88bce8;
     }
 }
 
@@ -541,7 +550,7 @@ input {
     &.active {
         background: rgba(70, 70, 70, 0.95);
         color: #fff;
-        border-color: #6eb3ff;
+        border-color: #88bce8;
     }
 }
 
@@ -607,7 +616,7 @@ input {
     .about-link {
         display: block;
         margin-bottom: 12px;
-        color: #6eb3ff;
+        color: #88bce8;
         text-decoration: none;
         word-break: break-all;
 
@@ -635,7 +644,7 @@ input {
     &.active {
         background: rgba(70, 70, 70, 0.95);
         color: #fff;
-        border-color: #6eb3ff;
+        border-color: #88bce8;
     }
 }
 
@@ -713,8 +722,8 @@ input {
 
     &.hd-mode {
         background-image: url(./static/icons/hd-icon.svg);
-        background-color: rgba(110, 179, 255, 0.2);
-        border-color: #6eb3ff;
+        background-color: rgba(136, 188, 232, 0.2);
+        border-color: #88bce8;
     }
 
     &.sd-mode {
@@ -784,7 +793,7 @@ input {
     &.active {
         background-color: rgba(70, 70, 70, 0.95);
         color: #fff;
-        border-color: #6eb3ff;
+        border-color: #88bce8;
     }
 
     &.left-panel-tab-scene {
