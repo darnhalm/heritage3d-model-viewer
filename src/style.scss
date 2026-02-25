@@ -1,5 +1,30 @@
 @use '../node_modules/@playcanvas/pcui/dist/pcui-theme-grey.scss' as *;
 
+/* Flag icons (EN, RU, CN) from flag-icons - https://github.com/lipis/flag-icons */
+.fi {
+    display: inline-block;
+    width: 1.333333em;
+    height: 1em;
+    line-height: 1;
+    background-size: contain;
+    background-position: 50%;
+    background-repeat: no-repeat;
+
+    &::before {
+        content: '\00a0';
+    }
+
+    &.fis {
+        width: 1em;
+    }
+}
+.fi-gb { background-image: url('/static/flags/gb.svg'); }
+.fi-gb.fis { background-image: url('/static/flags/gb.svg'); }
+.fi-ru { background-image: url('/static/flags/ru.svg'); }
+.fi-ru.fis { background-image: url('/static/flags/ru.svg'); }
+.fi-cn { background-image: url('/static/flags/cn.svg'); }
+.fi-cn.fis { background-image: url('/static/flags/cn.svg'); }
+
 html {
     height: 100%;
 }
@@ -1343,6 +1368,33 @@ input {
 
 #panel-left.collapsed #scene-container, #panel-left.collapsed .header {
     display: none !important;
+}
+
+.lang-switcher {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    margin-top: auto;
+    flex-shrink: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+    .fi {
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+
+        &:hover {
+            opacity: 1;
+        }
+    }
+}
+
+#panel-left.collapsed .lang-switcher {
+    display: none;
 }
 
 .font-thin {

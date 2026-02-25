@@ -54,6 +54,11 @@ class App extends React.Component<{ observer: Observer }> {
                     <img src={'static/heritage3d-logo.svg'}/>
                 </div>
                 <LeftPanel observerData={this.state} setProperty={this._setStateProperty} />
+                <div className='lang-switcher'>
+                    <span className='fi fi-gb fis' title='English' />
+                    <span className='fi fi-ru fis' title='Русский' />
+                    <span className='fi fi-cn fis' title='中文' />
+                </div>
             </Container>
             <div id='canvas-wrapper'>
                 <canvas id="application-canvas" ref={this.canvasRef} />
