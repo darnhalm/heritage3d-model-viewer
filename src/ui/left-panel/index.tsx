@@ -135,7 +135,7 @@ class MetadataPanel extends React.Component<{ observerData: ObserverData; setPro
 const toggleCollapsed = () => {
     const leftPanel = document.getElementById('panel-left');
     if (leftPanel) {
-        leftPanel.classList.toggle('collapsed');
+        leftPanel.classList.toggle('expanded');
     }
 };
 
@@ -425,7 +425,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     componentDidMount(): void {
         document.getElementById('panel-toggle')?.addEventListener('click', () => toggleCollapsed());
         document.getElementById('title')?.addEventListener('click', () => toggleCollapsed());
-        setTimeout(() => toggleCollapsed());
     }
 
     render() {

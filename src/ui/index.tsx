@@ -20,7 +20,7 @@ class App extends React.Component<{ observer: Observer }> {
         super(props);
 
         this.canvasRef = React.createRef();
-        this.state = this._retrieveState();
+        this.state = { ...this._retrieveState() };
 
         props.observer.on('*:set', () => {
             // update the state
@@ -43,7 +43,7 @@ class App extends React.Component<{ observer: Observer }> {
     render() {
         if (!this.state) return null;
         return <div id="application-container">
-            <Container id="panel-left" flex resizable='right' resizeMin={220} resizeMax={800}>
+            <Container id="panel-left" width={32} flex resizable='right' resizeMin={220} resizeMax={800}>
                 <div className="header" style={{ display: 'none' }}>
                     <div id="title">
                         <img src={'static/heritage3d-logo.svg'}/>
@@ -99,5 +99,12 @@ export default (observer: Observer) => {
     // Commit the initial mount synchronously
     flushSync(() => {
         root.render(<App observer={observer} />);
+    });
+
+    // Prevent flash of expanded panel: show only after layout is settled (2 frames)
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            document.body.classList.add('ui-ready');
+        });
     });
 };

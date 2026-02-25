@@ -322,8 +322,9 @@ const main = () => {
             switch (key) {
                 case 'load':
                 case 'assetUrl': {
-                    const url = decodeURIComponent(value);
-                    files.push({ url, filename: url });
+                    const loadUrl = decodeURIComponent(value);
+                    const absoluteUrl = loadUrl.startsWith('http') ? loadUrl : new URL(loadUrl, window.location.href).href;
+                    files.push({ url: absoluteUrl, filename: loadUrl });
                     break;
                 }
                 case 'cameraPosition': {

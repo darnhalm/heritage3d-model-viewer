@@ -68,8 +68,14 @@ body {
     }
 }
 
+body:not(.ui-ready) #panel-left {
+    visibility: hidden;
+}
+
 #panel-left {
-    width: 310px;
+    width: 32px !important;
+    min-width: 32px !important;
+    max-width: 32px !important;
     height: 100%;
     background-color: #2e2e2e;
     display: flex;
@@ -83,13 +89,19 @@ body {
     position: relative;
 }
 
-#panel-left.collapsed {
+#panel-left.expanded {
+    width: 310px !important;
+    min-width: 220px !important;
+    max-width: 800px !important;
+}
+
+#panel-left:not(.expanded) {
     width: 32px !important;
     overflow: hidden;
     overflow-y: hidden !important;
 }
 
-#panel-left.collapsed #panel-toggle::before {
+#panel-left:not(.expanded) #panel-toggle::before {
     transform: translateY(-50%) translateX(-50%) rotateZ(90deg);
 }
 
@@ -1423,7 +1435,7 @@ input {
 
 @media only screen and (max-width: 950px) {
 
-    #panel-left.collapsed {
+    #panel-left:not(.expanded) {
         overflow: visible !important;
     }
 
@@ -1450,8 +1462,8 @@ input {
         display: none !important;
     }
 
-    #panel-left:not(.collapsed) + #canvas-wrapper > #popup,
-    #panel-left:not(.collapsed) + #canvas-wrapper > #load-controls > .load-button-panel {
+    #panel-left.expanded + #canvas-wrapper > #popup,
+    #panel-left.expanded + #canvas-wrapper > #load-controls > .load-button-panel {
         display: none;
     }
 
@@ -1472,7 +1484,7 @@ input {
         right: 0;
     }
 
-    #panel-left:not(.collapsed) + #canvas-wrapper > .selected-node-panel-parent > .selected-node-panel {
+    #panel-left.expanded + #canvas-wrapper > .selected-node-panel-parent > .selected-node-panel {
         background-color: #333333;
         border: 2px #202020 solid !important;
     }
@@ -1490,11 +1502,11 @@ input {
     }
 }
 
-#panel-left.collapsed {
+#panel-left:not(.expanded) {
     position: absolute;
 }
 
-#panel-left.collapsed > .pcui-resizable-handle {
+#panel-left:not(.expanded) > .pcui-resizable-handle {
     display: none;
 }
 
@@ -1504,7 +1516,7 @@ input {
     position: fixed;
 }
 
-#panel-left:not(.collapsed)> #panel-toggle > img {
+#panel-left.expanded > #panel-toggle > img {
     display: none;
 }
 
@@ -1616,7 +1628,7 @@ input {
     }
 }
 
-#panel-left.collapsed #scene-container, #panel-left.collapsed .header {
+#panel-left:not(.expanded) #scene-container, #panel-left:not(.expanded) .header {
     display: none !important;
 }
 
@@ -1654,7 +1666,7 @@ input {
     }
 }
 
-#panel-left.collapsed .lang-switcher {
+#panel-left:not(.expanded) .lang-switcher {
     display: none;
 }
 
