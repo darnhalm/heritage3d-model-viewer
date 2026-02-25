@@ -177,7 +177,12 @@ const observerData: ObserverData = {
     },
     morphs: null,
     enableWebGPU: false,
-    centerScene: false
+    centerScene: false,
+    metadata: {
+        title: '', creator: '', subject: '', description: '', publisher: '', contributor: '',
+        date: '', type: '', format: '', identifier: '', source: '', language: '', relation: '', coverage: '', rights: '',
+        egrokn: false, egroknLevel: 'federal', objectNumber: '', isMuseumItem: false, goskatalogLink: ''
+    }
 };
 
 const saveOptions = (observer: Observer, name: string) => {
@@ -190,6 +195,7 @@ const saveOptions = (observer: Observer, name: string) => {
         shadowCatcher: options.shadowCatcher,
         measure: options.measure,
         enableWebGPU: options.enableWebGPU,
+        metadata: options.metadata ?? {},
         ui: { language: options.ui?.language }
     }));
 };

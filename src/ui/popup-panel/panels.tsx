@@ -452,9 +452,7 @@ class IDPanel extends React.Component <{
                                 }}
                             />
                         </>
-                    ) : (
-                        <div style={{ color: '#888', fontSize: 13 }}>{t('Select a node in the hierarchy (Model tab).', lang)}</div>
-                    )}
+                    ) : null}
                 </Container>
             </div>
         );

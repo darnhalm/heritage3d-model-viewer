@@ -168,6 +168,36 @@ export interface ObserverData {
     },
     enableWebGPU: boolean,
     centerScene: boolean,
+    /** Dublin Core metadata */
+    metadata?: {
+        title?: string;
+        creator?: string;
+        subject?: string;
+        description?: string;
+        publisher?: string;
+        contributor?: string;
+        date?: string;
+        type?: string;
+        format?: string;
+        identifier?: string;
+        source?: string;
+        language?: string;
+        relation?: string;
+        coverage?: string;
+        rights?: string;
+        /** ЕГРОКН — объект в реестре культурного наследия */
+        egrokn?: boolean;
+        /** Уровень значения: федеральный, региональный, муниципальный */
+        egroknLevel?: 'federal' | 'regional' | 'municipal';
+        /** Номер объекта */
+        objectNumber?: string;
+        /** Музейный предмет */
+        isMuseumItem?: boolean;
+        /** Ссылка на Госкаталог */
+        goskatalogLink?: string;
+    };
 }
 
 export type SetProperty = (path: string, value: any) => void;
+
+export const DUBLIN_CORE_KEYS = ['title', 'creator', 'subject', 'description', 'publisher', 'contributor', 'date', 'type', 'format', 'identifier', 'source', 'language', 'relation', 'coverage', 'rights'] as const;

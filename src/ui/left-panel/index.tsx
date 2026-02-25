@@ -17,7 +17,8 @@ const exportViewerSettings = (observerData: ObserverData) => {
         debug: observerData.debug,
         shadowCatcher: observerData.shadowCatcher,
         measure: observerData.measure,
-        enableWebGPU: observerData.enableWebGPU
+        enableWebGPU: observerData.enableWebGPU,
+        metadata: observerData.metadata ?? {}
     };
     const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -28,7 +29,112 @@ const exportViewerSettings = (observerData: ObserverData) => {
     URL.revokeObjectURL(url);
 };
 
-type LeftPanelTab = 'scene' | 'materials' | 'poi';
+type LeftPanelTab = 'scene' | 'materials' | 'poi' | 'metadata';
+
+const DUBLIN_CORE_FIELDS: Array<{ key: string; labelKey: string }> = [
+    { key: 'title', labelKey: 'Title' }, { key: 'creator', labelKey: 'Creator' }, { key: 'subject', labelKey: 'Subject' },
+    { key: 'description', labelKey: 'Description' }, { key: 'publisher', labelKey: 'Publisher' }, { key: 'contributor', labelKey: 'Contributor' },
+    { key: 'date', labelKey: 'Date' }, { key: 'type', labelKey: 'Type' }, { key: 'format', labelKey: 'Format' },
+    { key: 'identifier', labelKey: 'Identifier' }, { key: 'source', labelKey: 'Source' }, { key: 'language', labelKey: 'Language' },
+    { key: 'relation', labelKey: 'Relation' }, { key: 'coverage', labelKey: 'Coverage' }, { key: 'rights', labelKey: 'Rights' }
+];
+
+class MetadataPanel extends React.Component<{ observerData: ObserverData; setProperty: SetProperty }> {
+    state: { saved: boolean } = { saved: false };
+    saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+    shouldComponentUpdate(nextProps: { observerData: ObserverData }, nextState: { saved: boolean }) {
+        return JSON.stringify(nextProps.observerData.metadata) !== JSON.stringify(this.props.observerData.metadata) ||
+               nextProps.observerData?.ui?.language !== this.props.observerData?.ui?.language ||
+               nextState.saved !== this.state.saved;
+    }
+
+    componentWillUnmount() {
+        if (this.saveTimer) clearTimeout(this.saveTimer);
+    }
+
+    handleSave = () => {
+        this.setState({ saved: true });
+        if (this.saveTimer) clearTimeout(this.saveTimer);
+        this.saveTimer = setTimeout(() => this.setState({ saved: false }), 2000);
+    };
+
+    render() {
+        const { observerData, setProperty } = this.props;
+        const metadata = observerData.metadata ?? {};
+        const lang = observerData?.ui?.language;
+        const egrokn = !!metadata.egrokn;
+        const isMuseumItem = !!metadata.isMuseumItem;
+        const egroknLevelOptions = [
+            { v: 'federal', t: t('Federal', lang) },
+            { v: 'regional', t: t('Regional', lang) },
+            { v: 'municipal', t: t('Municipal', lang) }
+        ];
+        return (
+            <Panel headerText={t('Metadata (Dublin Core)', lang)} id='metadata-panel' flexShrink={'0'} collapsible={false}>
+                <div className='metadata-dublin-core'>
+                    {DUBLIN_CORE_FIELDS.map(({ key, labelKey }) => (
+                        <div key={key} className='panel-option metadata-field'>
+                            <label className='panel-label'>{t(labelKey, lang)}</label>
+                            <input
+                                type='text'
+                                className='metadata-input panel-value'
+                                value={String(metadata[key as keyof typeof metadata] ?? '')}
+                                onChange={(e) => setProperty(`metadata.${key}`, e.target.value)}
+                            />
+                        </div>
+                    ))}
+                    <div className='metadata-heritage-section'>
+                        <Toggle
+                            label={t('EGROKN', lang)}
+                            value={egrokn}
+                            setProperty={(v: boolean) => setProperty('metadata.egrokn', v)}
+                        />
+                        {egrokn && (
+                            <Select
+                                label={t('EGROKN level', lang)}
+                                type='string'
+                                options={egroknLevelOptions}
+                                value={metadata.egroknLevel ?? 'federal'}
+                                setProperty={(v: string) => setProperty('metadata.egroknLevel', v)}
+                            />
+                        )}
+                        <div className='panel-option metadata-field'>
+                            <label className='panel-label'>{t('Object number', lang)}</label>
+                            <input
+                                type='text'
+                                className='metadata-input panel-value'
+                                value={metadata.objectNumber ?? ''}
+                                onChange={(e) => setProperty('metadata.objectNumber', e.target.value)}
+                            />
+                        </div>
+                        <Toggle
+                            label={t('Museum item', lang)}
+                            value={isMuseumItem}
+                            setProperty={(v: boolean) => setProperty('metadata.isMuseumItem', v)}
+                        />
+                        {isMuseumItem && (
+                            <div className='panel-option metadata-field'>
+                                <label className='panel-label'>{t('Goskatalog link', lang)}</label>
+                                <input
+                                    type='url'
+                                    className='metadata-input panel-value'
+                                    placeholder='https://goskatalog.ru/...'
+                                    value={metadata.goskatalogLink ?? ''}
+                                    onChange={(e) => setProperty('metadata.goskatalogLink', e.target.value)}
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+                <div id='metadata-save-row'>
+                    <Button class='secondary' text={t('Save', lang)} onClick={this.handleSave} />
+                    {this.state.saved && <span className='metadata-saved-feedback'>✓ {t('Saved', lang)}</span>}
+                </div>
+            </Panel>
+        );
+    }
+}
 
 const toggleCollapsed = () => {
     const leftPanel = document.getElementById('panel-left');
@@ -314,7 +420,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     state: { tab: LeftPanelTab } = { tab: 'scene' };
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab }): boolean {
-        const keys = ['camera', 'debug', 'scene.cameras', 'scene.selectedCamera', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language'];
+        const keys = ['camera', 'debug', 'scene.cameras', 'scene.selectedCamera', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) || nextState.tab !== this.state.tab;
@@ -354,6 +460,13 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                         onClick={() => this.setState({ tab: 'poi' })}
                     >
                         {t('POI', lang)}
+                    </button>
+                    <button
+                        type='button'
+                        className={'left-panel-tab left-panel-tab-metadata' + (tab === 'metadata' ? ' active' : '')}
+                        onClick={() => this.setState({ tab: 'metadata' })}
+                    >
+                        {t('Metadata (Dublin Core)', lang)}
                     </button>
                 </div>
 
@@ -431,6 +544,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                         </Panel>
                     )}
                     {tab === 'poi' && <div id='left-tab-poi' />}
+                    {tab === 'metadata' && <MetadataPanel observerData={observerData} setProperty={setProperty} />}
                 </div>
 
                 <div id='scene-scrolly-bits' />

@@ -791,6 +791,7 @@ input {
 
 .left-panel-tabs {
     display: flex;
+    flex-wrap: wrap;
     gap: 4px;
     margin-top: 16px;
     margin-bottom: 8px;
@@ -833,6 +834,11 @@ input {
     &.left-panel-tab-poi {
         background-image: url(./static/icons/tab-poi-icon.svg);
     }
+
+    &.left-panel-tab-metadata {
+        flex-basis: 100%;
+        background-image: url(./static/icons/id-icon.svg);
+    }
 }
 
 .left-panel-tab-content {
@@ -861,6 +867,50 @@ input {
         background-position: 14px center;
         padding-left: 42px !important;
     }
+}
+
+/* Metadata (Dublin Core) tab */
+.metadata-dublin-core {
+    padding: 8px 12px;
+}
+
+.metadata-heritage-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #444;
+}
+
+.metadata-field {
+    margin-bottom: 8px;
+
+    .metadata-input {
+        width: 100%;
+        padding: 6px 8px;
+        background: rgba(40, 40, 40, 0.9);
+        border: 1px solid #555;
+        border-radius: 4px;
+        color: white;
+        font-size: 12px;
+        transition: box-shadow 0.2s ease;
+
+        &:hover,
+        &:focus {
+            outline: none;
+            box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4);
+        }
+    }
+}
+
+#metadata-save-row {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.metadata-saved-feedback {
+    color: #88bce8;
+    font-size: 12px;
 }
 
 #scene-scrolly-bits {
