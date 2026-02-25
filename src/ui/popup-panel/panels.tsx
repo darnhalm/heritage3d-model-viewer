@@ -222,7 +222,10 @@ class InfoPanel extends React.Component <{
                     )}
                     {this.state.tab === 'about' && (
                         <div className='info-about-block'>
-                            <div className='about-title'>HERITAGE3D Viewer v1.0</div>
+                            <div className='about-header'>
+                                <img src='static/heritage3d-logo.svg' alt='' className='about-logo' />
+                                <div className='about-title'>HERITAGE3D Viewer v1.0</div>
+                            </div>
                             <div className='about-description'>
                                 {t('This viewer is a modified version of the open-source project PlayCanvas Model Viewer (MIT License):', lang)}
                             </div>
@@ -231,6 +234,12 @@ class InfoPanel extends React.Component <{
                                 {t('UI components are based on PlayCanvas PCUI (MIT License):', lang)}
                             </div>
                             <a href='https://github.com/playcanvas/pcui' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/playcanvas/pcui</a>
+                            <div className='about-description'>
+                                {t('Icons: Google Material Icons', lang)} — <a href='https://fonts.google.com/icons' target='_blank' rel='noopener noreferrer' className='about-link'>fonts.google.com/icons</a>
+                            </div>
+                            <div className='about-description'>
+                                {t('Flags: flag-icons', lang)} — <a href='https://github.com/lipis/flag-icons' target='_blank' rel='noopener noreferrer' className='about-link'>github.com/lipis/flag-icons</a>
+                            </div>
                             <div className='about-project'>{t('HERITAGE3D.RU Project', lang)}</div>
                         </div>
                     )}

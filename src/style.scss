@@ -644,15 +644,33 @@ input {
     line-height: 1.5;
     color: #fff;
 
+    .about-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .about-logo {
+        width: 48px;
+        height: 48px;
+        flex-shrink: 0;
+    }
+
     .about-title {
-        margin-bottom: 12px;
+        margin: 0;
         font-weight: 600;
+        font-size: 16px;
         color: #fff;
     }
 
     .about-description {
         margin-bottom: 12px;
         color: #fff;
+
+        .about-link {
+            display: inline;
+        }
     }
 
     .about-project {
