@@ -7,6 +7,26 @@ import { extract, addEventListenerOnClickOnly } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData, HierarchyNode } from '../../types';
 import { Detail, Slider, Toggle, Select, ColorPickerControl, ToggleColor, Numeric, Vector } from '../components';
+
+const ControlDetail = (props: { label: string, value: string, icon?: string, icons?: string[], useMouseIcon?: boolean, trackpadIcon?: '1' | '2', swipeIcon?: 'left' | 'right' }) => {
+    const iconList = props.icons || (props.icon ? [props.icon] : []);
+    return (
+        <Container class={['panel-option', 'control-detail']}>
+            <Label class='panel-label' text={props.label} />
+            <div className='panel-value control-value'>
+                {props.useMouseIcon && <span className='control-icon control-icon-mouse' />}
+                {props.trackpadIcon === '1' && <span className='control-icon control-icon-trackpad-1' />}
+                {props.trackpadIcon === '2' && <span className='control-icon control-icon-trackpad-2' />}
+                {props.swipeIcon === 'left' && <span className='control-icon control-icon-swipe-left' />}
+                {props.swipeIcon === 'right' && <span className='control-icon control-icon-swipe-right' />}
+                {iconList.map((ic) => (
+                    <span key={ic} className='material-symbols-outlined control-icon'>{ic}</span>
+                ))}
+                <span>{props.value}</span>
+            </div>
+        </Container>
+    );
+};
 import MorphTargetPanel from '../left-panel/morph-target-panel';
 
 declare global {
@@ -91,18 +111,18 @@ class InfoPanel extends React.Component <{
                             {this.state.controlsSubTab === 'desktop' ? (
                                 <div className='info-controls-content'>
                                     <Label text={t('Orbit Mode', lang)} class='popup-panel-heading' />
-                                    <Detail label={t('Orbit', lang)} value={t('Left Mouse', lang)} />
-                                    <Detail label={t('Pan', lang)} value={t('Right Mouse', lang)} />
-                                    <Detail label={t('Zoom', lang)} value={t('Mouse Wheel', lang)} />
-                                    <Detail label={t('Set Focus', lang)} value={t('Double Click', lang)} />
+                                    <ControlDetail label={t('Orbit', lang)} value={t('Left Mouse', lang)} useMouseIcon icons={['right_click']} />
+                                    <ControlDetail label={t('Pan', lang)} value={t('Right Mouse', lang)} useMouseIcon icons={['left_click']} />
+                                    <ControlDetail label={t('Zoom', lang)} value={t('Mouse Wheel', lang)} useMouseIcon icons={['swap_vert']} />
+                                    <ControlDetail label={t('Set Focus', lang)} value={t('Double Click', lang)} useMouseIcon icons={['touch_double']} />
                                     <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
-                                    <Detail label={t('Look Around', lang)} value={t('Left Mouse', lang)} />
-                                    <Detail label={t('Fly', lang)} value='W, S, A, D' />
+                                    <ControlDetail label={t('Look Around', lang)} value={t('Left Mouse', lang)} useMouseIcon icons={['right_click']} />
+                                    <ControlDetail label={t('Fly', lang)} value='W, S, A, D' icon='keyboard' />
                                     <Label text={t('General', lang)} class='popup-panel-heading' />
-                                    <Container class='panel-option'>
+                                    <Container class={['panel-option', 'control-detail']}>
                                         <Label class='panel-label' text={t('Frame Scene', lang)} />
-                                        <div className='panel-value' style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                            <Label text='F' />
+                                        <div className='panel-value control-value'>
+                                            <span>F</span>
                                             <Button
                                                 class={['fit-screen-button', 'fit-screen-button-inline']}
                                                 width={28}
@@ -111,10 +131,10 @@ class InfoPanel extends React.Component <{
                                             />
                                         </div>
                                     </Container>
-                                    <Container class='panel-option'>
+                                    <Container class={['panel-option', 'control-detail']}>
                                         <Label class='panel-label' text={t('Reset Camera', lang)} />
-                                        <div className='panel-value' style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                            <Label text='R' />
+                                        <div className='panel-value control-value'>
+                                            <span>R</span>
                                             <Button
                                                 class={['reset-camera-button', 'reset-camera-button-inline']}
                                                 width={28}
@@ -127,13 +147,13 @@ class InfoPanel extends React.Component <{
                             ) : (
                                 <div className='info-controls-content'>
                                     <Label text={t('Orbit Mode', lang)} class='popup-panel-heading' />
-                                    <Detail label={t('Orbit', lang)} value={t('One Finger Drag', lang)} />
-                                    <Detail label={t('Pan', lang)} value={t('Two Finger Drag', lang)} />
-                                    <Detail label={t('Zoom', lang)} value={t('Pinch', lang)} />
-                                    <Detail label={t('Set Focus', lang)} value={t('Double Tap', lang)} />
+                                    <ControlDetail label={t('Orbit', lang)} value={t('One Finger Drag', lang)} trackpadIcon='1' />
+                                    <ControlDetail label={t('Pan', lang)} value={t('Two Finger Drag', lang)} trackpadIcon='2' />
+                                    <ControlDetail label={t('Zoom', lang)} value={t('Pinch', lang)} icon='pinch' />
+                                    <ControlDetail label={t('Set Focus', lang)} value={t('Double Tap', lang)} icon='touch_double' />
                                     <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
-                                    <Detail label={t('Look Around', lang)} value={t('Touch on Right', lang)} />
-                                    <Detail label={t('Fly', lang)} value={t('Touch on Left', lang)} />
+                                    <ControlDetail label={t('Look Around', lang)} value={t('Touch on Right', lang)} swipeIcon='right' />
+                                    <ControlDetail label={t('Fly', lang)} value={t('Touch on Left', lang)} swipeIcon='left' />
                                 </div>
                             )}
                         </>
@@ -240,7 +260,6 @@ class InfoPanel extends React.Component <{
                             <div className='about-description'>
                                 {t('Flags: flag-icons', lang)} — <a href='https://github.com/lipis/flag-icons' target='_blank' rel='noopener noreferrer' className='about-link'>github.com/lipis/flag-icons</a>
                             </div>
-                            <div className='about-project'>{t('HERITAGE3D.RU Project', lang)}</div>
                         </div>
                     )}
                 </Container>

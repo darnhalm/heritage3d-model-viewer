@@ -610,6 +610,94 @@ input {
             margin-top: 0;
         }
     }
+
+    .control-value {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        color: #ccc;
+        line-height: 1.4;
+
+        * {
+            color: inherit;
+        }
+    }
+
+    .control-icon {
+        font-size: 20px;
+    }
+
+    .control-detail {
+        min-height: 28px;
+    }
+
+    .control-icon-mouse,
+    .control-icon-trackpad-1,
+    .control-icon-trackpad-2,
+    .control-icon-swipe-left,
+    .control-icon-swipe-right {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        display: inline-block;
+        background-color: currentColor;
+    }
+
+    .control-icon-mouse {
+        mask-image: url(./static/icons/mouse-icon.svg);
+        mask-repeat: no-repeat;
+        mask-size: contain;
+        mask-position: center;
+        -webkit-mask-image: url(./static/icons/mouse-icon.svg);
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        -webkit-mask-position: center;
+    }
+
+    .control-icon-trackpad-1 {
+        mask-image: url(./static/icons/trackpad-1-icon.svg);
+        mask-repeat: no-repeat;
+        mask-size: contain;
+        mask-position: center;
+        -webkit-mask-image: url(./static/icons/trackpad-1-icon.svg);
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        -webkit-mask-position: center;
+    }
+
+    .control-icon-trackpad-2 {
+        mask-image: url(./static/icons/trackpad-2-icon.svg);
+        mask-repeat: no-repeat;
+        mask-size: contain;
+        mask-position: center;
+        -webkit-mask-image: url(./static/icons/trackpad-2-icon.svg);
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        -webkit-mask-position: center;
+    }
+
+    .control-icon-swipe-left {
+        mask-image: url(./static/icons/swipe-left-icon.svg);
+        mask-repeat: no-repeat;
+        mask-size: contain;
+        mask-position: center;
+        -webkit-mask-image: url(./static/icons/swipe-left-icon.svg);
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        -webkit-mask-position: center;
+    }
+
+    .control-icon-swipe-right {
+        mask-image: url(./static/icons/swipe-right-icon.svg);
+        mask-repeat: no-repeat;
+        mask-size: contain;
+        mask-position: center;
+        -webkit-mask-image: url(./static/icons/swipe-right-icon.svg);
+        -webkit-mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        -webkit-mask-position: center;
+    }
 }
 
 .info-panel-model-combined {
