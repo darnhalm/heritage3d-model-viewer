@@ -479,7 +479,7 @@ class IDPanel extends React.Component <{
 
         return (
             <div className='popup-panel-parent'>
-                <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'id'}>
+                <Container id='id-panel' class='popup-panel' flex hidden={props.observerData.ui.active !== 'id'}>
                     <Label text={t('ID', lang)} class='popup-panel-heading' />
                     {path ? (
                         <>

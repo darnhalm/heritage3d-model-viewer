@@ -1040,6 +1040,16 @@ input {
     gap: 8px;
 }
 
+#id-panel .panel-option {
+    padding: 0 0 0 8px;
+    min-height: 28px;
+}
+
+#id-panel > .panel-option:nth-child(even),
+.id-panel-metadata .panel-option:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
 .id-panel-metadata {
     margin-top: 12px;
     padding-top: 12px;
@@ -1434,8 +1444,10 @@ input {
         margin: 8px 0 !important;
     }
 
-    #popup > #popup-buttons-parent > #fullscreen-button {
-        display: none;
+    #popup-buttons-parent #fullscreen-button,
+    #popup-buttons-parent #camera-mode-button,
+    #popup-buttons-parent #view-button {
+        display: none !important;
     }
 
     #panel-left:not(.collapsed) + #canvas-wrapper > #popup,
