@@ -1,4 +1,4 @@
-import { Panel, Container, Button } from '@playcanvas/pcui/react';
+import { Panel, Container, Button, Label, TextInput } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import { extract } from '../../helpers';
@@ -72,61 +72,57 @@ class MetadataPanel extends React.Component<{ observerData: ObserverData; setPro
         ];
         return (
             <Panel headerText={t('Metadata (Dublin Core)', lang)} id='metadata-panel' flexShrink={'0'} collapsible={false}>
-                <div className='metadata-dublin-core'>
-                    {DUBLIN_CORE_FIELDS.map(({ key, labelKey }) => (
-                        <div key={key} className='panel-option metadata-field'>
-                            <label className='panel-label'>{t(labelKey, lang)}</label>
-                            <input
-                                type='text'
-                                className='metadata-input panel-value'
-                                value={String(metadata[key as keyof typeof metadata] ?? '')}
-                                onChange={(e) => setProperty(`metadata.${key}`, e.target.value)}
-                            />
-                        </div>
-                    ))}
-                    <div className='metadata-heritage-section'>
-                        <Toggle
-                            label={t('EGROKN', lang)}
-                            value={egrokn}
-                            setProperty={(v: boolean) => setProperty('metadata.egrokn', v)}
+                {DUBLIN_CORE_FIELDS.map(({ key, labelKey }) => (
+                    <Container key={key} class={['panel-option', 'metadata-field']}>
+                        <Label class='panel-label' text={t(labelKey, lang)} />
+                        <TextInput
+                            class='panel-value'
+                            value={String(metadata[key as keyof typeof metadata] ?? '')}
+                            onChange={(value: string) => setProperty(`metadata.${key}`, value)}
                         />
-                        {egrokn && (
-                            <Select
-                                label={t('EGROKN level', lang)}
-                                type='string'
-                                options={egroknLevelOptions}
-                                value={metadata.egroknLevel ?? 'federal'}
-                                setProperty={(v: string) => setProperty('metadata.egroknLevel', v)}
-                            />
-                        )}
-                        <div className='panel-option metadata-field'>
-                            <label className='panel-label'>{t('Object number', lang)}</label>
-                            <input
-                                type='text'
-                                className='metadata-input panel-value'
-                                value={metadata.objectNumber ?? ''}
-                                onChange={(e) => setProperty('metadata.objectNumber', e.target.value)}
-                            />
-                        </div>
-                        <Toggle
-                            label={t('Museum item', lang)}
-                            value={isMuseumItem}
-                            setProperty={(v: boolean) => setProperty('metadata.isMuseumItem', v)}
+                    </Container>
+                ))}
+                <Container class={['panel-option', 'metadata-section-header']}>
+                    <Label class='panel-label' text={t('Heritage', lang)} />
+                </Container>
+                <Toggle
+                    label={t('EGROKN', lang)}
+                    value={egrokn}
+                    setProperty={(v: boolean) => setProperty('metadata.egrokn', v)}
+                />
+                {egrokn && (
+                    <Select
+                        label={t('EGROKN level', lang)}
+                        type='string'
+                        options={egroknLevelOptions}
+                        value={metadata.egroknLevel ?? 'federal'}
+                        setProperty={(v: string) => setProperty('metadata.egroknLevel', v)}
+                    />
+                )}
+                <Container class={['panel-option', 'metadata-field']}>
+                    <Label class='panel-label' text={t('Object number', lang)} />
+                    <TextInput
+                        class='panel-value'
+                        value={metadata.objectNumber ?? ''}
+                        onChange={(value: string) => setProperty('metadata.objectNumber', value)}
+                    />
+                </Container>
+                <Toggle
+                    label={t('Museum item', lang)}
+                    value={isMuseumItem}
+                    setProperty={(v: boolean) => setProperty('metadata.isMuseumItem', v)}
+                />
+                {isMuseumItem && (
+                    <Container class={['panel-option', 'metadata-field']}>
+                        <Label class='panel-label' text={t('Goskatalog link', lang)} />
+                        <TextInput
+                            class='panel-value'
+                            placeholder='https://goskatalog.ru/...'
+                            value={metadata.goskatalogLink ?? ''}
+                            onChange={(value: string) => setProperty('metadata.goskatalogLink', value)}
                         />
-                        {isMuseumItem && (
-                            <div className='panel-option metadata-field'>
-                                <label className='panel-label'>{t('Goskatalog link', lang)}</label>
-                                <input
-                                    type='url'
-                                    className='metadata-input panel-value'
-                                    placeholder='https://goskatalog.ru/...'
-                                    value={metadata.goskatalogLink ?? ''}
-                                    onChange={(e) => setProperty('metadata.goskatalogLink', e.target.value)}
-                                />
-                            </div>
-                        )}
-                    </div>
-                </div>
+                    </Container>
+                )}
                 <div id='metadata-save-row'>
                     <Button class='secondary' text={t('Save', lang)} onClick={this.handleSave} />
                     {this.state.saved && <span className='metadata-saved-feedback'>✓ {t('Saved', lang)}</span>}

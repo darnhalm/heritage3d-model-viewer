@@ -135,7 +135,8 @@ body {
 #sky-panel > .pcui-panel-content,
 #light-panel > .pcui-panel-content,
 #settings-panel > .pcui-panel-content,
-#materials-panel > .pcui-panel-content {
+#materials-panel > .pcui-panel-content,
+#metadata-panel > .pcui-panel-content {
     margin-right: 6px;
 }
 
@@ -1009,35 +1010,22 @@ input {
 }
 
 /* Metadata (Dublin Core) tab */
-.metadata-dublin-core {
-    padding: 8px 12px;
-}
+#metadata-panel .metadata-section-header {
+    color: #888;
+    font-size: 11px;
+    text-transform: uppercase;
+    padding: 8px 0 2px 0;
 
-.metadata-heritage-section {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid #444;
-}
-
-.metadata-field {
-    margin-bottom: 8px;
-
-    .metadata-input {
+    .panel-label {
         width: 100%;
-        padding: 6px 8px;
-        background: rgba(40, 40, 40, 0.9);
-        border: 1px solid #555;
-        border-radius: 4px;
-        color: white;
-        font-size: 12px;
-        transition: box-shadow 0.2s ease;
-
-        &:hover,
-        &:focus {
-            outline: none;
-            box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4);
-        }
     }
+}
+
+#metadata-panel .metadata-field .pcui-text-input {
+    flex-grow: 1;
+    font-size: 14px;
+    height: 30px !important;
+    min-height: 30px;
 }
 
 #metadata-save-row {
@@ -1327,7 +1315,8 @@ input {
 #light-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #settings-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #materials-panel > .pcui-panel-content > .panel-option:nth-child(even),
-#device-panel > .pcui-panel-content > .panel-option:nth-child(even) {
+#device-panel > .pcui-panel-content > .panel-option:nth-child(even),
+#metadata-panel > .pcui-panel-content > .panel-option:nth-child(even) {
     background-color: rgba(0, 0, 0, 0.1);
 }
 
@@ -1676,14 +1665,27 @@ input {
     font-style: normal;
 }
 
+$panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+
 .pcui-button {
     border-radius: 6px !important;
     transition: background-color 250ms ease, box-shadow 0.2s ease;
 
     &:hover:not(.pcui-disabled):not(.pcui-readonly),
     &.pcui-focus:not(.pcui-disabled):not(.pcui-readonly) {
-        box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+        box-shadow: $panel-focus-shadow;
     }
+}
+
+/* Same focus/hover effect for inputs as buttons (no orange) */
+.pcui-input-element:not(.pcui-disabled):not(.pcui-readonly):not(.pcui-error):hover,
+.pcui-input-element:not(.pcui-disabled):not(.pcui-readonly).pcui-focus {
+    box-shadow: $panel-focus-shadow;
+}
+
+.pcui-select-input:not(.pcui-disabled):not(.pcui-readonly):hover .pcui-select-input-shadow,
+.pcui-select-input:not(.pcui-disabled):not(.pcui-readonly).pcui-focus .pcui-select-input-shadow {
+    box-shadow: $panel-focus-shadow;
 }
 
 .pcui-button.secondary {
