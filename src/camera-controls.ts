@@ -240,22 +240,26 @@ class CameraControls {
         }
 
         const { keyCode } = KeyboardMouseSource;
+        const el = document.activeElement as HTMLElement | null;
+        const isTyping = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
 
         // apply dead zone to gamepad sticks
         applyDeadZone(leftStick, this.gamepadDeadZone.x, this.gamepadDeadZone.y);
         applyDeadZone(rightStick, this.gamepadDeadZone.x, this.gamepadDeadZone.y);
 
-        // update state
-        this._state.axis.add(tmpV1.set(
-            (key[keyCode.D] - key[keyCode.A]) + (key[keyCode.RIGHT] - key[keyCode.LEFT]),
-            (key[keyCode.E] - key[keyCode.Q]),
-            (key[keyCode.W] - key[keyCode.S]) + (key[keyCode.UP] - key[keyCode.DOWN])
-        ));
+        // update state (skip keyboard when focus is in text input)
+        if (!isTyping) {
+            this._state.axis.add(tmpV1.set(
+                (key[keyCode.D] - key[keyCode.A]) + (key[keyCode.RIGHT] - key[keyCode.LEFT]),
+                (key[keyCode.E] - key[keyCode.Q]),
+                (key[keyCode.W] - key[keyCode.S]) + (key[keyCode.UP] - key[keyCode.DOWN])
+            ));
+            this._state.shift += key[keyCode.SHIFT];
+            this._state.ctrl += key[keyCode.CTRL];
+        }
         for (let i = 0; i < this._state.mouse.length; i++) {
             this._state.mouse[i] += button[i];
         }
-        this._state.shift += key[keyCode.SHIFT];
-        this._state.ctrl += key[keyCode.CTRL];
         this._state.touches += count[0];
 
         if (this._mode !== 'fly' && this._state.axis.length() > 0) {

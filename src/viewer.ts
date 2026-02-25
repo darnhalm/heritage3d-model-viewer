@@ -356,6 +356,10 @@ class Viewer {
         camera.camera.requestSceneColorMap(true);
 
         app.keyboard.on(EVENT_KEYDOWN, (event) => {
+            const el = document.activeElement as HTMLElement | null;
+            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) {
+                return;
+            }
             switch (event.key) {
                 case KEY_F: {
                     this.focus(false);
