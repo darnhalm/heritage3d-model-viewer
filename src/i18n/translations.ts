@@ -182,7 +182,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         Model: 'Модель',
         About: 'О\u00a0программе',
         Desktop: 'Компьютер',
-        Touch: 'Сенсор',
+        Touch: 'Тачпад',
         'Orbit Mode': 'Режим орбиты',
         Orbit: 'Вращение',
         Pan: 'Панорама',
