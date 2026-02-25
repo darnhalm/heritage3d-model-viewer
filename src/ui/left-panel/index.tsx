@@ -24,7 +24,11 @@ const exportViewerSettings = (observerData: ObserverData) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'model-viewer-settings.json';
+    const viewer = (window as any).viewer;
+    const filenames = viewer?.observer?.get?.('scene.filenames') as string[] | undefined;
+    const firstFilename = Array.isArray(filenames) && filenames.length > 0 ? filenames[0] : null;
+    const baseName = firstFilename ? firstFilename.replace(/\.[^/.]+$/, '') || null : null;
+    a.download = baseName ? `${baseName}.model-viewer-settings.json` : 'model-viewer-settings.json';
     a.click();
     URL.revokeObjectURL(url);
 };
