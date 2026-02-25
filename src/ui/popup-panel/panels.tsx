@@ -419,6 +419,14 @@ class ViewPanel extends React.Component <{
     }
 }
 
+const DUBLIN_CORE_DISPLAY_KEYS = ['title', 'creator', 'subject', 'description', 'publisher', 'contributor', 'date', 'type', 'format', 'identifier', 'source', 'language', 'relation', 'coverage', 'rights'] as const;
+const DUBLIN_CORE_LABELS: Record<string, string> = {
+    title: 'Title', creator: 'Creator', subject: 'Subject', description: 'Description',
+    publisher: 'Publisher', contributor: 'Contributor', date: 'Date', type: 'Type',
+    format: 'Format', identifier: 'Identifier', source: 'Source', language: 'Language',
+    relation: 'Relation', coverage: 'Coverage', rights: 'Rights'
+};
+
 class IDPanel extends React.Component <{
     observerData: ObserverData,
     setProperty: SetProperty }> {
@@ -426,15 +434,20 @@ class IDPanel extends React.Component <{
         observerData: ObserverData;
         setProperty: SetProperty; }>): boolean {
         return JSON.stringify(nextProps.observerData.scene?.selectedNode) !== JSON.stringify(this.props.observerData.scene?.selectedNode) ||
-               JSON.stringify(nextProps.observerData.ui) !== JSON.stringify(this.props.observerData.ui);
+               JSON.stringify(nextProps.observerData.ui) !== JSON.stringify(this.props.observerData.ui) ||
+               JSON.stringify(nextProps.observerData.metadata) !== JSON.stringify(this.props.observerData.metadata);
     }
 
     render() {
         const props = this.props;
         const scene = props.observerData.scene;
+        const metadata = props.observerData.metadata ?? {};
         const lang = props.observerData?.ui?.language;
         const path = scene?.selectedNode?.path ?? '';
         const name = scene?.selectedNode?.name ?? '';
+        const filledFields = DUBLIN_CORE_DISPLAY_KEYS.filter(
+            (key) => (metadata[key] !== undefined && metadata[key] !== null && String(metadata[key]).trim() !== '')
+        );
 
         return (
             <div className='popup-panel-parent'>
@@ -453,6 +466,14 @@ class IDPanel extends React.Component <{
                             />
                         </>
                     ) : null}
+                    {filledFields.length > 0 && (
+                        <div className='id-panel-metadata'>
+                            <Label text={t('Metadata (Dublin Core)', lang)} class='popup-panel-heading' />
+                            {filledFields.map((key) => (
+                                <Detail key={key} label={t(DUBLIN_CORE_LABELS[key], lang)} value={String(metadata[key])} />
+                            ))}
+                        </div>
+                    )}
                 </Container>
             </div>
         );
