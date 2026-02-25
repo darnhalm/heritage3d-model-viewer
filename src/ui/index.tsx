@@ -55,14 +55,29 @@ class App extends React.Component<{ observer: Observer }> {
                 </div>
                 <LeftPanel observerData={this.state} setProperty={this._setStateProperty} />
                 <div className='lang-switcher'>
-                    <span className='fi fi-gb fis' title='English' />
-                    <span className='fi fi-ru fis' title='Русский' />
-                    <span className='fi fi-cn fis' title='中文' />
+                    <button
+                        type='button'
+                        className={'fi fi-gb fis' + (this.state?.ui?.language === 'en' ? ' active' : '')}
+                        title='English'
+                        onClick={() => this._setStateProperty('ui.language', 'en')}
+                    />
+                    <button
+                        type='button'
+                        className={'fi fi-ru fis' + (this.state?.ui?.language === 'ru' ? ' active' : '')}
+                        title='Русский'
+                        onClick={() => this._setStateProperty('ui.language', 'ru')}
+                    />
+                    <button
+                        type='button'
+                        className={'fi fi-cn fis' + (this.state?.ui?.language === 'zh' ? ' active' : '')}
+                        title='中文'
+                        onClick={() => this._setStateProperty('ui.language', 'zh')}
+                    />
                 </div>
             </Container>
             <div id='canvas-wrapper'>
                 <canvas id="application-canvas" ref={this.canvasRef} />
-                <LoadControls setProperty={this._setStateProperty}/>
+                <LoadControls observerData={this.state} setProperty={this._setStateProperty}/>
                 <SelectedNode sceneData={this.state.scene} />
                 <PopupPanel observerData={this.state} setProperty={this._setStateProperty} />
                 <ErrorBox observerData={this.state} setProperty={this._setStateProperty} />

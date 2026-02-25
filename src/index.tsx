@@ -60,7 +60,8 @@ const observerData: ObserverData = {
         active: null,
         spinner: false,
         loadProgress: 0,
-        error: null
+        error: null,
+        language: 'en'
     },
     camera: {
         fov: 40,
@@ -188,7 +189,8 @@ const saveOptions = (observer: Observer, name: string) => {
         debug: options.debug,
         shadowCatcher: options.shadowCatcher,
         measure: options.measure,
-        enableWebGPU: options.enableWebGPU
+        enableWebGPU: options.enableWebGPU,
+        ui: { language: options.ui?.language }
     }));
 };
 

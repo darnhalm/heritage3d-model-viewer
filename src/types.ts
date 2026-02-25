@@ -33,6 +33,7 @@ export interface ObserverData {
         loadProgress?: number,
         error?: string,
         warnings?: string[],
+        language?: 'en' | 'ru' | 'zh',
     },
     camera: {
         fov: number,

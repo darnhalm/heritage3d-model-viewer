@@ -1,7 +1,8 @@
 import { Container, Label, Button, TextInput } from '@playcanvas/pcui/react';
 import React, { useRef, useState } from 'react';
 
-import { File, SetProperty } from '../types';
+import { t } from '../i18n/translations';
+import { File, SetProperty, ObserverData } from '../types';
 
 const validUrl = (url: string) => {
     try {
@@ -13,7 +14,7 @@ const validUrl = (url: string) => {
     }
 };
 
-const LoadControls = (props: { setProperty: SetProperty }) => {
+const LoadControls = (props: { observerData: ObserverData; setProperty: SetProperty }) => {
     const [urlInputValid, setUrlInputValid] = useState(false);
     const inputFile = useRef(null);
 
@@ -52,6 +53,7 @@ const LoadControls = (props: { setProperty: SetProperty }) => {
         }]);
     };
 
+    const lang = props.observerData?.ui?.language;
     return (
         <div id='load-controls'>
             <Container class="load-button-panel" enabled flex>
@@ -67,16 +69,16 @@ const LoadControls = (props: { setProperty: SetProperty }) => {
                 <input type='file' id='file' accept='.glb,.gltf,.ply' multiple onChange={onFileSelected} ref={inputFile} style={{ display: 'none' }} />
                 <div id="drag-drop" onClick={onLoadButtonClick}>
                     <Button id="drag-drop-search-icon" icon='E129' />
-                    <Label class='desktop' text="Drag & drop .glb, .gltf, or .ply files, or click to open files" />
-                    <Label class='mobile' text="Click to open files" />
+                    <Label class='desktop' text={t('Drag & drop .glb, .gltf, or .ply files, or click to open files', lang)} />
+                    <Label class='mobile' text={t('Click to open files', lang)} />
                 </div>
-                <Label id='or-text' text="OR" class="centered-label" />
+                <Label id='or-text' text={t('OR', lang)} class="centered-label" />
                 <TextInput class='secondary' id='glb-url-input' placeholder='Enter .glb, .gltf, or .ply URL' keyChange onValidate={(value: string) => {
                     const isValid = validUrl(value);
                     setUrlInputValid(isValid);
                     return isValid;
                 }}/>
-                <Button class='secondary' id='glb-url-button' text='LOAD MODEL FROM URL' onClick={onUrlSelected} enabled={urlInputValid}></Button>
+                <Button class='secondary' id='glb-url-button' text={t('LOAD MODEL FROM URL', lang)} onClick={onUrlSelected} enabled={urlInputValid}></Button>
             </Container>
         </div>
     );
