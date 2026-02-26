@@ -649,9 +649,14 @@ input {
     font-size: 16px !important;
 }
 
-.popup-panel-parent > .pcui-container {
+.popup-panel-parent > .pcui-container,
+.popup-panel-parent > #id-panel {
     position: absolute;
     padding-top: 8px;
+}
+
+.popup-panel-parent[hidden] {
+    display: none !important;
 }
 
 .popup-panel-heading {
@@ -1174,20 +1179,70 @@ input {
     gap: 8px;
 }
 
-#id-panel .panel-option {
-    padding: 0 0 0 8px;
-    min-height: 28px;
-}
+/* ID panel — plain HTML, no pcui for text */
+.id-panel {
+    display: flex;
+    flex-direction: column;
+    max-height: 70vh;
+    overflow-y: auto;
+    font-size: 14px;
+    width: 504px;
 
-#id-panel > .panel-option:nth-child(even),
-.id-panel-metadata .panel-option:nth-child(even) {
-    background-color: rgba(0, 0, 0, 0.1);
-}
+    .id-panel-heading {
+        font-weight: 700;
+        font-size: 16px;
+        color: #fff;
+        margin: 0 0 8px 0;
+        padding: 8px 12px;
+        background-color: rgba(32, 32, 32, 0.9);
+        border-radius: 4px;
+        flex-shrink: 0;
+    }
 
-.id-panel-metadata {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid #444;
+    .id-panel-row {
+        padding: 8px 0 6px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        border-top: 1px solid #444;
+
+        &:first-of-type {
+            border-top: none;
+            padding-top: 0;
+        }
+    }
+
+    .id-panel-label {
+        font-weight: 700;
+        color: #aaa;
+        font-size: 14px;
+    }
+
+    .id-panel-value {
+        word-break: break-word;
+        overflow-wrap: break-word;
+        white-space: pre-wrap;
+        line-height: 1.5;
+        color: #fff;
+    }
+
+    .id-panel-section {
+        margin-top: 12px;
+        padding-top: 12px;
+
+        .id-panel-heading {
+            margin-top: 0;
+        }
+
+        .id-panel-row:first-of-type {
+            border-top: 1px solid #444;
+        }
+    }
+
+    .pcui-button {
+        margin-top: 8px;
+        flex-shrink: 0;
+    }
 }
 
 .metadata-saved-feedback {

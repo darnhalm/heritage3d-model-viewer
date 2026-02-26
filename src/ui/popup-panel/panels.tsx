@@ -477,14 +477,23 @@ class IDPanel extends React.Component <{
             (key) => (metadata[key] !== undefined && metadata[key] !== null && String(metadata[key]).trim() !== '')
         );
 
+        const isActive = props.observerData.ui.active === 'id';
         return (
-            <div className='popup-panel-parent'>
-                <Container id='id-panel' class='popup-panel' flex hidden={props.observerData.ui.active !== 'id'}>
-                    <Label text={t('ID', lang)} class='popup-panel-heading' />
+            <div className='popup-panel-parent' hidden={!isActive}>
+                <div
+                    id='id-panel'
+                    className='popup-panel id-panel'
+                >
                     {path ? (
                         <>
-                            <Detail label={t('Path', lang)} value={path} />
-                            <Detail label={t('Name', lang)} value={name || '-'} />
+                            <div className='id-panel-row'>
+                                <span className='id-panel-label'>{t('Path', lang)}</span>
+                                <span className='id-panel-value'>{path}</span>
+                            </div>
+                            <div className='id-panel-row'>
+                                <span className='id-panel-label'>{t('Name', lang)}</span>
+                                <span className='id-panel-value'>{name || '-'}</span>
+                            </div>
                             <Button
                                 class='secondary'
                                 text={t('Copy path', lang)}
@@ -495,14 +504,17 @@ class IDPanel extends React.Component <{
                         </>
                     ) : null}
                     {filledFields.length > 0 && (
-                        <div className='id-panel-metadata'>
-                            <Label text={t('Metadata (Dublin Core)', lang)} class='popup-panel-heading' />
+                        <div className='id-panel-section'>
+                            <h3 className='id-panel-heading'>{t('Metadata (Dublin Core)', lang)}</h3>
                             {filledFields.map((key) => (
-                                <Detail key={key} label={t(DUBLIN_CORE_LABELS[key], lang)} value={String(metadata[key])} />
+                                <div key={key} className='id-panel-row'>
+                                    <span className='id-panel-label'>{t(DUBLIN_CORE_LABELS[key], lang)}</span>
+                                    <span className='id-panel-value'>{String(metadata[key])}</span>
+                                </div>
                             ))}
                         </div>
                     )}
-                </Container>
+                </div>
             </div>
         );
     }
