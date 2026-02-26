@@ -96,7 +96,8 @@ const observerData: ObserverData = {
     },
     shadowCatcher: {
         enabled: true,
-        intensity: 0.4
+        intensity: 0.4,
+        heightOffset: 0
     },
     debug: {
         renderMode: 'default',

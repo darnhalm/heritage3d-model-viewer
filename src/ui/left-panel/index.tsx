@@ -333,6 +333,14 @@ class LightPanel extends React.Component <{ observerData: ObserverData, setPrope
                     max={1}
                     value={shadowCatcher?.intensity ?? 0.4}
                     setProperty={(value: number) => props.setProperty('shadowCatcher.intensity', value)} />
+                <Slider
+                    label={t('Catcher Height', lang)}
+                    precision={2}
+                    min={-10}
+                    max={10}
+                    value={shadowCatcher?.heightOffset ?? 0}
+                    setProperty={(value: number) => props.setProperty('shadowCatcher.heightOffset', value)}
+                    enabled={shadowCatcher?.enabled ?? true} />
             </Panel>
         );
     }
@@ -523,13 +531,15 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         {t('Vertex Normals', lang)}
                                     </button>
                                     {(observerData?.debug?.normals ?? 0) > 0 && (
-                                        <Slider
-                                            label=''
-                                            precision={2}
-                                            min={0}
-                                            max={1}
-                                            value={observerData?.debug?.normals ?? 0}
-                                            setProperty={(value: number) => setProperty('debug.normals', value)} />
+                                        <div className='materials-layer-normals-slider'>
+                                            <Slider
+                                                label=''
+                                                precision={2}
+                                                min={0}
+                                                max={1}
+                                                value={observerData?.debug?.normals ?? 0}
+                                                setProperty={(value: number) => setProperty('debug.normals', value)} />
+                                        </div>
                                     )}
                                 </div>
                                 </div>

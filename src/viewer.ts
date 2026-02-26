@@ -916,6 +916,7 @@ class Viewer {
             // shadow catcher
             'shadowCatcher.enabled': this.setShadowCatcherEnabled.bind(this),
             'shadowCatcher.intensity': this.setShadowCatcherIntensity.bind(this),
+            'shadowCatcher.heightOffset': this.setShadowCatcherHeightOffset.bind(this),
 
             // debug
             'debug.stats': this.setDebugStats.bind(this),
@@ -1574,6 +1575,7 @@ class Viewer {
         o.set('light.shadow', true);
         o.set('shadowCatcher.enabled', true);
         o.set('shadowCatcher.intensity', 0.4);
+        o.set('shadowCatcher.heightOffset', 0);
         o.set('debug.renderMode', 'default');
         o.set('debug.stats', false);
         o.set('debug.wireframe', false);
@@ -2342,6 +2344,11 @@ class Viewer {
 
     setShadowCatcherIntensity(value: number) {
         this.shadowCatcher.intensity = value;
+        this.renderNextFrame();
+    }
+
+    setShadowCatcherHeightOffset(value: number) {
+        this.shadowCatcher.heightOffset = value;
         this.renderNextFrame();
     }
 

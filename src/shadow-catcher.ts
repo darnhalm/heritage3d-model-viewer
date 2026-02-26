@@ -33,6 +33,8 @@ class ShadowCatcher {
 
     camera: CameraComponent;
 
+    _heightOffset = 0;
+
     constructor(app: AppBase, camera: CameraComponent, parent: Entity, sceneRoot: Entity) {
         // create and add the shadow layer
         this.layer = new Layer({
@@ -115,7 +117,7 @@ class ShadowCatcher {
         const len = Math.sqrt(bound.halfExtents.x * bound.halfExtents.x + bound.halfExtents.z * bound.halfExtents.z);
 
         this.plane.setLocalScale(len * 4, 1, len * 4);
-        this.plane.setPosition(center.x, bound.getMin().y, center.z);
+        this.plane.setPosition(center.x, bound.getMin().y + this._heightOffset, center.z);
 
         this.light.light.shadowDistance = this.camera.camera._farClip;
     }
@@ -135,6 +137,14 @@ class ShadowCatcher {
 
     get intensity() {
         return this.light.light.shadowIntensity;
+    }
+
+    set heightOffset(value: number) {
+        this._heightOffset = value;
+    }
+
+    get heightOffset() {
+        return this._heightOffset;
     }
 }
 

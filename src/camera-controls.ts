@@ -23,6 +23,7 @@ type CameraControlsState = {
     shift: number;
     ctrl: number;
     touches: number;
+    alt: boolean;
 };
 
 const tmpV1 = new Vec3();
@@ -122,8 +123,19 @@ class CameraControls {
         mouse: [0, 0, 0],
         shift: 0,
         ctrl: 0,
-        touches: 0
+        touches: 0,
+        alt: false
     };
+
+    private _onKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Alt') this._state.alt = true;
+    };
+
+    private _onKeyUp = (e: KeyboardEvent) => {
+        if (e.key === 'Alt') this._state.alt = false;
+    };
+
+    skyRotationSpeed = 0.3;
 
     // when false, camera controls ignore all input
     enabled = true;
@@ -161,6 +173,9 @@ class CameraControls {
         this._orbitMobileInput.attach(this._app.graphicsDevice.canvas);
         this._flyMobileInput.attach(this._app.graphicsDevice.canvas);
         this._gamepadInput.attach(this._app.graphicsDevice.canvas);
+
+        window.addEventListener('keydown', this._onKeyDown);
+        window.addEventListener('keyup', this._onKeyUp);
 
         // pose
         this._pose.look(this._camera.entity.getPosition(), Vec3.ZERO);
@@ -286,11 +301,25 @@ class CameraControls {
         // FIXME: need to flip z axis for orbit camera
         deltas.move.append([v.x, v.y, orbit ? -v.z : v.z]);
 
-        // desktop rotate
-        v.set(0, 0, 0);
-        const mouseRotate = new Vec3(mouse[0], mouse[1], 0);
-        v.add(mouseRotate.mulScalar((1 - pan) * this.orbitSpeed * dt));
-        deltas.rotate.append([v.x, v.y, v.z]);
+        // desktop rotate / sky rotate (Alt + left drag)
+        const skyRotate = this._state.alt && this._state.mouse[0] > 0 && !pan && (mouse[0] !== 0 || mouse[1] !== 0);
+        const skyboxValue = this._observer.get('skybox.value');
+        const canSkyRotate = skyboxValue && skyboxValue !== 'None';
+
+        if (skyRotate && canSkyRotate) {
+            const current = (this._observer.get('skybox.rotation') as number) ?? 0;
+            const delta = -mouse[0] * this.skyRotationSpeed;
+            let next = current + delta;
+            while (next > 180) next -= 360;
+            while (next < -180) next += 360;
+            this._observer.set('skybox.rotation', next);
+            deltas.rotate.append([0, 0, 0]);
+        } else {
+            v.set(0, 0, 0);
+            const mouseRotate = new Vec3(mouse[0], mouse[1], 0);
+            v.add(mouseRotate.mulScalar((1 - pan) * this.orbitSpeed * dt));
+            deltas.rotate.append([v.x, v.y, v.z]);
+        }
 
         // mobile move
         v.set(0, 0, 0);
@@ -335,6 +364,8 @@ class CameraControls {
     }
 
     destroy() {
+        window.removeEventListener('keydown', this._onKeyDown);
+        window.removeEventListener('keyup', this._onKeyUp);
         this._desktopInput.destroy();
         this._orbitMobileInput.destroy();
         this._flyMobileInput.destroy();
