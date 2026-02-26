@@ -497,7 +497,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             <button
                                                 key={item.value}
                                                 type='button'
-                                                className={'materials-layer-item' + (item.value === 'default' ? ' materials-layer-item-final-render' : '') + (item.value === 'albedo' ? ' materials-layer-item-base-color' : '') + (item.value === 'metalness' ? ' materials-layer-item-metalness' : '') + (item.value === 'gloss' ? ' materials-layer-item-roughness' : '') + (observerData?.debug?.renderMode === item.value ? ' selected' : '')}
+                                                className={'materials-layer-item' + (item.value === 'default' ? ' materials-layer-item-final-render' : '') + (item.value === 'albedo' ? ' materials-layer-item-base-color' : '') + (item.value === 'metalness' ? ' materials-layer-item-metalness' : '') + (item.value === 'gloss' ? ' materials-layer-item-roughness' : '') + (item.value === 'world_normal' ? ' materials-layer-item-normal' : '') + (item.value === 'specularity' ? ' materials-layer-item-specular' : '') + (item.value === 'emission' ? ' materials-layer-item-emissive' : '') + (item.value === 'lighting' ? ' materials-layer-item-lighting' : '') + (item.value === 'ao' ? ' materials-layer-item-ao' : '') + (item.value === 'opacity' ? ' materials-layer-item-opacity' : '') + (item.value === 'uv0' ? ' materials-layer-item-uv' : '') + (observerData?.debug?.renderMode === item.value ? ' selected' : '')}
                                                 onClick={() => setProperty('debug.renderMode', item.value)}
                                             >
                                                 {item.label}
@@ -509,7 +509,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 <div className='materials-layer-category-title'>{t('Geometry', lang)} (2)</div>
                                 <button
                                     type='button'
-                                    className={'materials-layer-item' + (observerData?.debug?.wireframe ? ' selected' : '')}
+                                    className={'materials-layer-item materials-layer-item-wireframe' + (observerData?.debug?.wireframe ? ' selected' : '')}
                                     onClick={() => setProperty('debug.wireframe', !observerData?.debug?.wireframe)}
                                 >
                                     {t('Wireframe', lang)}
@@ -517,7 +517,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 <div className='materials-layer-normals-row'>
                                     <button
                                         type='button'
-                                        className={'materials-layer-item' + ((observerData?.debug?.normals ?? 0) > 0 ? ' selected' : '')}
+                                        className={'materials-layer-item materials-layer-item-vertex-normals' + ((observerData?.debug?.normals ?? 0) > 0 ? ' selected' : '')}
                                         onClick={() => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 1)}
                                     >
                                         {t('Vertex Normals', lang)}

@@ -152,6 +152,51 @@ body:not(.ui-ready) #panel-left {
     margin-right: 6px;
 }
 
+#camera-panel > .pcui-panel-header,
+#sky-panel > .pcui-panel-header,
+#light-panel > .pcui-panel-header,
+#settings-panel > .pcui-panel-header {
+    padding-left: 36px;
+    position: relative;
+
+    &::before {
+        content: '';
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
+        background-color: #fff;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-position: center;
+        mask-position: center;
+    }
+}
+
+#camera-panel > .pcui-panel-header::before {
+    -webkit-mask-image: url(./static/icons/camera-icon.svg?v=1);
+    mask-image: url(./static/icons/camera-icon.svg?v=1);
+}
+
+#sky-panel > .pcui-panel-header::before {
+    -webkit-mask-image: url(./static/icons/sky-icon.svg?v=1);
+    mask-image: url(./static/icons/sky-icon.svg?v=1);
+}
+
+#light-panel > .pcui-panel-header::before {
+    -webkit-mask-image: url(./static/icons/light-icon.svg?v=1);
+    mask-image: url(./static/icons/light-icon.svg?v=1);
+}
+
+#settings-panel > .pcui-panel-header::before {
+    -webkit-mask-image: url(./static/icons/settings-camera-icon.svg?v=1);
+    mask-image: url(./static/icons/settings-camera-icon.svg?v=1);
+}
+
 .materials-layer-list {
     margin-bottom: 12px;
 }
@@ -181,37 +226,104 @@ body:not(.ui-ready) #panel-left {
     cursor: pointer;
     border-radius: 6px;
     transition: background-color 250ms ease;
+    position: relative;
 
-    &.materials-layer-item-final-render {
-        background-image: url(./static/icons/final-render-icon.svg);
-        background-repeat: no-repeat;
-        background-size: 18px;
-        background-position: 10px center;
+    &.materials-layer-item-final-render,
+    &.materials-layer-item-base-color,
+    &.materials-layer-item-metalness,
+    &.materials-layer-item-roughness,
+    &.materials-layer-item-opacity,
+    &.materials-layer-item-uv,
+    &.materials-layer-item-ao,
+    &.materials-layer-item-lighting,
+    &.materials-layer-item-emissive,
+    &.materials-layer-item-specular,
+    &.materials-layer-item-normal,
+    &.materials-layer-item-vertex-normals,
+    &.materials-layer-item-wireframe {
         padding-left: 36px;
+
+        &::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 18px;
+            height: 18px;
+            background-color: #fff;
+            -webkit-mask-repeat: no-repeat;
+            mask-repeat: no-repeat;
+            -webkit-mask-size: contain;
+            mask-size: contain;
+            -webkit-mask-position: center;
+            mask-position: center;
+        }
     }
 
-    &.materials-layer-item-base-color {
-        background-image: url(./static/icons/diffuse-icon.svg);
-        background-repeat: no-repeat;
-        background-size: 18px;
-        background-position: 10px center;
-        padding-left: 36px;
+    &.materials-layer-item-final-render::before {
+        -webkit-mask-image: url(./static/icons/final-render-icon.svg);
+        mask-image: url(./static/icons/final-render-icon.svg);
     }
 
-    &.materials-layer-item-metalness {
-        background-image: url(./static/icons/metalness-icon.svg);
-        background-repeat: no-repeat;
-        background-size: 18px;
-        background-position: 10px center;
-        padding-left: 36px;
+    &.materials-layer-item-base-color::before {
+        -webkit-mask-image: url(./static/icons/diffuse-icon.svg);
+        mask-image: url(./static/icons/diffuse-icon.svg);
     }
 
-    &.materials-layer-item-roughness {
-        background-image: url(./static/icons/roughness-icon.svg);
-        background-repeat: no-repeat;
-        background-size: 18px;
-        background-position: 10px center;
-        padding-left: 36px;
+    &.materials-layer-item-metalness::before {
+        -webkit-mask-image: url(./static/icons/metalness-icon.svg?v=2);
+        mask-image: url(./static/icons/metalness-icon.svg?v=2);
+    }
+
+    &.materials-layer-item-roughness::before {
+        -webkit-mask-image: url(./static/icons/roughness-icon.svg?v=2);
+        mask-image: url(./static/icons/roughness-icon.svg?v=2);
+    }
+
+    &.materials-layer-item-opacity::before {
+        -webkit-mask-image: url(./static/icons/opacity-icon.svg?v=1);
+        mask-image: url(./static/icons/opacity-icon.svg?v=1);
+    }
+
+    &.materials-layer-item-uv::before {
+        -webkit-mask-image: url(./static/icons/uv-icon.svg?v=1);
+        mask-image: url(./static/icons/uv-icon.svg?v=1);
+    }
+
+    &.materials-layer-item-ao::before {
+        -webkit-mask-image: url(./static/icons/ao-icon.svg?v=1);
+        mask-image: url(./static/icons/ao-icon.svg?v=1);
+    }
+
+    &.materials-layer-item-lighting::before {
+        -webkit-mask-image: url(./static/icons/lighting-icon.svg?v=1);
+        mask-image: url(./static/icons/lighting-icon.svg?v=1);
+    }
+
+    &.materials-layer-item-emissive::before {
+        -webkit-mask-image: url(./static/icons/emissive-icon.svg?v=1);
+        mask-image: url(./static/icons/emissive-icon.svg?v=1);
+    }
+
+    &.materials-layer-item-specular::before {
+        -webkit-mask-image: url(./static/icons/specular-icon.svg?v=1);
+        mask-image: url(./static/icons/specular-icon.svg?v=1);
+    }
+
+    &.materials-layer-item-normal::before {
+        -webkit-mask-image: url(./static/icons/normal-icon.svg?v=1);
+        mask-image: url(./static/icons/normal-icon.svg?v=1);
+    }
+
+    &.materials-layer-item-vertex-normals::before {
+        -webkit-mask-image: url(./static/icons/vertex-normals-icon.svg?v=1);
+        mask-image: url(./static/icons/vertex-normals-icon.svg?v=1);
+    }
+
+    &.materials-layer-item-wireframe::before {
+        -webkit-mask-image: url(./static/icons/wireframe-icon.svg?v=1);
+        mask-image: url(./static/icons/wireframe-icon.svg?v=1);
     }
 
     &:hover {
