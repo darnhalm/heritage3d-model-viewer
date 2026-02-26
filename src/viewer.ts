@@ -1244,6 +1244,9 @@ class Viewer {
         // reset animation state
         this.animTracks = [];
         this.animationMap = {};
+
+        this.observer.set('scene.materialChannelsWithTextures', '[]');
+        this.observer.set('scene.materialChannelPreviews', '{}');
     }
 
     updateSceneStats() {
@@ -1314,6 +1317,89 @@ class Viewer {
                 });
             }
         });
+
+        // collect which material channels have texture maps (for "hide empty channels" option)
+        const channelsWithTextures = new Set<string>();
+        this.assets.forEach((asset) => {
+            if (asset.type === 'gsplat') return;
+            const resource = asset.resource as any;
+            (resource.materials ?? []).forEach((matAsset: Asset) => {
+                const mat = matAsset?.resource as any;
+                if (!mat) return;
+                if (mat.diffuseMap) channelsWithTextures.add('albedo');
+                if (mat.metalnessMap) channelsWithTextures.add('metalness');
+                if (mat.glossMap) channelsWithTextures.add('gloss');
+                if (mat.normalMap) channelsWithTextures.add('world_normal');
+                if (mat.specularMap) channelsWithTextures.add('specularity');
+                if (mat.emissiveMap) channelsWithTextures.add('emission');
+                if (mat.aoMap) channelsWithTextures.add('ao');
+                if (mat.opacityMap) channelsWithTextures.add('opacity');
+            });
+        });
+        channelsWithTextures.add('lighting'); // lighting is computed, always show
+        this.observer.set('scene.materialChannelsWithTextures', JSON.stringify([...channelsWithTextures]));
+
+        // collect channel previews (texture thumbnails or value/color)
+        const channelPreviews: Record<string, { type: string; src?: string; value?: number; r?: number; g?: number; b?: number }> = {};
+        const getTextureSrc = (tex: any): string | null => {
+            if (!tex || typeof tex.getSource !== 'function') return null;
+            try {
+                const src = tex.getSource();
+                if (!src) return null;
+                if (src.src) return src.src;
+                if (src instanceof HTMLCanvasElement) return src.toDataURL();
+                return null;
+            } catch {
+                return null;
+            }
+        };
+        this.assets.forEach((asset) => {
+            if (asset.type === 'gsplat') return;
+            const resource = asset.resource as any;
+            (resource.materials ?? []).forEach((matAsset: Asset) => {
+                const mat = matAsset?.resource as any;
+                if (!mat) return;
+                if (!channelPreviews.albedo) {
+                    const src = getTextureSrc(mat.diffuseMap);
+                    if (src) channelPreviews.albedo = { type: 'texture', src };
+                    else if (mat.diffuse) channelPreviews.albedo = { type: 'color', r: mat.diffuse.r, g: mat.diffuse.g, b: mat.diffuse.b };
+                }
+                if (!channelPreviews.metalness) {
+                    const src = getTextureSrc(mat.metalnessMap);
+                    if (src) channelPreviews.metalness = { type: 'texture', src };
+                    else if (typeof mat.metalness === 'number') channelPreviews.metalness = { type: 'value', value: mat.metalness };
+                }
+                if (!channelPreviews.gloss) {
+                    const src = getTextureSrc(mat.glossMap);
+                    if (src) channelPreviews.gloss = { type: 'texture', src };
+                    else if (typeof mat.gloss === 'number') channelPreviews.gloss = { type: 'value', value: mat.gloss };
+                }
+                if (!channelPreviews.world_normal && mat.normalMap) {
+                    const src = getTextureSrc(mat.normalMap);
+                    if (src) channelPreviews.world_normal = { type: 'texture', src };
+                }
+                if (!channelPreviews.specularity) {
+                    const src = getTextureSrc(mat.specularMap);
+                    if (src) channelPreviews.specularity = { type: 'texture', src };
+                    else if (mat.specular) channelPreviews.specularity = { type: 'color', r: mat.specular.r, g: mat.specular.g, b: mat.specular.b };
+                }
+                if (!channelPreviews.emission) {
+                    const src = getTextureSrc(mat.emissiveMap);
+                    if (src) channelPreviews.emission = { type: 'texture', src };
+                    else if (mat.emissive) channelPreviews.emission = { type: 'color', r: mat.emissive.r, g: mat.emissive.g, b: mat.emissive.b };
+                }
+                if (!channelPreviews.ao && mat.aoMap) {
+                    const src = getTextureSrc(mat.aoMap);
+                    if (src) channelPreviews.ao = { type: 'texture', src };
+                }
+                if (!channelPreviews.opacity) {
+                    const src = getTextureSrc(mat.opacityMap);
+                    if (src) channelPreviews.opacity = { type: 'texture', src };
+                    else if (typeof mat.opacity === 'number') channelPreviews.opacity = { type: 'value', value: mat.opacity };
+                }
+            });
+        });
+        this.observer.set('scene.materialChannelPreviews', JSON.stringify(channelPreviews));
 
         const mapChildren = function (node: GraphNode): Array<HierarchyNode> {
             return node.children.map((child: GraphNode) => ({

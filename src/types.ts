@@ -81,6 +81,7 @@ export interface ObserverData {
     },
     debug: {
         renderMode: 'default' | 'albedo' | 'opacity' | 'worldNormal' | 'specularity' | 'gloss' | 'metalness' | 'ao' | 'emission' | 'lighting' | 'uv0',
+        hideEmptyChannels: boolean,
         stats: boolean,
         wireframe: boolean,
         wireframeColor: {
@@ -135,6 +136,8 @@ export interface ObserverData {
         textureVRAM?: number,
         meshVRAM?: number,
         bounds?: any,
+        materialChannelsWithTextures?: string,
+        materialChannelPreviews?: string,
         variant: {
             selected: number
         },

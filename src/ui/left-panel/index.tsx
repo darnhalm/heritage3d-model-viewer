@@ -353,27 +353,31 @@ class LightPanel extends React.Component <{ observerData: ObserverData, setPrope
     }
 }
 
-const renderModeCategories: Array<{
+const MATERIAL_CHANNEL_ITEMS: Array<{ label: string; value: string }> = [
+    { label: 'Base Color', value: 'albedo' },
+    { label: 'Metalness', value: 'metalness' },
+    { label: 'Roughness', value: 'gloss' },
+    { label: 'Normal Map', value: 'world_normal' },
+    { label: 'Specular F0', value: 'specularity' },
+    { label: 'Emissive', value: 'emission' },
+    { label: 'Lighting', value: 'lighting' },
+    { label: 'AO', value: 'ao' },
+    { label: 'Opacity', value: 'opacity' }
+];
+
+const renderModeCategories = (channelsWithTextures: Set<string>, hideEmptyChannels: boolean): Array<{
     title: string;
     items: Array<{ label: string; value: string }>;
-}> = [
-    { title: 'RENDER', items: [{ label: 'Final Render', value: 'default' }] },
-    {
-        title: 'MATERIAL CHANNELS',
-        items: [
-            { label: 'Base Color', value: 'albedo' },
-            { label: 'Metalness', value: 'metalness' },
-            { label: 'Roughness', value: 'gloss' },
-            { label: 'Normal Map', value: 'world_normal' },
-            { label: 'Specular F0', value: 'specularity' },
-            { label: 'Emissive', value: 'emission' },
-            { label: 'Lighting', value: 'lighting' },
-            { label: 'AO', value: 'ao' },
-            { label: 'Opacity', value: 'opacity' }
-        ]
-    },
-    { title: 'UV', items: [{ label: 'UV Checker', value: 'uv0' }] }
-];
+}> => {
+    const materialItems = hideEmptyChannels
+        ? MATERIAL_CHANNEL_ITEMS.filter((item) => channelsWithTextures.has(item.value))
+        : MATERIAL_CHANNEL_ITEMS;
+    return [
+        { title: 'RENDER', items: [{ label: 'Final Render', value: 'default' }] },
+        { title: 'MATERIAL CHANNELS', items: materialItems },
+        { title: 'UV', items: [{ label: 'UV Checker', value: 'uv0' }] }
+    ];
+};
 
 class SettingsPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>): boolean {
@@ -435,7 +439,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     state: { tab: LeftPanelTab } = { tab: 'scene' };
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab }): boolean {
-        const keys = ['camera', 'debug', 'scene.cameras', 'scene.selectedCamera', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
+        const keys = ['camera', 'debug', 'scene.cameras', 'scene.selectedCamera', 'scene.materialChannelsWithTextures', 'scene.materialChannelPreviews', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) || nextState.tab !== this.state.tab;
@@ -503,21 +507,55 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     {tab === 'materials' && (
                         <Panel headerText={t('Materials', lang)} id='materials-panel' flexShrink={'0'} collapsible={false}>
                             <div className='materials-layer-list'>
-                                {renderModeCategories.map((cat, ci) => (
+                                {renderModeCategories(
+                                    new Set(JSON.parse(observerData?.scene?.materialChannelsWithTextures ?? '[]')),
+                                    observerData?.debug?.hideEmptyChannels ?? false
+                                ).map((cat, ci) => (
                                     <div key={ci} className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>
                                             {cat.title} ({cat.items.length})
                                         </div>
-                                        {cat.items.map((item) => (
+                                        {cat.title === 'MATERIAL CHANNELS' && (
+                                            <Toggle
+                                                label={t('Hide channels without textures', lang)}
+                                                value={observerData?.debug?.hideEmptyChannels ?? false}
+                                                setProperty={(value: boolean) => setProperty('debug.hideEmptyChannels', value)}
+                                            />
+                                        )}
+                                        {cat.items.map((item) => {
+                                            const previews = (() => {
+                                                try { return JSON.parse(observerData?.scene?.materialChannelPreviews ?? '{}'); } catch { return {}; }
+                                            })();
+                                            const preview = previews[item.value];
+                                            return (
                                             <button
                                                 key={item.value}
                                                 type='button'
                                                 className={'materials-layer-item' + (item.value === 'default' ? ' materials-layer-item-final-render' : '') + (item.value === 'albedo' ? ' materials-layer-item-base-color' : '') + (item.value === 'metalness' ? ' materials-layer-item-metalness' : '') + (item.value === 'gloss' ? ' materials-layer-item-roughness' : '') + (item.value === 'world_normal' ? ' materials-layer-item-normal' : '') + (item.value === 'specularity' ? ' materials-layer-item-specular' : '') + (item.value === 'emission' ? ' materials-layer-item-emissive' : '') + (item.value === 'lighting' ? ' materials-layer-item-lighting' : '') + (item.value === 'ao' ? ' materials-layer-item-ao' : '') + (item.value === 'opacity' ? ' materials-layer-item-opacity' : '') + (item.value === 'uv0' ? ' materials-layer-item-uv' : '') + (observerData?.debug?.renderMode === item.value ? ' selected' : '')}
                                                 onClick={() => setProperty('debug.renderMode', item.value)}
                                             >
-                                                {item.label}
+                                                <span className='materials-layer-item-label'>{item.label}</span>
+                                                {preview && cat.title === 'MATERIAL CHANNELS' && (
+                                                    <span className='materials-layer-channel-preview'>
+                                                        {preview.type === 'texture' && preview.src && (
+                                                            <img src={preview.src} alt='' className='materials-layer-preview-img' />
+                                                        )}
+                                                        {preview.type === 'value' && typeof preview.value === 'number' && (
+                                                            <span
+                                                                className='materials-layer-preview-value'
+                                                                style={{
+                                                                    background: `linear-gradient(to right, #000 0%, #fff ${Math.max(1, Math.min(1, preview.value) * 100)}%)`
+                                                                }}
+                                                            />
+                                                        )}
+                                                        {preview.type === 'color' && preview.r !== undefined && (
+                                                            <span className='materials-layer-preview-color' style={{ backgroundColor: `rgb(${Math.round((preview.r ?? 0) * 255)}, ${Math.round((preview.g ?? 0) * 255)}, ${Math.round((preview.b ?? 0) * 255)})` }} />
+                                                        )}
+                                                    </span>
+                                                )}
                                             </button>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 ))}
                                 <div className='materials-layer-category'>

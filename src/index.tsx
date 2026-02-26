@@ -101,6 +101,7 @@ const observerData: ObserverData = {
     },
     debug: {
         renderMode: 'default',
+        hideEmptyChannels: false,
         stats: false,
         wireframe: false,
         wireframeColor: { r: 0, g: 0, b: 0 },
@@ -151,6 +152,8 @@ const observerData: ObserverData = {
         textureVRAM: null,
         meshVRAM: null,
         bounds: null,
+        materialChannelsWithTextures: '[]',
+        materialChannelPreviews: '{}',
         variant: {
             selected: 0
         },
