@@ -66,7 +66,7 @@ const LoadControls = (props: { observerData: ObserverData; setProperty: SetPrope
                         window.open('https://github.com/playcanvas/model-viewer', '_blank').focus();
                     }} icon='E259'/>
                 </div>
-                <input type='file' id='file' accept='.glb,.gltf,.ply' multiple onChange={onFileSelected} ref={inputFile} style={{ display: 'none' }} />
+                <input type='file' id='file' accept='.glb,.gltf,.ply,.json' multiple onChange={onFileSelected} ref={inputFile} style={{ display: 'none' }} />
                 <div id="drag-drop" onClick={onLoadButtonClick}>
                     <Button id="drag-drop-search-icon" icon='E129' />
                     <Label class='desktop' text={t('Drag & drop .glb, .gltf, or .ply files, or click to open files', lang)} />

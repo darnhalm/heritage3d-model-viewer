@@ -1546,7 +1546,7 @@ class Viewer {
         URL.revokeObjectURL(url);
     }
 
-    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'enableWebGPU'];
+    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'enableWebGPU', 'metadata'];
     private static readonly SETTINGS_FILTER_PATHS = ['skybox.options', 'debug.renderMode'];
 
     /** Reset viewer settings (camera, skybox, light, etc.) to defaults. Call before loading a new model so that if no settings file is found, defaults are shown. */
@@ -1558,8 +1558,6 @@ class Viewer {
         o.set('camera.multisample', true);
         o.set('camera.hq', true);
         o.set('camera.mode', 'orbit');
-        o.set('camera.position', null);
-        o.set('camera.focus', null);
         o.set('skybox.value', this.skyboxUrls.has('Paul Lobe Haus') ? 'Paul Lobe Haus' : 'None');
         o.set('skybox.exposure', 0);
         o.set('skybox.rotation', 0);
@@ -1598,7 +1596,7 @@ class Viewer {
     /** Apply a settings object (e.g. from model-viewer-settings.json) to the observer. */
     applyViewerSettings(data: Record<string, unknown>) {
         const filter = Viewer.SETTINGS_FILTER_PATHS;
-        const colorPaths = ['skybox.backgroundColor', 'light.color'];
+        const colorPaths = ['skybox.backgroundColor', 'light.color', 'debug.wireframeColor'];
         const toRgb = (v: unknown): { r: number; g: number; b: number } | null => {
             if (typeof v === 'string') return Viewer.hexToRgb(v);
             if (v && typeof v === 'object' && !Array.isArray(v)) {
@@ -1661,31 +1659,90 @@ class Viewer {
 
     private static readonly SETTINGS_FETCH_TIMEOUT_MS = 5000;
 
-    /** Fetch settings file next to the model URL (same folder). Tries base and (1)..(N) names; applies the one with highest version number that exists. If none found (e.g. drag with blob URL), resets to defaults. */
-    private tryFetchAndApplySettings(firstModelUrl: string): Promise<void> {
+    /** Match settings filename like baseName.model-viewer-settings.json or baseName.model-viewer-settings(1).json. Returns version (0 for base, N for (N)) or -1 if no match. */
+    private static settingsVersionFromFilename(filename: string, baseName: string): number {
+        const name = filename.split('/').pop() || '';
+        if (name === `${baseName}.model-viewer-settings.json`) return 0;
+        const m = name.match(new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.model-viewer-settings\\((\\d+)\\)\\.json$`, 'i'));
+        return m ? parseInt(m[1], 10) : -1;
+    }
+
+    /** Fetch settings file next to the model URL (same folder) or from dropped/selected files. Tries base and (1)..(N) names; applies the one with highest version number that exists. If none found, resets to defaults. */
+    private tryFetchAndApplySettings(firstModelUrl: string, allFiles?: Array<{ url: string; filename?: string }>): Promise<void> {
+        const firstModelFilename = allFiles?.find((f) =>
+            (f.filename && this.isModelFilename(f.filename)) || (f.filename && this.isGSplatFilename(f.filename))
+        )?.filename;
+        const baseName = firstModelFilename ? firstModelFilename.replace(/\.[^/.]+$/, '').split('/').pop() || '' : '';
+
+        const fromDroppedFiles = (): Promise<{ data: Record<string, unknown>; version: number } | null> => {
+            if (!allFiles || !baseName) return Promise.resolve(null);
+            const best: { file: { url: string }; version: number } | null = allFiles.reduce(
+                (acc, f) => {
+                    if (!f.filename) return acc;
+                    const v = Viewer.settingsVersionFromFilename(f.filename, baseName);
+                    if (v < 0) return acc;
+                    if (!acc || v > acc.version) return { file: f, version: v };
+                    return acc;
+                },
+                null as { file: { url: string }; version: number } | null
+            );
+            if (!best) return Promise.resolve(null);
+            return fetch(best.file.url, { cache: 'no-store' })
+                .then((res) => (res.ok ? res.json().then((data: Record<string, unknown>) => ({ data, version: best.version })) : null))
+                .catch((): null => null);
+        };
+
         const candidates = Viewer.settingsUrlCandidatesForModelUrl(firstModelUrl);
         if (candidates.length === 0) {
-            this.resetViewerSettingsToDefaults();
-            return Promise.resolve();
+            return fromDroppedFiles().then((r) => {
+                if (r) {
+                    this.applyViewerSettings(r.data);
+                    this.syncSkyboxAndLightFromObserver();
+                } else {
+                    this.observer.set('camera.position', null);
+                    this.observer.set('camera.focus', null);
+                    this.resetViewerSettingsToDefaults();
+                }
+            });
         }
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), Viewer.SETTINGS_FETCH_TIMEOUT_MS);
         const fetchOne = (c: { url: string; version: number }): Promise<{ data: Record<string, unknown>; version: number } | null> =>
             fetch(c.url, { method: 'GET', signal: controller.signal, cache: 'no-store' })
-                .then((res) => (res.ok ? res.json().then((data: Record<string, unknown>) => ({ data, version: c.version })) : null))
+                .then((res) => {
+                    if (!res.ok) return null;
+                    return res.json().then((data: Record<string, unknown>) => ({ data, version: c.version })).catch(() => null);
+                })
                 .catch((): null => null);
-        return Promise.all(candidates.map(fetchOne))
+
+        return Promise.all([...candidates.map(fetchOne), fromDroppedFiles()])
             .then((results) => {
                 const ok = results.filter((r): r is { data: Record<string, unknown>; version: number } => r != null && typeof (r as any).data === 'object');
                 if (ok.length === 0) {
+                    if (typeof console !== 'undefined' && console.warn) {
+                        console.warn('[model-viewer] Settings file not found. Tried:', candidates.slice(0, 3).map((c) => c.url));
+                    }
+                    this.observer.set('camera.position', null);
+                    this.observer.set('camera.focus', null);
                     this.resetViewerSettingsToDefaults();
                     return;
                 }
                 const best = ok.reduce((a, b) => (a.version >= b.version ? a : b));
                 this.applyViewerSettings(best.data);
                 this.syncSkyboxAndLightFromObserver();
+                if (typeof console !== 'undefined' && console.debug) {
+                    console.debug('[model-viewer] Applied settings from file (version', best.version, ')');
+                }
             })
-            .catch(() => { this.resetViewerSettingsToDefaults(); })
+            .catch((err) => {
+                if (typeof console !== 'undefined' && console.warn) {
+                    console.warn('[model-viewer] Settings fetch failed:', err);
+                }
+                this.observer.set('camera.position', null);
+                this.observer.set('camera.focus', null);
+                this.resetViewerSettingsToDefaults();
+            })
             .finally(() => clearTimeout(timeoutId));
     }
 
@@ -2057,9 +2114,9 @@ class Viewer {
                     this.observer.set('ui.warnings', warnings);
                 }
 
-                // auto-load settings from model folder (same base name, .model-viewer-settings.json) when model is loaded by URL
+                // auto-load settings from model folder (URL) or from dropped/selected files (blob)
                 const firstModelUrl = modelFiles[0]?.url;
-                return this.tryFetchAndApplySettings(firstModelUrl);
+                return this.tryFetchAndApplySettings(firstModelUrl, files);
             })
             .then(() => {
                 this.postSceneLoad();

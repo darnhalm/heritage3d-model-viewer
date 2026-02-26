@@ -10,8 +10,16 @@ const rgbToArr = (rgb: { r: number, g: number, b: number }) => [rgb.r, rgb.g, rg
 const arrToRgb = (arr: number[]) => ({ r: arr[0], g: arr[1], b: arr[2] });
 
 const exportViewerSettings = (observerData: ObserverData) => {
+    const viewer = (window as any).viewer;
+    const camera: Record<string, unknown> = observerData.camera ? { ...observerData.camera } : {};
+    if (viewer?.cameraControls?.mode === 'orbit') {
+        const p = viewer.cameraControls.getPosition();
+        const f = viewer.cameraControls.getFocus();
+        camera.position = [p.x, p.y, p.z];
+        camera.focus = [f.x, f.y, f.z];
+    }
     const settings = {
-        camera: observerData.camera,
+        camera,
         skybox: observerData.skybox,
         light: observerData.light,
         debug: observerData.debug,
@@ -24,7 +32,6 @@ const exportViewerSettings = (observerData: ObserverData) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const viewer = (window as any).viewer;
     const filenames = viewer?.observer?.get?.('scene.filenames') as string[] | undefined;
     const firstFilename = Array.isArray(filenames) && filenames.length > 0 ? filenames[0] : null;
     const baseName = firstFilename ? firstFilename.replace(/\.[^/.]+$/, '') || null : null;
