@@ -30,6 +30,14 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
         return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
     });
 
+    await page.waitForFunction(() => {
+        const observer = (window as any).viewer?.observer;
+        return observer?.get('camera.fov') === 150 &&
+            observer?.get('skybox.exposure') === 6 &&
+            observer?.get('measure.unitScale') === 0.01 &&
+            observer?.get('measure.knownDistance') === 1.25;
+    });
+
     const state = await page.evaluate(() => ({
         filenames: (window as any).viewer.observer.get('scene.filenames'),
         materialCount: (window as any).viewer.observer.get('scene.materialCount'),

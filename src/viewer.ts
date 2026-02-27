@@ -704,6 +704,8 @@ class Viewer {
         selectionMat.setParameter('uColor', [0.224, 1.0, 0.078, 1.0]);
         selectionMat.blendType = BLEND_NORMAL;
         selectionMat.depthState.write = false;
+        selectionMat.depthBias = -2.0;
+        selectionMat.slopeDepthBias = 2.0;
         selectionMat.update();
         this.selectionHighlightMaterial = selectionMat;
 
@@ -2659,6 +2661,7 @@ class Viewer {
     setDebugWireframe(show: boolean) {
         this.showWireframe = show;
         this.dirtyWireframe = true;
+        this.dirtySelectionHighlight = true;
         this.renderNextFrame();
     }
 
@@ -3425,6 +3428,12 @@ class Viewer {
             this.buildSelectionHighlightMeshes();
         }
         this.selectionController.onPrerender(this.selectionHighlightMeshInstances.length);
+        if (this.showWireframe && this.observer.get('debug.withTextureOnly')) {
+            const showWireframeOverlay = !this.selectionController.isFlashActive();
+            this.wireframeMeshInstances.forEach((mi) => {
+                mi.visible = showWireframeOverlay;
+            });
+        }
 
         if (this.dirtyTexelDensityHeatmap) {
             this.dirtyTexelDensityHeatmap = false;

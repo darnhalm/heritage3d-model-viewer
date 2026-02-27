@@ -334,6 +334,10 @@ class SelectionController {
         this.updateFlashMaterial(highlightMeshCount);
     }
 
+    isFlashActive() {
+        return this.selectionFlashStartMs > 0;
+    }
+
     reset() {
         this.stopSelectionFlash();
     }

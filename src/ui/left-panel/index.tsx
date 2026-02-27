@@ -628,7 +628,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         <button
                                             type='button'
                                             className={`materials-layer-item materials-layer-item-vertex-normals${(observerData?.debug?.normals ?? 0) > 0 ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 1)}
+                                            onClick={() => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 0.2)}
                                         >
                                             {t('Vertex Normals', lang)}
                                         </button>
