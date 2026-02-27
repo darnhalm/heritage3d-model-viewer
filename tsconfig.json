@@ -18,6 +18,6 @@
         "sourceMap": true,
         "target": "es2022"
     },
-    "include": ["**/*.ts", "**/*.tsx"],
-    "exclude": ["node_modules", "**/*.js", "dist"]
+    "include": ["src/**/*.ts", "src/**/*.tsx"],
+    "exclude": ["node_modules", "**/*.js", "dist", "src_backup", "static_backup"]
 }

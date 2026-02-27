@@ -25,6 +25,7 @@
         "@playcanvas/eslint-config": "2.1.0",
         "@playcanvas/observer": "1.7.1",
         "@playcanvas/pcui": "5.5.0",
+        "@playwright/test": "^1.58.2",
         "@rollup/plugin-alias": "6.0.0",
         "@rollup/plugin-commonjs": "29.0.0",
         "@rollup/plugin-image": "3.0.3",
@@ -59,6 +60,7 @@
         "lint": "eslint src rollup.config.mjs eslint.config.mjs",
         "lint:fix": "eslint src rollup.config.mjs eslint.config.mjs --fix",
         "serve": "serve --cors dist",
+        "test:smoke": "npm run build && playwright test",
         "watch": "rollup -c -w"
     },
     "engines": {

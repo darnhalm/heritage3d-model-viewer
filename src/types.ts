@@ -94,7 +94,9 @@ export interface ObserverData {
         grid: boolean,
         normals: number,
         uvCheckerScale: number,
-        withTextureOnly: boolean
+        selectedUvSet: number,
+        withTextureOnly: boolean,
+        texelDensityHeatmap?: boolean
     },
     animation: {
         playing: boolean,
@@ -140,6 +142,9 @@ export interface ObserverData {
         materialChannelsWithTextures?: string,
         materialChannelFilenames?: string,
         selectedMaterialNames?: string,
+        availableUvSets?: string,
+        texelDensitySummary?: string,
+        texelDensityReport?: string,
         variant: {
             selected: number
         },

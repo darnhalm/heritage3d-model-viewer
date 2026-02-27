@@ -222,6 +222,13 @@ body:not(.ui-ready) #panel-left {
     margin-bottom: 12px;
 }
 
+.materials-layer-uv-extra {
+    margin-top: 6px;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+}
+
 .materials-layer-category-title {
     color: #888;
     font-size: 11px;
@@ -235,6 +242,7 @@ body:not(.ui-ready) #panel-left {
     align-items: center;
     justify-content: space-between;
     width: 100%;
+    max-width: 100%;
     padding: 8px 10px;
     margin-bottom: 2px;
     border: none;
@@ -246,6 +254,7 @@ body:not(.ui-ready) #panel-left {
     border-radius: 6px;
     transition: background-color 250ms ease;
     position: relative;
+    box-sizing: border-box;
 
     &.materials-layer-item-final-render,
     &.materials-layer-item-base-color,
@@ -357,6 +366,24 @@ body:not(.ui-ready) #panel-left {
     }
 }
 
+.materials-layer-item-static {
+    cursor: default;
+}
+
+.materials-layer-item-inline-icon {
+    width: 18px;
+    height: 18px;
+    display: inline-block;
+    flex-shrink: 0;
+    opacity: 0.9;
+}
+
+.materials-layer-inline-hint {
+    color: #888;
+    font-size: 13px;
+    padding: 8px 10px 2px 10px;
+}
+
 .materials-layer-item-label {
     display: flex;
     align-items: center;
@@ -366,6 +393,18 @@ body:not(.ui-ready) #panel-left {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.materials-layer-item-value {
+    color: #fff;
+    font-size: 13px;
+    min-width: 0;
+    max-width: 45%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+    flex: 0 1 auto;
 }
 
 .materials-layer-item-filename {
@@ -1061,6 +1100,18 @@ input {
     background-image: url(./static/icons/ruler-icon.svg);
 }
 
+.measurement-button.measure-enabled {
+    background-color: rgba(34, 163, 98, 0.92) !important;
+    box-shadow: 0 0 0 1px rgba(142, 255, 198, 0.55), 0 0 12px rgba(34, 163, 98, 0.45) !important;
+}
+
+.measurement-button.measure-enabled:hover,
+.measurement-button.measure-enabled.pcui-focus,
+.measurement-button.measure-enabled.selected {
+    background-color: rgba(34, 163, 98, 1) !important;
+    box-shadow: 0 0 0 1px rgba(186, 255, 221, 0.75), 0 0 14px rgba(34, 163, 98, 0.6) !important;
+}
+
 .view-button {
     background-repeat: no-repeat;
     background-size: 24px;
@@ -1335,7 +1386,7 @@ input {
     top: 40px;
     display: flex;
     align-items: center;
-    width: 350px;
+    width: 420px;
     margin: 12px;
     padding: 16px 16px 16px 16px;
     border-radius: 8px;
@@ -1360,6 +1411,10 @@ input {
 
 .selected-node-panel > .pcui-panel-content {
     padding-right: 6px;
+}
+
+.selected-node-panel .panel-option {
+    margin-bottom: 6px;
 }
 
 .animation-controls-panel-parent {

@@ -1,0 +1,18 @@
+{
+  "camera": {
+    "fov": 200
+  },
+  "measure": {
+    "unitScale": 0.01,
+    "knownDistance": 1.25
+  },
+  "skybox": {
+    "exposure": 99
+  },
+  "debug": {
+    "grid": true
+  },
+  "__proto__": {
+    "polluted": true
+  }
+}

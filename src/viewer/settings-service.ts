@@ -149,6 +149,8 @@ class SettingsService {
         o.set('debug.axes', false);
         o.set('debug.grid', false);
         o.set('debug.normals', 0);
+        o.set('debug.selectedUvSet', 0);
+        o.set('debug.texelDensityHeatmap', false);
         o.set('measure.enabled', false);
         o.set('measure.unit', 'm');
         o.set('measure.unitScale', 1);
@@ -163,7 +165,7 @@ class SettingsService {
         const filter = SettingsService.SETTINGS_FILTER_PATHS;
         const blockedKeys = new Set(['__proto__', 'constructor', 'prototype']);
         const colorPaths = ['skybox.backgroundColor', 'light.color', 'debug.wireframeColor'];
-        const numericPaths = new Set(['measure.unitScale', 'measure.knownDistance', 'camera.fov', 'skybox.exposure']);
+        const numericPaths = new Set(['measure.unitScale', 'measure.knownDistance', 'camera.fov', 'skybox.exposure', 'debug.selectedUvSet']);
         const clampFinite = (value: unknown, min: number, max: number): number | null => {
             const n = Number(value);
             if (!Number.isFinite(n)) return null;
@@ -179,6 +181,8 @@ class SettingsService {
                     return clampFinite(value, 35, 150);
                 case 'skybox.exposure':
                     return clampFinite(value, -6, 6);
+                case 'debug.selectedUvSet':
+                    return clampFinite(value, 0, 7);
                 default:
                     return value;
             }

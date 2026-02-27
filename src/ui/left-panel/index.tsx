@@ -1,13 +1,25 @@
-import { Panel, Container, Button, Label, TextInput, TreeView, TreeViewItem } from '@playcanvas/pcui/react';
+import { Panel, Container, Button, Label, TextInput } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import { extract } from '../../helpers';
 import { t } from '../../i18n/translations';
-import { SetProperty, ObserverData, HierarchyNode } from '../../types';
+import { SetProperty, ObserverData } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, ToggleColor } from '../components';
 
 const rgbToArr = (rgb: { r: number, g: number, b: number }) => [rgb.r, rgb.g, rgb.b, 1];
 const arrToRgb = (arr: number[]) => ({ r: arr[0], g: arr[1], b: arr[2] });
+const texelDensityUnitLabel = (unit?: string) => unit === 'mm' ? 'px/mm' : (unit === 'cm' ? 'px/cm' : 'px/m');
+const texelDensityDisplayValue = (td: number, unit?: string) => {
+    const divisor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
+    const precision = unit === 'm' ? 0 : 2;
+    return `${(td / divisor).toFixed(precision)} ${texelDensityUnitLabel(unit)}`;
+};
+const texelDensityAreaValue = (areaM2: number, unit?: string) => {
+    const factor = unit === 'mm' ? 1000000 : (unit === 'cm' ? 10000 : 1);
+    const suffix = unit === 'mm' ? 'mm²' : (unit === 'cm' ? 'cm²' : 'm²');
+    const precision = unit === 'm' ? 2 : 0;
+    return `${(areaM2 * factor).toFixed(precision)} ${suffix}`;
+};
 
 const exportViewerSettings = (observerData: ObserverData) => {
     const viewer = (window as any).viewer;
@@ -454,10 +466,9 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
 
 class LeftPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
     state: { tab: LeftPanelTab } = { tab: 'scene' };
-    materialsHierarchyRef = React.createRef<HTMLDivElement>();
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab }): boolean {
-        const keys = ['camera', 'debug', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.variants', 'scene.variant', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) || nextState.tab !== this.state.tab;
@@ -468,36 +479,14 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         document.getElementById('title')?.addEventListener('click', () => toggleCollapsed());
     }
 
-    componentDidUpdate(prevProps: Readonly<{ observerData: ObserverData }>): void {
-        const prevPath = prevProps.observerData?.scene?.selectedNode?.path ?? '';
-        const path = this.props.observerData?.scene?.selectedNode?.path ?? '';
-        if (path && path !== prevPath && this.props.observerData?.debug?.withTextureOnly && this.state.tab === 'materials') {
-            const selectedEl = this.materialsHierarchyRef.current?.querySelector('.pcui-treeview-item.pcui-treeview-item-selected') as HTMLElement | null;
-            selectedEl?.scrollIntoView({ block: 'nearest' });
-        }
-    }
-
     render() {
         const { tab } = this.state;
         const { observerData, setProperty } = this.props;
         const lang = observerData?.ui?.language;
-        const selectedMaterialNames = (() => {
-            try {
-                const parsed = JSON.parse(observerData?.scene?.selectedMaterialNames ?? '[]');
-                return Array.isArray(parsed) ? parsed.filter(Boolean).map(String) : [];
-            } catch {
-                return [];
-            }
+        const texelDensityShortValue = (() => {
+            const summary = observerData?.scene?.texelDensitySummary || 'n/a';
+            return summary.split('|')[0]?.trim() || summary;
         })();
-        const variantListOptions: Array<{ v: string; t: string }> = (() => {
-            try {
-                const parsed = JSON.parse(observerData?.scene?.variants?.list ?? '[]');
-                return Array.isArray(parsed) ? parsed.map((v: string) => ({ v: String(v), t: String(v) })) : [];
-            } catch {
-                return [];
-            }
-        })();
-        const selectedMaterialLabel = selectedMaterialNames.length > 0 ? selectedMaterialNames.join(', ') : '-';
 
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
@@ -561,29 +550,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             {cat.title} ({cat.items.length})
                                         </div>
                                         {cat.title === 'MATERIAL CHANNELS' && (
-                                            <>
-                                                <Toggle
-                                                    label={t('With texture', lang)}
-                                                    value={observerData?.debug?.withTextureOnly ?? false}
-                                                    setProperty={(value: boolean) => setProperty('debug.withTextureOnly', value)}
-                                                />
-                                                {observerData?.debug?.withTextureOnly && (
-                                                    <>
-                                                        <Detail
-                                                            label={t('Material', lang)}
-                                                            value={selectedMaterialLabel}
-                                                        />
-                                                        <Select
-                                                            label={t('Variant', lang)}
-                                                            type='string'
-                                                            options={variantListOptions}
-                                                            value={observerData?.scene?.variant?.selected ?? ''}
-                                                            setProperty={(value: string) => setProperty('scene.variant.selected', value)}
-                                                            enabled={variantListOptions.length > 0}
-                                                        />
-                                                    </>
-                                                )}
-                                            </>
+                                            <Toggle
+                                                label='With texturemap'
+                                                value={observerData?.debug?.withTextureOnly ?? false}
+                                                setProperty={(value: boolean) => setProperty('debug.withTextureOnly', value)}
+                                            />
                                         )}
                                         {cat.items.map((item) => (
                                             <button
@@ -598,15 +569,41 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 </span>
                                             </button>
                                         ))}
-                                        {cat.title === 'UV' && observerData?.debug?.renderMode === 'uv_checker' && (
-                                            <Slider
-                                                label={t('Checker Scale', lang)}
-                                                precision={0}
-                                                min={1}
-                                                max={64}
-                                                value={observerData?.debug?.uvCheckerScale ?? 16}
-                                                setProperty={(value: number) => setProperty('debug.uvCheckerScale', value)}
-                                            />
+                                        {cat.title === 'UV' && (
+                                            <>
+                                                {observerData?.debug?.renderMode === 'uv_checker' && (
+                                                    <Slider
+                                                        label={t('Checker Scale', lang)}
+                                                        precision={0}
+                                                        min={1}
+                                                        max={64}
+                                                        value={observerData?.debug?.uvCheckerScale ?? 16}
+                                                        setProperty={(value: number) => setProperty('debug.uvCheckerScale', value)}
+                                                    />
+                                                )}
+                                                {(observerData?.debug?.withTextureOnly ?? false) && (
+                                                    <div className='materials-layer-uv-extra'>
+                                                        <div className='materials-layer-item materials-layer-item-static'>
+                                                            <span className='materials-layer-item-label'>
+                                                                <img src='static/icons/texel-density.svg' alt='' className='materials-layer-item-inline-icon' />
+                                                                <span>{t('Texel Density', lang)}</span>
+                                                            </span>
+                                                            {observerData?.scene?.selectedNode?.path ? (
+                                                                <span className='materials-layer-item-value' title={observerData?.scene?.texelDensitySummary || 'n/a'}>
+                                                                    {texelDensityShortValue}
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+                                                        {(() => {
+                                                            const selectedPath = observerData?.scene?.selectedNode?.path ?? '';
+                                                            if (!selectedPath) {
+                                                                return <div className='materials-layer-inline-hint'>{t('Click an object in the viewport.', lang)}</div>;
+                                                            }
+                                                            return null;
+                                                        })()}
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 ))}
@@ -641,46 +638,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 </div>
                                 </div>
                             </div>
-                            {observerData?.debug?.withTextureOnly && (
-                                <div className='materials-layer-category'>
-                                    <div className='materials-layer-category-title'>
-                                        {t('Hierarchy', lang)}
-                                    </div>
-                                    {(() => {
-                                        let modelHierarchy: Array<HierarchyNode> = [];
-                                        const selectedPath = observerData?.scene?.selectedNode?.path ?? '';
-                                        try {
-                                            modelHierarchy = JSON.parse(observerData?.scene?.nodes || '[]');
-                                            if (!Array.isArray(modelHierarchy)) modelHierarchy = [];
-                                        } catch {
-                                            modelHierarchy = [];
-                                        }
-                                        const mapNodes = (nodes: Array<HierarchyNode>) =>
-                                            nodes.map((node: HierarchyNode) => (
-                                                <TreeViewItem
-                                                    key={node.path}
-                                                    text={node.name}
-                                                    selected={selectedPath === node.path}
-                                                    open={true}
-                                                    onSelect={() => setProperty('scene.selectedNode.path', node.path)}
-                                                    onDeselect={() => setProperty('scene.selectedNode.path', '')}
-                                                >
-                                                    {mapNodes(node.children || [])}
-                                                </TreeViewItem>
-                                            ));
-
-                                        return modelHierarchy.length > 0 ? (
-                                            <div className='info-panel-hierarchy' ref={this.materialsHierarchyRef}>
-                                                <TreeView key={`materials-hierarchy-${selectedPath}`} allowReordering={false} allowDrag={false}>
-                                                    {mapNodes(modelHierarchy)}
-                                                </TreeView>
-                                            </div>
-                                        ) : (
-                                            <div style={{ color: '#888', fontSize: 13 }}>{t('No hierarchy data.', lang)}</div>
-                                        );
-                                    })()}
-                                </div>
-                            )}
                             {observerData?.debug?.wireframe && (
                                 <ColorPickerControl
                                     label={t('Wireframe Color', lang)}

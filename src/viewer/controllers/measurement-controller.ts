@@ -1,5 +1,5 @@
 import { Observer } from '@playcanvas/observer';
-import { Vec3 } from 'playcanvas';
+import { MeshInstance, PRIMITIVE_TRIANGLES, SEMANTIC_POSITION, Vec3 } from 'playcanvas';
 
 import { Picker } from '../../picker';
 
@@ -9,7 +9,18 @@ type MeasurementControllerArgs = {
     canvas: HTMLCanvasElement;
     observer: Observer;
     picker: Picker;
+    getMeshInstances: () => Array<MeshInstance>;
+    getPickRay: (x: number, y: number) => { origin: Vec3; direction: Vec3 };
     renderNextFrame: () => void;
+};
+
+type CachedMeshGeometry = {
+    positions: Float32Array;
+    indices: Uint16Array | Uint32Array | null;
+    vertexCount: number;
+    primitiveBase: number;
+    primitiveCount: number;
+    baseVertex: number;
 };
 
 class MeasurementController {
@@ -18,6 +29,10 @@ class MeasurementController {
     private observer: Observer;
 
     private picker: Picker;
+
+    private getMeshInstances: () => Array<MeshInstance>;
+
+    private getPickRay: (x: number, y: number) => { origin: Vec3; direction: Vec3 };
 
     private renderNextFrame: () => void;
 
@@ -45,10 +60,14 @@ class MeasurementController {
 
     private measureEnd: Vec3 | null = null;
 
+    private meshGeometryCache = new WeakMap<object, CachedMeshGeometry | null>();
+
     constructor(args: MeasurementControllerArgs) {
         this.canvas = args.canvas;
         this.observer = args.observer;
         this.picker = args.picker;
+        this.getMeshInstances = args.getMeshInstances;
+        this.getPickRay = args.getPickRay;
         this.renderNextFrame = args.renderNextFrame;
         this.initOverlay();
         this.bindEvents();
@@ -120,7 +139,7 @@ class MeasurementController {
     }
 
     private async pickAndMeasureAt(x: number, y: number) {
-        const p = await this.picker.pick(x, y);
+        const p = this.pickSurfacePoint(x, y) ?? await this.picker.pick(x, y);
         if (!p) return;
 
         const waitingSecondPoint = this.observer.get('measure.pointCount') === 1;
@@ -141,6 +160,146 @@ class MeasurementController {
         this.observer.set('measure.lastDistance', distanceMeters);
         this.observer.set('measure.pointCount', 0);
         this.renderNextFrame();
+    }
+
+    private getCachedMeshGeometry(mi: MeshInstance) {
+        const mesh = mi.mesh as object & {
+            primitive?: Array<{ type?: number; base?: number; count?: number; indexed?: boolean; baseVertex?: number }>;
+            vertexBuffer?: { getNumVertices?: () => number; numVertices?: number };
+            indexBuffer?: Array<{ numIndices?: number }>;
+            getVertexStream?: (semantic: string, data: Float32Array) => number;
+            getIndices?: (data: Uint16Array | Uint32Array) => number;
+        };
+        if (!mesh) return null;
+
+        const cached = this.meshGeometryCache.get(mesh);
+        if (cached !== undefined) return cached;
+
+        const primitive = mesh.primitive?.[0];
+        const vertexCount = mesh.vertexBuffer?.getNumVertices?.() ?? mesh.vertexBuffer?.numVertices ?? 0;
+        if (!primitive || primitive.type !== PRIMITIVE_TRIANGLES || vertexCount <= 0 || !mesh.getVertexStream) {
+            this.meshGeometryCache.set(mesh, null);
+            return null;
+        }
+
+        const positions = new Float32Array(vertexCount * 3);
+        if (mesh.getVertexStream(SEMANTIC_POSITION, positions) <= 0) {
+            this.meshGeometryCache.set(mesh, null);
+            return null;
+        }
+
+        let indices: Uint16Array | Uint32Array | null = null;
+        if (primitive.indexed) {
+            const totalIndexCount = mesh.indexBuffer?.[0]?.numIndices ?? ((primitive.base ?? 0) + (primitive.count ?? 0));
+            if (!totalIndexCount || !mesh.getIndices) {
+                this.meshGeometryCache.set(mesh, null);
+                return null;
+            }
+            indices = vertexCount > 65535 ? new Uint32Array(totalIndexCount) : new Uint16Array(totalIndexCount);
+            if (mesh.getIndices(indices) <= 0) {
+                this.meshGeometryCache.set(mesh, null);
+                return null;
+            }
+        }
+
+        const geometry = {
+            positions,
+            indices,
+            vertexCount,
+            primitiveBase: Math.max(0, primitive.base ?? 0),
+            primitiveCount: Math.max(0, primitive.count ?? 0),
+            baseVertex: primitive.baseVertex ?? 0
+        } satisfies CachedMeshGeometry;
+        this.meshGeometryCache.set(mesh, geometry);
+        return geometry;
+    }
+
+    private intersectTriangle(origin: Vec3, direction: Vec3, a: Vec3, b: Vec3, c: Vec3) {
+        const epsilon = 1e-8;
+        const edge1 = new Vec3().sub2(b, a);
+        const edge2 = new Vec3().sub2(c, a);
+        const pvec = new Vec3().cross(direction, edge2);
+        const det = edge1.dot(pvec);
+        if (Math.abs(det) < epsilon) return null;
+
+        const invDet = 1 / det;
+        const tvec = new Vec3().sub2(origin, a);
+        const u = tvec.dot(pvec) * invDet;
+        if (u < 0 || u > 1) return null;
+
+        const qvec = new Vec3().cross(tvec, edge1);
+        const v = direction.dot(qvec) * invDet;
+        if (v < 0 || u + v > 1) return null;
+
+        const t = edge2.dot(qvec) * invDet;
+        return t >= 0 ? t : null;
+    }
+
+    private pickSurfacePoint(x: number, y: number) {
+        const { origin, direction } = this.getPickRay(x, y);
+        let bestT = Number.POSITIVE_INFINITY;
+        let bestPoint: Vec3 | null = null;
+        const p0 = new Vec3();
+        const p1 = new Vec3();
+        const p2 = new Vec3();
+
+        this.getMeshInstances().forEach((mi) => {
+            const aabb = mi.aabb;
+            if (!aabb) return;
+
+            const min = aabb.getMin();
+            const max = aabb.getMax();
+            let tMin = -Infinity;
+            let tMax = Infinity;
+
+            const testAxis = (originValue: number, dirValue: number, minValue: number, maxValue: number) => {
+                if (Math.abs(dirValue) <= 1e-8) {
+                    return originValue >= minValue && originValue <= maxValue;
+                }
+                const invDir = 1 / dirValue;
+                let t1 = (minValue - originValue) * invDir;
+                let t2 = (maxValue - originValue) * invDir;
+                if (t1 > t2) {
+                    const tmp = t1;
+                    t1 = t2;
+                    t2 = tmp;
+                }
+                tMin = Math.max(tMin, t1);
+                tMax = Math.min(tMax, t2);
+                return tMax >= tMin;
+            };
+
+            if (!testAxis(origin.x, direction.x, min.x, max.x) ||
+                !testAxis(origin.y, direction.y, min.y, max.y) ||
+                !testAxis(origin.z, direction.z, min.z, max.z)) {
+                return;
+            }
+
+            const geometry = this.getCachedMeshGeometry(mi);
+            const world = mi.node?.getWorldTransform();
+            if (!geometry || !world || geometry.primitiveCount < 3) return;
+
+            for (let i = geometry.primitiveBase; i + 2 < geometry.primitiveBase + geometry.primitiveCount; i += 3) {
+                const i0 = (geometry.indices ? geometry.indices[i] : i) + geometry.baseVertex;
+                const i1 = (geometry.indices ? geometry.indices[i + 1] : i + 1) + geometry.baseVertex;
+                const i2 = (geometry.indices ? geometry.indices[i + 2] : i + 2) + geometry.baseVertex;
+                if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= geometry.vertexCount || i1 >= geometry.vertexCount || i2 >= geometry.vertexCount) continue;
+
+                p0.set(geometry.positions[i0 * 3], geometry.positions[i0 * 3 + 1], geometry.positions[i0 * 3 + 2]);
+                p1.set(geometry.positions[i1 * 3], geometry.positions[i1 * 3 + 1], geometry.positions[i1 * 3 + 2]);
+                p2.set(geometry.positions[i2 * 3], geometry.positions[i2 * 3 + 1], geometry.positions[i2 * 3 + 2]);
+                world.transformPoint(p0, p0);
+                world.transformPoint(p1, p1);
+                world.transformPoint(p2, p2);
+
+                const t = this.intersectTriangle(origin, direction, p0, p1, p2);
+                if (t == null || t >= bestT) continue;
+                bestT = t;
+                bestPoint = origin.clone().add(direction.clone().mulScalar(t));
+            }
+        });
+
+        return bestPoint;
     }
 
     private hideOverlay() {
@@ -189,10 +348,9 @@ class MeasurementController {
 
         this.measureSvgEl.setAttribute('viewBox', `0 0 ${this.canvas.clientWidth} ${this.canvas.clientHeight}`);
 
-        const dpr = window.devicePixelRatio || 1;
         const start = worldToScreen(this.measureStart);
-        const sx = start.x / dpr;
-        const sy = start.y / dpr;
+        const sx = start.x;
+        const sy = start.y;
         const visStart = start.z > 0;
 
         const crossSize = 7;
@@ -223,8 +381,8 @@ class MeasurementController {
         }
 
         const end = worldToScreen(this.measureEnd);
-        const ex = end.x / dpr;
-        const ey = end.y / dpr;
+        const ex = end.x;
+        const ey = end.y;
         const visEnd = end.z > 0;
         setCross(this.measureEndHX, this.measureEndVY, ex, ey, visEnd);
 

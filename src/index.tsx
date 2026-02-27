@@ -110,7 +110,9 @@ const observerData: ObserverData = {
         grid: false,
         normals: 0,
         uvCheckerScale: 16,
-        withTextureOnly: false
+        selectedUvSet: 0,
+        withTextureOnly: false,
+        texelDensityHeatmap: false
     },
     animation: {
         playing: false,
@@ -156,6 +158,9 @@ const observerData: ObserverData = {
         materialChannelsWithTextures: '[]',
         materialChannelFilenames: '{}',
         selectedMaterialNames: '[]',
+        availableUvSets: '[]',
+        texelDensitySummary: '',
+        texelDensityReport: '[]',
         variant: {
             selected: 0
         },

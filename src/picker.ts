@@ -36,8 +36,9 @@ class Picker {
         const { picker } = this;
         picker.resize(width, height);
         picker.prepare(camera.camera, app.scene, [app.scene.layers.getLayerByName('World')]);
-        const pixels = await picker.renderTarget.colorBuffer.read(x, y, 1, 1, {
-            renderTarget: picker.renderTarget,
+        const renderTarget = (picker as any).renderTarget;
+        const pixels = await renderTarget.colorBuffer.read(x, y, 1, 1, {
+            renderTarget,
             immediate: true
         });
 

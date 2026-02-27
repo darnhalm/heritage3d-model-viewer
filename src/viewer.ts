@@ -1,6 +1,7 @@
 import { Observer } from '@playcanvas/observer';
 import {
     ADDRESS_CLAMP_TO_EDGE,
+    ADDRESS_REPEAT,
     BLENDMODE_ONE,
     BLEND_NORMAL,
     BLENDMODE_ZERO,
@@ -92,6 +93,7 @@ import { MeshoptDecoder } from '../lib/meshopt_decoder.module.js';
 // model filename extensions
 const modelExtensions = ['gltf', 'glb', 'vox'];
 const defaultSceneBounds = new BoundingBox(new Vec3(0, 1, 0), new Vec3(1, 1, 1));
+const UV_SEMANTICS = ['TEXCOORD0', 'TEXCOORD1', 'TEXCOORD2', 'TEXCOORD3', 'TEXCOORD4', 'TEXCOORD5', 'TEXCOORD6', 'TEXCOORD7'] as const;
 
 const vec = new Vec3();
 const bbox = new BoundingBox();
@@ -187,7 +189,11 @@ void main(void) {
     float checker = mod(c, 2.0);
     vec3 dark = vec3(0.12, 0.12, 0.12);
     vec3 light = vec3(0.92, 0.92, 0.92);
-    gl_FragColor = vec4(mix(light, dark, checker), 1.0);
+    vec3 base = mix(light, dark, checker);
+    float seamDist = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+    float seam = 1.0 - step(0.03, seamDist);
+    vec3 seamColor = vec3(0.09, 0.95, 0.28);
+    gl_FragColor = vec4(mix(base, seamColor, seam), 1.0);
 }
 `;
 
@@ -217,10 +223,122 @@ fn fragmentMain(input: FragmentInput) -> FragmentOutput {
     let checker = c - 2.0 * floor(c * 0.5);
     let dark = vec3f(0.12, 0.12, 0.12);
     let light = vec3f(0.92, 0.92, 0.92);
-    output.color = vec4f(mix(light, dark, checker), 1.0);
+    let base = mix(light, dark, checker);
+    let seamDist = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+    let seam = 1.0 - select(0.0, 1.0, seamDist >= 0.03);
+    let seamColor = vec3f(0.09, 0.95, 0.28);
+    output.color = vec4f(mix(base, seamColor, seam), 1.0);
     return output;
 }
 `;
+
+const createUvMapCheckerCanvas = (size = 1024, grid = 8): HTMLCanvasElement => {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+
+    const tile = size / grid;
+    const palette = ['#0F6D8A', '#61D1C6', '#E9DFA7', '#F78D73', '#D12A70', '#252525', '#8C8C8C', '#BDBDBD'];
+
+    const luminance = (hex: string) => {
+        const n = parseInt(hex.slice(1), 16);
+        const r = (n >> 16) & 0xff;
+        const g = (n >> 8) & 0xff;
+        const b = n & 0xff;
+        return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    };
+
+    for (let row = 0; row < grid; row++) {
+        for (let col = 0; col < grid; col++) {
+            const color = palette[(col - row + palette.length * 16) % palette.length];
+            const x = col * tile;
+            const y = row * tile;
+
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, tile, tile);
+
+            const textColor = luminance(color) > 0.6 ? '#101010' : '#f6f6f6';
+            const label = `${String.fromCharCode(65 + row)}${col}`;
+            ctx.textAlign = 'center';
+            ctx.fillStyle = textColor;
+            ctx.font = `500 ${Math.round(tile * 0.23)}px "Arial"`;
+            ctx.fillText(label, x + tile * 0.5, y + tile * 0.35);
+            ctx.font = `${Math.round(tile * 0.28)}px "Arial"`;
+            ctx.fillText('↑', x + tile * 0.5, y + tile * 0.72);
+        }
+    }
+
+    // Fine grid lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    const minorStep = tile / 8;
+    for (let i = 0; i <= grid * 8; i++) {
+        const p = i * minorStep;
+        ctx.beginPath();
+        ctx.moveTo(p, 0);
+        ctx.lineTo(p, size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, p);
+        ctx.lineTo(size, p);
+        ctx.stroke();
+    }
+
+    // Major tile borders
+    ctx.strokeStyle = 'rgba(255,255,255,0.34)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= grid; i++) {
+        const p = i * tile;
+        ctx.beginPath();
+        ctx.moveTo(p, 0);
+        ctx.lineTo(p, size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, p);
+        ctx.lineTo(size, p);
+        ctx.stroke();
+    }
+
+    return canvas;
+};
+
+const createUvColorCanvas = (size = 1024): HTMLCanvasElement => {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
+
+    const gradient = ctx.createLinearGradient(0, 0, size, 0);
+    gradient.addColorStop(0, '#000000');
+    gradient.addColorStop(1, '#ff0000');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    const vertical = ctx.createLinearGradient(0, size, 0, 0);
+    vertical.addColorStop(0, 'rgba(0,0,0,0)');
+    vertical.addColorStop(1, 'rgba(0,255,0,1)');
+    ctx.fillStyle = vertical;
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 8; i++) {
+        const p = (i / 8) * size;
+        ctx.beginPath();
+        ctx.moveTo(p, 0);
+        ctx.lineTo(p, size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, p);
+        ctx.lineTo(size, p);
+        ctx.stroke();
+    }
+
+    return canvas;
+};
 
 class Viewer {
     canvas: HTMLCanvasElement;
@@ -263,9 +381,19 @@ class Viewer {
 
     selectionHighlightMaterial: ShaderMaterial;
 
+    texelDensityHeatmapMeshInstances: Array<MeshInstance>;
+
+    texelDensityHeatmapMaterials: Array<StandardMaterial>;
+
+    uvColorMeshInstances: Array<MeshInstance>;
+
     uvCheckerMeshInstances: Array<MeshInstance>;
 
-    uvCheckerMaterial: ShaderMaterial;
+    uvCheckerMaterial: StandardMaterial;
+
+    uvColorMaterial: StandardMaterial;
+
+    uvDebugMode: 'uv0' | 'uv_checker' | null = null;
 
     uvCheckerEnabled = false;
 
@@ -301,6 +429,8 @@ class Viewer {
     dirtyWireframe: boolean;
 
     dirtySelectionHighlight: boolean;
+
+    dirtyTexelDensityHeatmap: boolean;
 
     dirtyBounds: boolean;
 
@@ -532,6 +662,9 @@ class Viewer {
         this.meshInstances = [];
         this.wireframeMeshInstances = [];
         this.selectionHighlightMeshInstances = [];
+        this.texelDensityHeatmapMeshInstances = [];
+        this.texelDensityHeatmapMaterials = [];
+        this.uvColorMeshInstances = [];
         this.uvCheckerMeshInstances = [];
 
         const material = new StandardMaterial();
@@ -571,22 +704,61 @@ class Viewer {
         selectionMat.update();
         this.selectionHighlightMaterial = selectionMat;
 
-        const uvCheckerShaderArgs = {
-            uniqueName: 'uv-checker-overlay',
-            attributes: {
-                vertex_position: SEMANTIC_POSITION,
-                vertex_texCoord0: SEMANTIC_TEXCOORD0
-            },
-            vertexGLSL: uvCheckerVertexGLSL,
-            fragmentGLSL: uvCheckerFragmentGLSL,
-            vertexWGSL: uvCheckerVertexWGSL,
-            fragmentWGSL: uvCheckerFragmentWGSL
-        };
-        const uvCheckerMat = new ShaderMaterial(uvCheckerShaderArgs);
-        const uvCheckerScale = Number(observer.get('debug.uvCheckerScale') ?? 16);
-        uvCheckerMat.setParameter('uScale', Math.max(1, Math.min(64, uvCheckerScale)));
+        const uvCheckerCanvas = createUvMapCheckerCanvas(1024, 8);
+        const uvCheckerTexture = new Texture(this.app.graphicsDevice, {
+            name: 'uv-map-checker',
+            width: uvCheckerCanvas.width,
+            height: uvCheckerCanvas.height,
+            format: PIXELFORMAT_RGBA8,
+            mipmaps: true,
+            minFilter: FILTER_NEAREST,
+            magFilter: FILTER_NEAREST,
+            addressU: ADDRESS_REPEAT,
+            addressV: ADDRESS_REPEAT
+        });
+        uvCheckerTexture.setSource(uvCheckerCanvas);
+
+        const uvCheckerMat = new StandardMaterial();
+        uvCheckerMat.useLighting = false;
+        uvCheckerMat.useSkybox = false;
+        uvCheckerMat.diffuse = new Color(1, 1, 1);
+        uvCheckerMat.emissive = new Color(1, 1, 1);
+        uvCheckerMat.diffuseMap = uvCheckerTexture;
+        uvCheckerMat.emissiveMap = uvCheckerTexture;
+        const uvCheckerScale = Math.max(1, Math.min(64, Number(observer.get('debug.uvCheckerScale') ?? 16)));
+        uvCheckerMat.diffuseMapTiling.set(uvCheckerScale, uvCheckerScale);
+        uvCheckerMat.emissiveMapTiling.set(uvCheckerScale, uvCheckerScale);
+        const selectedUvSet = Math.max(0, Math.min(UV_SEMANTICS.length - 1, Number(observer.get('debug.selectedUvSet') ?? 0) | 0));
+        uvCheckerMat.diffuseMapUv = selectedUvSet;
+        uvCheckerMat.emissiveMapUv = selectedUvSet;
         uvCheckerMat.update();
         this.uvCheckerMaterial = uvCheckerMat;
+
+        const uvColorCanvas = createUvColorCanvas(1024);
+        const uvColorTexture = new Texture(this.app.graphicsDevice, {
+            name: 'uv-color-map',
+            width: uvColorCanvas.width,
+            height: uvColorCanvas.height,
+            format: PIXELFORMAT_RGBA8,
+            mipmaps: true,
+            minFilter: FILTER_NEAREST,
+            magFilter: FILTER_NEAREST,
+            addressU: ADDRESS_REPEAT,
+            addressV: ADDRESS_REPEAT
+        });
+        uvColorTexture.setSource(uvColorCanvas);
+
+        const uvColorMat = new StandardMaterial();
+        uvColorMat.useLighting = false;
+        uvColorMat.useSkybox = false;
+        uvColorMat.diffuse = new Color(1, 1, 1);
+        uvColorMat.emissive = new Color(1, 1, 1);
+        uvColorMat.diffuseMap = uvColorTexture;
+        uvColorMat.emissiveMap = uvColorTexture;
+        uvColorMat.diffuseMapUv = selectedUvSet;
+        uvColorMat.emissiveMapUv = selectedUvSet;
+        uvColorMat.update();
+        this.uvColorMaterial = uvColorMat;
 
         this.animTracks = [];
         this.animationMap = {};
@@ -608,6 +780,7 @@ class Viewer {
 
         this.dirtyWireframe = false;
         this.dirtySelectionHighlight = false;
+        this.dirtyTexelDensityHeatmap = false;
         this.dirtyBounds = false;
         this.dirtySkeleton = false;
         this.dirtyGrid = false;
@@ -627,6 +800,7 @@ class Viewer {
         this.miniStats.enabled = observer.get('debug.stats');
 
         this.observer = observer;
+        this.observer.set('debug.texelDensityHeatmap', false);
         this.settingsService = new SettingsService({
             observer: this.observer,
             skyboxUrls: this.skyboxUrls,
@@ -670,6 +844,8 @@ class Viewer {
             canvas: this.canvas,
             observer: this.observer,
             picker: this.picker,
+            getMeshInstances: () => this.meshInstances,
+            getPickRay: this.getPickRay.bind(this),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
         this.selectionController = new SelectionController({
@@ -679,6 +855,7 @@ class Viewer {
             selectionHighlightMaterial: this.selectionHighlightMaterial,
             getMeshInstances: () => this.meshInstances,
             getCameraPosition: () => this.camera.getPosition(),
+            getPickRay: this.getPickRay.bind(this),
             getSelectedNode: () => this.selectedNode,
             setSelectedNodePath: (path: string) => this.setSelectedNode(path),
             resetSelectionHighlightMeshes: this.resetSelectionHighlightMeshes.bind(this),
@@ -816,6 +993,13 @@ class Viewer {
         setTimeout(() => {
             this.cameraControls.reset(result, this.camera.getPosition());
         }, RIPPLE_CAMERA_DELAY_MS);
+    }
+
+    private getPickRay(x: number, y: number) {
+        const origin = this.camera.camera.screenToWorld(x, y, this.camera.camera.nearClip);
+        const end = this.camera.camera.screenToWorld(x, y, this.camera.camera.farClip);
+        const direction = end.sub(origin).normalize();
+        return { origin, direction };
     }
 
     clearMeasurement() {
@@ -964,9 +1148,15 @@ class Viewer {
             'debug.grid': this.setDebugGrid.bind(this),
             'debug.normals': this.setNormalLength.bind(this),
             'debug.uvCheckerScale': this.setUvCheckerScale.bind(this),
+            'debug.selectedUvSet': this.setSelectedUvSet.bind(this),
             'debug.withTextureOnly': () => {
                 this.selectionController.onTextureSelectionModeChange(this.observer.get('debug.withTextureOnly'));
                 this.dirtySelectionHighlight = true;
+                this.dirtyTexelDensityHeatmap = true;
+                this.renderNextFrame();
+            },
+            'debug.texelDensityHeatmap': () => {
+                this.dirtyTexelDensityHeatmap = true;
                 this.renderNextFrame();
             },
             'debug.renderMode': this.setRenderMode.bind(this),
@@ -997,6 +1187,10 @@ class Viewer {
                     this.clearMeasurement();
                 }
                 this.canvas.style.cursor = enabled ? 'crosshair' : '';
+            },
+            'measure.unit': () => {
+                this.updateTexelDensityStats();
+                this.renderNextFrame();
             }
         };
 
@@ -1283,9 +1477,12 @@ class Viewer {
         this.selectionController.reset();
         this.resetWireframeMeshes();
         this.resetSelectionHighlightMeshes();
+        this.resetTexelDensityHeatmapMeshes();
+        this.resetUvColorMeshes();
         this.resetUvCheckerMeshes();
         this.uvCheckerOriginalVisibility.clear();
         this.uvCheckerEnabled = false;
+        this.uvDebugMode = null;
         this.clearMeasurement();
 
         // reset animation state
@@ -1295,6 +1492,9 @@ class Viewer {
         this.observer.set('scene.materialChannelsWithTextures', '[]');
         this.observer.set('scene.materialChannelFilenames', '{}');
         this.observer.set('scene.selectedMaterialNames', '[]');
+        this.observer.set('scene.availableUvSets', '[]');
+        this.observer.set('scene.texelDensitySummary', '');
+        this.observer.set('scene.texelDensityReport', '[]');
     }
 
     private updateMaterialChannelInfo() {
@@ -1342,6 +1542,252 @@ class Viewer {
         this.observer.set('scene.materialChannelsWithTextures', JSON.stringify([...channelsWithTextures]));
         this.observer.set('scene.materialChannelFilenames', JSON.stringify(channelFilenames));
         this.observer.set('scene.selectedMaterialNames', JSON.stringify([...materialNames]));
+    }
+
+    private getSelectedUvSet() {
+        const value = Number(this.observer.get('debug.selectedUvSet') ?? 0);
+        return Math.max(0, Math.min(UV_SEMANTICS.length - 1, Number.isFinite(value) ? (value | 0) : 0));
+    }
+
+    private getUvSemantic(index: number) {
+        return UV_SEMANTICS[Math.max(0, Math.min(UV_SEMANTICS.length - 1, index | 0))];
+    }
+
+    private getAvailableUvSets(meshes: MeshInstance[]) {
+        const available = new Set<number>();
+        meshes.forEach((mi) => {
+            const elements = (mi.mesh as any)?.vertexBuffer?.format?.elements ?? [];
+            elements.forEach((element: { semantic?: string }) => {
+                const semantic = String(element?.semantic ?? '');
+                const uvIndex = UV_SEMANTICS.indexOf(semantic as (typeof UV_SEMANTICS)[number]);
+                if (uvIndex !== -1) {
+                    available.add(uvIndex);
+                }
+            });
+        });
+        return [...available].sort((a, b) => a - b);
+    }
+
+    private updateSelectedUvSets() {
+        const meshes = this.selectedNode ? this.collectMeshInstances(this.selectedNode as Entity) : [];
+        const available = this.getAvailableUvSets(meshes);
+        this.observer.set('scene.availableUvSets', JSON.stringify(available));
+        const current = this.getSelectedUvSet();
+        const next = available.includes(current) ? current : (available[0] ?? 0);
+        if (next !== current) {
+            this.observer.set('debug.selectedUvSet', next);
+            return;
+        }
+        this.setSelectedUvSet(next);
+    }
+
+    private getTexelDensityTextureMeta(material: any) {
+        const mapCandidates = ['diffuseMap', 'emissiveMap', 'opacityMap', 'normalMap', 'aoMap', 'metalnessMap', 'specularMap', 'glossMap'] as const;
+        for (let i = 0; i < mapCandidates.length; i++) {
+            const key = mapCandidates[i];
+            const tex = material?.[key];
+            if (tex && Number.isFinite(tex.width) && Number.isFinite(tex.height) && tex.width > 0 && tex.height > 0) {
+                const keyBase = key.replace('Map', '');
+                const tilingKey = `${keyBase}MapTiling`;
+                const tiling = material?.[tilingKey];
+                return {
+                    channel: keyBase,
+                    tex,
+                    tilingX: Math.max(0.000001, Math.abs(Number(tiling?.x ?? 1))),
+                    tilingY: Math.max(0.000001, Math.abs(Number(tiling?.y ?? 1)))
+                };
+            }
+        }
+        return null;
+    }
+
+    private calculateMeshInstanceTexelDensity(mi: MeshInstance, safeUnitScale: number) {
+        type TdEntry = {
+            node: string;
+            material: string;
+            texture: string;
+            channel: string;
+            resolution: string;
+            td: number;
+            triangles: number;
+            worldAreaM2: number;
+        };
+
+        const mesh = mi.mesh;
+        const primitive = mesh?.primitive?.[0];
+        const textureMeta = this.getTexelDensityTextureMeta(mi.material);
+        if (!mesh || !primitive || primitive.type !== PRIMITIVE_TRIANGLES || !textureMeta) {
+            return null;
+        }
+
+        const vertexCount = mesh.vertexBuffer?.getNumVertices?.() ?? mesh.vertexBuffer?.numVertices ?? 0;
+        if (vertexCount <= 0) {
+            return null;
+        }
+
+        const positions = new Float32Array(vertexCount * 3);
+        const uvs = new Float32Array(vertexCount * 2);
+        if (mesh.getVertexStream(SEMANTIC_POSITION, positions) <= 0 || mesh.getVertexStream(this.getUvSemantic(this.getSelectedUvSet()), uvs) <= 0) {
+            return null;
+        }
+
+        const primitiveBase = Math.max(0, primitive.base ?? 0);
+        const primitiveCount = Math.max(0, primitive.count ?? 0);
+        const baseVertex = primitive.baseVertex ?? 0;
+        if (primitiveCount < 3) {
+            return null;
+        }
+
+        let indices: Uint16Array | Uint32Array | null = null;
+        if (primitive.indexed) {
+            const totalIndexCount = mesh.indexBuffer?.[0]?.numIndices ?? (primitiveBase + primitiveCount);
+            if (totalIndexCount <= 0) {
+                return null;
+            }
+            indices = vertexCount > 65535 ? new Uint32Array(totalIndexCount) : new Uint16Array(totalIndexCount);
+            if (mesh.getIndices(indices) <= 0) {
+                return null;
+            }
+        }
+
+        const worldMat = mi.node?.getWorldTransform();
+        if (!worldMat) {
+            return null;
+        }
+
+        const p0 = new Vec3();
+        const p1 = new Vec3();
+        const p2 = new Vec3();
+        const edge0 = new Vec3();
+        const edge1 = new Vec3();
+        const cross = new Vec3();
+
+        let worldAreaUnits2 = 0;
+        let texelCount = 0;
+        let triangleCount = 0;
+
+        for (let i = primitiveBase; i + 2 < primitiveBase + primitiveCount; i += 3) {
+            const i0 = (primitive.indexed ? indices![i] : i) + baseVertex;
+            const i1 = (primitive.indexed ? indices![i + 1] : i + 1) + baseVertex;
+            const i2 = (primitive.indexed ? indices![i + 2] : i + 2) + baseVertex;
+
+            if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= vertexCount || i1 >= vertexCount || i2 >= vertexCount) {
+                continue;
+            }
+
+            p0.set(positions[i0 * 3], positions[i0 * 3 + 1], positions[i0 * 3 + 2]);
+            p1.set(positions[i1 * 3], positions[i1 * 3 + 1], positions[i1 * 3 + 2]);
+            p2.set(positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2]);
+            worldMat.transformPoint(p0, p0);
+            worldMat.transformPoint(p1, p1);
+            worldMat.transformPoint(p2, p2);
+
+            edge0.sub2(p1, p0);
+            edge1.sub2(p2, p0);
+            cross.cross(edge0, edge1);
+            const triAreaWorldUnits2 = 0.5 * cross.length();
+            if (!Number.isFinite(triAreaWorldUnits2) || triAreaWorldUnits2 <= 1e-12) {
+                continue;
+            }
+
+            const u0 = uvs[i0 * 2];
+            const v0 = uvs[i0 * 2 + 1];
+            const u1 = uvs[i1 * 2];
+            const v1 = uvs[i1 * 2 + 1];
+            const u2 = uvs[i2 * 2];
+            const v2 = uvs[i2 * 2 + 1];
+            const triAreaUv = 0.5 * Math.abs(((u1 - u0) * (v2 - v0)) - ((v1 - v0) * (u2 - u0))) * textureMeta.tilingX * textureMeta.tilingY;
+            if (!Number.isFinite(triAreaUv) || triAreaUv <= 1e-12) {
+                continue;
+            }
+
+            worldAreaUnits2 += triAreaWorldUnits2;
+            texelCount += triAreaUv * textureMeta.tex.width * textureMeta.tex.height;
+            triangleCount++;
+        }
+
+        const worldAreaM2 = worldAreaUnits2 * safeUnitScale * safeUnitScale;
+        if (!Number.isFinite(worldAreaM2) || worldAreaM2 <= 1e-12 || !Number.isFinite(texelCount) || texelCount <= 0 || triangleCount === 0) {
+            return null;
+        }
+
+        const td = Math.sqrt(texelCount / worldAreaM2);
+        if (!Number.isFinite(td) || td <= 0) {
+            return null;
+        }
+
+        return {
+            node: mi.node?.path || mi.node?.name || '-',
+            material: (mi.material as any)?.name || '-',
+            texture: textureMeta.tex.name || '-',
+            channel: textureMeta.channel,
+            resolution: `${textureMeta.tex.width}x${textureMeta.tex.height}`,
+            td,
+            triangles: triangleCount,
+            worldAreaM2
+        } satisfies TdEntry;
+    }
+
+    private updateTexelDensityStats() {
+        type TdEntry = {
+            node: string;
+            material: string;
+            texture: string;
+            channel: string;
+            resolution: string;
+            td: number;
+            triangles: number;
+            worldAreaM2: number;
+        };
+
+        const selectedPath = this.observer.get('scene.selectedNode.path') as string;
+        if (!this.selectedNode || !selectedPath) {
+            this.observer.set('scene.texelDensitySummary', 'n/a');
+            this.observer.set('scene.texelDensityReport', '[]');
+            return;
+        }
+
+        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
+        const safeUnitScale = Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
+        const selectedMeshes = this.collectMeshInstances(this.selectedNode as Entity);
+        const entries: TdEntry[] = [];
+        let totalWorldAreaM2 = 0;
+        let totalTexelCount = 0;
+        let totalTriangles = 0;
+
+        selectedMeshes.forEach((mi) => {
+            const entry = this.calculateMeshInstanceTexelDensity(mi, safeUnitScale);
+            if (!entry) return;
+            entries.push(entry);
+            totalWorldAreaM2 += entry.worldAreaM2;
+            totalTexelCount += entry.td * entry.td * entry.worldAreaM2;
+            totalTriangles += entry.triangles;
+        });
+
+        if (entries.length === 0 || totalWorldAreaM2 <= 0 || totalTexelCount <= 0) {
+            this.observer.set('scene.texelDensitySummary', 'n/a');
+            this.observer.set('scene.texelDensityReport', '[]');
+            return;
+        }
+
+        entries.sort((a, b) => b.worldAreaM2 - a.worldAreaM2);
+        const td = Math.sqrt(totalTexelCount / totalWorldAreaM2);
+        const unit = String(this.observer.get('measure.unit') ?? 'm');
+        const tdDivisor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
+        const tdUnit = unit === 'mm' ? 'px/mm' : (unit === 'cm' ? 'px/cm' : 'px/m');
+        const areaFactor = unit === 'mm' ? 1000000 : (unit === 'cm' ? 10000 : 1);
+        const areaUnit = unit === 'mm' ? 'mm²' : (unit === 'cm' ? 'cm²' : 'm²');
+        const displayTd = td / tdDivisor;
+        const displayArea = totalWorldAreaM2 * areaFactor;
+        const tdPrecision = unit === 'm' ? 0 : 2;
+        const areaPrecision = unit === 'm' ? 2 : 0;
+        const summary = `${displayTd.toFixed(tdPrecision)} ${tdUnit} | ${entries.length} mats | ${totalTriangles} tris | ${displayArea.toFixed(areaPrecision)} ${areaUnit}`;
+        this.observer.set('scene.texelDensitySummary', summary);
+        this.observer.set('scene.texelDensityReport', JSON.stringify(entries.slice(0, 32).map((e) => ({
+            ...e,
+            td: Math.round(e.td),
+            worldAreaM2: Number(e.worldAreaM2.toFixed(4))
+        }))));
     }
 
     updateSceneStats() {
@@ -1414,6 +1860,7 @@ class Viewer {
         });
 
         this.updateMaterialChannelInfo();
+        this.updateTexelDensityStats();
 
         const mapChildren = function (node: GraphNode): Array<HierarchyNode> {
             return node.children.map((child: GraphNode) => ({
@@ -2089,8 +2536,11 @@ class Viewer {
         this.selectedNode = graphNode;
         this.selectionController.onSelectionNodeChanged();
         this.updateMaterialChannelInfo();
+        this.updateSelectedUvSets();
+        this.updateTexelDensityStats();
         this.dirtyWireframe = true;
         this.dirtySelectionHighlight = true;
+        this.dirtyTexelDensityHeatmap = true;
         this.dirtyBounds = true;
         this.dirtySkeleton = true;
         this.renderNextFrame();
@@ -2104,8 +2554,31 @@ class Viewer {
                     resource.applyMaterialVariant(entityAsset.entity, variant);
                 }
             });
+            this.updateMaterialChannelInfo();
+            this.updateSelectedUvSets();
+            this.updateTexelDensityStats();
+            this.dirtyTexelDensityHeatmap = true;
             this.renderNextFrame();
         }
+    }
+
+    setSelectedUvSet(value: number) {
+        const selectedUvSet = Math.max(0, Math.min(UV_SEMANTICS.length - 1, Number(value) | 0));
+        this.uvCheckerMaterial.diffuseMapUv = selectedUvSet;
+        this.uvCheckerMaterial.emissiveMapUv = selectedUvSet;
+        this.uvCheckerMaterial.update();
+        this.uvColorMaterial.diffuseMapUv = selectedUvSet;
+        this.uvColorMaterial.emissiveMapUv = selectedUvSet;
+        this.uvColorMaterial.update();
+
+        if (this.uvDebugMode === 'uv0') {
+            this.resetUvColorMeshes();
+            this.buildUvColorMeshes();
+        }
+
+        this.updateTexelDensityStats();
+        this.dirtyTexelDensityHeatmap = true;
+        this.renderNextFrame();
     }
 
     setSelectedCamera(cameraPath: string) {
@@ -2215,7 +2688,8 @@ class Viewer {
 
     setUvCheckerScale(scale: number) {
         const clamped = Math.max(1, Math.min(64, Number(scale) || 16));
-        this.uvCheckerMaterial.setParameter('uScale', clamped);
+        this.uvCheckerMaterial.diffuseMapTiling.set(clamped, clamped);
+        this.uvCheckerMaterial.emissiveMapTiling.set(clamped, clamped);
         this.uvCheckerMaterial.update();
         this.renderNextFrame();
     }
@@ -2226,19 +2700,40 @@ class Viewer {
     }
 
     setRenderMode(renderMode: string) {
-        const enableUvChecker = renderMode === 'uv_checker';
-        if (enableUvChecker !== this.uvCheckerEnabled) {
-            this.uvCheckerEnabled = enableUvChecker;
-            if (enableUvChecker) {
+        const nextUvDebugMode = (renderMode === 'uv_checker' || renderMode === 'uv0') ? renderMode : null;
+        if (this.uvDebugMode !== nextUvDebugMode) {
+            this.resetUvCheckerMeshes();
+            this.resetUvColorMeshes();
+            this.uvDebugMode = nextUvDebugMode;
+            this.uvCheckerEnabled = nextUvDebugMode === 'uv_checker';
+
+            if (nextUvDebugMode) {
                 this.setUvCheckerBaseVisibility(true);
-                this.buildUvCheckerMeshes();
+                if (nextUvDebugMode === 'uv_checker') {
+                    this.buildUvCheckerMeshes();
+                } else {
+                    this.buildUvColorMeshes();
+                }
             } else {
-                this.resetUvCheckerMeshes();
                 this.setUvCheckerBaseVisibility(false);
+                this.meshInstances.forEach((mi) => {
+                    mi.visible = true;
+                });
             }
+        } else if (nextUvDebugMode === 'uv_checker') {
+            this.uvCheckerEnabled = true;
+            this.resetUvCheckerMeshes();
+            this.buildUvCheckerMeshes();
+        } else if (nextUvDebugMode === 'uv0') {
+            this.resetUvColorMeshes();
+            this.buildUvColorMeshes();
+        } else {
+            this.meshInstances.forEach((mi) => {
+                mi.visible = true;
+            });
         }
 
-        this.camera.camera.setShaderPass((renderMode !== 'default' && renderMode !== 'uv_checker') ? `debug_${renderMode}` : 'forward');
+        this.camera.camera.setShaderPass((renderMode !== 'default' && !nextUvDebugMode) ? `debug_${renderMode}` : 'forward');
         this.renderNextFrame();
     }
 
@@ -2487,9 +2982,15 @@ class Viewer {
 
         if (this.observer.get('debug.renderMode') === 'uv_checker') {
             this.uvCheckerEnabled = true;
+            this.uvDebugMode = 'uv_checker';
             this.setUvCheckerBaseVisibility(true);
             this.resetUvCheckerMeshes();
             this.buildUvCheckerMeshes();
+        } else if (this.observer.get('debug.renderMode') === 'uv0') {
+            this.uvDebugMode = 'uv0';
+            this.setUvCheckerBaseVisibility(true);
+            this.resetUvColorMeshes();
+            this.buildUvColorMeshes();
         }
 
         // if no meshes are currently loaded, then enable skeleton rendering so user can see something
@@ -2499,6 +3000,7 @@ class Viewer {
 
         // update
         this.updateSceneStats();
+        this.updateSelectedUvSets();
 
         // rebuild the anim state graph
         if (this.animTracks.length > 0) {
@@ -2702,6 +3204,14 @@ class Viewer {
         this.uvCheckerMeshInstances = [];
     }
 
+    private resetUvColorMeshes() {
+        this.app.scene.layers.getLayerByName('World').removeMeshInstances(this.uvColorMeshInstances);
+        this.uvColorMeshInstances.forEach((mi) => {
+            mi.clearShaders();
+        });
+        this.uvColorMeshInstances = [];
+    }
+
     private buildUvCheckerMeshes() {
         this.uvCheckerMeshInstances = this.meshInstances.map((mi) => {
             const meshInstance = new MeshInstance(mi.mesh, this.uvCheckerMaterial, mi.node);
@@ -2711,6 +3221,18 @@ class Viewer {
         });
 
         this.app.scene.layers.getLayerByName('World').addMeshInstances(this.uvCheckerMeshInstances);
+    }
+
+    private buildUvColorMeshes() {
+        this.uvColorMeshInstances = this.meshInstances
+        .map((mi) => {
+            const meshInstance = new MeshInstance(mi.mesh, this.uvColorMaterial, mi.node);
+            meshInstance.skinInstance = mi.skinInstance;
+            meshInstance.morphInstance = mi.morphInstance;
+            return meshInstance;
+        });
+
+        this.app.scene.layers.getLayerByName('World').addMeshInstances(this.uvColorMeshInstances);
     }
 
     private setUvCheckerBaseVisibility(enabled: boolean) {
@@ -2724,9 +3246,9 @@ class Viewer {
         }
 
         this.meshInstances.forEach((mi) => {
-            if (this.uvCheckerOriginalVisibility.has(mi.id)) {
-                mi.visible = this.uvCheckerOriginalVisibility.get(mi.id) as boolean;
-            }
+            mi.visible = this.uvCheckerOriginalVisibility.has(mi.id) ?
+                this.uvCheckerOriginalVisibility.get(mi.id) as boolean :
+                true;
         });
         this.uvCheckerOriginalVisibility.clear();
     }
@@ -2737,6 +3259,89 @@ class Viewer {
             mi.clearShaders();
         });
         this.selectionHighlightMeshInstances = [];
+    }
+
+    private resetTexelDensityHeatmapMeshes() {
+        this.app.scene.layers.getLayerByName('World').removeMeshInstances(this.texelDensityHeatmapMeshInstances);
+        this.texelDensityHeatmapMeshInstances.forEach((mi) => {
+            mi.clearShaders();
+        });
+        this.texelDensityHeatmapMeshInstances = [];
+        this.texelDensityHeatmapMaterials.forEach((material) => material.destroy());
+        this.texelDensityHeatmapMaterials = [];
+    }
+
+    private getTexelDensityHeatmapColor(value: number, min: number, max: number) {
+        const stops = [
+            { t: 0.0, c: [0.129, 0.4, 0.968] },
+            { t: 0.25, c: [0.121, 0.78, 0.867] },
+            { t: 0.5, c: [0.365, 0.86, 0.365] },
+            { t: 0.75, c: [0.969, 0.82, 0.251] },
+            { t: 1.0, c: [0.922, 0.251, 0.2] }
+        ];
+        const safeMin = Math.max(1e-6, min);
+        const safeMax = Math.max(safeMin + 1e-6, max);
+        const logMin = Math.log(safeMin);
+        const logMax = Math.log(safeMax);
+        const t = math.clamp((Math.log(Math.max(value, 1e-6)) - logMin) / (logMax - logMin), 0, 1);
+        for (let i = 1; i < stops.length; i++) {
+            if (t <= stops[i].t) {
+                const a = stops[i - 1];
+                const b = stops[i];
+                const f = (t - a.t) / (b.t - a.t);
+                return new Color(
+                    a.c[0] + (b.c[0] - a.c[0]) * f,
+                    a.c[1] + (b.c[1] - a.c[1]) * f,
+                    a.c[2] + (b.c[2] - a.c[2]) * f
+                );
+            }
+        }
+        const last = stops[stops.length - 1].c;
+        return new Color(last[0], last[1], last[2]);
+    }
+
+    private buildTexelDensityHeatmapMeshes() {
+        if (!this.selectedNode || !this.observer.get('debug.withTextureOnly') || !this.observer.get('debug.texelDensityHeatmap')) return;
+
+        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
+        const safeUnitScale = Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
+        const selectedMeshes = this.collectMeshInstances(this.selectedNode as Entity);
+        const entries = selectedMeshes.map((mi) => ({
+            mi,
+            entry: this.calculateMeshInstanceTexelDensity(mi, safeUnitScale)
+        })).filter((item) => !!item.entry) as Array<{
+            mi: MeshInstance;
+            entry: NonNullable<ReturnType<Viewer['calculateMeshInstanceTexelDensity']>>;
+        }>;
+
+        if (entries.length === 0) return;
+
+        const minTd = Math.min(...entries.map((item) => item.entry.td));
+        const maxTd = Math.max(...entries.map((item) => item.entry.td));
+
+        this.texelDensityHeatmapMeshInstances = entries.map(({ mi, entry }) => {
+            const color = this.getTexelDensityHeatmapColor(entry.td, minTd, maxTd);
+            const material = new StandardMaterial();
+            material.useLighting = false;
+            material.useSkybox = false;
+            material.cull = mi.material?.cull;
+            material.blendType = BLEND_NORMAL;
+            material.depthState.write = false;
+            material.depthBias = -0.2;
+            material.slopeDepthBias = 0.2;
+            material.opacity = 0.72;
+            material.diffuse = color;
+            material.emissive = color;
+            material.update();
+            this.texelDensityHeatmapMaterials.push(material);
+
+            const meshInstance = new MeshInstance(mi.mesh, material, mi.node);
+            meshInstance.skinInstance = mi.skinInstance;
+            meshInstance.morphInstance = mi.morphInstance;
+            return meshInstance;
+        });
+
+        this.app.scene.layers.getLayerByName('World').addMeshInstances(this.texelDensityHeatmapMeshInstances);
     }
 
     private buildWireframeMeshes() {
@@ -2808,6 +3413,12 @@ class Viewer {
             this.buildSelectionHighlightMeshes();
         }
         this.selectionController.onPrerender(this.selectionHighlightMeshInstances.length);
+
+        if (this.dirtyTexelDensityHeatmap) {
+            this.dirtyTexelDensityHeatmap = false;
+            this.resetTexelDensityHeatmapMeshes();
+            this.buildTexelDensityHeatmapMeshes();
+        }
 
         // wireframe
         if (this.dirtyWireframe) {

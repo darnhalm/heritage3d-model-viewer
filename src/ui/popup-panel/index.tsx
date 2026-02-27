@@ -75,7 +75,9 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                 ))}
                 {wrap(t('Measurement', lang), (
                     <Button
-                        class={buildClass('measurement').concat('measurement-button')}
+                        class={buildClass('measurement')
+                            .concat('measurement-button')
+                            .concat(this.props.observerData.measure.enabled ? 'measure-enabled' : [])}
                         id='measurement-button'
                         width={40}
                         height={40}
