@@ -86,6 +86,7 @@ import arCloseImage from './svg/ar-close.svg';
 import arModeImage from './svg/ar-mode.svg';
 import { File, HierarchyNode, MorphTargetData, SceneCamera } from './types';
 import { MeasurementController, SelectionController } from './viewer/controllers';
+import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
 import { XRObjectPlacementController } from './xr-mode';
 import { MeshoptDecoder } from '../lib/meshopt_decoder.module.js';
@@ -398,6 +399,8 @@ class Viewer {
     uvCheckerEnabled = false;
 
     uvCheckerOriginalVisibility = new Map<number, boolean>();
+
+    meshGeometryCache = new WeakMap<object, CachedMeshGeometry | null>();
 
 
     animTracks: Array<AnimTrack>;
@@ -1515,14 +1518,30 @@ class Viewer {
             if (typeof mat.name === 'string' && mat.name.trim()) {
                 materialNames.add(mat.name.trim());
             }
-            if (mat.diffuseMap) { channelsWithTextures.add('albedo'); if (!channelFilenames.albedo) channelFilenames.albedo = getTextureFilename(mat.diffuseMap) ?? ''; }
-            if (mat.metalnessMap) { channelsWithTextures.add('metalness'); if (!channelFilenames.metalness) channelFilenames.metalness = getTextureFilename(mat.metalnessMap) ?? ''; }
-            if (mat.glossMap) { channelsWithTextures.add('gloss'); if (!channelFilenames.gloss) channelFilenames.gloss = getTextureFilename(mat.glossMap) ?? ''; }
-            if (mat.normalMap) { channelsWithTextures.add('world_normal'); if (!channelFilenames.world_normal) channelFilenames.world_normal = getTextureFilename(mat.normalMap) ?? ''; }
-            if (mat.specularMap) { channelsWithTextures.add('specularity'); if (!channelFilenames.specularity) channelFilenames.specularity = getTextureFilename(mat.specularMap) ?? ''; }
-            if (mat.emissiveMap) { channelsWithTextures.add('emission'); if (!channelFilenames.emission) channelFilenames.emission = getTextureFilename(mat.emissiveMap) ?? ''; }
-            if (mat.aoMap) { channelsWithTextures.add('ao'); if (!channelFilenames.ao) channelFilenames.ao = getTextureFilename(mat.aoMap) ?? ''; }
-            if (mat.opacityMap) { channelsWithTextures.add('opacity'); if (!channelFilenames.opacity) channelFilenames.opacity = getTextureFilename(mat.opacityMap) ?? ''; }
+            if (mat.diffuseMap) {
+                channelsWithTextures.add('albedo'); if (!channelFilenames.albedo) channelFilenames.albedo = getTextureFilename(mat.diffuseMap) ?? '';
+            }
+            if (mat.metalnessMap) {
+                channelsWithTextures.add('metalness'); if (!channelFilenames.metalness) channelFilenames.metalness = getTextureFilename(mat.metalnessMap) ?? '';
+            }
+            if (mat.glossMap) {
+                channelsWithTextures.add('gloss'); if (!channelFilenames.gloss) channelFilenames.gloss = getTextureFilename(mat.glossMap) ?? '';
+            }
+            if (mat.normalMap) {
+                channelsWithTextures.add('world_normal'); if (!channelFilenames.world_normal) channelFilenames.world_normal = getTextureFilename(mat.normalMap) ?? '';
+            }
+            if (mat.specularMap) {
+                channelsWithTextures.add('specularity'); if (!channelFilenames.specularity) channelFilenames.specularity = getTextureFilename(mat.specularMap) ?? '';
+            }
+            if (mat.emissiveMap) {
+                channelsWithTextures.add('emission'); if (!channelFilenames.emission) channelFilenames.emission = getTextureFilename(mat.emissiveMap) ?? '';
+            }
+            if (mat.aoMap) {
+                channelsWithTextures.add('ao'); if (!channelFilenames.ao) channelFilenames.ao = getTextureFilename(mat.aoMap) ?? '';
+            }
+            if (mat.opacityMap) {
+                channelsWithTextures.add('opacity'); if (!channelFilenames.opacity) channelFilenames.opacity = getTextureFilename(mat.opacityMap) ?? '';
+            }
         };
 
         if (this.selectedNode) {
@@ -1614,40 +1633,21 @@ class Viewer {
         };
 
         const mesh = mi.mesh;
-        const primitive = mesh?.primitive?.[0];
         const textureMeta = this.getTexelDensityTextureMeta(mi.material);
-        if (!mesh || !primitive || primitive.type !== PRIMITIVE_TRIANGLES || !textureMeta) {
+        if (!mesh || !textureMeta) {
             return null;
         }
 
-        const vertexCount = mesh.vertexBuffer?.getNumVertices?.() ?? mesh.vertexBuffer?.numVertices ?? 0;
-        if (vertexCount <= 0) {
+        const geometry = getCachedMeshGeometry(mi, this.meshGeometryCache);
+        if (!geometry) {
             return null;
         }
 
-        const positions = new Float32Array(vertexCount * 3);
+        const positions = geometry.positions;
+        const vertexCount = geometry.vertexCount;
         const uvs = new Float32Array(vertexCount * 2);
-        if (mesh.getVertexStream(SEMANTIC_POSITION, positions) <= 0 || mesh.getVertexStream(this.getUvSemantic(this.getSelectedUvSet()), uvs) <= 0) {
+        if (mesh.getVertexStream(this.getUvSemantic(this.getSelectedUvSet()), uvs) <= 0) {
             return null;
-        }
-
-        const primitiveBase = Math.max(0, primitive.base ?? 0);
-        const primitiveCount = Math.max(0, primitive.count ?? 0);
-        const baseVertex = primitive.baseVertex ?? 0;
-        if (primitiveCount < 3) {
-            return null;
-        }
-
-        let indices: Uint16Array | Uint32Array | null = null;
-        if (primitive.indexed) {
-            const totalIndexCount = mesh.indexBuffer?.[0]?.numIndices ?? (primitiveBase + primitiveCount);
-            if (totalIndexCount <= 0) {
-                return null;
-            }
-            indices = vertexCount > 65535 ? new Uint32Array(totalIndexCount) : new Uint16Array(totalIndexCount);
-            if (mesh.getIndices(indices) <= 0) {
-                return null;
-            }
         }
 
         const worldMat = mi.node?.getWorldTransform();
@@ -1666,45 +1666,48 @@ class Viewer {
         let texelCount = 0;
         let triangleCount = 0;
 
-        for (let i = primitiveBase; i + 2 < primitiveBase + primitiveCount; i += 3) {
-            const i0 = (primitive.indexed ? indices![i] : i) + baseVertex;
-            const i1 = (primitive.indexed ? indices![i + 1] : i + 1) + baseVertex;
-            const i2 = (primitive.indexed ? indices![i + 2] : i + 2) + baseVertex;
+        geometry.primitives.forEach((primitive) => {
+            if (primitive.indexed && !geometry.indices) return;
+            for (let i = primitive.base; i + 2 < primitive.base + primitive.count; i += 3) {
+                const i0 = ((primitive.indexed ? geometry.indices?.[i] : i) ?? i) + primitive.baseVertex;
+                const i1 = ((primitive.indexed ? geometry.indices?.[i + 1] : i + 1) ?? (i + 1)) + primitive.baseVertex;
+                const i2 = ((primitive.indexed ? geometry.indices?.[i + 2] : i + 2) ?? (i + 2)) + primitive.baseVertex;
 
-            if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= vertexCount || i1 >= vertexCount || i2 >= vertexCount) {
-                continue;
+                if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= vertexCount || i1 >= vertexCount || i2 >= vertexCount) {
+                    continue;
+                }
+
+                p0.set(positions[i0 * 3], positions[i0 * 3 + 1], positions[i0 * 3 + 2]);
+                p1.set(positions[i1 * 3], positions[i1 * 3 + 1], positions[i1 * 3 + 2]);
+                p2.set(positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2]);
+                worldMat.transformPoint(p0, p0);
+                worldMat.transformPoint(p1, p1);
+                worldMat.transformPoint(p2, p2);
+
+                edge0.sub2(p1, p0);
+                edge1.sub2(p2, p0);
+                cross.cross(edge0, edge1);
+                const triAreaWorldUnits2 = 0.5 * cross.length();
+                if (!Number.isFinite(triAreaWorldUnits2) || triAreaWorldUnits2 <= 1e-12) {
+                    continue;
+                }
+
+                const u0 = uvs[i0 * 2];
+                const v0 = uvs[i0 * 2 + 1];
+                const u1 = uvs[i1 * 2];
+                const v1 = uvs[i1 * 2 + 1];
+                const u2 = uvs[i2 * 2];
+                const v2 = uvs[i2 * 2 + 1];
+                const triAreaUv = 0.5 * Math.abs(((u1 - u0) * (v2 - v0)) - ((v1 - v0) * (u2 - u0))) * textureMeta.tilingX * textureMeta.tilingY;
+                if (!Number.isFinite(triAreaUv) || triAreaUv <= 1e-12) {
+                    continue;
+                }
+
+                worldAreaUnits2 += triAreaWorldUnits2;
+                texelCount += triAreaUv * textureMeta.tex.width * textureMeta.tex.height;
+                triangleCount++;
             }
-
-            p0.set(positions[i0 * 3], positions[i0 * 3 + 1], positions[i0 * 3 + 2]);
-            p1.set(positions[i1 * 3], positions[i1 * 3 + 1], positions[i1 * 3 + 2]);
-            p2.set(positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2]);
-            worldMat.transformPoint(p0, p0);
-            worldMat.transformPoint(p1, p1);
-            worldMat.transformPoint(p2, p2);
-
-            edge0.sub2(p1, p0);
-            edge1.sub2(p2, p0);
-            cross.cross(edge0, edge1);
-            const triAreaWorldUnits2 = 0.5 * cross.length();
-            if (!Number.isFinite(triAreaWorldUnits2) || triAreaWorldUnits2 <= 1e-12) {
-                continue;
-            }
-
-            const u0 = uvs[i0 * 2];
-            const v0 = uvs[i0 * 2 + 1];
-            const u1 = uvs[i1 * 2];
-            const v1 = uvs[i1 * 2 + 1];
-            const u2 = uvs[i2 * 2];
-            const v2 = uvs[i2 * 2 + 1];
-            const triAreaUv = 0.5 * Math.abs(((u1 - u0) * (v2 - v0)) - ((v1 - v0) * (u2 - u0))) * textureMeta.tilingX * textureMeta.tilingY;
-            if (!Number.isFinite(triAreaUv) || triAreaUv <= 1e-12) {
-                continue;
-            }
-
-            worldAreaUnits2 += triAreaWorldUnits2;
-            texelCount += triAreaUv * textureMeta.tex.width * textureMeta.tex.height;
-            triangleCount++;
-        }
+        });
 
         const worldAreaM2 = worldAreaUnits2 * safeUnitScale * safeUnitScale;
         if (!Number.isFinite(worldAreaM2) || worldAreaM2 <= 1e-12 || !Number.isFinite(texelCount) || texelCount <= 0 || triangleCount === 0) {
@@ -1783,7 +1786,7 @@ class Viewer {
         const areaPrecision = unit === 'm' ? 2 : 0;
         const summary = `${displayTd.toFixed(tdPrecision)} ${tdUnit} | ${entries.length} mats | ${totalTriangles} tris | ${displayArea.toFixed(areaPrecision)} ${areaUnit}`;
         this.observer.set('scene.texelDensitySummary', summary);
-        this.observer.set('scene.texelDensityReport', JSON.stringify(entries.slice(0, 32).map((e) => ({
+        this.observer.set('scene.texelDensityReport', JSON.stringify(entries.slice(0, 32).map(e => ({
             ...e,
             td: Math.round(e.td),
             worldAreaM2: Number(e.worldAreaM2.toFixed(4))
@@ -1823,30 +1826,30 @@ class Viewer {
                     res.meshes.forEach((mesh: Mesh) => {
                         vertexCount += mesh.vertexBuffer.getNumVertices();
 
-                        const prim = mesh.primitive[0];
-                        switch (prim.type) {
-                            case PRIMITIVE_POINTS:
-                                primitiveCount += prim.count;
-                                break;
-                            case PRIMITIVE_LINES:
-                                primitiveCount += prim.count / 2;
-                                break;
-                            case PRIMITIVE_LINELOOP:
-                                primitiveCount += prim.count;
-                                break;
-                            case PRIMITIVE_LINESTRIP:
-                                primitiveCount += prim.count - 1;
-                                break;
-                            case PRIMITIVE_TRIANGLES:
-                                primitiveCount += prim.count / 3;
-                                break;
-                            case PRIMITIVE_TRISTRIP:
-                                primitiveCount += prim.count - 2;
-                                break;
-                            case PRIMITIVE_TRIFAN:
-                                primitiveCount += prim.count - 2;
-                                break;
-                        }
+                        (mesh.primitive ?? []).forEach((prim: { type?: number; count?: number }) => {
+                            const count = Math.max(0, Number(prim?.count ?? 0));
+                            switch (prim?.type) {
+                                case PRIMITIVE_POINTS:
+                                    primitiveCount += count;
+                                    break;
+                                case PRIMITIVE_LINES:
+                                    primitiveCount += count / 2;
+                                    break;
+                                case PRIMITIVE_LINELOOP:
+                                    primitiveCount += count;
+                                    break;
+                                case PRIMITIVE_LINESTRIP:
+                                    primitiveCount += Math.max(0, count - 1);
+                                    break;
+                                case PRIMITIVE_TRIANGLES:
+                                    primitiveCount += count / 3;
+                                    break;
+                                case PRIMITIVE_TRISTRIP:
+                                case PRIMITIVE_TRIFAN:
+                                    primitiveCount += Math.max(0, count - 2);
+                                    break;
+                            }
+                        });
                         meshVRAM += mesh.vertexBuffer.numBytes + (mesh.indexBuffer?.[0]?.numBytes ?? 0);
                     });
                 });
@@ -2048,12 +2051,20 @@ class Viewer {
         this.settingsService.resetViewerSettingsToDefaults();
     }
 
-    /** Apply a settings object (e.g. from model-viewer-settings.json) to the observer. */
+    /**
+     * Apply a settings object (e.g. from model-viewer-settings.json) to the observer.
+     * @param data - Parsed viewer settings payload.
+     */
     applyViewerSettings(data: Record<string, unknown>) {
         this.settingsService.applyViewerSettings(data);
     }
 
-    /** Fetch and apply model settings from nearby files. */
+    /**
+     * Fetch and apply model settings from nearby files.
+     * @param firstModelUrl - URL of the primary loaded model file.
+     * @param allFiles - Optional list of all dropped or loaded files.
+     * @returns Promise resolved after settings lookup completes.
+     */
     private tryFetchAndApplySettings(firstModelUrl: string, allFiles?: Array<{ url: string; filename?: string }>): Promise<void> {
         return this.settingsService.tryFetchAndApplySettings(firstModelUrl, allFiles);
     }
@@ -2329,112 +2340,113 @@ class Viewer {
 
             // Defer load to next frame so the progress bar can paint at 0%
             requestAnimationFrame(() => {
-            this.resetViewerSettingsToDefaults();
-            const warnings: string[] = [];
-            const modelFiles = files.filter((f) => this.isModelFilename(f.filename) || this.isGSplatFilename(f.filename));
-            const total = modelFiles.length;
-            const progressPerFile: number[] = new Array(total).fill(0);
-            let lastProgressUpdate = 0;
-            let lastProgressValue = 0;
-            const PROGRESS_THROTTLE_MS = 80;
-            const PROGRESS_MIN_DELTA = 1.5;
+                this.resetViewerSettingsToDefaults();
+                const warnings: string[] = [];
+                const modelFiles = files.filter(f => this.isModelFilename(f.filename) || this.isGSplatFilename(f.filename));
+                const total = modelFiles.length;
+                const progressPerFile: number[] = new Array(total).fill(0);
+                let lastProgressUpdate = 0;
+                let lastProgressValue = 0;
+                const PROGRESS_THROTTLE_MS = 80;
+                const PROGRESS_MIN_DELTA = 1.5;
 
-            const setAggregateProgress = () => {
-                const sum = progressPerFile.reduce((a, b) => a + b, 0);
-                const pct = total > 0 ? (sum / total) * 90 : 0;
-                const target = Math.min(90, Math.floor(pct * 10) / 10);
-                const now = Date.now();
-                const deltaOk = Math.abs(target - lastProgressValue) >= PROGRESS_MIN_DELTA;
-                const timeOk = now - lastProgressUpdate >= PROGRESS_THROTTLE_MS;
-                if (target >= 90 || deltaOk || timeOk) {
-                    lastProgressUpdate = now;
-                    lastProgressValue = target;
-                    this.observer.set('ui.loadProgress', target);
-                }
-                if (sum > 0 && fallbackInterval) stopFallbackProgress();
-            };
-
-            let fallbackInterval: ReturnType<typeof setInterval> | null = null;
-            const startFallbackProgress = () => {
-                fallbackInterval = setInterval(() => {
-                    const current = this.observer.get('ui.loadProgress') as number;
-                    if (current >= 90) return;
-                    this.observer.set('ui.loadProgress', Math.min(90, current + 3));
-                }, 150);
-            };
-            const stopFallbackProgress = () => {
-                if (fallbackInterval) {
-                    clearInterval(fallbackInterval);
-                    fallbackInterval = null;
-                }
-            };
-
-            const promises = modelFiles.map((file, modelIndex) => {
-                const onProgress = (p: number) => {
-                    progressPerFile[modelIndex] = p;
-                    setAggregateProgress();
-                };
-                return this.isModelFilename(file.filename) ?
-                    this.loadGltf(file, files, warnings, onProgress) :
-                    this.loadPly(file, files, onProgress);
-            });
-
-            setTimeout(() => {
-                if ((this.observer.get('ui.loadProgress') as number) === 0) startFallbackProgress();
-            }, 300);
-
-            const wrappedPromises = promises.map((p, i) => p.then((asset) => {
-                progressPerFile[i] = 1;
-                setAggregateProgress();
-                return asset;
-            }));
-
-            Promise.all(wrappedPromises)
-            .then((assets: Asset[]) => {
-                this.loadTimestamp = loadTimestamp;
-
-                // add assets to the scene
-                assets.forEach((asset) => {
-                    if (asset) {
-                        this.addToScene(asset);
+                let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+                const stopFallbackProgress = () => {
+                    if (fallbackInterval) {
+                        clearInterval(fallbackInterval);
+                        fallbackInterval = null;
                     }
+                };
+
+                const setAggregateProgress = () => {
+                    const sum = progressPerFile.reduce((a, b) => a + b, 0);
+                    const pct = total > 0 ? (sum / total) * 90 : 0;
+                    const target = Math.min(90, Math.floor(pct * 10) / 10);
+                    const now = Date.now();
+                    const deltaOk = Math.abs(target - lastProgressValue) >= PROGRESS_MIN_DELTA;
+                    const timeOk = now - lastProgressUpdate >= PROGRESS_THROTTLE_MS;
+                    if (target >= 90 || deltaOk || timeOk) {
+                        lastProgressUpdate = now;
+                        lastProgressValue = target;
+                        this.observer.set('ui.loadProgress', target);
+                    }
+                    if (sum > 0 && fallbackInterval) stopFallbackProgress();
+                };
+
+                const startFallbackProgress = () => {
+                    fallbackInterval = setInterval(() => {
+                        const current = this.observer.get('ui.loadProgress') as number;
+                        if (current >= 90) return;
+                        this.observer.set('ui.loadProgress', Math.min(90, current + 3));
+                    }, 150);
+                };
+
+                const promises = modelFiles.map((file, modelIndex) => {
+                    const onProgress = (p: number) => {
+                        progressPerFile[modelIndex] = p;
+                        setAggregateProgress();
+                    };
+                    return this.isModelFilename(file.filename) ?
+                        this.loadGltf(file, files, warnings, onProgress) :
+                        this.loadPly(file, files, onProgress);
                 });
 
-                // update scene urls
-                const urls = modelFiles.map(f => f.url);
-                const filenames = modelFiles.map(f => f.filename.split('/').pop());
-                if (resetScene) {
-                    this.observer.set('scene.urls', urls);
-                    this.observer.set('scene.filenames', filenames);
-                } else {
-                    this.observer.set('scene.urls', this.observer.get('scene.urls').concat(urls));
-                    this.observer.set('scene.filenames', this.observer.get('scene.filenames').concat(filenames));
-                }
-
-                if (warnings.length > 0) {
-                    console.warn(`Model loaded with ${warnings.length} warning(s):`);
-                    warnings.forEach(w => console.warn(`  - ${w}`));
-                    this.observer.set('ui.warnings', warnings);
-                }
-
-                // auto-load settings from model folder (URL) or from dropped/selected files (blob)
-                const firstModelUrl = modelFiles[0]?.url;
-                return this.tryFetchAndApplySettings(firstModelUrl, files);
-            })
-            .then(() => {
-                this.postSceneLoad();
-            })
-            .catch((err) => {
-                console.log(err);
-                this.observer.set('ui.error', err?.toString() || err);
-            })
-            .finally(() => {
-                stopFallbackProgress();
-                this.observer.set('ui.loadProgress', 100);
                 setTimeout(() => {
-                    this.observer.set('ui.spinner', false);
-                }, 250);
-            });
+                    if ((this.observer.get('ui.loadProgress') as number) === 0) startFallbackProgress();
+                }, 300);
+
+                const wrappedPromises = promises.map((p, i) => p.then((asset) => {
+                    progressPerFile[i] = 1;
+                    setAggregateProgress();
+                    return asset;
+                }));
+
+                Promise.all(wrappedPromises)
+                .then((assets: Asset[]) => {
+                    this.loadTimestamp = loadTimestamp;
+
+                    // add assets to the scene
+                    assets.forEach((asset) => {
+                        if (asset) {
+                            this.addToScene(asset);
+                        }
+                    });
+
+                    // update scene urls
+                    const urls = modelFiles.map(f => f.url);
+                    const filenames = modelFiles.map(f => f.filename.split('/').pop());
+                    if (resetScene) {
+                        this.observer.set('scene.urls', urls);
+                        this.observer.set('scene.filenames', filenames);
+                    } else {
+                        this.observer.set('scene.urls', this.observer.get('scene.urls').concat(urls));
+                        this.observer.set('scene.filenames', this.observer.get('scene.filenames').concat(filenames));
+                    }
+
+                    if (warnings.length > 0) {
+                        console.warn(`Model loaded with ${warnings.length} warning(s):`);
+                        warnings.forEach(w => console.warn(`  - ${w}`));
+                        this.observer.set('ui.warnings', warnings);
+                    }
+
+                    // auto-load settings from model folder (URL) or from dropped/selected files (blob)
+                    const firstModelUrl = modelFiles[0]?.url;
+                    return this.tryFetchAndApplySettings(firstModelUrl, files);
+                })
+                .then(() => {
+                    this.postSceneLoad();
+                })
+                .catch((err) => {
+                    console.log(err);
+                    this.observer.set('ui.error', err?.toString() || err);
+                })
+                .finally(() => {
+                    stopFallbackProgress();
+                    this.observer.set('ui.loadProgress', 100);
+                    setTimeout(() => {
+                        this.observer.set('ui.spinner', false);
+                    }, 250);
+                });
             });
         } else {
             // load skybox
@@ -3267,7 +3279,7 @@ class Viewer {
             mi.clearShaders();
         });
         this.texelDensityHeatmapMeshInstances = [];
-        this.texelDensityHeatmapMaterials.forEach((material) => material.destroy());
+        this.texelDensityHeatmapMaterials.forEach(material => material.destroy());
         this.texelDensityHeatmapMaterials = [];
     }
 
@@ -3306,18 +3318,18 @@ class Viewer {
         const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
         const safeUnitScale = Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
         const selectedMeshes = this.collectMeshInstances(this.selectedNode as Entity);
-        const entries = selectedMeshes.map((mi) => ({
+        const entries = selectedMeshes.map(mi => ({
             mi,
             entry: this.calculateMeshInstanceTexelDensity(mi, safeUnitScale)
-        })).filter((item) => !!item.entry) as Array<{
+        })).filter(item => !!item.entry) as Array<{
             mi: MeshInstance;
             entry: NonNullable<ReturnType<Viewer['calculateMeshInstanceTexelDensity']>>;
         }>;
 
         if (entries.length === 0) return;
 
-        const minTd = Math.min(...entries.map((item) => item.entry.td));
-        const maxTd = Math.max(...entries.map((item) => item.entry.td));
+        const minTd = Math.min(...entries.map(item => item.entry.td));
+        const maxTd = Math.max(...entries.map(item => item.entry.td));
 
         this.texelDensityHeatmapMeshInstances = entries.map(({ mi, entry }) => {
             const color = this.getTexelDensityHeatmapColor(entry.td, minTd, maxTd);

@@ -71,3 +71,34 @@ test('encodes model URLs in the share panel', async ({ page }) => {
     await expect(shareInput).toBeVisible();
     await expect(shareInput).toHaveValue('http://127.0.0.1:4173/?load=https%3A%2F%2Fexample.com%2Fmodel.glb%3Fx%3D1%26y%3D2');
 });
+
+test('raycast helpers hit secondary mesh primitives for selection and measurement', async ({ page }) => {
+    await page.goto('/?load=static%2Ftest-assets%2FMultiPrimitive.gltf');
+    await waitForViewer(page);
+
+    await page.waitForFunction(() => {
+        const observer = (window as any).viewer?.observer;
+        const filenames = observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('MultiPrimitive.gltf');
+    });
+
+    const result = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const Vec3 = viewer.camera.getPosition().constructor;
+        const point = viewer.camera.camera.worldToScreen(new Vec3(0.75, 0, 0));
+        const hit = viewer.selectionController.selectNodeByRay(point.x, point.y);
+        const surface = viewer.measurementController.pickSurfacePoint(point.x, point.y);
+        return {
+            hit,
+            selectedPath: viewer.observer.get('scene.selectedNode.path'),
+            surface: surface ? { x: surface.x, y: surface.y, z: surface.z } : null
+        };
+    });
+
+    expect(result.hit).toBe(true);
+    expect(result.selectedPath).toContain('MultiPrimitivePlane');
+    expect(result.surface).not.toBeNull();
+    expect(result.surface.x).toBeGreaterThan(0.5);
+    expect(Math.abs(result.surface.y)).toBeLessThan(0.1);
+    expect(Math.abs(result.surface.z)).toBeLessThan(0.1);
+});

@@ -173,7 +173,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         Municipal: 'Municipal',
         'Object number': 'Object number',
         'Museum item': 'Museum item',
-        'Goskatalog link': 'Goskatalog link',
+        'Goskatalog link': 'Goskatalog link'
     },
     ru: {
         Settings: 'Настройки',
@@ -347,7 +347,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         Municipal: 'Муниципальный',
         'Object number': 'Номер объекта',
         'Museum item': 'Музейный предмет',
-        'Goskatalog link': 'Ссылка на Госкаталог',
+        'Goskatalog link': 'Ссылка на Госкаталог'
     },
     zh: {
         Settings: '设置',
@@ -521,8 +521,8 @@ export const translations: Record<Lang, Record<string, string>> = {
         Municipal: '市政',
         'Object number': '对象编号',
         'Museum item': '博物馆藏品',
-        'Goskatalog link': 'Госкаталог 链接',
-    },
+        'Goskatalog link': 'Госкаталог 链接'
+    }
 };
 
 export const t = (key: string, lang: Lang | string | undefined): string => {

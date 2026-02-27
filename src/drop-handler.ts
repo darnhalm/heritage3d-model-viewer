@@ -1,4 +1,5 @@
 import { path } from 'playcanvas';
+
 import type { File } from './types';
 
 type DropHandlerFunc = (files: Array<File>, resetScene: boolean) => void;

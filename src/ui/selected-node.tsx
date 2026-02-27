@@ -58,7 +58,9 @@ class SelectedNode extends React.Component < { observerData: ObserverData; setPr
                 return [];
             }
         })();
-        const activeUvSetLabel = uvSetOptions.find((option) => option.v === (observerData?.debug?.selectedUvSet ?? 0))?.t ?? `UV${observerData?.debug?.selectedUvSet ?? 0}`;
+        const activeUvSetLabel = uvSetOptions.length > 0 ?
+            (uvSetOptions.find(option => option.v === (observerData?.debug?.selectedUvSet ?? 0))?.t ?? `UV${observerData?.debug?.selectedUvSet ?? 0}`) :
+            '-';
         const texelDensityEntries = (() => {
             try {
                 const parsed = JSON.parse(scene?.texelDensityReport ?? '[]');

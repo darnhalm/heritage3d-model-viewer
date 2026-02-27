@@ -190,9 +190,26 @@ const observerData: ObserverData = {
     enableWebGPU: false,
     centerScene: false,
     metadata: {
-        title: '', creator: '', subject: '', description: '', publisher: '', contributor: '',
-        date: '', type: '', format: '', identifier: '', source: '', language: '', relation: '', coverage: '', rights: '',
-        egrokn: false, egroknLevel: 'federal', objectNumber: '', isMuseumItem: false, goskatalogLink: ''
+        title: '',
+        creator: '',
+        subject: '',
+        description: '',
+        publisher: '',
+        contributor: '',
+        date: '',
+        type: '',
+        format: '',
+        identifier: '',
+        source: '',
+        language: '',
+        relation: '',
+        coverage: '',
+        rights: '',
+        egrokn: false,
+        egroknLevel: 'federal',
+        objectNumber: '',
+        isMuseumItem: false,
+        goskatalogLink: ''
     }
 };
 

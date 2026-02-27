@@ -78,15 +78,15 @@ class AnimationControls extends React.Component <{ animationData: ObserverData['
         return enabled ? (
             <div className='animation-controls-panel-parent'>
                 <span title={props.animationData.playing ? t('Pause', props.lang) : t('Play', props.lang)} style={{ display: 'contents' }}>
-                <Button
-                    class='anim-control-button'
-                    width={30}
-                    height={30}
-                    icon={ props.animationData.playing ? 'E376' : 'E286' }
-                    text=''
-                    onClick={() => {
-                    props.setProperty('animation.playing', !this.animationState.playing);
-                }} />
+                    <Button
+                        class='anim-control-button'
+                        width={30}
+                        height={30}
+                        icon={ props.animationData.playing ? 'E376' : 'E286' }
+                        text=''
+                        onClick={() => {
+                            props.setProperty('animation.playing', !this.animationState.playing);
+                        }} />
                 </span>
                 <AnimationTrackSelect animationData={this.props.animationData} setProperty={this.props.setProperty} />
                 <NakedSlider

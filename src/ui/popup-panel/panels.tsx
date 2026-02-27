@@ -7,7 +7,6 @@ import { extract, addEventListenerOnClickOnly } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData, HierarchyNode } from '../../types';
 import { Detail, Slider, Toggle, Select, ColorPickerControl, ToggleColor, Numeric, Vector } from '../components';
-
 const ControlDetail = (props: { label: string, value: string, icon?: string, icons?: string[], useMouseIcon?: boolean, trackpadIcon?: '1' | '2', swipeIcon?: 'left' | 'right' }) => {
     const iconList = props.icons || (props.icon ? [props.icon] : []);
     return (
@@ -19,7 +18,7 @@ const ControlDetail = (props: { label: string, value: string, icon?: string, ico
                 {props.trackpadIcon === '2' && <span className='control-icon control-icon-trackpad-2' />}
                 {props.swipeIcon === 'left' && <span className='control-icon control-icon-swipe-left' />}
                 {props.swipeIcon === 'right' && <span className='control-icon control-icon-swipe-right' />}
-                {iconList.map((ic) => (
+                {iconList.map(ic => (
                     <span key={ic} className='material-symbols-outlined control-icon'>{ic}</span>
                 ))}
                 <span>{props.value}</span>
@@ -49,6 +48,7 @@ class InfoPanel extends React.Component <{
     observerData: ObserverData,
     setProperty: SetProperty }> {
     state: { tab: InfoTab; controlsSubTab: ControlsSubTab } = { tab: 'controls', controlsSubTab: 'desktop' };
+
     modelHierarchyRef = React.createRef<HTMLDivElement>();
 
     componentDidUpdate(prevProps: Readonly<{ observerData: ObserverData }>, prevState: Readonly<{ tab: InfoTab }>) {
@@ -83,21 +83,21 @@ class InfoPanel extends React.Component <{
                     <div className='info-panel-tabs'>
                         <button
                             type='button'
-                            className={'info-tab' + (this.state.tab === 'controls' ? ' active' : '')}
+                            className={`info-tab${this.state.tab === 'controls' ? ' active' : ''}`}
                             onClick={() => this.setState({ tab: 'controls' })}
                         >
                             {t('Controls', lang)}
                         </button>
                         <button
                             type='button'
-                            className={'info-tab' + (this.state.tab === 'model' ? ' active' : '')}
+                            className={`info-tab${this.state.tab === 'model' ? ' active' : ''}`}
                             onClick={() => this.setState({ tab: 'model' })}
                         >
                             {t('Model', lang)}
                         </button>
                         <button
                             type='button'
-                            className={'info-tab' + (this.state.tab === 'about' ? ' active' : '')}
+                            className={`info-tab${this.state.tab === 'about' ? ' active' : ''}`}
                             onClick={() => this.setState({ tab: 'about' })}
                         >
                             {t('About', lang)}
@@ -108,14 +108,14 @@ class InfoPanel extends React.Component <{
                             <div className='info-panel-subtabs'>
                                 <button
                                     type='button'
-                                    className={'info-subtab' + (this.state.controlsSubTab === 'desktop' ? ' active' : '')}
+                                    className={`info-subtab${this.state.controlsSubTab === 'desktop' ? ' active' : ''}`}
                                     onClick={() => this.setState({ controlsSubTab: 'desktop' })}
                                 >
                                     {t('Desktop', lang)}
                                 </button>
                                 <button
                                     type='button'
-                                    className={'info-subtab' + (this.state.controlsSubTab === 'touch' ? ' active' : '')}
+                                    className={`info-subtab${this.state.controlsSubTab === 'touch' ? ' active' : ''}`}
                                     onClick={() => this.setState({ controlsSubTab: 'touch' })}
                                 >
                                     {t('Touch', lang)}
@@ -219,25 +219,24 @@ class InfoPanel extends React.Component <{
                                 } catch {
                                     modelHierarchy = [];
                                 }
-                                const mapNodes = (nodes: Array<HierarchyNode>) =>
-                                    nodes.map((node: HierarchyNode) => (
-                                        <TreeViewItem
-                                            key={node.path}
-                                            text={node.name}
-                                            selected={selectedPath === node.path}
-                                            open={isSelfOrAncestor(node.path)}
-                                            onSelect={(tv: any) => {
-                                                setProperty('scene.selectedNode.path', node.path);
-                                                const remove = addEventListenerOnClickOnly(document.body, () => {
-                                                    tv.selected = false;
-                                                    remove();
-                                                }, 4);
-                                            }}
-                                            onDeselect={() => setProperty('scene.selectedNode.path', '')}
-                                        >
-                                            {mapNodes(node.children || [])}
-                                        </TreeViewItem>
-                                    ));
+                                const mapNodes = (nodes: Array<HierarchyNode>) => nodes.map((node: HierarchyNode) => (
+                                    <TreeViewItem
+                                        key={node.path}
+                                        text={node.name}
+                                        selected={selectedPath === node.path}
+                                        open={isSelfOrAncestor(node.path)}
+                                        onSelect={(tv: any) => {
+                                            setProperty('scene.selectedNode.path', node.path);
+                                            const remove = addEventListenerOnClickOnly(document.body, () => {
+                                                tv.selected = false;
+                                                remove();
+                                            }, 4);
+                                        }}
+                                        onDeselect={() => setProperty('scene.selectedNode.path', '')}
+                                    >
+                                        {mapNodes(node.children || [])}
+                                    </TreeViewItem>
+                                ));
                                 return modelHierarchy.length > 0 ? (
                                     <div className='info-panel-hierarchy' ref={this.modelHierarchyRef}>
                                         <TreeView key={`model-hierarchy-${selectedPath}`} allowReordering={false} allowDrag={false}>
@@ -489,10 +488,21 @@ class ViewPanel extends React.Component <{
 
 const DUBLIN_CORE_DISPLAY_KEYS = ['title', 'creator', 'subject', 'description', 'publisher', 'contributor', 'date', 'type', 'format', 'identifier', 'source', 'language', 'relation', 'coverage', 'rights'] as const;
 const DUBLIN_CORE_LABELS: Record<string, string> = {
-    title: 'Title', creator: 'Creator', subject: 'Subject', description: 'Description',
-    publisher: 'Publisher', contributor: 'Contributor', date: 'Date', type: 'Type',
-    format: 'Format', identifier: 'Identifier', source: 'Source', language: 'Language',
-    relation: 'Relation', coverage: 'Coverage', rights: 'Rights'
+    title: 'Title',
+    creator: 'Creator',
+    subject: 'Subject',
+    description: 'Description',
+    publisher: 'Publisher',
+    contributor: 'Contributor',
+    date: 'Date',
+    type: 'Type',
+    format: 'Format',
+    identifier: 'Identifier',
+    source: 'Source',
+    language: 'Language',
+    relation: 'Relation',
+    coverage: 'Coverage',
+    rights: 'Rights'
 };
 
 class IDPanel extends React.Component <{
@@ -514,7 +524,7 @@ class IDPanel extends React.Component <{
         const path = scene?.selectedNode?.path ?? '';
         const name = scene?.selectedNode?.name ?? '';
         const filledFields = DUBLIN_CORE_DISPLAY_KEYS.filter(
-            (key) => (metadata[key] !== undefined && metadata[key] !== null && String(metadata[key]).trim() !== '')
+            key => (metadata[key] !== undefined && metadata[key] !== null && String(metadata[key]).trim() !== '')
         );
 
         const isActive = props.observerData.ui.active === 'id';
@@ -546,7 +556,7 @@ class IDPanel extends React.Component <{
                     {filledFields.length > 0 && (
                         <div className='id-panel-section'>
                             <h3 className='id-panel-heading'>{t('Metadata (Dublin Core)', lang)}</h3>
-                            {filledFields.map((key) => (
+                            {filledFields.map(key => (
                                 <div key={key} className='id-panel-row'>
                                     <span className='id-panel-label'>{t(DUBLIN_CORE_LABELS[key], lang)}</span>
                                     <span className='id-panel-value'>{String(metadata[key])}</span>

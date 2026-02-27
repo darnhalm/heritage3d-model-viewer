@@ -2,10 +2,10 @@ import { Button } from '@playcanvas/pcui/react';
 import { UsdzExporter } from 'playcanvas';
 import React from 'react';
 
-import { t } from '../../i18n/translations';
 import AnimationControls from './animation-controls';
 import { MeasurementsPanel, ViewPanel, InfoPanel, IDPanel } from './panels';
 import { addEventListenerOnClickOnly } from '../../helpers';
+import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData } from '../../types';
 
 const PopupPanelControls = (props: { observerData: ObserverData, setProperty: SetProperty }) => {
@@ -20,28 +20,40 @@ const PopupPanelControls = (props: { observerData: ObserverData, setProperty: Se
 class PopupButtonControls extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
     popupPanelElement: any;
 
+    removeDeselectEvents: (() => void) | null = null;
+
+    componentWillUnmount() {
+        this.removeDeselectEvents?.();
+        this.removeDeselectEvents = null;
+    }
+
+    private handleClick = (value: string) => {
+        const nextActive = this.props.observerData.ui.active === value ? null : value;
+        this.props.setProperty('ui.active', nextActive);
+
+        if (this.removeDeselectEvents) {
+            this.removeDeselectEvents();
+            this.removeDeselectEvents = null;
+        }
+
+        if (!nextActive) return;
+
+        if (!this.popupPanelElement) this.popupPanelElement = document.getElementById('popup');
+
+        setTimeout(() => {
+            const deactivateUi = (e: any) => {
+                if (this.popupPanelElement?.contains(e.target)) {
+                    return;
+                }
+                this.props.setProperty('ui.active', null);
+                this.removeDeselectEvents?.();
+                this.removeDeselectEvents = null;
+            };
+            this.removeDeselectEvents = addEventListenerOnClickOnly(document.body, deactivateUi, 4);
+        });
+    };
+
     render() {
-        let removeDeselectEvents: any;
-        const handleClick = (value: string) => {
-            this.props.setProperty('ui.active', this.props.observerData.ui.active === value ? null : value);
-
-            // after a popup button is set active, listen for another click outside the panel to deactivate it
-            if (!this.popupPanelElement) this.popupPanelElement = document.getElementById('popup');
-            // add the event listener after the current click is complete
-            setTimeout(() => {
-                if (removeDeselectEvents) removeDeselectEvents();
-                const deactivateUi = (e: any) => {
-                    if (this.popupPanelElement.contains(e.target)) {
-                        return;
-                    }
-                    this.props.setProperty('ui.active', null);
-                    removeDeselectEvents();
-                    removeDeselectEvents = null;
-                };
-                removeDeselectEvents = addEventListenerOnClickOnly(document.body, deactivateUi, 4);
-            });
-        };
-
         const buildClass = (value: string) => {
             return (this.props.observerData.ui.active === value) ? ['popup-button', 'selected'] : ['popup-button'];
         };
@@ -59,7 +71,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         id='info-button'
                         width={40}
                         height={40}
-                        onClick={() => handleClick('info')}
+                        onClick={() => this.handleClick('info')}
                     />
                 ))}
                 {wrap(this.props.observerData.camera.hq ? t('HD mode', lang) : t('SD mode', lang), (
@@ -76,14 +88,14 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                 {wrap(t('Measurement', lang), (
                     <Button
                         class={buildClass('measurement')
-                            .concat('measurement-button')
-                            .concat(this.props.observerData.measure.enabled ? 'measure-enabled' : [])}
+                        .concat('measurement-button')
+                        .concat(this.props.observerData.measure.enabled ? 'measure-enabled' : [])}
                         id='measurement-button'
                         width={40}
                         height={40}
                         onClick={() => {
                             const isOpening = this.props.observerData.ui.active !== 'measurement';
-                            handleClick('measurement');
+                            this.handleClick('measurement');
                             if (isOpening) {
                                 this.props.setProperty('measure.enabled', true);
                             }
@@ -96,11 +108,11 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         id='id-button'
                         width={40}
                         height={40}
-                        onClick={() => handleClick('id')}
+                        onClick={() => this.handleClick('id')}
                     />
                 ))}
                 {wrap(t('View & share', lang), (
-                    <Button class={buildClass('view').concat('view-button')} id='view-button' width={40} height={40} onClick={() => handleClick('view')} />
+                    <Button class={buildClass('view').concat('view-button')} id='view-button' width={40} height={40} onClick={() => this.handleClick('view')} />
                 ))}
                 {wrap(t('Frame scene', lang), (
                     <Button
@@ -167,27 +179,27 @@ class PopupPanel extends React.Component <{ observerData: ObserverData, setPrope
             <PopupPanelControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
             <PopupButtonControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
             <span title={t('View in AR', this.props.observerData?.ui?.language)} style={{ display: 'contents' }}>
-            <Button
-                class='popup-button'
-                id='launch-ar-button'
-                icon='E189'
-                hidden={!this.hasArSupport || this.props.observerData.scene.nodes === '[]'}
-                width={40}
-                height={40}
-                onClick={() => {
-                    if (this.usdzExporter) {
-                        const sceneRoot = (window as any).viewer.app.root.findByName('sceneRoot');
-                        // convert the loaded entity into asdz file
-                        this.usdzExporter.build(sceneRoot).then((arrayBuffer: any) => {
-                            const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
-                            this.link.href = URL.createObjectURL(blob);
-                            this.link.click();
-                        }).catch(console.error);
-                    } else {
-                        if (window.viewer) window.viewer.xrMode.start();
-                    }
-                } }
-            />
+                <Button
+                    class='popup-button'
+                    id='launch-ar-button'
+                    icon='E189'
+                    hidden={!this.hasArSupport || this.props.observerData.scene.nodes === '[]'}
+                    width={40}
+                    height={40}
+                    onClick={() => {
+                        if (this.usdzExporter) {
+                            const sceneRoot = (window as any).viewer.app.root.findByName('sceneRoot');
+                            // convert the loaded entity into asdz file
+                            this.usdzExporter.build(sceneRoot).then((arrayBuffer: any) => {
+                                const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
+                                this.link.href = URL.createObjectURL(blob);
+                                this.link.click();
+                            }).catch(console.error);
+                        } else {
+                            if (window.viewer) window.viewer.xrMode.start();
+                        }
+                    } }
+                />
             </span>
         </div>);
     }

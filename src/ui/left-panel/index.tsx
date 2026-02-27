@@ -8,7 +8,7 @@ import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, ToggleColo
 
 const rgbToArr = (rgb: { r: number, g: number, b: number }) => [rgb.r, rgb.g, rgb.b, 1];
 const arrToRgb = (arr: number[]) => ({ r: arr[0], g: arr[1], b: arr[2] });
-const texelDensityUnitLabel = (unit?: string) => unit === 'mm' ? 'px/mm' : (unit === 'cm' ? 'px/cm' : 'px/m');
+const texelDensityUnitLabel = (unit?: string) => (unit === 'mm' ? 'px/mm' : (unit === 'cm' ? 'px/cm' : 'px/m'));
 const texelDensityDisplayValue = (td: number, unit?: string) => {
     const divisor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
     const precision = unit === 'm' ? 0 : 2;
@@ -64,6 +64,7 @@ const DUBLIN_CORE_FIELDS: Array<{ key: string; labelKey: string }> = [
 
 class MetadataPanel extends React.Component<{ observerData: ObserverData; setProperty: SetProperty }> {
     state: { saved: boolean } = { saved: false };
+
     saveTimer: ReturnType<typeof setTimeout> | null = null;
 
     shouldComponentUpdate(nextProps: { observerData: ObserverData }, nextState: { saved: boolean }) {
@@ -394,10 +395,10 @@ const renderModeCategories = (
     title: string;
     items: Array<{ label: string; value: string; filename?: string }>;
 }> => {
-    const materialItems = (withTextureOnly
-        ? MATERIAL_CHANNEL_ITEMS.filter((item) => channelsWithTextures.has(item.value))
-        : MATERIAL_CHANNEL_ITEMS
-    ).map((item) => ({
+    const materialItems = (withTextureOnly ?
+        MATERIAL_CHANNEL_ITEMS.filter(item => channelsWithTextures.has(item.value)) :
+        MATERIAL_CHANNEL_ITEMS
+    ).map(item => ({
         ...item,
         filename: channelFilenames[item.value] || undefined
     }));
@@ -434,6 +435,7 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
                         const message = value ?
                             'Enable WebGPU? The page will refresh to apply this change.' :
                             'Disable WebGPU? The page will refresh to apply this change.';
+                        // eslint-disable-next-line no-alert
                         if (window.confirm(message)) {
                             props.setProperty('enableWebGPU', value);
                             setTimeout(() => window.location.reload(), 100);
@@ -493,28 +495,28 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                 <div className='left-panel-tabs'>
                     <button
                         type='button'
-                        className={'left-panel-tab left-panel-tab-scene' + (tab === 'scene' ? ' active' : '')}
+                        className={`left-panel-tab left-panel-tab-scene${tab === 'scene' ? ' active' : ''}`}
                         onClick={() => this.setState({ tab: 'scene' })}
                     >
                         {t('Settings', lang)}
                     </button>
                     <button
                         type='button'
-                        className={'left-panel-tab left-panel-tab-materials' + (tab === 'materials' ? ' active' : '')}
+                        className={`left-panel-tab left-panel-tab-materials${tab === 'materials' ? ' active' : ''}`}
                         onClick={() => this.setState({ tab: 'materials' })}
                     >
                         {t('Materials', lang)}
                     </button>
                     <button
                         type='button'
-                        className={'left-panel-tab left-panel-tab-poi' + (tab === 'poi' ? ' active' : '')}
+                        className={`left-panel-tab left-panel-tab-poi${tab === 'poi' ? ' active' : ''}`}
                         onClick={() => this.setState({ tab: 'poi' })}
                     >
                         {t('POI', lang)}
                     </button>
                     <button
                         type='button'
-                        className={'left-panel-tab left-panel-tab-metadata' + (tab === 'metadata' ? ' active' : '')}
+                        className={`left-panel-tab left-panel-tab-metadata${tab === 'metadata' ? ' active' : ''}`}
                         onClick={() => this.setState({ tab: 'metadata' })}
                     >
                         {t('Metadata (Dublin Core)', lang)}
@@ -543,7 +545,13 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {renderModeCategories(
                                     new Set(JSON.parse(observerData?.scene?.materialChannelsWithTextures ?? '[]')),
                                     observerData?.debug?.withTextureOnly ?? false,
-                                    (() => { try { return JSON.parse(observerData?.scene?.materialChannelFilenames ?? '{}'); } catch { return {}; } })()
+                                    (() => {
+                                        try {
+                                            return JSON.parse(observerData?.scene?.materialChannelFilenames ?? '{}');
+                                        } catch {
+                                            return {};
+                                        }
+                                    })()
                                 ).map((cat, ci) => (
                                     <div key={ci} className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>
@@ -556,11 +564,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 setProperty={(value: boolean) => setProperty('debug.withTextureOnly', value)}
                                             />
                                         )}
-                                        {cat.items.map((item) => (
+                                        {cat.items.map(item => (
                                             <button
                                                 key={item.value}
                                                 type='button'
-                                                className={'materials-layer-item' + (item.value === 'default' ? ' materials-layer-item-final-render' : '') + (item.value === 'albedo' ? ' materials-layer-item-base-color' : '') + (item.value === 'metalness' ? ' materials-layer-item-metalness' : '') + (item.value === 'gloss' ? ' materials-layer-item-roughness' : '') + (item.value === 'world_normal' ? ' materials-layer-item-normal' : '') + (item.value === 'specularity' ? ' materials-layer-item-specular' : '') + (item.value === 'emission' ? ' materials-layer-item-emissive' : '') + (item.value === 'lighting' ? ' materials-layer-item-lighting' : '') + (item.value === 'ao' ? ' materials-layer-item-ao' : '') + (item.value === 'opacity' ? ' materials-layer-item-opacity' : '') + ((item.value === 'uv0' || item.value === 'uv_checker') ? ' materials-layer-item-uv' : '') + (observerData?.debug?.renderMode === item.value ? ' selected' : '')}
+                                                className={`materials-layer-item${item.value === 'default' ? ' materials-layer-item-final-render' : ''}${item.value === 'albedo' ? ' materials-layer-item-base-color' : ''}${item.value === 'metalness' ? ' materials-layer-item-metalness' : ''}${item.value === 'gloss' ? ' materials-layer-item-roughness' : ''}${item.value === 'world_normal' ? ' materials-layer-item-normal' : ''}${item.value === 'specularity' ? ' materials-layer-item-specular' : ''}${item.value === 'emission' ? ' materials-layer-item-emissive' : ''}${item.value === 'lighting' ? ' materials-layer-item-lighting' : ''}${item.value === 'ao' ? ' materials-layer-item-ao' : ''}${item.value === 'opacity' ? ' materials-layer-item-opacity' : ''}${(item.value === 'uv0' || item.value === 'uv_checker') ? ' materials-layer-item-uv' : ''}${observerData?.debug?.renderMode === item.value ? ' selected' : ''}`}
                                                 onClick={() => setProperty('debug.renderMode', item.value)}
                                             >
                                                 <span className='materials-layer-item-label'>
@@ -608,34 +616,34 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                     </div>
                                 ))}
                                 <div className='materials-layer-category'>
-                                <div className='materials-layer-category-title'>{t('Geometry', lang)} (2)</div>
-                                <button
-                                    type='button'
-                                    className={'materials-layer-item materials-layer-item-wireframe' + (observerData?.debug?.wireframe ? ' selected' : '')}
-                                    onClick={() => setProperty('debug.wireframe', !observerData?.debug?.wireframe)}
-                                >
-                                    {t('Wireframe', lang)}
-                                </button>
-                                <div className='materials-layer-normals-row'>
+                                    <div className='materials-layer-category-title'>{t('Geometry', lang)} (2)</div>
                                     <button
                                         type='button'
-                                        className={'materials-layer-item materials-layer-item-vertex-normals' + ((observerData?.debug?.normals ?? 0) > 0 ? ' selected' : '')}
-                                        onClick={() => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 1)}
+                                        className={`materials-layer-item materials-layer-item-wireframe${observerData?.debug?.wireframe ? ' selected' : ''}`}
+                                        onClick={() => setProperty('debug.wireframe', !observerData?.debug?.wireframe)}
                                     >
-                                        {t('Vertex Normals', lang)}
+                                        {t('Wireframe', lang)}
                                     </button>
-                                    {(observerData?.debug?.normals ?? 0) > 0 && (
-                                        <div className='materials-layer-normals-slider'>
-                                            <Slider
-                                                label=''
-                                                precision={2}
-                                                min={0}
-                                                max={1}
-                                                value={observerData?.debug?.normals ?? 0}
-                                                setProperty={(value: number) => setProperty('debug.normals', value)} />
-                                        </div>
-                                    )}
-                                </div>
+                                    <div className='materials-layer-normals-row'>
+                                        <button
+                                            type='button'
+                                            className={`materials-layer-item materials-layer-item-vertex-normals${(observerData?.debug?.normals ?? 0) > 0 ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 1)}
+                                        >
+                                            {t('Vertex Normals', lang)}
+                                        </button>
+                                        {(observerData?.debug?.normals ?? 0) > 0 && (
+                                            <div className='materials-layer-normals-slider'>
+                                                <Slider
+                                                    label=''
+                                                    precision={2}
+                                                    min={0}
+                                                    max={1}
+                                                    value={observerData?.debug?.normals ?? 0}
+                                                    setProperty={(value: number) => setProperty('debug.normals', value)} />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             {observerData?.debug?.wireframe && (

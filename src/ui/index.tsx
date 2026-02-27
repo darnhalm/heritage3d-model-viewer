@@ -70,19 +70,19 @@ class App extends React.Component<{ observer: Observer }> {
                 <div className='lang-switcher'>
                     <button
                         type='button'
-                        className={'fi fi-gb fis' + (this.state?.ui?.language === 'en' ? ' active' : '')}
+                        className={`fi fi-gb fis${this.state?.ui?.language === 'en' ? ' active' : ''}`}
                         title='English'
                         onClick={() => this._setStateProperty('ui.language', 'en')}
                     />
                     <button
                         type='button'
-                        className={'fi fi-ru fis' + (this.state?.ui?.language === 'ru' ? ' active' : '')}
+                        className={`fi fi-ru fis${this.state?.ui?.language === 'ru' ? ' active' : ''}`}
                         title='Русский'
                         onClick={() => this._setStateProperty('ui.language', 'ru')}
                     />
                     <button
                         type='button'
-                        className={'fi fi-cn fis' + (this.state?.ui?.language === 'zh' ? ' active' : '')}
+                        className={`fi fi-cn fis${this.state?.ui?.language === 'zh' ? ' active' : ''}`}
                         title='中文'
                         onClick={() => this._setStateProperty('ui.language', 'zh')}
                     />

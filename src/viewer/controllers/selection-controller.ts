@@ -4,26 +4,16 @@ import {
     Mat4,
     math,
     MeshInstance,
-    PRIMITIVE_TRIANGLES,
-    SEMANTIC_POSITION,
     ShaderMaterial,
     Vec3
 } from 'playcanvas';
 
+import { CachedMeshGeometry, intersectMeshTriangles } from './mesh-raycast';
 import { Picker } from '../../picker';
 
 const SELECT_CLICK_DRAG_THRESHOLD = 5;
 const FLASH_DURATION_MS = 500;
 const FLASH_COLOR: [number, number, number] = [0.224, 1.0, 0.078];
-
-type CachedMeshGeometry = {
-    positions: Float32Array;
-    indices: Uint16Array | Uint32Array | null;
-    vertexCount: number;
-    primitiveBase: number;
-    primitiveCount: number;
-    baseVertex: number;
-};
 
 type SelectionControllerArgs = {
     canvas: HTMLCanvasElement;
@@ -282,122 +272,8 @@ class SelectionController {
         return true;
     }
 
-    private getCachedMeshGeometry(mi: MeshInstance) {
-        const mesh = mi.mesh as object & {
-            primitive?: Array<{ type?: number; base?: number; count?: number; indexed?: boolean; baseVertex?: number }>;
-            vertexBuffer?: { getNumVertices?: () => number; numVertices?: number };
-            indexBuffer?: Array<{ numIndices?: number }>;
-            getVertexStream?: (semantic: string, data: Float32Array) => number;
-            getIndices?: (data: Uint16Array | Uint32Array) => number;
-        };
-        if (!mesh) return null;
-
-        const cached = this.meshGeometryCache.get(mesh);
-        if (cached !== undefined) {
-            return cached;
-        }
-
-        const primitive = mesh.primitive?.[0];
-        const vertexCount = mesh.vertexBuffer?.getNumVertices?.() ?? mesh.vertexBuffer?.numVertices ?? 0;
-        if (!primitive || primitive.type !== PRIMITIVE_TRIANGLES || vertexCount <= 0 || !mesh.getVertexStream) {
-            this.meshGeometryCache.set(mesh, null);
-            return null;
-        }
-
-        const positions = new Float32Array(vertexCount * 3);
-        if (mesh.getVertexStream(SEMANTIC_POSITION, positions) <= 0) {
-            this.meshGeometryCache.set(mesh, null);
-            return null;
-        }
-
-        let indices: Uint16Array | Uint32Array | null = null;
-        if (primitive.indexed) {
-            const totalIndexCount = mesh.indexBuffer?.[0]?.numIndices ?? ((primitive.base ?? 0) + (primitive.count ?? 0));
-            if (!totalIndexCount || !mesh.getIndices) {
-                this.meshGeometryCache.set(mesh, null);
-                return null;
-            }
-            indices = vertexCount > 65535 ? new Uint32Array(totalIndexCount) : new Uint16Array(totalIndexCount);
-            if (mesh.getIndices(indices) <= 0) {
-                this.meshGeometryCache.set(mesh, null);
-                return null;
-            }
-        }
-
-        const geometry = {
-            positions,
-            indices,
-            vertexCount,
-            primitiveBase: Math.max(0, primitive.base ?? 0),
-            primitiveCount: Math.max(0, primitive.count ?? 0),
-            baseVertex: primitive.baseVertex ?? 0
-        } satisfies CachedMeshGeometry;
-
-        this.meshGeometryCache.set(mesh, geometry);
-        return geometry;
-    }
-
-    private intersectTriangle(origin: Vec3, direction: Vec3, a: Vec3, b: Vec3, c: Vec3) {
-        const epsilon = 1e-8;
-        const edge1 = new Vec3().sub2(b, a);
-        const edge2 = new Vec3().sub2(c, a);
-        const pvec = new Vec3().cross(direction, edge2);
-        const det = edge1.dot(pvec);
-        if (Math.abs(det) < epsilon) return null;
-
-        const invDet = 1 / det;
-        const tvec = new Vec3().sub2(origin, a);
-        const u = tvec.dot(pvec) * invDet;
-        if (u < 0 || u > 1) return null;
-
-        const qvec = new Vec3().cross(tvec, edge1);
-        const v = direction.dot(qvec) * invDet;
-        if (v < 0 || u + v > 1) return null;
-
-        const t = edge2.dot(qvec) * invDet;
-        return t >= 0 ? t : null;
-    }
-
     private intersectMeshTriangles(mi: MeshInstance, origin: Vec3, direction: Vec3, maxDistance: number) {
-        const geometry = this.getCachedMeshGeometry(mi);
-        if (!geometry || geometry.primitiveCount < 3) {
-            return null;
-        }
-
-        const world = mi.node?.getWorldTransform();
-        if (!world) {
-            return null;
-        }
-
-        let bestT = Number.POSITIVE_INFINITY;
-        const p0 = new Vec3();
-        const p1 = new Vec3();
-        const p2 = new Vec3();
-
-        for (let i = geometry.primitiveBase; i + 2 < geometry.primitiveBase + geometry.primitiveCount; i += 3) {
-            const i0 = (geometry.indices ? geometry.indices[i] : i) + geometry.baseVertex;
-            const i1 = (geometry.indices ? geometry.indices[i + 1] : i + 1) + geometry.baseVertex;
-            const i2 = (geometry.indices ? geometry.indices[i + 2] : i + 2) + geometry.baseVertex;
-
-            if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= geometry.vertexCount || i1 >= geometry.vertexCount || i2 >= geometry.vertexCount) {
-                continue;
-            }
-
-            p0.set(geometry.positions[i0 * 3], geometry.positions[i0 * 3 + 1], geometry.positions[i0 * 3 + 2]);
-            p1.set(geometry.positions[i1 * 3], geometry.positions[i1 * 3 + 1], geometry.positions[i1 * 3 + 2]);
-            p2.set(geometry.positions[i2 * 3], geometry.positions[i2 * 3 + 1], geometry.positions[i2 * 3 + 2]);
-            world.transformPoint(p0, p0);
-            world.transformPoint(p1, p1);
-            world.transformPoint(p2, p2);
-
-            const t = this.intersectTriangle(origin, direction, p0, p1, p2);
-            if (t == null || t > maxDistance || t >= bestT) {
-                continue;
-            }
-            bestT = t;
-        }
-
-        return Number.isFinite(bestT) ? bestT : null;
+        return intersectMeshTriangles(mi, origin, direction, maxDistance, this.meshGeometryCache);
     }
 
     private stopSelectionFlash() {

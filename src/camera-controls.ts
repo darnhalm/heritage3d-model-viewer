@@ -232,13 +232,21 @@ class CameraControls {
         this._controller.attach(pose.look(position, focus));
     }
 
-    /** Current camera position (orbit: camera entity position). */
+    /**
+     * Current camera position (orbit: camera entity position).
+     * @param out - Optional destination vector.
+     * @returns Current camera world position.
+     */
     getPosition(out?: Vec3): Vec3 {
         const p = this._pose.position;
         return out ? out.copy(p) : p.clone();
     }
 
-    /** Current orbit focus point (point the camera looks at). */
+    /**
+     * Current orbit focus point (point the camera looks at).
+     * @param out - Optional destination vector.
+     * @returns Current orbit focus point.
+     */
     getFocus(out?: Vec3): Vec3 {
         return this._pose.getFocus(out);
     }

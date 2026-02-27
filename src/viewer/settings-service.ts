@@ -64,7 +64,7 @@ class SettingsService {
 
     private static rgbToHex(r: number, g: number, b: number): string {
         const toByte = (x: number) => Math.round(Math.max(0, Math.min(1, Number(x))) * 255);
-        return `#${[toByte(r), toByte(g), toByte(b)].map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+        return `#${[toByte(r), toByte(g), toByte(b)].map(n => n.toString(16).padStart(2, '0')).join('')}`;
     }
 
     private static hexToRgb(hex: string): Rgb | null {
@@ -108,9 +108,9 @@ class SettingsService {
         const a = document.createElement('a');
         a.href = url;
         const filenames = this.observer.get('scene.filenames') as string[] | undefined;
-        const baseName = (filenames && filenames.length > 0 && filenames[0])
-            ? filenames[0].replace(/\.[^/.]+$/, '') || 'model-viewer'
-            : 'model-viewer';
+        const baseName = (filenames && filenames.length > 0 && filenames[0]) ?
+            filenames[0].replace(/\.[^/.]+$/, '') || 'model-viewer' :
+            'model-viewer';
         a.download = `${baseName}.model-viewer-settings.json`;
         a.click();
         URL.revokeObjectURL(url);
@@ -209,7 +209,7 @@ class SettingsService {
             }
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 const obj = value as Record<string, unknown>;
-                const keys = path === '' ? SettingsService.SETTINGS_APPLY_KEYS.filter((k) => obj[k] !== undefined) : Object.keys(obj);
+                const keys = path === '' ? SettingsService.SETTINGS_APPLY_KEYS.filter(k => obj[k] !== undefined) : Object.keys(obj);
                 keys.forEach((k) => {
                     if (blockedKeys.has(k)) return;
                     loadRec(path ? `${path}.${k}` : k, obj[k]);
@@ -231,9 +231,9 @@ class SettingsService {
         const out: { url: string; version: number }[] = [];
         try {
             const absoluteUrl =
-                modelUrl.startsWith('http://') || modelUrl.startsWith('https://')
-                    ? modelUrl
-                    : new URL(modelUrl, typeof window !== 'undefined' ? window.location.href : 'http://localhost').href;
+                modelUrl.startsWith('http://') || modelUrl.startsWith('https://') ?
+                    modelUrl :
+                    new URL(modelUrl, typeof window !== 'undefined' ? window.location.href : 'http://localhost').href;
             const u = new URL(absoluteUrl);
             if (!u.protocol.startsWith('http')) return out;
             const pathParts = u.pathname.split('/').filter(Boolean);
@@ -258,8 +258,7 @@ class SettingsService {
     }
 
     tryFetchAndApplySettings(firstModelUrl: string, allFiles?: ModelFile[]): Promise<void> {
-        const firstModelFilename = allFiles?.find((f) =>
-            (f.filename && this.isModelFilename(f.filename)) || (f.filename && this.isGSplatFilename(f.filename))
+        const firstModelFilename = allFiles?.find(f => (f.filename && this.isModelFilename(f.filename)) || (f.filename && this.isGSplatFilename(f.filename))
         )?.filename;
         const baseName = firstModelFilename ? firstModelFilename.replace(/\.[^/.]+$/, '').split('/').pop() || '' : '';
 
@@ -277,8 +276,8 @@ class SettingsService {
             );
             if (!best) return Promise.resolve(null);
             return fetch(best.file.url, { cache: 'no-store' })
-                .then((res) => (res.ok ? res.json().then((data: Record<string, unknown>) => ({ data, version: best.version })) : null))
-                .catch((): null => null);
+            .then(res => (res.ok ? res.json().then((data: Record<string, unknown>) => ({ data, version: best.version })) : null))
+            .catch((): null => null);
         };
 
         const candidates = SettingsService.settingsUrlCandidatesForModelUrl(firstModelUrl);
@@ -297,53 +296,52 @@ class SettingsService {
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), SettingsService.SETTINGS_FETCH_TIMEOUT_MS);
-        const fetchOne = (c: { url: string; version: number }): Promise<{ data: Record<string, unknown>; version: number } | null> =>
-            fetch(c.url, { method: 'GET', signal: controller.signal, cache: 'no-store' })
-                .then((res) => {
-                    if (!res.ok) return null;
-                    return res.json().then((data: Record<string, unknown>) => ({ data, version: c.version })).catch((): null => null);
-                })
-                .catch((): null => null);
+        const fetchOne = (c: { url: string; version: number }): Promise<{ data: Record<string, unknown>; version: number } | null> => fetch(c.url, { method: 'GET', signal: controller.signal, cache: 'no-store' })
+        .then((res) => {
+            if (!res.ok) return null;
+            return res.json().then((data: Record<string, unknown>) => ({ data, version: c.version })).catch((): null => null);
+        })
+        .catch((): null => null);
 
         return Promise.all([...candidates.map(fetchOne), fromDroppedFiles()])
-            .then((results) => {
-                const ok = results.filter((r): r is { data: Record<string, unknown>; version: number } => r != null && typeof (r as any).data === 'object');
-                if (ok.length === 0) {
-                    if (typeof console !== 'undefined' && console.warn) {
-                        console.warn('[model-viewer] Settings file not found. Tried:', candidates.slice(0, 3).map((c) => c.url));
-                    }
-                    this.observer.set('camera.position', null);
-                    this.observer.set('camera.focus', null);
-                    this.resetViewerSettingsToDefaults();
-                    return;
-                }
-                const best = ok.reduce((a, b) => (a.version >= b.version ? a : b));
-                this.applyViewerSettings(best.data);
-                this.syncSkyboxAndLightFromObserver();
-                if (typeof console !== 'undefined' && console.debug) {
-                    console.debug('[model-viewer] Applied settings from file (version', best.version, ')');
-                }
-            })
-            .catch((err) => {
+        .then((results) => {
+            const ok = results.filter((r): r is { data: Record<string, unknown>; version: number } => r != null && typeof (r as any).data === 'object');
+            if (ok.length === 0) {
                 if (typeof console !== 'undefined' && console.warn) {
-                    console.warn('[model-viewer] Settings fetch failed:', err);
+                    console.warn('[model-viewer] Settings file not found. Tried:', candidates.slice(0, 3).map(c => c.url));
                 }
                 this.observer.set('camera.position', null);
                 this.observer.set('camera.focus', null);
                 this.resetViewerSettingsToDefaults();
-            })
-            .finally(() => clearTimeout(timeoutId));
+                return;
+            }
+            const best = ok.reduce((a, b) => (a.version >= b.version ? a : b));
+            this.applyViewerSettings(best.data);
+            this.syncSkyboxAndLightFromObserver();
+            if (typeof console !== 'undefined' && console.debug) {
+                console.debug('[model-viewer] Applied settings from file (version', best.version, ')');
+            }
+        })
+        .catch((err) => {
+            if (typeof console !== 'undefined' && console.warn) {
+                console.warn('[model-viewer] Settings fetch failed:', err);
+            }
+            this.observer.set('camera.position', null);
+            this.observer.set('camera.focus', null);
+            this.resetViewerSettingsToDefaults();
+        })
+        .finally(() => clearTimeout(timeoutId));
     }
 
     syncSkyboxAndLightFromObserver() {
         const bgColor = this.observer.get('skybox.backgroundColor') as { r?: number; g?: number; b?: number } | undefined;
-        if (bgColor && typeof bgColor === 'object' && [bgColor.r, bgColor.g, bgColor.b].every((x) => typeof x === 'number')) {
+        if (bgColor && typeof bgColor === 'object' && [bgColor.r, bgColor.g, bgColor.b].every(x => typeof x === 'number')) {
             this.setBackgroundColor({ r: Number(bgColor.r), g: Number(bgColor.g), b: Number(bgColor.b) });
         }
         const background = this.observer.get('skybox.background');
         if (typeof background === 'string') this.setSkyboxBackground(background);
         const lc = this.observer.get('light.color') as { r?: number; g?: number; b?: number } | undefined;
-        if (lc && typeof lc === 'object' && [lc.r, lc.g, lc.b].every((x) => typeof x === 'number')) {
+        if (lc && typeof lc === 'object' && [lc.r, lc.g, lc.b].every(x => typeof x === 'number')) {
             this.setLightColor({ r: Number(lc.r), g: Number(lc.g), b: Number(lc.b) });
         }
     }
