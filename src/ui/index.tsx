@@ -16,6 +16,8 @@ class App extends React.Component<{ observer: Observer }> {
 
     canvasRef: any;
 
+    private stateUpdateRaf: number | null = null;
+
     constructor(props: any) {
         super(props);
 
@@ -23,9 +25,20 @@ class App extends React.Component<{ observer: Observer }> {
         this.state = { ...this._retrieveState() };
 
         props.observer.on('*:set', () => {
-            // update the state
-            this.setState(this._retrieveState());
+            if (this.stateUpdateRaf !== null) return;
+            // Coalesce bursty observer updates into a single React state update per frame.
+            this.stateUpdateRaf = window.requestAnimationFrame(() => {
+                this.stateUpdateRaf = null;
+                this.setState(this._retrieveState());
+            });
         });
+    }
+
+    componentWillUnmount(): void {
+        if (this.stateUpdateRaf !== null) {
+            window.cancelAnimationFrame(this.stateUpdateRaf);
+            this.stateUpdateRaf = null;
+        }
     }
 
     _retrieveState = () => {

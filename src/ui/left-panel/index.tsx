@@ -152,10 +152,19 @@ const toggleCollapsed = () => {
 
 class CameraPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>): boolean {
-        const keys = ['ui', 'camera', 'debug', 'animation.playing', 'scene.cameras', 'scene.selectedCamera', 'runtime'];
-        const a = extract(nextProps.observerData, keys);
-        const b = extract(this.props.observerData, keys);
-        return JSON.stringify(a) !== JSON.stringify(b);
+        const a = nextProps.observerData;
+        const b = this.props.observerData;
+        return a.ui?.language !== b.ui?.language ||
+               a.scene?.cameras !== b.scene?.cameras ||
+               a.scene?.selectedCamera !== b.scene?.selectedCamera ||
+               a.camera?.fov !== b.camera?.fov ||
+               a.camera?.tonemapping !== b.camera?.tonemapping ||
+               a.camera?.pixelScale !== b.camera?.pixelScale ||
+               a.camera?.multisampleSupported !== b.camera?.multisampleSupported ||
+               a.camera?.multisample !== b.camera?.multisample ||
+               a.camera?.hq !== b.camera?.hq ||
+               a.runtime?.viewportWidth !== b.runtime?.viewportWidth ||
+               a.runtime?.viewportHeight !== b.runtime?.viewportHeight;
     }
 
     render() {

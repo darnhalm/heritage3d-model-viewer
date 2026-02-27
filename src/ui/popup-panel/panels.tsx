@@ -302,8 +302,16 @@ class MeasurementsPanel extends React.Component <{
     shouldComponentUpdate(nextProps: Readonly<{
         observerData: ObserverData;
         setProperty: SetProperty; }>): boolean {
-        return JSON.stringify(nextProps.observerData.measure) !== JSON.stringify(this.props.observerData.measure) ||
-               JSON.stringify(nextProps.observerData.ui) !== JSON.stringify(this.props.observerData.ui);
+        const a = nextProps.observerData;
+        const b = this.props.observerData;
+        return a.ui?.active !== b.ui?.active ||
+               a.ui?.language !== b.ui?.language ||
+               a.measure?.enabled !== b.measure?.enabled ||
+               a.measure?.unit !== b.measure?.unit ||
+               a.measure?.unitScale !== b.measure?.unitScale ||
+               a.measure?.knownDistance !== b.measure?.knownDistance ||
+               a.measure?.lastDistance !== b.measure?.lastDistance ||
+               a.measure?.pointCount !== b.measure?.pointCount;
     }
 
     render() {
@@ -380,7 +388,8 @@ class ViewPanel extends React.Component <{
     isMobile: boolean;
 
     get shareUrl() {
-        return `${location.origin}${location.pathname}?${this.props.sceneData.urls.map((url: string) => `load=${url}`).join('&')}`;
+        const query = this.props.sceneData.urls.map((url: string) => `load=${encodeURIComponent(url)}`).join('&');
+        return query ? `${location.origin}${location.pathname}?${query}` : `${location.origin}${location.pathname}`;
     }
 
     constructor(props: any) {
@@ -392,8 +401,16 @@ class ViewPanel extends React.Component <{
         sceneData: ObserverData['scene'];
         uiData: ObserverData['ui'];
         setProperty: SetProperty; }>): boolean {
-        return JSON.stringify(nextProps.sceneData) !== JSON.stringify(this.props.sceneData) ||
-               JSON.stringify(nextProps.uiData) !== JSON.stringify(this.props.uiData);
+        const a = nextProps;
+        const b = this.props;
+        const urlsA = a.sceneData?.urls || [];
+        const urlsB = b.sceneData?.urls || [];
+        if (urlsA.length !== urlsB.length) return true;
+        for (let i = 0; i < urlsA.length; i++) {
+            if (urlsA[i] !== urlsB[i]) return true;
+        }
+        return a.uiData?.active !== b.uiData?.active ||
+               a.uiData?.language !== b.uiData?.language;
     }
 
     get hasQRCode() {

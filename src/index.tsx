@@ -242,6 +242,8 @@ const main = () => {
 
     // global url
     const url = new URL(window.location.href);
+    const perfParam = url.searchParams.get('perf');
+    const perfEnabled = perfParam !== null && perfParam.toLowerCase() !== '0' && perfParam.toLowerCase() !== 'false';
 
     initMaterials();
 
@@ -295,6 +297,7 @@ const main = () => {
 
         // make available globally
         window.viewer = viewer;
+        viewer.setPerfEnabled(perfEnabled);
 
         // save orbit camera position before unload so it can be restored on next load
         window.addEventListener('beforeunload', () => {

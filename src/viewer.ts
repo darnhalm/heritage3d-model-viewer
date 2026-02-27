@@ -84,6 +84,8 @@ import { ShadowCatcher } from './shadow-catcher';
 import arCloseImage from './svg/ar-close.svg';
 import arModeImage from './svg/ar-mode.svg';
 import { File, HierarchyNode, MorphTargetData, SceneCamera } from './types';
+import { MeasurementController, SelectionController } from './viewer/controllers';
+import { SettingsService } from './viewer/settings-service';
 import { XRObjectPlacementController } from './xr-mode';
 import { MeshoptDecoder } from '../lib/meshopt_decoder.module.js';
 
@@ -99,7 +101,6 @@ const ZOOM_SCALE_MIN = 0.01;
 
 const doubleTapDelay = 400;
 const doubleTapRadius = 45;
-const MEASURE_CLICK_DRAG_THRESHOLD = 5;
 const RIPPLE_CAMERA_DELAY_MS = 380;
 const RIPPLE_REMOVE_MS = 900;
 
@@ -327,6 +328,12 @@ class Viewer {
 
     observer: Observer;
 
+    measurementController: MeasurementController;
+
+    selectionController: SelectionController;
+
+    settingsService: SettingsService;
+
     suppressAnimationProgressUpdate: boolean;
 
     selectedNode: GraphNode | null;
@@ -341,47 +348,19 @@ class Viewer {
 
     cursorWorld = new Vec3();
 
+    private tmpBoundsSize = new Vec3();
+
+    private tmpGridV0 = new Vec3();
+
+    private tmpGridV1 = new Vec3();
+
     rippleContainer: HTMLDivElement | null = null;
-
-    measureOverlay: HTMLDivElement | null = null;
-
-    measureSvgEl: SVGSVGElement | null = null;
-
-    measureLineEl: SVGLineElement | null = null;
-
-    measureStartHX: SVGLineElement | null = null;
-
-    measureStartVY: SVGLineElement | null = null;
-
-    measureEndHX: SVGLineElement | null = null;
-
-    measureEndVY: SVGLineElement | null = null;
-
-    measureLabelEl: HTMLDivElement | null = null;
 
     lastTapTime = 0;
 
     lastTapX = 0;
 
     lastTapY = 0;
-
-    private measureClickDown: { clientX: number; clientY: number; canvasX: number; canvasY: number } | null = null;
-
-    private measureIsPotentialClick = false;
-
-    measureStart: Vec3 | null = null;
-
-    measureEnd: Vec3 | null = null;
-
-    private selectClickDown: { clientX: number; clientY: number; canvasX: number; canvasY: number } | null = null;
-
-    private selectIsPotentialClick = false;
-
-    private selectionFlashStartMs = 0;
-
-    private selectionFlashDurationMs = 500;
-
-    private selectionFlashRaf: number | null = null;
 
     loadTimestamp?: number = null;
 
@@ -396,6 +375,24 @@ class Viewer {
     sceneCameras: Array<CameraComponent> = [];
 
     activeSceneCamera: CameraComponent | null = null;
+
+    private perfEnabled = false;
+
+    private perfWindowStartMs = 0;
+
+    private perfWindowDurationMs = 5000;
+
+    private perfFrames = 0;
+
+    private perfFrameDeltasMs: number[] = [];
+
+    private perfLastFrameStartMs = 0;
+
+    private perfOnFrameRenderTotalMs = 0;
+
+    private perfOnPrerenderTotalMs = 0;
+
+    private perfOnPostrenderTotalMs = 0;
 
     constructor(
         canvas: HTMLCanvasElement,
@@ -630,6 +627,19 @@ class Viewer {
         this.miniStats.enabled = observer.get('debug.stats');
 
         this.observer = observer;
+        this.settingsService = new SettingsService({
+            observer: this.observer,
+            skyboxUrls: this.skyboxUrls,
+            cameraControls: this.cameraControls,
+            isModelFilename: this.isModelFilename.bind(this),
+            isGSplatFilename: this.isGSplatFilename.bind(this),
+            setBackgroundColor: this.setBackgroundColor.bind(this),
+            setSkyboxBackground: this.setSkyboxBackground.bind(this),
+            setLightColor: this.setLightColor.bind(this),
+            onMeasurementReset: () => {
+                this.measurementController?.reset();
+            }
+        });
 
         const device = this.app.graphicsDevice;
 
@@ -656,6 +666,24 @@ class Viewer {
         // construct the depth reader
         this.picker = new Picker(app, camera);
         this.cursorWorld = new Vec3();
+        this.measurementController = new MeasurementController({
+            canvas: this.canvas,
+            observer: this.observer,
+            picker: this.picker,
+            renderNextFrame: this.renderNextFrame.bind(this)
+        });
+        this.selectionController = new SelectionController({
+            canvas: this.canvas,
+            observer: this.observer,
+            picker: this.picker,
+            selectionHighlightMaterial: this.selectionHighlightMaterial,
+            getMeshInstances: () => this.meshInstances,
+            getCameraPosition: () => this.camera.getPosition(),
+            getSelectedNode: () => this.selectedNode,
+            setSelectedNodePath: (path: string) => this.setSelectedNode(path),
+            resetSelectionHighlightMeshes: this.resetSelectionHighlightMeshes.bind(this),
+            renderNextFrame: this.renderNextFrame.bind(this)
+        });
 
         // ripple container over canvas (pointer-events: none)
         const wrapper = this.canvas.parentElement;
@@ -663,31 +691,6 @@ class Viewer {
             this.rippleContainer = document.createElement('div');
             this.rippleContainer.className = 'ripple-container';
             wrapper.appendChild(this.rippleContainer);
-
-            this.measureOverlay = document.createElement('div');
-            this.measureOverlay.className = 'measure-overlay';
-            this.measureSvgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            this.measureSvgEl.setAttribute('class', 'measure-svg');
-            this.measureSvgEl.style.display = 'none';
-
-            const mkLine = (cls: string) => {
-                const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                el.setAttribute('class', cls);
-                this.measureSvgEl?.appendChild(el);
-                return el;
-            };
-            this.measureLineEl = mkLine('measure-line');
-            this.measureStartHX = mkLine('measure-cross');
-            this.measureStartVY = mkLine('measure-cross');
-            this.measureEndHX = mkLine('measure-cross');
-            this.measureEndVY = mkLine('measure-cross');
-            this.measureOverlay.appendChild(this.measureSvgEl);
-
-            this.measureLabelEl = document.createElement('div');
-            this.measureLabelEl.className = 'measure-label';
-            this.measureLabelEl.style.display = 'none';
-            this.measureOverlay.appendChild(this.measureLabelEl);
-            wrapper.appendChild(this.measureOverlay);
         }
 
         // double click: pick → ripple → after 380ms center camera
@@ -695,75 +698,6 @@ class Viewer {
             if (this.observer.get('measure.enabled')) return;
             this._pickAndCenterAt(event.offsetX, event.offsetY);
         });
-
-        // measure mode: pick points only on real click (not on click+orbit drag)
-        const onMeasureMousedown = (event: MouseEvent) => {
-            if (!this.observer.get('measure.enabled')) return;
-            if (event.button !== 0) return;
-            if (event.target !== canvas) return;
-            const rect = canvas.getBoundingClientRect();
-            this.measureClickDown = {
-                clientX: event.clientX,
-                clientY: event.clientY,
-                canvasX: event.clientX - rect.left,
-                canvasY: event.clientY - rect.top
-            };
-            this.measureIsPotentialClick = true;
-        };
-        const onMeasureMousemove = (event: MouseEvent) => {
-            if (!this.measureIsPotentialClick || !this.measureClickDown) return;
-            const dx = event.clientX - this.measureClickDown.clientX;
-            const dy = event.clientY - this.measureClickDown.clientY;
-            if (Math.hypot(dx, dy) > MEASURE_CLICK_DRAG_THRESHOLD) {
-                this.measureIsPotentialClick = false;
-            }
-        };
-        const onMeasureMouseup = (event: MouseEvent) => {
-            if (event.button !== 0) return;
-            if (this.measureIsPotentialClick && this.measureClickDown && this.observer.get('measure.enabled')) {
-                this._pickAndMeasureAt(this.measureClickDown.canvasX, this.measureClickDown.canvasY);
-            }
-            this.measureIsPotentialClick = false;
-            this.measureClickDown = null;
-        };
-        canvas.addEventListener('mousedown', onMeasureMousedown);
-        document.addEventListener('mousemove', onMeasureMousemove);
-        document.addEventListener('mouseup', onMeasureMouseup);
-
-        // with-texture mode: click object on model to select it
-        const onSelectMousedown = (event: MouseEvent) => {
-            if (event.button !== 0) return;
-            if (event.target !== canvas) return;
-            if (!this.observer.get('debug.withTextureOnly')) return;
-            if (this.observer.get('measure.enabled')) return;
-            const rect = canvas.getBoundingClientRect();
-            this.selectClickDown = {
-                clientX: event.clientX,
-                clientY: event.clientY,
-                canvasX: event.clientX - rect.left,
-                canvasY: event.clientY - rect.top
-            };
-            this.selectIsPotentialClick = true;
-        };
-        const onSelectMousemove = (event: MouseEvent) => {
-            if (!this.selectIsPotentialClick || !this.selectClickDown) return;
-            const dx = event.clientX - this.selectClickDown.clientX;
-            const dy = event.clientY - this.selectClickDown.clientY;
-            if (Math.hypot(dx, dy) > MEASURE_CLICK_DRAG_THRESHOLD) {
-                this.selectIsPotentialClick = false;
-            }
-        };
-        const onSelectMouseup = (event: MouseEvent) => {
-            if (event.button !== 0) return;
-            if (this.selectIsPotentialClick && this.selectClickDown && this.observer.get('debug.withTextureOnly') && !this.observer.get('measure.enabled')) {
-                this._pickAndSelectAt(this.selectClickDown.canvasX, this.selectClickDown.canvasY);
-            }
-            this.selectIsPotentialClick = false;
-            this.selectClickDown = null;
-        };
-        canvas.addEventListener('mousedown', onSelectMousedown);
-        document.addEventListener('mousemove', onSelectMousemove);
-        document.addEventListener('mouseup', onSelectMouseup);
 
         // double tap (mobile): same as dblclick when second tap within delay and radius
         canvas.addEventListener('touchend', (event: TouchEvent) => {
@@ -789,6 +723,20 @@ class Viewer {
 
         // start the application
         app.start();
+    }
+
+    setPerfEnabled(enabled: boolean) {
+        this.perfEnabled = enabled;
+        this.perfWindowStartMs = 0;
+        this.perfFrames = 0;
+        this.perfFrameDeltasMs.length = 0;
+        this.perfLastFrameStartMs = 0;
+        this.perfOnFrameRenderTotalMs = 0;
+        this.perfOnPrerenderTotalMs = 0;
+        this.perfOnPostrenderTotalMs = 0;
+        if (enabled) {
+            console.log('[perf] enabled (window=5s)');
+        }
     }
 
     private initXrMode() {
@@ -870,216 +818,18 @@ class Viewer {
         }, RIPPLE_CAMERA_DELAY_MS);
     }
 
-    private async _pickAndMeasureAt(x: number, y: number) {
-        const p = await this.picker.pick(x, y);
-        if (!p) return;
-
-        const waitingSecondPoint = this.observer.get('measure.pointCount') === 1;
-
-        if (!waitingSecondPoint || !this.measureStart) {
-            this.measureStart = p.clone();
-            this.measureEnd = null;
-            this.observer.set('measure.pointCount', 1);
-            this.observer.set('measure.lastDistance', null);
-            this.renderNextFrame();
+    clearMeasurement() {
+        if (this.measurementController) {
+            this.measurementController.clearMeasurement();
             return;
         }
-
-        this.measureEnd = p.clone();
-        const rawDistance = this.measureStart.distance(this.measureEnd);
-        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
-        const distanceMeters = rawDistance * (Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1);
-
-        this.observer.set('measure.lastDistance', distanceMeters);
-        this.observer.set('measure.pointCount', 0);
-        this.renderNextFrame();
-    }
-
-    private _selectNodeAtPoint(worldPoint: Vec3) {
-        let bestNode: GraphNode | null = null;
-        let bestDistanceSq = Number.POSITIVE_INFINITY;
-        let bestVolume = Number.POSITIVE_INFINITY;
-        let bestDepthSq = Number.POSITIVE_INFINITY;
-
-        const localPoint = new Vec3();
-        const invWorld = new Mat4();
-        const cameraPos = this.camera.getPosition();
-
-        this.meshInstances.forEach((mi) => {
-            const node = mi.node;
-            if (!node) return;
-
-            const meshAabb = mi.mesh?.aabb;
-            if (meshAabb) {
-                // More accurate than world AABB: test in mesh local space (OBB in world).
-                invWorld.copy(node.getWorldTransform()).invert();
-                invWorld.transformPoint(worldPoint, localPoint);
-
-                const min = meshAabb.getMin();
-                const max = meshAabb.getMax();
-                const cx = math.clamp(localPoint.x, min.x, max.x);
-                const cy = math.clamp(localPoint.y, min.y, max.y);
-                const cz = math.clamp(localPoint.z, min.z, max.z);
-                const dx = localPoint.x - cx;
-                const dy = localPoint.y - cy;
-                const dz = localPoint.z - cz;
-                const distanceSq = dx * dx + dy * dy + dz * dz;
-
-                const he = meshAabb.halfExtents;
-                const volume = (he.x * 2) * (he.y * 2) * (he.z * 2);
-                const dcx = cameraPos.x - mi.aabb.center.x;
-                const dcy = cameraPos.y - mi.aabb.center.y;
-                const dcz = cameraPos.z - mi.aabb.center.z;
-                const depthSq = dcx * dcx + dcy * dcy + dcz * dcz;
-
-                const betterDistance = distanceSq < bestDistanceSq - 1e-8;
-                const equalDistance = Math.abs(distanceSq - bestDistanceSq) <= 1e-8;
-                // For overlapping objects, prefer the one closer to camera.
-                const betterDepth = equalDistance && depthSq < bestDepthSq - 1e-8;
-                const equalDepth = equalDistance && Math.abs(depthSq - bestDepthSq) <= 1e-8;
-                const betterVolume = equalDepth && volume < bestVolume;
-
-                if (betterDistance || betterDepth || betterVolume) {
-                    bestDistanceSq = distanceSq;
-                    bestVolume = volume;
-                    bestDepthSq = depthSq;
-                    bestNode = node;
-                }
-                return;
-            }
-
-            // Fallback for instances without local mesh bounds.
-            const aabb = mi.aabb;
-            if (!aabb) return;
-            const min = aabb.getMin();
-            const max = aabb.getMax();
-            const cx = math.clamp(worldPoint.x, min.x, max.x);
-            const cy = math.clamp(worldPoint.y, min.y, max.y);
-            const cz = math.clamp(worldPoint.z, min.z, max.z);
-            const dx = worldPoint.x - cx;
-            const dy = worldPoint.y - cy;
-            const dz = worldPoint.z - cz;
-            const distanceSq = dx * dx + dy * dy + dz * dz;
-            const dcx = cameraPos.x - aabb.center.x;
-            const dcy = cameraPos.y - aabb.center.y;
-            const dcz = cameraPos.z - aabb.center.z;
-            const depthSq = dcx * dcx + dcy * dcy + dcz * dcz;
-
-            if (distanceSq < bestDistanceSq || (Math.abs(distanceSq - bestDistanceSq) <= 1e-8 && depthSq < bestDepthSq)) {
-                bestDistanceSq = distanceSq;
-                bestDepthSq = depthSq;
-                bestNode = node;
-            }
-        });
-
-        if (bestNode) {
-            this.setSelectedNode(bestNode.path);
-        }
-    }
-
-    private async _pickAndSelectAt(x: number, y: number) {
-        const p = await this.picker.pick(x, y);
-        if (!p) return;
-        this._selectNodeAtPoint(p);
-    }
-
-    clearMeasurement() {
-        this.measureStart = null;
-        this.measureEnd = null;
         this.observer.set('measure.pointCount', 0);
         this.observer.set('measure.lastDistance', null);
-        if (this.measureLabelEl) this.measureLabelEl.style.display = 'none';
-        if (this.measureSvgEl) this.measureSvgEl.style.display = 'none';
-        this.renderNextFrame();
     }
 
     /** Recalibrate unitScale: user measured two points and knows the real-world distance. Sets unitScale so that lastDistance matches knownDistance. */
     recalculateSceneSize() {
-        const lastDistance = this.observer.get('measure.lastDistance') as number | null;
-        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
-        const knownDistance = Number(this.observer.get('measure.knownDistance') ?? 0);
-        const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
-        if (lastDistance == null || lastDistance <= 0 || !Number.isFinite(unitScale) || unitScale <= 0 || !Number.isFinite(knownDistance) || knownDistance <= 0) {
-            return;
-        }
-        const factor = unit === 'mm' ? 0.001 : unit === 'cm' ? 0.01 : 1;
-        const knownDistanceMeters = knownDistance * factor;
-        const rawDistance = lastDistance / unitScale;
-        const newUnitScale = knownDistanceMeters / rawDistance;
-        if (!Number.isFinite(newUnitScale) || newUnitScale <= 0) return;
-        this.observer.set('measure.unitScale', newUnitScale);
-        this.observer.set('measure.lastDistance', knownDistanceMeters);
-        this.renderNextFrame();
-    }
-
-    private updateMeasurementOverlay() {
-        if (!this.measureSvgEl || !this.measureStart) return;
-        this.measureSvgEl.setAttribute('viewBox', `0 0 ${this.canvas.clientWidth} ${this.canvas.clientHeight}`);
-
-        const dpr = window.devicePixelRatio || 1;
-        const start = this.camera.camera.worldToScreen(this.measureStart);
-        const sx = start.x / dpr;
-        const sy = start.y / dpr;
-        const visStart = start.z > 0;
-
-        const crossSize = 7;
-        const setCross = (hx: SVGLineElement | null, vy: SVGLineElement | null, x: number, y: number, visible: boolean) => {
-            if (!hx || !vy) return;
-            hx.setAttribute('x1', `${x - crossSize}`);
-            hx.setAttribute('y1', `${y}`);
-            hx.setAttribute('x2', `${x + crossSize}`);
-            hx.setAttribute('y2', `${y}`);
-            vy.setAttribute('x1', `${x}`);
-            vy.setAttribute('y1', `${y - crossSize}`);
-            vy.setAttribute('x2', `${x}`);
-            vy.setAttribute('y2', `${y + crossSize}`);
-            const disp = visible ? 'block' : 'none';
-            hx.style.display = disp;
-            vy.style.display = disp;
-        };
-
-        setCross(this.measureStartHX, this.measureStartVY, sx, sy, visStart);
-
-        if (!this.measureEnd) {
-            if (this.measureLineEl) this.measureLineEl.style.display = 'none';
-            if (this.measureEndHX) this.measureEndHX.style.display = 'none';
-            if (this.measureEndVY) this.measureEndVY.style.display = 'none';
-            if (this.measureLabelEl) this.measureLabelEl.style.display = 'none';
-            this.measureSvgEl.style.display = visStart ? 'block' : 'none';
-            return;
-        }
-
-        const end = this.camera.camera.worldToScreen(this.measureEnd);
-        const ex = end.x / dpr;
-        const ey = end.y / dpr;
-        const visEnd = end.z > 0;
-        setCross(this.measureEndHX, this.measureEndVY, ex, ey, visEnd);
-
-        const lineVisible = visStart && visEnd;
-        if (this.measureLineEl) {
-            this.measureLineEl.setAttribute('x1', `${sx}`);
-            this.measureLineEl.setAttribute('y1', `${sy}`);
-            this.measureLineEl.setAttribute('x2', `${ex}`);
-            this.measureLineEl.setAttribute('y2', `${ey}`);
-            this.measureLineEl.style.display = lineVisible ? 'block' : 'none';
-        }
-
-        if (this.measureLabelEl) {
-            const lastMeters = this.observer.get('measure.lastDistance') as number | null;
-            if (Number.isFinite(lastMeters) && lineVisible) {
-                const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
-                const factor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
-                const precision = unit === 'mm' ? 0 : 2;
-                this.measureLabelEl.textContent = `${(lastMeters * factor).toFixed(precision)} ${unit}`;
-                this.measureLabelEl.style.left = `${(sx + ex) * 0.5}px`;
-                this.measureLabelEl.style.top = `${(sy + ey) * 0.5}px`;
-                this.measureLabelEl.style.display = 'block';
-            } else {
-                this.measureLabelEl.style.display = 'none';
-            }
-        }
-
-        this.measureSvgEl.style.display = lineVisible || visStart ? 'block' : 'none';
+        this.measurementController?.recalculateSceneSize();
     }
 
     private getSelectedMeshInstances() {
@@ -1215,9 +965,7 @@ class Viewer {
             'debug.normals': this.setNormalLength.bind(this),
             'debug.uvCheckerScale': this.setUvCheckerScale.bind(this),
             'debug.withTextureOnly': () => {
-                if (!this.observer.get('debug.withTextureOnly')) {
-                    this.stopSelectionFlash();
-                }
+                this.selectionController.onTextureSelectionModeChange(this.observer.get('debug.withTextureOnly'));
                 this.dirtySelectionHighlight = true;
                 this.renderNextFrame();
             },
@@ -1532,7 +1280,7 @@ class Viewer {
         this.assets = [];
 
         this.meshInstances = [];
-        this.stopSelectionFlash();
+        this.selectionController.reset();
         this.resetWireframeMeshes();
         this.resetSelectionHighlightMeshes();
         this.resetUvCheckerMeshes();
@@ -1843,273 +1591,29 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    private static rgbToHex(r: number, g: number, b: number): string {
-        const toByte = (x: number) => Math.round(Math.max(0, Math.min(1, Number(x))) * 255);
-        return '#' + [toByte(r), toByte(g), toByte(b)].map((n) => n.toString(16).padStart(2, '0')).join('');
-    }
-
-    private static hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-        const m = /^#([0-9A-Fa-f]{6})$/.exec(hex);
-        if (!m) return null;
-        const n = parseInt(m[1], 16);
-        return { r: ((n >> 16) & 0xff) / 255, g: ((n >> 8) & 0xff) / 255, b: (n & 0xff) / 255 };
-    }
-
     /** Export current viewer settings (camera, skybox, light, etc.) to a JSON file. */
     exportViewerSettings() {
-        const options = this.observer.json() as Record<string, unknown>;
-        const skybox = (options.skybox && typeof options.skybox === 'object') ? { ...(options.skybox as Record<string, unknown>) } : {};
-        const light = (options.light && typeof options.light === 'object') ? { ...(options.light as Record<string, unknown>) } : {};
-        if (skybox.backgroundColor && typeof skybox.backgroundColor === 'object' && !Array.isArray(skybox.backgroundColor)) {
-            const c = skybox.backgroundColor as { r?: number; g?: number; b?: number };
-            skybox.backgroundColor = Viewer.rgbToHex(Number(c.r ?? 0), Number(c.g ?? 0), Number(c.b ?? 0));
-        }
-        if (light.color && typeof light.color === 'object' && !Array.isArray(light.color)) {
-            const c = light.color as { r?: number; g?: number; b?: number };
-            light.color = Viewer.rgbToHex(Number(c.r ?? 0), Number(c.g ?? 0), Number(c.b ?? 0));
-        }
-        const data: Record<string, unknown> = {
-            modelViewerSettingsVersion: 1,
-            camera: options.camera,
-            skybox,
-            light,
-            debug: options.debug,
-            shadowCatcher: options.shadowCatcher,
-            measure: options.measure,
-            enableWebGPU: options.enableWebGPU
-        };
-        if (this.cameraControls.mode === 'orbit') {
-            const p = this.cameraControls.getPosition();
-            const f = this.cameraControls.getFocus();
-            (data.camera as Record<string, unknown>).position = [p.x, p.y, p.z];
-            (data.camera as Record<string, unknown>).focus = [f.x, f.y, f.z];
-        }
-        const json = JSON.stringify(data, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const filenames = this.observer.get('scene.filenames') as string[] | undefined;
-        const baseName = (filenames && filenames.length > 0 && filenames[0])
-            ? filenames[0].replace(/\.[^/.]+$/, '') || 'model-viewer'
-            : 'model-viewer';
-        a.download = `${baseName}.model-viewer-settings.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+        this.settingsService.exportViewerSettings();
     }
 
-    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'enableWebGPU', 'metadata'];
-    private static readonly SETTINGS_FILTER_PATHS = ['skybox.options', 'debug.renderMode'];
-
-    /** Reset viewer settings (camera, skybox, light, etc.) to defaults. Call before loading a new model so that if no settings file is found, defaults are shown. */
+    /** Reset viewer settings (camera, skybox, light, etc.) to defaults. */
     private resetViewerSettingsToDefaults() {
-        const o = this.observer;
-        o.set('camera.fov', 40);
-        o.set('camera.tonemapping', 'Linear');
-        o.set('camera.pixelScale', 1);
-        o.set('camera.multisample', true);
-        o.set('camera.hq', true);
-        o.set('camera.mode', 'orbit');
-        o.set('skybox.value', this.skyboxUrls.has('Paul Lobe Haus') ? 'Paul Lobe Haus' : 'None');
-        o.set('skybox.exposure', 0);
-        o.set('skybox.rotation', 0);
-        o.set('skybox.background', 'Solid Color');
-        o.set('skybox.backgroundColor', { r: 134 / 255, g: 152 / 255, b: 174 / 255 });
-        o.set('skybox.blur', 1);
-        o.set('skybox.domeProjection.domeRadius', 20);
-        o.set('skybox.domeProjection.tripodOffset', 0.1);
-        o.set('light.enabled', true);
-        o.set('light.color', { r: 1, g: 1, b: 1 });
-        o.set('light.intensity', 1);
-        o.set('light.follow', false);
-        o.set('light.shadow', true);
-        o.set('shadowCatcher.enabled', true);
-        o.set('shadowCatcher.intensity', 0.4);
-        o.set('shadowCatcher.heightOffset', 0);
-        o.set('debug.renderMode', 'default');
-        o.set('debug.stats', false);
-        o.set('debug.wireframe', false);
-        o.set('debug.wireframeColor', { r: 0, g: 0, b: 0 });
-        o.set('debug.bounds', false);
-        o.set('debug.skeleton', false);
-        o.set('debug.axes', false);
-        o.set('debug.grid', false);
-        o.set('debug.normals', 0);
-        o.set('measure.enabled', false);
-        o.set('measure.unit', 'm');
-        o.set('measure.unitScale', 1);
-        o.set('measure.lastDistance', null);
-        o.set('measure.pointCount', 0);
-        o.set('measure.knownDistance', 0);
-        this.measureStart = null;
-        this.syncSkyboxAndLightFromObserver();
+        this.settingsService.resetViewerSettingsToDefaults();
     }
 
     /** Apply a settings object (e.g. from model-viewer-settings.json) to the observer. */
     applyViewerSettings(data: Record<string, unknown>) {
-        const filter = Viewer.SETTINGS_FILTER_PATHS;
-        const colorPaths = ['skybox.backgroundColor', 'light.color', 'debug.wireframeColor'];
-        const toRgb = (v: unknown): { r: number; g: number; b: number } | null => {
-            if (typeof v === 'string') return Viewer.hexToRgb(v);
-            if (v && typeof v === 'object' && !Array.isArray(v)) {
-                const o = v as Record<string, unknown>;
-                const r = Number(o.r), g = Number(o.g), b = Number(o.b);
-                if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) return { r, g, b };
-            }
-            return null;
-        };
-        const loadRec = (path: string, value: unknown): void => {
-            if (filter.indexOf(path) !== -1) return;
-            if (colorPaths.indexOf(path) !== -1) {
-                const rgb = toRgb(value);
-                if (rgb) {
-                    this.observer.set(path, rgb);
-                    return;
-                }
-            }
-            if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                const obj = value as Record<string, unknown>;
-                const keys = path === '' ? Viewer.SETTINGS_APPLY_KEYS.filter((k) => obj[k] !== undefined) : Object.keys(obj);
-                keys.forEach((k) => loadRec(path ? `${path}.${k}` : k, obj[k]));
-            } else {
-                if (path !== 'skybox.value' || value === 'None' || this.skyboxUrls.has(value as string)) {
-                    this.observer.set(path, value);
-                }
-            }
-        };
-        try {
-            loadRec('', data);
-        } catch (_) { /* ignore */ }
+        this.settingsService.applyViewerSettings(data);
     }
 
-    /** Max (N) in candidate names: base.model-viewer-settings.json, (1)..(N). */
-    private static readonly SETTINGS_CANDIDATE_VERSIONS = 20;
-
-    /** Build candidate URLs for settings file: base.model-viewer-settings.json and base.model-viewer-settings(1).json … (N).json (Chrome adds (1) on re-download). */
-    private static settingsUrlCandidatesForModelUrl(modelUrl: string): { url: string; version: number }[] {
-        const out: { url: string; version: number }[] = [];
-        try {
-            const absoluteUrl =
-                modelUrl.startsWith('http://') || modelUrl.startsWith('https://')
-                    ? modelUrl
-                    : new URL(modelUrl, typeof window !== 'undefined' ? window.location.href : 'http://localhost').href;
-            const u = new URL(absoluteUrl);
-            if (!u.protocol.startsWith('http')) return out;
-            const pathParts = u.pathname.split('/').filter(Boolean);
-            if (pathParts.length === 0) return out;
-            const baseName = pathParts[pathParts.length - 1].replace(/\.[^/.]+$/, '') || pathParts[pathParts.length - 1];
-            const dir = pathParts.slice(0, -1);
-            out.push({ url: u.origin + '/' + dir.concat(`${baseName}.model-viewer-settings.json`).join('/'), version: 0 });
-            for (let n = 1; n <= Viewer.SETTINGS_CANDIDATE_VERSIONS; n++) {
-                out.push({ url: u.origin + '/' + dir.concat(`${baseName}.model-viewer-settings(${n}).json`).join('/'), version: n });
-            }
-            return out;
-        } catch {
-            return out;
-        }
-    }
-
-    private static readonly SETTINGS_FETCH_TIMEOUT_MS = 5000;
-
-    /** Match settings filename like baseName.model-viewer-settings.json or baseName.model-viewer-settings(1).json. Returns version (0 for base, N for (N)) or -1 if no match. */
-    private static settingsVersionFromFilename(filename: string, baseName: string): number {
-        const name = filename.split('/').pop() || '';
-        if (name === `${baseName}.model-viewer-settings.json`) return 0;
-        const m = name.match(new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.model-viewer-settings\\((\\d+)\\)\\.json$`, 'i'));
-        return m ? parseInt(m[1], 10) : -1;
-    }
-
-    /** Fetch settings file next to the model URL (same folder) or from dropped/selected files. Tries base and (1)..(N) names; applies the one with highest version number that exists. If none found, resets to defaults. */
+    /** Fetch and apply model settings from nearby files. */
     private tryFetchAndApplySettings(firstModelUrl: string, allFiles?: Array<{ url: string; filename?: string }>): Promise<void> {
-        const firstModelFilename = allFiles?.find((f) =>
-            (f.filename && this.isModelFilename(f.filename)) || (f.filename && this.isGSplatFilename(f.filename))
-        )?.filename;
-        const baseName = firstModelFilename ? firstModelFilename.replace(/\.[^/.]+$/, '').split('/').pop() || '' : '';
-
-        const fromDroppedFiles = (): Promise<{ data: Record<string, unknown>; version: number } | null> => {
-            if (!allFiles || !baseName) return Promise.resolve(null);
-            const best: { file: { url: string }; version: number } | null = allFiles.reduce(
-                (acc, f) => {
-                    if (!f.filename) return acc;
-                    const v = Viewer.settingsVersionFromFilename(f.filename, baseName);
-                    if (v < 0) return acc;
-                    if (!acc || v > acc.version) return { file: f, version: v };
-                    return acc;
-                },
-                null as { file: { url: string }; version: number } | null
-            );
-            if (!best) return Promise.resolve(null);
-            return fetch(best.file.url, { cache: 'no-store' })
-                .then((res) => (res.ok ? res.json().then((data: Record<string, unknown>) => ({ data, version: best.version })) : null))
-                .catch((): null => null);
-        };
-
-        const candidates = Viewer.settingsUrlCandidatesForModelUrl(firstModelUrl);
-        if (candidates.length === 0) {
-            return fromDroppedFiles().then((r) => {
-                if (r) {
-                    this.applyViewerSettings(r.data);
-                    this.syncSkyboxAndLightFromObserver();
-                } else {
-                    this.observer.set('camera.position', null);
-                    this.observer.set('camera.focus', null);
-                    this.resetViewerSettingsToDefaults();
-                }
-            });
-        }
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), Viewer.SETTINGS_FETCH_TIMEOUT_MS);
-        const fetchOne = (c: { url: string; version: number }): Promise<{ data: Record<string, unknown>; version: number } | null> =>
-            fetch(c.url, { method: 'GET', signal: controller.signal, cache: 'no-store' })
-                .then((res) => {
-                    if (!res.ok) return null;
-                    return res.json().then((data: Record<string, unknown>) => ({ data, version: c.version })).catch(() => null);
-                })
-                .catch((): null => null);
-
-        return Promise.all([...candidates.map(fetchOne), fromDroppedFiles()])
-            .then((results) => {
-                const ok = results.filter((r): r is { data: Record<string, unknown>; version: number } => r != null && typeof (r as any).data === 'object');
-                if (ok.length === 0) {
-                    if (typeof console !== 'undefined' && console.warn) {
-                        console.warn('[model-viewer] Settings file not found. Tried:', candidates.slice(0, 3).map((c) => c.url));
-                    }
-                    this.observer.set('camera.position', null);
-                    this.observer.set('camera.focus', null);
-                    this.resetViewerSettingsToDefaults();
-                    return;
-                }
-                const best = ok.reduce((a, b) => (a.version >= b.version ? a : b));
-                this.applyViewerSettings(best.data);
-                this.syncSkyboxAndLightFromObserver();
-                if (typeof console !== 'undefined' && console.debug) {
-                    console.debug('[model-viewer] Applied settings from file (version', best.version, ')');
-                }
-            })
-            .catch((err) => {
-                if (typeof console !== 'undefined' && console.warn) {
-                    console.warn('[model-viewer] Settings fetch failed:', err);
-                }
-                this.observer.set('camera.position', null);
-                this.observer.set('camera.focus', null);
-                this.resetViewerSettingsToDefaults();
-            })
-            .finally(() => clearTimeout(timeoutId));
+        return this.settingsService.tryFetchAndApplySettings(firstModelUrl, allFiles);
     }
 
     /** Apply current observer skybox/light to the scene (e.g. after loading settings from file). */
     private syncSkyboxAndLightFromObserver() {
-        const bgColor = this.observer.get('skybox.backgroundColor') as { r?: number; g?: number; b?: number } | undefined;
-        if (bgColor && typeof bgColor === 'object' && [bgColor.r, bgColor.g, bgColor.b].every((x) => typeof x === 'number')) {
-            this.setBackgroundColor({ r: Number(bgColor.r), g: Number(bgColor.g), b: Number(bgColor.b) });
-        }
-        const background = this.observer.get('skybox.background');
-        if (typeof background === 'string') this.setSkyboxBackground(background);
-        const lc = this.observer.get('light.color') as { r?: number; g?: number; b?: number } | undefined;
-        if (lc && typeof lc === 'object' && [lc.r, lc.g, lc.b].every((x) => typeof x === 'number')) {
-            this.setLightColor({ r: Number(lc.r), g: Number(lc.g), b: Number(lc.b) });
-        }
+        this.settingsService.syncSkyboxAndLightFromObserver();
     }
 
     // adjust camera clipping planes to fit the scene
@@ -2583,7 +2087,7 @@ class Viewer {
         }
 
         this.selectedNode = graphNode;
-        this.startSelectionFlash();
+        this.selectionController.onSelectionNodeChanged();
         this.updateMaterialChannelInfo();
         this.dirtyWireframe = true;
         this.dirtySelectionHighlight = true;
@@ -3235,42 +2739,6 @@ class Viewer {
         this.selectionHighlightMeshInstances = [];
     }
 
-    private stopSelectionFlash() {
-        this.selectionFlashStartMs = 0;
-        if (this.selectionFlashRaf !== null) {
-            cancelAnimationFrame(this.selectionFlashRaf);
-            this.selectionFlashRaf = null;
-        }
-        this.selectionHighlightMaterial.setParameter('uColor', [0.224, 1.0, 0.078, 0]);
-        this.selectionHighlightMaterial.update();
-        this.resetSelectionHighlightMeshes();
-    }
-
-    private startSelectionFlash() {
-        this.stopSelectionFlash();
-
-        if (!this.selectedNode || !this.observer.get('debug.withTextureOnly')) return;
-
-        this.selectionFlashStartMs = performance.now();
-        this.selectionHighlightMaterial.setParameter('uColor', [0.224, 1.0, 0.078, 1]);
-        this.selectionHighlightMaterial.update();
-        this.dirtySelectionHighlight = true;
-
-        const tick = () => {
-            if (!this.selectionFlashStartMs) return;
-            const elapsed = performance.now() - this.selectionFlashStartMs;
-            this.renderNextFrame();
-            if (elapsed < this.selectionFlashDurationMs) {
-                this.selectionFlashRaf = requestAnimationFrame(tick);
-            } else {
-                this.stopSelectionFlash();
-                this.renderNextFrame();
-            }
-        };
-
-        this.selectionFlashRaf = requestAnimationFrame(tick);
-    }
-
     private buildWireframeMeshes() {
         this.wireframeMeshInstances = this.getSelectedMeshInstances().map((mi) => {
             const meshInstance = new MeshInstance(mi.mesh, this.wireframeMaterial, mi.node);
@@ -3298,6 +2766,15 @@ class Viewer {
     }
 
     private onFrameRender() {
+        const perfStart = this.perfEnabled ? performance.now() : 0;
+        if (this.perfEnabled) {
+            this.perfFrames++;
+            if (this.perfLastFrameStartMs > 0) {
+                this.perfFrameDeltasMs.push(perfStart - this.perfLastFrameStartMs);
+            }
+            this.perfLastFrameStartMs = perfStart;
+        }
+
         if (this.canvasResize) {
             const { width, height } = this.getCanvasSize();
             const pixelScale = this.observer.get('camera.pixelScale');
@@ -3311,10 +2788,15 @@ class Viewer {
 
         // rebuild render targets
         this.rebuildRenderTargets();
+
+        if (this.perfEnabled) {
+            this.perfOnFrameRenderTotalMs += performance.now() - perfStart;
+        }
     }
 
     // generate and render debug elements on prerender
     private onPrerender() {
+        const perfStart = this.perfEnabled ? performance.now() : 0;
         if (this.firstFrame) {
             return;
         }
@@ -3325,12 +2807,7 @@ class Viewer {
             this.resetSelectionHighlightMeshes();
             this.buildSelectionHighlightMeshes();
         }
-        if (this.selectionFlashStartMs > 0 && this.selectionHighlightMeshInstances.length > 0) {
-            const elapsed = performance.now() - this.selectionFlashStartMs;
-            const fade = math.clamp(1 - (elapsed / this.selectionFlashDurationMs), 0, 1);
-            this.selectionHighlightMaterial.setParameter('uColor', [0.224, 1.0, 0.078, fade]);
-            this.selectionHighlightMaterial.update();
-        }
+        this.selectionController.onPrerender(this.selectionHighlightMeshInstances.length);
 
         // wireframe
         if (this.dirtyWireframe) {
@@ -3361,12 +2838,12 @@ class Viewer {
             }
             this.debugBounds.update();
 
-            const v = new Vec3(
+            this.tmpBoundsSize.set(
                 this.dynamicSceneBounds.halfExtents.x * 2,
                 this.dynamicSceneBounds.halfExtents.y * 2,
                 this.dynamicSceneBounds.halfExtents.z * 2
             );
-            this.observer.set('scene.bounds', v.toString());
+            this.observer.set('scene.bounds', this.tmpBoundsSize.toString());
         }
 
         // debug normals
@@ -3434,8 +2911,8 @@ class Viewer {
                 // calculate primary spacing
                 const spacing = Math.pow(10, Math.floor(Math.log10(this.sceneBounds.halfExtents.length())));
 
-                const v0 = new Vec3(0, 0, 0);
-                const v1 = new Vec3(0, 0, 0);
+                const v0 = this.tmpGridV0;
+                const v1 = this.tmpGridV1;
 
                 const y = 0;
 
@@ -3460,20 +2937,20 @@ class Viewer {
         // keep DebugLines buffer empty so measurements are always overlay-only (never depth-tested / occluded by mesh)
         this.debugMeasure.clear();
         this.debugMeasure.update();
-        if (this.measureStart) {
-            this.updateMeasurementOverlay();
-        } else {
-            if (this.measureSvgEl) this.measureSvgEl.style.display = 'none';
-            if (this.measureLabelEl) this.measureLabelEl.style.display = 'none';
-        }
+        this.measurementController.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
 
         // fit camera planes to the scene
         this.fitCameraClipPlanes();
 
         this.shadowCatcher.onUpdate(this.dynamicSceneBounds);
+
+        if (this.perfEnabled) {
+            this.perfOnPrerenderTotalMs += performance.now() - perfStart;
+        }
     }
 
     private onPostrender() {
+        const perfStart = this.perfEnabled ? performance.now() : 0;
         if (this.firstFrame) {
             this.firstFrame = false;
 
@@ -3490,9 +2967,41 @@ class Viewer {
         // perform multiframe update. returned flag indicates whether more frames
         // are needed.
         this.multiframeBusy = this.multiframe.update();
+
+        if (this.perfEnabled) {
+            this.perfOnPostrenderTotalMs += performance.now() - perfStart;
+        }
     }
 
     private onFrameend() {
+        if (this.perfEnabled) {
+            const now = performance.now();
+            if (this.perfWindowStartMs === 0) {
+                this.perfWindowStartMs = now;
+            }
+
+            const elapsed = now - this.perfWindowStartMs;
+            if (elapsed >= this.perfWindowDurationMs && this.perfFrames > 0) {
+                const seconds = elapsed / 1000;
+                const fps = this.perfFrames / seconds;
+                const sorted = [...this.perfFrameDeltasMs].sort((a, b) => a - b);
+                const p95 = sorted.length > 0 ? sorted[Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95)))] : 0;
+                const avgFrameRender = this.perfOnFrameRenderTotalMs / this.perfFrames;
+                const avgPrerender = this.perfOnPrerenderTotalMs / this.perfFrames;
+                const avgPostrender = this.perfOnPostrenderTotalMs / this.perfFrames;
+                console.log(
+                    `[perf] ${seconds.toFixed(1)}s | fps=${fps.toFixed(1)} | p95=${p95.toFixed(2)}ms | frame=${avgFrameRender.toFixed(2)}ms | pre=${avgPrerender.toFixed(2)}ms | post=${avgPostrender.toFixed(2)}ms | meshes=${this.meshInstances.length}`
+                );
+
+                this.perfWindowStartMs = now;
+                this.perfFrames = 0;
+                this.perfFrameDeltasMs.length = 0;
+                this.perfOnFrameRenderTotalMs = 0;
+                this.perfOnPrerenderTotalMs = 0;
+                this.perfOnPostrenderTotalMs = 0;
+            }
+        }
+
         if (this.loadTimestamp !== null) {
             this.observer.set('scene.loadTime', `${Date.now() - this.loadTimestamp}ms`);
             this.loadTimestamp = null;
