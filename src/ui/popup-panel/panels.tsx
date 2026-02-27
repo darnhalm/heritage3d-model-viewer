@@ -49,6 +49,19 @@ class InfoPanel extends React.Component <{
     observerData: ObserverData,
     setProperty: SetProperty }> {
     state: { tab: InfoTab; controlsSubTab: ControlsSubTab } = { tab: 'controls', controlsSubTab: 'desktop' };
+    modelHierarchyRef = React.createRef<HTMLDivElement>();
+
+    componentDidUpdate(prevProps: Readonly<{ observerData: ObserverData }>, prevState: Readonly<{ tab: InfoTab }>) {
+        const prevPath = prevProps.observerData?.scene?.selectedNode?.path ?? '';
+        const path = this.props.observerData?.scene?.selectedNode?.path ?? '';
+        if (path && path !== prevPath && this.state.tab === 'model') {
+            const selectedEl = this.modelHierarchyRef.current?.querySelector('.pcui-treeview-item.pcui-treeview-item-selected') as HTMLElement | null;
+            selectedEl?.scrollIntoView({ block: 'nearest' });
+        } else if (this.state.tab === 'model' && prevState.tab !== 'model' && path) {
+            const selectedEl = this.modelHierarchyRef.current?.querySelector('.pcui-treeview-item.pcui-treeview-item-selected') as HTMLElement | null;
+            selectedEl?.scrollIntoView({ block: 'nearest' });
+        }
+    }
 
     render() {
         const { observerData, setProperty } = this.props;
@@ -192,6 +205,14 @@ class InfoPanel extends React.Component <{
                             <Label text={t('Hierarchy', lang)} class='popup-panel-heading' />
                             {hasModel ? (() => {
                                 let modelHierarchy: Array<HierarchyNode> = [];
+                                const selectedPath = scene?.selectedNode?.path ?? '';
+                                const isSelfOrAncestor = (path: string) => {
+                                    if (!path) return true;
+                                    if (selectedPath === path) return true;
+                                    return selectedPath.startsWith(`${path}/`) ||
+                                           selectedPath.startsWith(`${path}.`) ||
+                                           selectedPath.startsWith(`${path}>`);
+                                };
                                 try {
                                     modelHierarchy = JSON.parse(scene.nodes || '[]');
                                     if (!Array.isArray(modelHierarchy)) modelHierarchy = [];
@@ -203,6 +224,8 @@ class InfoPanel extends React.Component <{
                                         <TreeViewItem
                                             key={node.path}
                                             text={node.name}
+                                            selected={selectedPath === node.path}
+                                            open={isSelfOrAncestor(node.path)}
                                             onSelect={(tv: any) => {
                                                 setProperty('scene.selectedNode.path', node.path);
                                                 const remove = addEventListenerOnClickOnly(document.body, () => {
@@ -216,8 +239,8 @@ class InfoPanel extends React.Component <{
                                         </TreeViewItem>
                                     ));
                                 return modelHierarchy.length > 0 ? (
-                                    <div className='info-panel-hierarchy'>
-                                        <TreeView allowReordering={false} allowDrag={false}>
+                                    <div className='info-panel-hierarchy' ref={this.modelHierarchyRef}>
+                                        <TreeView key={`model-hierarchy-${selectedPath}`} allowReordering={false} allowDrag={false}>
                                             {mapNodes(modelHierarchy)}
                                         </TreeView>
                                     </div>

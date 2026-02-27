@@ -2,6 +2,7 @@ import { Observer } from '@playcanvas/observer';
 import {
     ADDRESS_CLAMP_TO_EDGE,
     BLENDMODE_ONE,
+    BLEND_NORMAL,
     BLENDMODE_ZERO,
     BLENDEQUATION_ADD,
     EVENT_KEYDOWN,
@@ -61,6 +62,8 @@ import {
     Quat,
     RenderComponent,
     RenderTarget,
+    SEMANTIC_POSITION,
+    ShaderMaterial,
     StandardMaterial,
     Texture,
     TouchDevice,
@@ -121,6 +124,45 @@ const pickDepthWgsl = /* wgsl */ `
     }
 `;
 
+const overlayVertexGLSL = /* glsl */ `
+attribute vec3 vertex_position;
+uniform mat4 matrix_model;
+uniform mat4 matrix_viewProjection;
+void main(void) {
+    gl_Position = matrix_viewProjection * matrix_model * vec4(vertex_position, 1.0);
+}
+`;
+
+const overlayFragmentGLSL = /* glsl */ `
+precision highp float;
+uniform vec4 uColor;
+void main(void) {
+    gl_FragColor = uColor;
+}
+`;
+
+const overlayVertexWGSL = /* wgsl */ `
+attribute vertex_position: vec3f;
+uniform matrix_model: mat4x4f;
+uniform matrix_viewProjection: mat4x4f;
+@vertex
+fn vertexMain(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = uniform.matrix_viewProjection * uniform.matrix_model * vec4(input.vertex_position, 1.0);
+    return output;
+}
+`;
+
+const overlayFragmentWGSL = /* wgsl */ `
+uniform uColor: vec4f;
+@fragment
+fn fragmentMain(input: FragmentInput) -> FragmentOutput {
+    var output: FragmentOutput;
+    output.color = uColor;
+    return output;
+}
+`;
+
 class Viewer {
     canvas: HTMLCanvasElement;
 
@@ -158,6 +200,11 @@ class Viewer {
 
     wireframeMaterial: StandardMaterial;
 
+    selectionHighlightMeshInstances: Array<MeshInstance>;
+
+    selectionHighlightMaterial: ShaderMaterial;
+
+
     animTracks: Array<AnimTrack>;
 
     animationMap: Record<string, string>;
@@ -185,6 +232,8 @@ class Viewer {
     normalLength: number;
 
     dirtyWireframe: boolean;
+
+    dirtySelectionHighlight: boolean;
 
     dirtyBounds: boolean;
 
@@ -257,6 +306,16 @@ class Viewer {
     measureStart: Vec3 | null = null;
 
     measureEnd: Vec3 | null = null;
+
+    private selectClickDown: { clientX: number; clientY: number; canvasX: number; canvasY: number } | null = null;
+
+    private selectIsPotentialClick = false;
+
+    private selectionFlashStartMs = 0;
+
+    private selectionFlashDurationMs = 500;
+
+    private selectionFlashRaf: number | null = null;
 
     loadTimestamp?: number = null;
 
@@ -409,6 +468,7 @@ class Viewer {
         this.assets = [];
         this.meshInstances = [];
         this.wireframeMeshInstances = [];
+        this.selectionHighlightMeshInstances = [];
 
         const material = new StandardMaterial();
         material.blendState = new BlendState(
@@ -429,6 +489,24 @@ class Viewer {
         material.update();
         this.wireframeMaterial = material;
 
+        const overlayShaderArgs = {
+            uniqueName: 'selection-overlay',
+            attributes: {
+                vertex_position: SEMANTIC_POSITION
+            },
+            vertexGLSL: overlayVertexGLSL,
+            fragmentGLSL: overlayFragmentGLSL,
+            vertexWGSL: overlayVertexWGSL,
+            fragmentWGSL: overlayFragmentWGSL
+        };
+
+        const selectionMat = new ShaderMaterial(overlayShaderArgs);
+        selectionMat.setParameter('uColor', [0.224, 1.0, 0.078, 1.0]);
+        selectionMat.blendType = BLEND_NORMAL;
+        selectionMat.depthState.write = false;
+        selectionMat.update();
+        this.selectionHighlightMaterial = selectionMat;
+
         this.animTracks = [];
         this.animationMap = {};
         this.firstFrame = false;
@@ -448,6 +526,7 @@ class Viewer {
         this.setWireframeColor(observer.get('debug.wireframeColor'));
 
         this.dirtyWireframe = false;
+        this.dirtySelectionHighlight = false;
         this.dirtyBounds = false;
         this.dirtySkeleton = false;
         this.dirtyGrid = false;
@@ -566,6 +645,41 @@ class Viewer {
         canvas.addEventListener('mousedown', onMeasureMousedown);
         document.addEventListener('mousemove', onMeasureMousemove);
         document.addEventListener('mouseup', onMeasureMouseup);
+
+        // with-texture mode: click object on model to select it
+        const onSelectMousedown = (event: MouseEvent) => {
+            if (event.button !== 0) return;
+            if (event.target !== canvas) return;
+            if (!this.observer.get('debug.withTextureOnly')) return;
+            if (this.observer.get('measure.enabled')) return;
+            const rect = canvas.getBoundingClientRect();
+            this.selectClickDown = {
+                clientX: event.clientX,
+                clientY: event.clientY,
+                canvasX: event.clientX - rect.left,
+                canvasY: event.clientY - rect.top
+            };
+            this.selectIsPotentialClick = true;
+        };
+        const onSelectMousemove = (event: MouseEvent) => {
+            if (!this.selectIsPotentialClick || !this.selectClickDown) return;
+            const dx = event.clientX - this.selectClickDown.clientX;
+            const dy = event.clientY - this.selectClickDown.clientY;
+            if (Math.hypot(dx, dy) > MEASURE_CLICK_DRAG_THRESHOLD) {
+                this.selectIsPotentialClick = false;
+            }
+        };
+        const onSelectMouseup = (event: MouseEvent) => {
+            if (event.button !== 0) return;
+            if (this.selectIsPotentialClick && this.selectClickDown && this.observer.get('debug.withTextureOnly') && !this.observer.get('measure.enabled')) {
+                this._pickAndSelectAt(this.selectClickDown.canvasX, this.selectClickDown.canvasY);
+            }
+            this.selectIsPotentialClick = false;
+            this.selectClickDown = null;
+        };
+        canvas.addEventListener('mousedown', onSelectMousedown);
+        document.addEventListener('mousemove', onSelectMousemove);
+        document.addEventListener('mouseup', onSelectMouseup);
 
         // double tap (mobile): same as dblclick when second tap within delay and radius
         canvas.addEventListener('touchend', (event: TouchEvent) => {
@@ -695,6 +809,94 @@ class Viewer {
         this.observer.set('measure.lastDistance', distanceMeters);
         this.observer.set('measure.pointCount', 0);
         this.renderNextFrame();
+    }
+
+    private _selectNodeAtPoint(worldPoint: Vec3) {
+        let bestNode: GraphNode | null = null;
+        let bestDistanceSq = Number.POSITIVE_INFINITY;
+        let bestVolume = Number.POSITIVE_INFINITY;
+        let bestDepthSq = Number.POSITIVE_INFINITY;
+
+        const localPoint = new Vec3();
+        const invWorld = new Mat4();
+        const cameraPos = this.camera.getPosition();
+
+        this.meshInstances.forEach((mi) => {
+            const node = mi.node;
+            if (!node) return;
+
+            const meshAabb = mi.mesh?.aabb;
+            if (meshAabb) {
+                // More accurate than world AABB: test in mesh local space (OBB in world).
+                invWorld.copy(node.getWorldTransform()).invert();
+                invWorld.transformPoint(worldPoint, localPoint);
+
+                const min = meshAabb.getMin();
+                const max = meshAabb.getMax();
+                const cx = math.clamp(localPoint.x, min.x, max.x);
+                const cy = math.clamp(localPoint.y, min.y, max.y);
+                const cz = math.clamp(localPoint.z, min.z, max.z);
+                const dx = localPoint.x - cx;
+                const dy = localPoint.y - cy;
+                const dz = localPoint.z - cz;
+                const distanceSq = dx * dx + dy * dy + dz * dz;
+
+                const he = meshAabb.halfExtents;
+                const volume = (he.x * 2) * (he.y * 2) * (he.z * 2);
+                const dcx = cameraPos.x - mi.aabb.center.x;
+                const dcy = cameraPos.y - mi.aabb.center.y;
+                const dcz = cameraPos.z - mi.aabb.center.z;
+                const depthSq = dcx * dcx + dcy * dcy + dcz * dcz;
+
+                const betterDistance = distanceSq < bestDistanceSq - 1e-8;
+                const equalDistance = Math.abs(distanceSq - bestDistanceSq) <= 1e-8;
+                // For overlapping objects, prefer the one closer to camera.
+                const betterDepth = equalDistance && depthSq < bestDepthSq - 1e-8;
+                const equalDepth = equalDistance && Math.abs(depthSq - bestDepthSq) <= 1e-8;
+                const betterVolume = equalDepth && volume < bestVolume;
+
+                if (betterDistance || betterDepth || betterVolume) {
+                    bestDistanceSq = distanceSq;
+                    bestVolume = volume;
+                    bestDepthSq = depthSq;
+                    bestNode = node;
+                }
+                return;
+            }
+
+            // Fallback for instances without local mesh bounds.
+            const aabb = mi.aabb;
+            if (!aabb) return;
+            const min = aabb.getMin();
+            const max = aabb.getMax();
+            const cx = math.clamp(worldPoint.x, min.x, max.x);
+            const cy = math.clamp(worldPoint.y, min.y, max.y);
+            const cz = math.clamp(worldPoint.z, min.z, max.z);
+            const dx = worldPoint.x - cx;
+            const dy = worldPoint.y - cy;
+            const dz = worldPoint.z - cz;
+            const distanceSq = dx * dx + dy * dy + dz * dz;
+            const dcx = cameraPos.x - aabb.center.x;
+            const dcy = cameraPos.y - aabb.center.y;
+            const dcz = cameraPos.z - aabb.center.z;
+            const depthSq = dcx * dcx + dcy * dcy + dcz * dcz;
+
+            if (distanceSq < bestDistanceSq || (Math.abs(distanceSq - bestDistanceSq) <= 1e-8 && depthSq < bestDepthSq)) {
+                bestDistanceSq = distanceSq;
+                bestDepthSq = depthSq;
+                bestNode = node;
+            }
+        });
+
+        if (bestNode) {
+            this.setSelectedNode(bestNode.path);
+        }
+    }
+
+    private async _pickAndSelectAt(x: number, y: number) {
+        const p = await this.picker.pick(x, y);
+        if (!p) return;
+        this._selectNodeAtPoint(p);
     }
 
     clearMeasurement() {
@@ -927,6 +1129,13 @@ class Viewer {
             'debug.axes': this.setDebugAxes.bind(this),
             'debug.grid': this.setDebugGrid.bind(this),
             'debug.normals': this.setNormalLength.bind(this),
+            'debug.withTextureOnly': () => {
+                if (!this.observer.get('debug.withTextureOnly')) {
+                    this.stopSelectionFlash();
+                }
+                this.dirtySelectionHighlight = true;
+                this.renderNextFrame();
+            },
             'debug.renderMode': this.setRenderMode.bind(this),
 
             // animation
@@ -1238,7 +1447,9 @@ class Viewer {
         this.assets = [];
 
         this.meshInstances = [];
+        this.stopSelectionFlash();
         this.resetWireframeMeshes();
+        this.resetSelectionHighlightMeshes();
         this.clearMeasurement();
 
         // reset animation state
@@ -1246,7 +1457,55 @@ class Viewer {
         this.animationMap = {};
 
         this.observer.set('scene.materialChannelsWithTextures', '[]');
-        this.observer.set('scene.materialChannelPreviews', '{}');
+        this.observer.set('scene.materialChannelFilenames', '{}');
+        this.observer.set('scene.selectedMaterialNames', '[]');
+    }
+
+    private updateMaterialChannelInfo() {
+        const channelsWithTextures = new Set<string>();
+        const channelFilenames: Record<string, string> = {};
+        const materialNames = new Set<string>();
+
+        const getTextureFilename = (tex: any): string | undefined => {
+            if (!tex) return undefined;
+            const texAssets = this.app.assets.filter((a: Asset) => a.type === 'texture');
+            const texAsset = texAssets.find((a: Asset) => a.resource === tex);
+            const file = texAsset?.file as { filename?: string } | undefined;
+            return file?.filename;
+        };
+
+        const collectFromMaterial = (mat: any) => {
+            if (!mat) return;
+            if (typeof mat.name === 'string' && mat.name.trim()) {
+                materialNames.add(mat.name.trim());
+            }
+            if (mat.diffuseMap) { channelsWithTextures.add('albedo'); if (!channelFilenames.albedo) channelFilenames.albedo = getTextureFilename(mat.diffuseMap) ?? ''; }
+            if (mat.metalnessMap) { channelsWithTextures.add('metalness'); if (!channelFilenames.metalness) channelFilenames.metalness = getTextureFilename(mat.metalnessMap) ?? ''; }
+            if (mat.glossMap) { channelsWithTextures.add('gloss'); if (!channelFilenames.gloss) channelFilenames.gloss = getTextureFilename(mat.glossMap) ?? ''; }
+            if (mat.normalMap) { channelsWithTextures.add('world_normal'); if (!channelFilenames.world_normal) channelFilenames.world_normal = getTextureFilename(mat.normalMap) ?? ''; }
+            if (mat.specularMap) { channelsWithTextures.add('specularity'); if (!channelFilenames.specularity) channelFilenames.specularity = getTextureFilename(mat.specularMap) ?? ''; }
+            if (mat.emissiveMap) { channelsWithTextures.add('emission'); if (!channelFilenames.emission) channelFilenames.emission = getTextureFilename(mat.emissiveMap) ?? ''; }
+            if (mat.aoMap) { channelsWithTextures.add('ao'); if (!channelFilenames.ao) channelFilenames.ao = getTextureFilename(mat.aoMap) ?? ''; }
+            if (mat.opacityMap) { channelsWithTextures.add('opacity'); if (!channelFilenames.opacity) channelFilenames.opacity = getTextureFilename(mat.opacityMap) ?? ''; }
+        };
+
+        if (this.selectedNode) {
+            const selectedEntity = this.selectedNode as Entity;
+            selectedEntity.findComponents('render').forEach((renderComponent: any) => {
+                const meshes = renderComponent?.meshInstances ?? [];
+                meshes.forEach((mi: MeshInstance) => collectFromMaterial(mi.material));
+            });
+        } else {
+            this.assets.forEach((asset) => {
+                if (asset.type === 'gsplat') return;
+                const resource = asset.resource as any;
+                (resource.materials ?? []).forEach((matAsset: Asset) => collectFromMaterial(matAsset?.resource));
+            });
+        }
+
+        this.observer.set('scene.materialChannelsWithTextures', JSON.stringify([...channelsWithTextures]));
+        this.observer.set('scene.materialChannelFilenames', JSON.stringify(channelFilenames));
+        this.observer.set('scene.selectedMaterialNames', JSON.stringify([...materialNames]));
     }
 
     updateSceneStats() {
@@ -1318,88 +1577,7 @@ class Viewer {
             }
         });
 
-        // collect which material channels have texture maps (for "hide empty channels" option)
-        const channelsWithTextures = new Set<string>();
-        this.assets.forEach((asset) => {
-            if (asset.type === 'gsplat') return;
-            const resource = asset.resource as any;
-            (resource.materials ?? []).forEach((matAsset: Asset) => {
-                const mat = matAsset?.resource as any;
-                if (!mat) return;
-                if (mat.diffuseMap) channelsWithTextures.add('albedo');
-                if (mat.metalnessMap) channelsWithTextures.add('metalness');
-                if (mat.glossMap) channelsWithTextures.add('gloss');
-                if (mat.normalMap) channelsWithTextures.add('world_normal');
-                if (mat.specularMap) channelsWithTextures.add('specularity');
-                if (mat.emissiveMap) channelsWithTextures.add('emission');
-                if (mat.aoMap) channelsWithTextures.add('ao');
-                if (mat.opacityMap) channelsWithTextures.add('opacity');
-            });
-        });
-        channelsWithTextures.add('lighting'); // lighting is computed, always show
-        this.observer.set('scene.materialChannelsWithTextures', JSON.stringify([...channelsWithTextures]));
-
-        // collect channel previews (texture thumbnails or value/color)
-        const channelPreviews: Record<string, { type: string; src?: string; value?: number; r?: number; g?: number; b?: number }> = {};
-        const getTextureSrc = (tex: any): string | null => {
-            if (!tex || typeof tex.getSource !== 'function') return null;
-            try {
-                const src = tex.getSource();
-                if (!src) return null;
-                if (src.src) return src.src;
-                if (src instanceof HTMLCanvasElement) return src.toDataURL();
-                return null;
-            } catch {
-                return null;
-            }
-        };
-        this.assets.forEach((asset) => {
-            if (asset.type === 'gsplat') return;
-            const resource = asset.resource as any;
-            (resource.materials ?? []).forEach((matAsset: Asset) => {
-                const mat = matAsset?.resource as any;
-                if (!mat) return;
-                if (!channelPreviews.albedo) {
-                    const src = getTextureSrc(mat.diffuseMap);
-                    if (src) channelPreviews.albedo = { type: 'texture', src };
-                    else if (mat.diffuse) channelPreviews.albedo = { type: 'color', r: mat.diffuse.r, g: mat.diffuse.g, b: mat.diffuse.b };
-                }
-                if (!channelPreviews.metalness) {
-                    const src = getTextureSrc(mat.metalnessMap);
-                    if (src) channelPreviews.metalness = { type: 'texture', src };
-                    else if (typeof mat.metalness === 'number') channelPreviews.metalness = { type: 'value', value: mat.metalness };
-                }
-                if (!channelPreviews.gloss) {
-                    const src = getTextureSrc(mat.glossMap);
-                    if (src) channelPreviews.gloss = { type: 'texture', src };
-                    else if (typeof mat.gloss === 'number') channelPreviews.gloss = { type: 'value', value: mat.gloss };
-                }
-                if (!channelPreviews.world_normal && mat.normalMap) {
-                    const src = getTextureSrc(mat.normalMap);
-                    if (src) channelPreviews.world_normal = { type: 'texture', src };
-                }
-                if (!channelPreviews.specularity) {
-                    const src = getTextureSrc(mat.specularMap);
-                    if (src) channelPreviews.specularity = { type: 'texture', src };
-                    else if (mat.specular) channelPreviews.specularity = { type: 'color', r: mat.specular.r, g: mat.specular.g, b: mat.specular.b };
-                }
-                if (!channelPreviews.emission) {
-                    const src = getTextureSrc(mat.emissiveMap);
-                    if (src) channelPreviews.emission = { type: 'texture', src };
-                    else if (mat.emissive) channelPreviews.emission = { type: 'color', r: mat.emissive.r, g: mat.emissive.g, b: mat.emissive.b };
-                }
-                if (!channelPreviews.ao && mat.aoMap) {
-                    const src = getTextureSrc(mat.aoMap);
-                    if (src) channelPreviews.ao = { type: 'texture', src };
-                }
-                if (!channelPreviews.opacity) {
-                    const src = getTextureSrc(mat.opacityMap);
-                    if (src) channelPreviews.opacity = { type: 'texture', src };
-                    else if (typeof mat.opacity === 'number') channelPreviews.opacity = { type: 'value', value: mat.opacity };
-                }
-            });
-        });
-        this.observer.set('scene.materialChannelPreviews', JSON.stringify(channelPreviews));
+        this.updateMaterialChannelInfo();
 
         const mapChildren = function (node: GraphNode): Array<HierarchyNode> {
             return node.children.map((child: GraphNode) => ({
@@ -2317,7 +2495,10 @@ class Viewer {
         }
 
         this.selectedNode = graphNode;
+        this.startSelectionFlash();
+        this.updateMaterialChannelInfo();
         this.dirtyWireframe = true;
+        this.dirtySelectionHighlight = true;
         this.dirtyBounds = true;
         this.dirtySkeleton = true;
         this.renderNextFrame();
@@ -2760,6 +2941,7 @@ class Viewer {
         });
 
         // dirty everything
+        this.dirtySelectionHighlight = true;
         this.dirtyWireframe = this.dirtyBounds = this.dirtySkeleton = this.dirtyGrid = this.dirtyNormals = true;
 
         this.renderNextFrame();
@@ -2894,6 +3076,50 @@ class Viewer {
         this.wireframeMeshInstances = [];
     }
 
+    private resetSelectionHighlightMeshes() {
+        this.app.scene.layers.getLayerByName('World').removeMeshInstances(this.selectionHighlightMeshInstances);
+        this.selectionHighlightMeshInstances.forEach((mi) => {
+            mi.clearShaders();
+        });
+        this.selectionHighlightMeshInstances = [];
+    }
+
+    private stopSelectionFlash() {
+        this.selectionFlashStartMs = 0;
+        if (this.selectionFlashRaf !== null) {
+            cancelAnimationFrame(this.selectionFlashRaf);
+            this.selectionFlashRaf = null;
+        }
+        this.selectionHighlightMaterial.setParameter('uColor', [0.224, 1.0, 0.078, 0]);
+        this.selectionHighlightMaterial.update();
+        this.resetSelectionHighlightMeshes();
+    }
+
+    private startSelectionFlash() {
+        this.stopSelectionFlash();
+
+        if (!this.selectedNode || !this.observer.get('debug.withTextureOnly')) return;
+
+        this.selectionFlashStartMs = performance.now();
+        this.selectionHighlightMaterial.setParameter('uColor', [0.224, 1.0, 0.078, 1]);
+        this.selectionHighlightMaterial.update();
+        this.dirtySelectionHighlight = true;
+
+        const tick = () => {
+            if (!this.selectionFlashStartMs) return;
+            const elapsed = performance.now() - this.selectionFlashStartMs;
+            this.renderNextFrame();
+            if (elapsed < this.selectionFlashDurationMs) {
+                this.selectionFlashRaf = requestAnimationFrame(tick);
+            } else {
+                this.stopSelectionFlash();
+                this.renderNextFrame();
+            }
+        };
+
+        this.selectionFlashRaf = requestAnimationFrame(tick);
+    }
+
     private buildWireframeMeshes() {
         this.wireframeMeshInstances = this.getSelectedMeshInstances().map((mi) => {
             const meshInstance = new MeshInstance(mi.mesh, this.wireframeMaterial, mi.node);
@@ -2904,6 +3130,20 @@ class Viewer {
         });
 
         this.app.scene.layers.getLayerByName('World').addMeshInstances(this.wireframeMeshInstances);
+    }
+
+    private buildSelectionHighlightMeshes() {
+        if (!this.selectedNode || !this.observer.get('debug.withTextureOnly')) return;
+
+        const selectedMeshes = this.collectMeshInstances(this.selectedNode as Entity);
+        this.selectionHighlightMeshInstances = selectedMeshes.map((mi) => {
+            const meshInstance = new MeshInstance(mi.mesh, this.selectionHighlightMaterial, mi.node);
+            meshInstance.renderStyle = PRIMITIVE_LINES;
+            meshInstance.skinInstance = mi.skinInstance;
+            meshInstance.morphInstance = mi.morphInstance;
+            return meshInstance;
+        });
+        this.app.scene.layers.getLayerByName('World').addMeshInstances(this.selectionHighlightMeshInstances);
     }
 
     private onFrameRender() {
@@ -2926,6 +3166,19 @@ class Viewer {
     private onPrerender() {
         if (this.firstFrame) {
             return;
+        }
+
+        // selected-object highlight (green contour only)
+        if (this.dirtySelectionHighlight) {
+            this.dirtySelectionHighlight = false;
+            this.resetSelectionHighlightMeshes();
+            this.buildSelectionHighlightMeshes();
+        }
+        if (this.selectionFlashStartMs > 0 && this.selectionHighlightMeshInstances.length > 0) {
+            const elapsed = performance.now() - this.selectionFlashStartMs;
+            const fade = math.clamp(1 - (elapsed / this.selectionFlashDurationMs), 0, 1);
+            this.selectionHighlightMaterial.setParameter('uColor', [0.224, 1.0, 0.078, fade]);
+            this.selectionHighlightMaterial.update();
         }
 
         // wireframe

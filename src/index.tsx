@@ -101,7 +101,6 @@ const observerData: ObserverData = {
     },
     debug: {
         renderMode: 'default',
-        hideEmptyChannels: false,
         stats: false,
         wireframe: false,
         wireframeColor: { r: 0, g: 0, b: 0 },
@@ -109,7 +108,8 @@ const observerData: ObserverData = {
         skeleton: false,
         axes: false,
         grid: false,
-        normals: 0
+        normals: 0,
+        withTextureOnly: false
     },
     animation: {
         playing: false,
@@ -153,7 +153,8 @@ const observerData: ObserverData = {
         meshVRAM: null,
         bounds: null,
         materialChannelsWithTextures: '[]',
-        materialChannelPreviews: '{}',
+        materialChannelFilenames: '{}',
+        selectedMaterialNames: '[]',
         variant: {
             selected: 0
         },

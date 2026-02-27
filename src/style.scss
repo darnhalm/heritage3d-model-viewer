@@ -37,8 +37,22 @@
     background-color: #88bce8 !important;
 }
 .pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-boolean-input-ticked:hover::after,
-.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-boolean-input-ticked:focus::after {
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-boolean-input-ticked:focus::after,
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-boolean-input-ticked.pcui-focus::after {
     background-color: #88bce8 !important;
+}
+
+/* Keep toggle focus/hover consistent with other controls (no orange accent) */
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly):hover,
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly):focus,
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-focus {
+    box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+}
+
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly):hover::after,
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly):focus::after,
+.pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-focus::after {
+    background-color: #ffffff !important;
 }
 
 html {
@@ -344,8 +358,26 @@ body:not(.ui-ready) #panel-left {
 }
 
 .materials-layer-item-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     flex: 1;
     min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.materials-layer-item-filename {
+    display: inline-block;
+    min-width: 0;
+    max-width: 60%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.8em;
+    opacity: 0.7;
+    font-weight: normal;
 }
 
 .materials-layer-channel-preview {
