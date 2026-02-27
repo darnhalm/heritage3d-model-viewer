@@ -109,6 +109,7 @@ const observerData: ObserverData = {
         axes: false,
         grid: false,
         normals: 0,
+        uvCheckerScale: 16,
         withTextureOnly: false
     },
     animation: {

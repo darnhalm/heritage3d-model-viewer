@@ -80,7 +80,7 @@ export interface ObserverData {
         heightOffset: number
     },
     debug: {
-        renderMode: 'default' | 'albedo' | 'opacity' | 'worldNormal' | 'specularity' | 'gloss' | 'metalness' | 'ao' | 'emission' | 'lighting' | 'uv0',
+        renderMode: 'default' | 'albedo' | 'opacity' | 'worldNormal' | 'specularity' | 'gloss' | 'metalness' | 'ao' | 'emission' | 'lighting' | 'uv0' | 'uv_checker',
         stats: boolean,
         wireframe: boolean,
         wireframeColor: {
@@ -93,6 +93,7 @@ export interface ObserverData {
         axes: boolean,
         grid: boolean,
         normals: number,
+        uvCheckerScale: number,
         withTextureOnly: boolean
     },
     animation: {

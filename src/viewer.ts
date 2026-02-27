@@ -63,6 +63,7 @@ import {
     RenderComponent,
     RenderTarget,
     SEMANTIC_POSITION,
+    SEMANTIC_TEXCOORD0,
     ShaderMaterial,
     StandardMaterial,
     Texture,
@@ -163,6 +164,63 @@ fn fragmentMain(input: FragmentInput) -> FragmentOutput {
 }
 `;
 
+const uvCheckerVertexGLSL = /* glsl */ `
+attribute vec3 vertex_position;
+attribute vec2 vertex_texCoord0;
+uniform mat4 matrix_model;
+uniform mat4 matrix_viewProjection;
+varying vec2 vUv0;
+void main(void) {
+    vUv0 = vertex_texCoord0;
+    gl_Position = matrix_viewProjection * matrix_model * vec4(vertex_position, 1.0);
+}
+`;
+
+const uvCheckerFragmentGLSL = /* glsl */ `
+precision highp float;
+varying vec2 vUv0;
+uniform float uScale;
+void main(void) {
+    vec2 uv = fract(vUv0 * uScale);
+    float c = step(0.5, uv.x) + step(0.5, uv.y);
+    float checker = mod(c, 2.0);
+    vec3 dark = vec3(0.12, 0.12, 0.12);
+    vec3 light = vec3(0.92, 0.92, 0.92);
+    gl_FragColor = vec4(mix(light, dark, checker), 1.0);
+}
+`;
+
+const uvCheckerVertexWGSL = /* wgsl */ `
+attribute vertex_position: vec3f;
+attribute vertex_texCoord0: vec2f;
+uniform matrix_model: mat4x4f;
+uniform matrix_viewProjection: mat4x4f;
+varying vUv0: vec2f;
+@vertex
+fn vertexMain(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.vUv0 = input.vertex_texCoord0;
+    output.position = uniform.matrix_viewProjection * uniform.matrix_model * vec4(input.vertex_position, 1.0);
+    return output;
+}
+`;
+
+const uvCheckerFragmentWGSL = /* wgsl */ `
+varying vUv0: vec2f;
+uniform uScale: f32;
+@fragment
+fn fragmentMain(input: FragmentInput) -> FragmentOutput {
+    var output: FragmentOutput;
+    let uv = fract(input.vUv0 * uniform.uScale);
+    let c = select(0.0, 1.0, uv.x >= 0.5) + select(0.0, 1.0, uv.y >= 0.5);
+    let checker = c - 2.0 * floor(c * 0.5);
+    let dark = vec3f(0.12, 0.12, 0.12);
+    let light = vec3f(0.92, 0.92, 0.92);
+    output.color = vec4f(mix(light, dark, checker), 1.0);
+    return output;
+}
+`;
+
 class Viewer {
     canvas: HTMLCanvasElement;
 
@@ -203,6 +261,14 @@ class Viewer {
     selectionHighlightMeshInstances: Array<MeshInstance>;
 
     selectionHighlightMaterial: ShaderMaterial;
+
+    uvCheckerMeshInstances: Array<MeshInstance>;
+
+    uvCheckerMaterial: ShaderMaterial;
+
+    uvCheckerEnabled = false;
+
+    uvCheckerOriginalVisibility = new Map<number, boolean>();
 
 
     animTracks: Array<AnimTrack>;
@@ -469,6 +535,7 @@ class Viewer {
         this.meshInstances = [];
         this.wireframeMeshInstances = [];
         this.selectionHighlightMeshInstances = [];
+        this.uvCheckerMeshInstances = [];
 
         const material = new StandardMaterial();
         material.blendState = new BlendState(
@@ -506,6 +573,23 @@ class Viewer {
         selectionMat.depthState.write = false;
         selectionMat.update();
         this.selectionHighlightMaterial = selectionMat;
+
+        const uvCheckerShaderArgs = {
+            uniqueName: 'uv-checker-overlay',
+            attributes: {
+                vertex_position: SEMANTIC_POSITION,
+                vertex_texCoord0: SEMANTIC_TEXCOORD0
+            },
+            vertexGLSL: uvCheckerVertexGLSL,
+            fragmentGLSL: uvCheckerFragmentGLSL,
+            vertexWGSL: uvCheckerVertexWGSL,
+            fragmentWGSL: uvCheckerFragmentWGSL
+        };
+        const uvCheckerMat = new ShaderMaterial(uvCheckerShaderArgs);
+        const uvCheckerScale = Number(observer.get('debug.uvCheckerScale') ?? 16);
+        uvCheckerMat.setParameter('uScale', Math.max(1, Math.min(64, uvCheckerScale)));
+        uvCheckerMat.update();
+        this.uvCheckerMaterial = uvCheckerMat;
 
         this.animTracks = [];
         this.animationMap = {};
@@ -1129,6 +1213,7 @@ class Viewer {
             'debug.axes': this.setDebugAxes.bind(this),
             'debug.grid': this.setDebugGrid.bind(this),
             'debug.normals': this.setNormalLength.bind(this),
+            'debug.uvCheckerScale': this.setUvCheckerScale.bind(this),
             'debug.withTextureOnly': () => {
                 if (!this.observer.get('debug.withTextureOnly')) {
                     this.stopSelectionFlash();
@@ -1450,6 +1535,9 @@ class Viewer {
         this.stopSelectionFlash();
         this.resetWireframeMeshes();
         this.resetSelectionHighlightMeshes();
+        this.resetUvCheckerMeshes();
+        this.uvCheckerOriginalVisibility.clear();
+        this.uvCheckerEnabled = false;
         this.clearMeasurement();
 
         // reset animation state
@@ -2621,13 +2709,32 @@ class Viewer {
         this.renderNextFrame();
     }
 
+    setUvCheckerScale(scale: number) {
+        const clamped = Math.max(1, Math.min(64, Number(scale) || 16));
+        this.uvCheckerMaterial.setParameter('uScale', clamped);
+        this.uvCheckerMaterial.update();
+        this.renderNextFrame();
+    }
+
     setFov(fov: number) {
         this.camera.camera.fov = fov;
         this.renderNextFrame();
     }
 
     setRenderMode(renderMode: string) {
-        this.camera.camera.setShaderPass(renderMode !== 'default' ? `debug_${renderMode}` : 'forward');
+        const enableUvChecker = renderMode === 'uv_checker';
+        if (enableUvChecker !== this.uvCheckerEnabled) {
+            this.uvCheckerEnabled = enableUvChecker;
+            if (enableUvChecker) {
+                this.setUvCheckerBaseVisibility(true);
+                this.buildUvCheckerMeshes();
+            } else {
+                this.resetUvCheckerMeshes();
+                this.setUvCheckerBaseVisibility(false);
+            }
+        }
+
+        this.camera.camera.setShaderPass((renderMode !== 'default' && renderMode !== 'uv_checker') ? `debug_${renderMode}` : 'forward');
         this.renderNextFrame();
     }
 
@@ -2874,6 +2981,13 @@ class Viewer {
         })
         .flat();
 
+        if (this.observer.get('debug.renderMode') === 'uv_checker') {
+            this.uvCheckerEnabled = true;
+            this.setUvCheckerBaseVisibility(true);
+            this.resetUvCheckerMeshes();
+            this.buildUvCheckerMeshes();
+        }
+
         // if no meshes are currently loaded, then enable skeleton rendering so user can see something
         if (this.meshInstances.length === 0) {
             this.observer.set('debug.skeleton', true);
@@ -3074,6 +3188,43 @@ class Viewer {
             mi.clearShaders();
         });
         this.wireframeMeshInstances = [];
+    }
+
+    private resetUvCheckerMeshes() {
+        this.app.scene.layers.getLayerByName('World').removeMeshInstances(this.uvCheckerMeshInstances);
+        this.uvCheckerMeshInstances.forEach((mi) => {
+            mi.clearShaders();
+        });
+        this.uvCheckerMeshInstances = [];
+    }
+
+    private buildUvCheckerMeshes() {
+        this.uvCheckerMeshInstances = this.meshInstances.map((mi) => {
+            const meshInstance = new MeshInstance(mi.mesh, this.uvCheckerMaterial, mi.node);
+            meshInstance.skinInstance = mi.skinInstance;
+            meshInstance.morphInstance = mi.morphInstance;
+            return meshInstance;
+        });
+
+        this.app.scene.layers.getLayerByName('World').addMeshInstances(this.uvCheckerMeshInstances);
+    }
+
+    private setUvCheckerBaseVisibility(enabled: boolean) {
+        if (enabled) {
+            this.uvCheckerOriginalVisibility.clear();
+            this.meshInstances.forEach((mi) => {
+                this.uvCheckerOriginalVisibility.set(mi.id, mi.visible);
+                mi.visible = false;
+            });
+            return;
+        }
+
+        this.meshInstances.forEach((mi) => {
+            if (this.uvCheckerOriginalVisibility.has(mi.id)) {
+                mi.visible = this.uvCheckerOriginalVisibility.get(mi.id) as boolean;
+            }
+        });
+        this.uvCheckerOriginalVisibility.clear();
     }
 
     private resetSelectionHighlightMeshes() {

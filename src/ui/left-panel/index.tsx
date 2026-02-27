@@ -383,7 +383,7 @@ const renderModeCategories = (
     return [
         { title: 'RENDER', items: [{ label: 'Final Render', value: 'default' }] },
         { title: 'MATERIAL CHANNELS', items: materialItems },
-        { title: 'UV', items: [{ label: 'UV Checker', value: 'uv0' }] }
+        { title: 'UV', items: [{ label: 'UV Colored', value: 'uv0' }, { label: 'UV Checker', value: 'uv_checker' }] }
     ];
 };
 
@@ -558,25 +558,29 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     value={observerData?.debug?.withTextureOnly ?? false}
                                                     setProperty={(value: boolean) => setProperty('debug.withTextureOnly', value)}
                                                 />
-                                                <Detail
-                                                    label={t('Material', lang)}
-                                                    value={selectedMaterialLabel}
-                                                />
-                                                <Select
-                                                    label={t('Variant', lang)}
-                                                    type='string'
-                                                    options={variantListOptions}
-                                                    value={observerData?.scene?.variant?.selected ?? ''}
-                                                    setProperty={(value: string) => setProperty('scene.variant.selected', value)}
-                                                    enabled={variantListOptions.length > 0}
-                                                />
+                                                {observerData?.debug?.withTextureOnly && (
+                                                    <>
+                                                        <Detail
+                                                            label={t('Material', lang)}
+                                                            value={selectedMaterialLabel}
+                                                        />
+                                                        <Select
+                                                            label={t('Variant', lang)}
+                                                            type='string'
+                                                            options={variantListOptions}
+                                                            value={observerData?.scene?.variant?.selected ?? ''}
+                                                            setProperty={(value: string) => setProperty('scene.variant.selected', value)}
+                                                            enabled={variantListOptions.length > 0}
+                                                        />
+                                                    </>
+                                                )}
                                             </>
                                         )}
                                         {cat.items.map((item) => (
                                             <button
                                                 key={item.value}
                                                 type='button'
-                                                className={'materials-layer-item' + (item.value === 'default' ? ' materials-layer-item-final-render' : '') + (item.value === 'albedo' ? ' materials-layer-item-base-color' : '') + (item.value === 'metalness' ? ' materials-layer-item-metalness' : '') + (item.value === 'gloss' ? ' materials-layer-item-roughness' : '') + (item.value === 'world_normal' ? ' materials-layer-item-normal' : '') + (item.value === 'specularity' ? ' materials-layer-item-specular' : '') + (item.value === 'emission' ? ' materials-layer-item-emissive' : '') + (item.value === 'lighting' ? ' materials-layer-item-lighting' : '') + (item.value === 'ao' ? ' materials-layer-item-ao' : '') + (item.value === 'opacity' ? ' materials-layer-item-opacity' : '') + (item.value === 'uv0' ? ' materials-layer-item-uv' : '') + (observerData?.debug?.renderMode === item.value ? ' selected' : '')}
+                                                className={'materials-layer-item' + (item.value === 'default' ? ' materials-layer-item-final-render' : '') + (item.value === 'albedo' ? ' materials-layer-item-base-color' : '') + (item.value === 'metalness' ? ' materials-layer-item-metalness' : '') + (item.value === 'gloss' ? ' materials-layer-item-roughness' : '') + (item.value === 'world_normal' ? ' materials-layer-item-normal' : '') + (item.value === 'specularity' ? ' materials-layer-item-specular' : '') + (item.value === 'emission' ? ' materials-layer-item-emissive' : '') + (item.value === 'lighting' ? ' materials-layer-item-lighting' : '') + (item.value === 'ao' ? ' materials-layer-item-ao' : '') + (item.value === 'opacity' ? ' materials-layer-item-opacity' : '') + ((item.value === 'uv0' || item.value === 'uv_checker') ? ' materials-layer-item-uv' : '') + (observerData?.debug?.renderMode === item.value ? ' selected' : '')}
                                                 onClick={() => setProperty('debug.renderMode', item.value)}
                                             >
                                                 <span className='materials-layer-item-label'>
@@ -585,6 +589,16 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 </span>
                                             </button>
                                         ))}
+                                        {cat.title === 'UV' && observerData?.debug?.renderMode === 'uv_checker' && (
+                                            <Slider
+                                                label={t('Checker Scale', lang)}
+                                                precision={0}
+                                                min={1}
+                                                max={64}
+                                                value={observerData?.debug?.uvCheckerScale ?? 16}
+                                                setProperty={(value: number) => setProperty('debug.uvCheckerScale', value)}
+                                            />
+                                        )}
                                     </div>
                                 ))}
                                 <div className='materials-layer-category'>
