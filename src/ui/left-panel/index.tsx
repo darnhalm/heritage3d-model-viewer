@@ -482,11 +482,13 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
 }
 
 class LeftPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
-    state: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null } = {
+    state: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number } = {
         tab: 'scene',
         poiSaved: false,
         draggingPoiId: null,
-        dragOverPoiId: null
+        dragOverPoiId: null,
+        dragX: 0,
+        dragY: 0
     };
 
     private collapseHandler: (() => void) | null = null;
@@ -494,7 +496,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private poiPointerMoveHandler: ((event: MouseEvent) => void) | null = null;
     private poiPointerUpHandler: ((event: MouseEvent) => void) | null = null;
 
-    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null }): boolean {
+    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number }): boolean {
         const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
@@ -502,7 +504,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             nextState.tab !== this.state.tab ||
             nextState.poiSaved !== this.state.poiSaved ||
             nextState.draggingPoiId !== this.state.draggingPoiId ||
-            nextState.dragOverPoiId !== this.state.dragOverPoiId;
+            nextState.dragOverPoiId !== this.state.dragOverPoiId ||
+            nextState.dragX !== this.state.dragX ||
+            nextState.dragY !== this.state.dragY;
     }
 
     componentDidMount(): void {
@@ -523,10 +527,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             if (!this.state.draggingPoiId) {
                 return;
             }
-            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-poi-id]') as HTMLElement | null;
-            const targetId = target?.dataset.poiId ?? null;
-            if (targetId !== this.state.dragOverPoiId) {
-                this.setState({ dragOverPoiId: targetId });
+            const targetId = this.getPoiDropTarget(event.clientY);
+            if (targetId !== this.state.dragOverPoiId || event.clientX !== this.state.dragX || event.clientY !== this.state.dragY) {
+                this.setState({ dragOverPoiId: targetId, dragX: event.clientX, dragY: event.clientY });
             }
         };
         this.poiPointerUpHandler = (event: MouseEvent) => {
@@ -534,12 +537,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                 return;
             }
             const sourceId = this.state.draggingPoiId;
-            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-poi-id]') as HTMLElement | null;
-            const targetId = target?.dataset.poiId ?? null;
+            const targetId = this.getPoiDropTarget(event.clientY);
             if (sourceId && targetId && sourceId !== targetId) {
                 (window as any).viewer?.reorderPoi?.(sourceId, targetId);
             }
-            this.setState({ draggingPoiId: null, dragOverPoiId: null });
+            this.setState({ draggingPoiId: null, dragOverPoiId: null, dragX: 0, dragY: 0 });
         };
         document.addEventListener('mousemove', this.poiPointerMoveHandler);
         document.addEventListener('mouseup', this.poiPointerUpHandler);
@@ -561,7 +563,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         }
     }
 
-    componentDidUpdate(_: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, prevState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null }) {
+    componentDidUpdate(_: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, prevState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number }) {
         if (prevState.tab === this.state.tab) {
             return;
         }
@@ -591,11 +593,38 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             return;
         }
         event.preventDefault();
-        this.setState({ draggingPoiId: id, dragOverPoiId: null });
+        this.setState({ draggingPoiId: id, dragOverPoiId: null, dragX: event.clientX, dragY: event.clientY });
     };
 
+    private getPoiDropTarget(clientY: number) {
+        if (!this.state.draggingPoiId) {
+            return null;
+        }
+
+        const items = Array.from(document.querySelectorAll('.poi-list-item[data-poi-id]')) as HTMLElement[];
+        let bestId: string | null = null;
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        items.forEach((item) => {
+            const poiId = item.dataset.poiId ?? null;
+            if (!poiId || poiId === this.state.draggingPoiId) {
+                return;
+            }
+
+            const rect = item.getBoundingClientRect();
+            const centerY = rect.top + rect.height / 2;
+            const distance = Math.abs(clientY - centerY);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestId = poiId;
+            }
+        });
+
+        return bestId;
+    }
+
     render() {
-        const { tab, draggingPoiId, dragOverPoiId } = this.state;
+        const { tab, draggingPoiId, dragOverPoiId, dragX, dragY } = this.state;
         const { observerData, setProperty } = this.props;
         const lang = observerData?.ui?.language;
         const texelDensityShortValue = (() => {
@@ -633,6 +662,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                 return [];
             }
         })();
+        const draggedPoi = poiList.find((poi: any) => String(poi.id) === draggingPoiId) ?? null;
+        const visiblePoiList = draggingPoiId ? poiList.filter((poi: any) => String(poi.id) !== draggingPoiId) : poiList;
 
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
@@ -861,14 +892,18 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {poiList.length === 0 && (
                                     <div className='materials-layer-inline-hint'>{t('No POIs yet.', lang)}</div>
                                 )}
-                                {poiList.map((poi: any) => (
-                                    <div
-                                        key={String(poi.id)}
-                                        className={`poi-list-item${draggingPoiId === String(poi.id) ? ' poi-list-item-dragging' : ''}${dragOverPoiId === String(poi.id) ? ' poi-list-item-drop-target' : ''}`}
-                                        data-poi-id={String(poi.id)}
-                                        onMouseDown={(event) => this.handlePoiPointerDown(String(poi.id), event)}
-                                    >
+                                {visiblePoiList.map((poi: any) => (
+                                    <React.Fragment key={String(poi.id)}>
+                                        {draggingPoiId && dragOverPoiId === String(poi.id) && <div className='poi-list-placeholder' />}
+                                        <div
+                                            className={`poi-list-item${dragOverPoiId === String(poi.id) ? ' poi-list-item-drop-target' : ''}`}
+                                            data-poi-id={String(poi.id)}
+                                        >
                                         <div className='poi-list-row'>
+                                            <div
+                                                className='poi-list-drag-handle'
+                                                onMouseDown={(event) => this.handlePoiPointerDown(String(poi.id), event)}
+                                            />
                                             <div
                                                 className='poi-list-badge'
                                                 style={{
@@ -897,9 +932,30 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 {t('Delete', lang)}
                                             </button>
                                         </div>
-                                    </div>
+                                        </div>
+                                    </React.Fragment>
                                 ))}
+                                {draggingPoiId && !dragOverPoiId && <div className='poi-list-placeholder' />}
                             </div>
+                            {draggedPoi && (
+                                <div
+                                    className='poi-drag-ghost'
+                                    style={{ transform: `translate(${dragX + 14}px, ${dragY + 14}px)` }}
+                                >
+                                    <div className='poi-list-row'>
+                                        <div className='poi-list-drag-handle' />
+                                        <div
+                                            className='poi-list-badge'
+                                            style={{
+                                                backgroundColor: draggedPoi.color || '#111111'
+                                            }}
+                                        >
+                                            {draggedPoi.number}
+                                        </div>
+                                        <div className='poi-drag-ghost-title'>{String(draggedPoi.title ?? `POI ${draggedPoi.number}`)}</div>
+                                    </div>
+                                </div>
+                            )}
                             <div id='poi-save-row'>
                                 <Button class='secondary' text={t('Save', lang)} onClick={this.handlePoiSave} />
                                 {this.state.poiSaved && <span className='metadata-saved-feedback'>✓ {t('Saved', lang)}</span>}
