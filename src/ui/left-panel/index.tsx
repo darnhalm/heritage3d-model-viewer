@@ -113,7 +113,7 @@ class MetadataPanel extends React.Component<{ observerData: ObserverData; setPro
             { v: 'municipal', t: t('Municipal', lang) }
         ];
         return (
-            <Panel headerText={t('Metadata (Dublin Core)', lang)} id='metadata-panel' flexShrink={'0'} collapsible={false}>
+            <Panel id='metadata-panel' flexShrink={'0'} collapsible={false}>
                 {DUBLIN_CORE_FIELDS.map(({ key, labelKey }) => (
                     <Container key={key} class={['panel-option', 'metadata-field']}>
                         <Label class='panel-label' text={t(labelKey, lang)} />
@@ -482,13 +482,14 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
 }
 
 class LeftPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
-    state: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number } = {
+    state: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null } = {
         tab: 'scene',
         poiSaved: false,
         draggingPoiId: null,
         dragOverPoiId: null,
         dragX: 0,
-        dragY: 0
+        dragY: 0,
+        activePoiCardId: null
     };
 
     private collapseHandler: (() => void) | null = null;
@@ -496,8 +497,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private poiPointerMoveHandler: ((event: MouseEvent) => void) | null = null;
     private poiPointerUpHandler: ((event: MouseEvent) => void) | null = null;
 
-    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
+    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) ||
@@ -506,7 +507,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             nextState.draggingPoiId !== this.state.draggingPoiId ||
             nextState.dragOverPoiId !== this.state.dragOverPoiId ||
             nextState.dragX !== this.state.dragX ||
-            nextState.dragY !== this.state.dragY;
+            nextState.dragY !== this.state.dragY ||
+            nextState.activePoiCardId !== this.state.activePoiCardId;
     }
 
     componentDidMount(): void {
@@ -563,7 +565,12 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         }
     }
 
-    componentDidUpdate(_: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, prevState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number }) {
+    componentDidUpdate(_: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, prevState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }) {
+        if (this.state.tab === 'materials' && this.props.observerData?.scene?.hasGsplat) {
+            this.setState({ tab: 'scene' });
+            return;
+        }
+
         if (prevState.tab === this.state.tab) {
             return;
         }
@@ -593,7 +600,15 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             return;
         }
         event.preventDefault();
-        this.setState({ draggingPoiId: id, dragOverPoiId: null, dragX: event.clientX, dragY: event.clientY });
+        this.props.setProperty('poi.activeId', id);
+        this.setState({ draggingPoiId: id, dragOverPoiId: null, dragX: event.clientX, dragY: event.clientY, activePoiCardId: id });
+    };
+
+    handlePoiCardClick = (id: string) => {
+        this.props.setProperty('poi.activeId', id);
+        if (this.state.activePoiCardId !== id) {
+            this.setState({ activePoiCardId: id });
+        }
     };
 
     private getPoiDropTarget(clientY: number) {
@@ -627,6 +642,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const { tab, draggingPoiId, dragOverPoiId, dragX, dragY } = this.state;
         const { observerData, setProperty } = this.props;
         const lang = observerData?.ui?.language;
+        const showMaterialsTab = !observerData?.scene?.hasGsplat;
+        const activePoiCardId = observerData?.poi?.activeId || this.state.activePoiCardId;
         const texelDensityShortValue = (() => {
             const summary = observerData?.scene?.texelDensitySummary || 'n/a';
             return summary.split('|')[0]?.trim() || summary;
@@ -675,13 +692,15 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     >
                         {t('Settings', lang)}
                     </button>
-                    <button
-                        type='button'
-                        className={`left-panel-tab left-panel-tab-materials${tab === 'materials' ? ' active' : ''}`}
-                        onClick={() => this.setState({ tab: 'materials' })}
-                    >
-                        {t('Materials', lang)}
-                    </button>
+                    {showMaterialsTab && (
+                        <button
+                            type='button'
+                            className={`left-panel-tab left-panel-tab-materials${tab === 'materials' ? ' active' : ''}`}
+                            onClick={() => this.setState({ tab: 'materials' })}
+                        >
+                            {t('Materials', lang)}
+                        </button>
+                    )}
                     <button
                         type='button'
                         className={`left-panel-tab left-panel-tab-poi${tab === 'poi' ? ' active' : ''}${observerData?.poi?.enabled ? ' tool-active' : ''}`}
@@ -702,8 +721,12 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     {tab === 'scene' && (
                         <>
                             <CameraPanel observerData={observerData} setProperty={setProperty} />
-                            <SkyboxPanel observerData={observerData} setProperty={setProperty} />
-                            <LightPanel observerData={observerData} setProperty={setProperty} />
+                            {!observerData?.scene?.hasGsplat && (
+                                <>
+                                    <SkyboxPanel observerData={observerData} setProperty={setProperty} />
+                                    <LightPanel observerData={observerData} setProperty={setProperty} />
+                                </>
+                            )}
                             <SettingsPanel observerData={observerData} setProperty={setProperty} />
                             <div id='export-settings-row'>
                                 <Button
@@ -714,8 +737,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             </div>
                         </>
                     )}
-                    {tab === 'materials' && (
-                        <Panel headerText={t('Materials', lang)} id='materials-panel' flexShrink={'0'} collapsible={false}>
+                    {showMaterialsTab && tab === 'materials' && (
+                        <Panel id='materials-panel' flexShrink={'0'} collapsible={false}>
                             <div className='materials-layer-list'>
                                 {renderModeCategories(
                                     new Set(JSON.parse(observerData?.scene?.materialChannelsWithTextures ?? '[]')),
@@ -886,7 +909,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                         </Panel>
                     )}
                     {tab === 'poi' && (
-                        <Panel headerText={t('POI', lang)} id='poi-panel' flexShrink={'0'} collapsible={false}>
+                        <Panel id='poi-panel' flexShrink={'0'} collapsible={false}>
                             <div className='materials-layer-inline-hint'>{t('Click on the model surface to place a POI.', lang)}</div>
                             <div className='poi-list'>
                                 {poiList.length === 0 && (
@@ -896,8 +919,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                     <React.Fragment key={String(poi.id)}>
                                         {draggingPoiId && dragOverPoiId === String(poi.id) && <div className='poi-list-placeholder' />}
                                         <div
-                                            className={`poi-list-item${dragOverPoiId === String(poi.id) ? ' poi-list-item-drop-target' : ''}`}
+                                            className={`poi-list-item${dragOverPoiId === String(poi.id) ? ' poi-list-item-drop-target' : ''}${activePoiCardId === String(poi.id) ? ' poi-list-item-active' : ''}`}
                                             data-poi-id={String(poi.id)}
+                                            onClick={() => this.handlePoiCardClick(String(poi.id))}
                                         >
                                         <div className='poi-list-row'>
                                             <div
@@ -923,13 +947,34 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             value={hexToArr(poi.color)}
                                             setProperty={(value: number[]) => (window as any).viewer?.updatePoiColor?.(String(poi.id), arrToHex(value))}
                                         />
+                                        <div className='poi-list-actions poi-list-actions-secondary'>
+                                            <button
+                                                type='button'
+                                                className={`poi-list-secondary-button${poi.camera ? ' is-saved' : ''}`}
+                                                onClick={() => (window as any).viewer?.capturePoiCameraView?.(String(poi.id))}
+                                            >
+                                                <img src='static/icons/poi-capture-view.svg' alt='' className='poi-list-secondary-button-icon' />
+                                                {t(poi.camera ? 'Retake View' : 'Capture View', lang)}
+                                            </button>
+                                            {poi.camera ? (
+                                                <button
+                                                    type='button'
+                                                    className='poi-list-secondary-button poi-list-secondary-button-delete-view'
+                                                    onClick={() => (window as any).viewer?.clearPoiCameraView?.(String(poi.id))}
+                                                >
+                                                    <img src='static/icons/poi-delete-view.svg' alt='' className='poi-list-secondary-button-icon' />
+                                                    {t('Delete View', lang)}
+                                                </button>
+                                            ) : null}
+                                        </div>
                                         <div className='poi-list-actions'>
                                             <button
                                                 type='button'
                                                 className='poi-list-delete'
+                                                title={t('Delete', lang)}
                                                 onClick={() => (window as any).viewer?.removePoi?.(String(poi.id))}
                                             >
-                                                {t('Delete', lang)}
+                                                <img src='static/icons/poi-delete.svg' alt='' className='poi-list-delete-icon' />
                                             </button>
                                         </div>
                                         </div>

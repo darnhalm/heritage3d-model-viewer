@@ -475,6 +475,14 @@ body:not(.ui-ready) #panel-left {
     transition: opacity 120ms ease, box-shadow 120ms ease, outline-color 120ms ease;
 }
 
+.poi-list-item:focus-within {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+}
+
+.poi-list-item.poi-list-item-active {
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
+}
+
 .poi-list-item.poi-list-item-dragging {
     opacity: 0.45;
 }
@@ -541,13 +549,59 @@ body:not(.ui-ready) #panel-left {
     justify-content: flex-end;
 }
 
-.poi-list-delete {
+.poi-list-actions.poi-list-actions-secondary {
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.poi-list-secondary-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     border: none;
     background: rgba(255, 255, 255, 0.08);
     color: #ddd;
     border-radius: 6px;
     padding: 6px 8px;
     cursor: pointer;
+}
+
+.poi-list-secondary-button-delete-view {
+    margin-left: auto;
+}
+
+.poi-list-secondary-button.is-saved {
+    background: rgba(34, 163, 98, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(142, 255, 198, 0.5);
+    color: #dff7e8;
+}
+
+.poi-list-secondary-button-icon {
+    width: 14px;
+    height: 14px;
+    display: block;
+    flex: 0 0 14px;
+}
+
+.poi-list-delete {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    color: #ddd;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    cursor: pointer;
+}
+
+.poi-list-delete-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
 }
 
 .poi-drag-ghost {
@@ -677,6 +731,33 @@ body:not(.ui-ready) #panel-left {
     inset: 0;
     pointer-events: none;
     overflow: hidden;
+}
+
+.capture-flash {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    background: rgba(255, 255, 255, 0.2);
+    z-index: 25;
+}
+
+.capture-flash.active {
+    animation: capture-flash 220ms ease-out 1;
+}
+
+@keyframes capture-flash {
+    0% {
+        opacity: 0;
+    }
+
+    35% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
 }
 
 .measure-overlay {

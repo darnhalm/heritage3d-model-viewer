@@ -2,6 +2,7 @@ import { Observer } from '@playcanvas/observer';
 import { MeshInstance, Vec3 } from 'playcanvas';
 
 import { CachedMeshGeometry, intersectMeshTrianglesDetailed } from './mesh-raycast';
+import { Picker } from '../../picker';
 
 const POI_CLICK_DRAG_THRESHOLD = 5;
 const POI_MARKER_HIT_RADIUS = 18;
@@ -11,6 +12,11 @@ type PoiEntry = {
     number: number;
     title?: string;
     color?: string;
+    camera?: {
+        position: [number, number, number];
+        focus: [number, number, number];
+        fov?: number;
+    };
     position: [number, number, number];
     normal: [number, number, number];
 };
@@ -18,8 +24,11 @@ type PoiEntry = {
 type PoiControllerArgs = {
     canvas: HTMLCanvasElement;
     observer: Observer;
+    picker: Picker;
     getMeshInstances: () => Array<MeshInstance>;
     getPickRay: (x: number, y: number) => { origin: Vec3; direction: Vec3 };
+    getCameraView: () => { position: [number, number, number]; focus: [number, number, number]; fov?: number } | null;
+    applyCameraView: (view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }) => void;
     renderNextFrame: () => void;
 };
 
@@ -28,9 +37,15 @@ class PoiController {
 
     private observer: Observer;
 
+    private picker: Picker;
+
     private getMeshInstances: () => Array<MeshInstance>;
 
     private getPickRay: (x: number, y: number) => { origin: Vec3; direction: Vec3 };
+
+    private getCameraView: () => { position: [number, number, number]; focus: [number, number, number]; fov?: number } | null;
+
+    private applyCameraView: (view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }) => void;
 
     private renderNextFrame: () => void;
 
@@ -56,11 +71,16 @@ class PoiController {
 
     private pulseUntil = 0;
 
+    private pulsePoiId: string | null = null;
+
     constructor(args: PoiControllerArgs) {
         this.canvas = args.canvas;
         this.observer = args.observer;
+        this.picker = args.picker;
         this.getMeshInstances = args.getMeshInstances;
         this.getPickRay = args.getPickRay;
+        this.getCameraView = args.getCameraView;
+        this.applyCameraView = args.applyCameraView;
         this.renderNextFrame = args.renderNextFrame;
         this.initOverlay();
         this.bindEvents();
@@ -126,7 +146,7 @@ class PoiController {
         const onMouseMove = (event: MouseEvent) => {
             if (this.draggingPoiId) {
                 const rect = this.canvas.getBoundingClientRect();
-                this.movePoiTo(this.draggingPoiId, event.clientX - rect.left, event.clientY - rect.top);
+                void this.movePoiTo(this.draggingPoiId, event.clientX - rect.left, event.clientY - rect.top);
                 return;
             }
             if (!this.poiIsPotentialClick || !this.poiClickDown) return;
@@ -144,7 +164,7 @@ class PoiController {
                 this.renderNextFrame();
             }
             if (this.poiIsPotentialClick && this.poiClickDown && this.observer.get('poi.enabled') && !this.observer.get('measure.enabled')) {
-                this.addPoiAt(this.poiClickDown.canvasX, this.poiClickDown.canvasY);
+                void this.addPoiAt(this.poiClickDown.canvasX, this.poiClickDown.canvasY);
             }
             this.poiIsPotentialClick = false;
             this.poiClickDown = null;
@@ -169,6 +189,10 @@ class PoiController {
         this.renderNextFrame();
     }
 
+    private setActivePoi(id: string | null) {
+        this.observer.set('poi.activeId', id || '');
+    }
+
     private findPoiNearScreenPoint(x: number, y: number) {
         let bestId: string | null = null;
         let bestDistance = Number.POSITIVE_INFINITY;
@@ -190,6 +214,7 @@ class PoiController {
         let bestHit: ReturnType<typeof intersectMeshTrianglesDetailed> = null;
 
         this.getMeshInstances().forEach((mi) => {
+            if ((mi as any).__viewerIsGsplat) return;
             const aabb = mi.aabb;
             if (!aabb) return;
 
@@ -229,12 +254,31 @@ class PoiController {
         return bestHit;
     }
 
-    addPoiAt(x: number, y: number) {
+    private async pickPoiPlacement(x: number, y: number) {
         const hit = this.pickSurfaceHit(x, y);
-        if (!hit) return false;
+        if (hit) {
+            const offset = Math.max(0.001, Math.min(0.02, hit.t * 0.0005));
+            return {
+                point: hit.point.clone().add(hit.normal.clone().mulScalar(offset)),
+                normal: hit.normal.clone()
+            };
+        }
 
-        const offset = Math.max(0.001, Math.min(0.02, hit.t * 0.0005));
-        const anchored = hit.point.clone().add(hit.normal.clone().mulScalar(offset));
+        const pickedPoint = await this.picker.pick(x, y);
+        if (!pickedPoint) {
+            return null;
+        }
+
+        const { direction } = this.getPickRay(x, y);
+        const normal = direction.clone().mulScalar(-1).normalize();
+        const anchored = pickedPoint.clone().add(normal.clone().mulScalar(0.002));
+        return { point: anchored, normal };
+    }
+
+    async addPoiAt(x: number, y: number) {
+        const placement = await this.pickPoiPlacement(x, y);
+        if (!placement) return false;
+
         const list = this.getPoiList();
         const nextNumber = list.length + 1;
         const nextPoi: PoiEntry = {
@@ -242,25 +286,24 @@ class PoiController {
             number: nextNumber,
             title: `POI ${nextNumber}`,
             color: '#000000',
-            position: [anchored.x, anchored.y, anchored.z],
-            normal: [hit.normal.x, hit.normal.y, hit.normal.z]
+            position: [placement.point.x, placement.point.y, placement.point.z],
+            normal: [placement.normal.x, placement.normal.y, placement.normal.z]
         };
+        this.setActivePoi(nextPoi.id);
         this.setPoiList([...list, nextPoi]);
         return true;
     }
 
-    private movePoiTo(id: string, x: number, y: number) {
-        const hit = this.pickSurfaceHit(x, y);
-        if (!hit) return false;
+    private async movePoiTo(id: string, x: number, y: number) {
+        const placement = await this.pickPoiPlacement(x, y);
+        if (!placement) return false;
 
-        const offset = Math.max(0.001, Math.min(0.02, hit.t * 0.0005));
-        const anchored = hit.point.clone().add(hit.normal.clone().mulScalar(offset));
         const updated = this.getPoiList().map((poi) => {
             if (poi.id !== id) return poi;
             return {
                 ...poi,
-                position: [anchored.x, anchored.y, anchored.z] as [number, number, number],
-                normal: [hit.normal.x, hit.normal.y, hit.normal.z] as [number, number, number]
+                position: [placement.point.x, placement.point.y, placement.point.z] as [number, number, number],
+                normal: [placement.normal.x, placement.normal.y, placement.normal.z] as [number, number, number]
             };
         });
         this.setPoiList(updated);
@@ -270,6 +313,9 @@ class PoiController {
     removePoi(id: string) {
         if (this.pinnedPoiId === id) {
             this.pinnedPoiId = null;
+        }
+        if (this.observer.get('poi.activeId') === id) {
+            this.setActivePoi(null);
         }
         const remaining = this.getPoiList()
             .filter(poi => poi.id !== id)
@@ -301,6 +347,47 @@ class PoiController {
         this.setPoiList(updated);
     }
 
+    capturePoiCameraView(id: string) {
+        const cameraView = this.getCameraView();
+        if (!cameraView) {
+            return;
+        }
+
+        const updated = this.getPoiList().map((poi) => {
+            if (poi.id !== id) return poi;
+            return {
+                ...poi,
+                camera: cameraView
+            };
+        });
+        this.setPoiList(updated);
+    }
+
+    clearPoiCameraView(id: string) {
+        const updated = this.getPoiList().map((poi) => {
+            if (poi.id !== id) return poi;
+            const nextPoi = { ...poi };
+            delete nextPoi.camera;
+            return nextPoi;
+        });
+        this.setPoiList(updated);
+    }
+
+    focusPoi(id: string) {
+        const poi = this.getPoiList().find((entry) => entry.id === id);
+        if (!poi) {
+            return;
+        }
+
+        this.pinnedPoiId = poi.id;
+        this.setActivePoi(poi.id);
+        if (poi.camera) {
+            this.applyCameraView(poi.camera);
+        } else {
+            this.renderNextFrame();
+        }
+    }
+
     reorderPoi(sourceId: string, targetId: string) {
         if (!sourceId || !targetId || sourceId === targetId) {
             return;
@@ -324,6 +411,13 @@ class PoiController {
     }
 
     pulseMarkers() {
+        this.pulsePoiId = null;
+        this.pulseUntil = Date.now() + 650;
+        this.renderNextFrame();
+    }
+
+    pulsePoi(id: string) {
+        this.pulsePoiId = id;
         this.pulseUntil = Date.now() + 650;
         this.renderNextFrame();
     }
@@ -331,6 +425,7 @@ class PoiController {
     clearPois() {
         this.hoveredPoiId = null;
         this.pinnedPoiId = null;
+        this.setActivePoi(null);
         this.setPoiList([]);
     }
 
@@ -373,8 +468,7 @@ class PoiController {
                 marker.addEventListener('click', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    this.pinnedPoiId = poi.id;
-                    this.renderNextFrame();
+                    this.focusPoi(poi.id);
                 });
                 this.overlay?.appendChild(marker);
                 this.markerEls.set(poi.id, marker);
@@ -382,7 +476,7 @@ class PoiController {
             marker.textContent = String(poi.number);
             marker.style.cursor = editEnabled ? 'grab' : 'default';
             marker.style.backgroundColor = poi.color || '#111111';
-            marker.classList.toggle('poi-marker-pulse', pulseActive);
+            marker.classList.toggle('poi-marker-pulse', pulseActive && (!this.pulsePoiId || this.pulsePoiId === poi.id));
 
             const screen = worldToScreen(new Vec3(poi.position[0], poi.position[1], poi.position[2]));
             const visible = screen.z > 0;

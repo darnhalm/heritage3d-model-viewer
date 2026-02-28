@@ -168,7 +168,8 @@ export interface ObserverData {
         },
         loadTime?: number,
         cameras: string,
-        selectedCamera: string
+        selectedCamera: string,
+        hasGsplat?: boolean
     },
     morphs?: Record<string, {
         name: string,
@@ -183,6 +184,7 @@ export interface ObserverData {
     },
     poi: {
         enabled: boolean,
+        activeId?: string,
         list: string
     },
     measure: {

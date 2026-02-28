@@ -160,6 +160,7 @@ class MeasurementController {
         let bestPoint: Vec3 | null = null;
 
         this.getMeshInstances().forEach((mi) => {
+            if ((mi as any).__viewerIsGsplat) return;
             const aabb = mi.aabb;
             if (!aabb) return;
 

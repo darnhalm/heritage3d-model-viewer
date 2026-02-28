@@ -176,7 +176,8 @@ const observerData: ObserverData = {
         },
         loadTime: null,
         cameras: '[]',
-        selectedCamera: ''
+        selectedCamera: '',
+        hasGsplat: false
     },
     runtime: {
         activeDeviceType: '',
@@ -187,6 +188,7 @@ const observerData: ObserverData = {
     },
     poi: {
         enabled: false,
+        activeId: '',
         list: '[]'
     },
     measure: {

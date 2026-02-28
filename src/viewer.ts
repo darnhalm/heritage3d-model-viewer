@@ -508,6 +508,8 @@ class Viewer {
 
     rippleContainer: HTMLDivElement | null = null;
 
+    captureFlashEl: HTMLDivElement | null = null;
+
     lastTapTime = 0;
 
     lastTapX = 0;
@@ -878,8 +880,31 @@ class Viewer {
         this.poiController = new PoiController({
             canvas: this.canvas,
             observer: this.observer,
+            picker: this.picker,
             getMeshInstances: () => this.meshInstances,
             getPickRay: this.getPickRay.bind(this),
+            getCameraView: () => ({
+                position: (() => {
+                    const p = this.cameraControls.getPosition();
+                    return [p.x, p.y, p.z] as [number, number, number];
+                })(),
+                focus: (() => {
+                    const f = this.cameraControls.getFocus();
+                    return [f.x, f.y, f.z] as [number, number, number];
+                })(),
+                fov: this.camera.camera.fov
+            }),
+            applyCameraView: (view) => {
+                if (typeof view.fov === 'number' && Number.isFinite(view.fov)) {
+                    this.camera.camera.fov = view.fov;
+                    this.observer.set('camera.fov', view.fov);
+                }
+                this.cameraControls.reset(
+                    new Vec3(view.focus[0], view.focus[1], view.focus[2]),
+                    new Vec3(view.position[0], view.position[1], view.position[2])
+                );
+                this.renderNextFrame();
+            },
             renderNextFrame: this.renderNextFrame.bind(this)
         });
         this.selectionController = new SelectionController({
@@ -902,6 +927,12 @@ class Viewer {
             this.rippleContainer = document.createElement('div');
             this.rippleContainer.className = 'ripple-container';
             wrapper.appendChild(this.rippleContainer);
+            this.captureFlashEl = document.createElement('div');
+            this.captureFlashEl.className = 'capture-flash';
+            this.captureFlashEl.addEventListener('animationend', () => {
+                this.captureFlashEl?.classList.remove('active');
+            });
+            wrapper.appendChild(this.captureFlashEl);
         }
 
         // double click: pick → ripple → after 380ms center camera
@@ -1057,6 +1088,20 @@ class Viewer {
         this.poiController?.updatePoiColor(id, color);
     }
 
+    capturePoiCameraView(id: string) {
+        this.poiController?.capturePoiCameraView(id);
+        this.poiController?.pulsePoi(id);
+        this.flashCaptureView();
+    }
+
+    clearPoiCameraView(id: string) {
+        this.poiController?.clearPoiCameraView(id);
+    }
+
+    focusPoi(id: string) {
+        this.poiController?.focusPoi(id);
+    }
+
     reorderPoi(sourceId: string, targetId: string) {
         this.poiController?.reorderPoi(sourceId, targetId);
     }
@@ -1067,6 +1112,15 @@ class Viewer {
 
     clearPois() {
         this.poiController?.clearPois();
+    }
+
+    private flashCaptureView() {
+        if (!this.captureFlashEl) {
+            return;
+        }
+        this.captureFlashEl.classList.remove('active');
+        void this.captureFlashEl.offsetWidth;
+        this.captureFlashEl.classList.add('active');
     }
 
     /** Recalibrate unitScale: user measured two points and knows the real-world distance. Sets unitScale so that lastDistance matches knownDistance. */
@@ -1097,6 +1151,7 @@ class Viewer {
             for (let i = 0; i < gsplatComponents.length; i++) {
                 const gsplat = gsplatComponents[i] as GSplatComponent;
                 if (gsplat.instance) {
+                    (gsplat.instance.meshInstance as any).__viewerIsGsplat = true;
                     meshInstances.push(gsplat.instance.meshInstance);
                 }
             }
@@ -1573,6 +1628,7 @@ class Viewer {
         this.observer.set('scene.availableUvSets', '[]');
         this.observer.set('scene.texelDensitySummary', '');
         this.observer.set('scene.texelDensityReport', '[]');
+        this.observer.set('scene.hasGsplat', false);
     }
 
     private updateMaterialChannelInfo() {
@@ -2321,6 +2377,7 @@ class Viewer {
         this.observer.set('scene.primitiveCount', primitiveCount);
         this.observer.set('scene.textureVRAM', textureVRAM);
         this.observer.set('scene.meshVRAM', meshVRAM);
+        this.observer.set('scene.hasGsplat', this.entities.some((entity) => entity.findComponents('gsplat').length > 0));
 
         // variant stats
         this.observer.set('scene.variants.list', JSON.stringify(variants));
