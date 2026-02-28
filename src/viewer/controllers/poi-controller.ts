@@ -9,6 +9,8 @@ const POI_MARKER_HIT_RADIUS = 18;
 type PoiEntry = {
     id: string;
     number: number;
+    title?: string;
+    color?: string;
     position: [number, number, number];
     normal: [number, number, number];
 };
@@ -46,6 +48,14 @@ class PoiController {
 
     private poiScreenPositions = new Map<string, { x: number; y: number; visible: boolean }>();
 
+    private hoverLabelEl: HTMLDivElement | null = null;
+
+    private hoveredPoiId: string | null = null;
+
+    private pinnedPoiId: string | null = null;
+
+    private pulseUntil = 0;
+
     constructor(args: PoiControllerArgs) {
         this.canvas = args.canvas;
         this.observer = args.observer;
@@ -54,6 +64,22 @@ class PoiController {
         this.renderNextFrame = args.renderNextFrame;
         this.initOverlay();
         this.bindEvents();
+        this.observer.on('poi.enabled:set', () => {
+            if (this.observer.get('poi.enabled')) {
+                this.pulseUntil = Date.now() + 650;
+            }
+            this.renderNextFrame();
+        });
+    }
+
+    private shouldShowOverlay(poiCount: number) {
+        if (poiCount === 0) return false;
+
+        const leftPanel = document.getElementById('panel-left');
+        const panelExpanded = leftPanel?.classList.contains('expanded') ?? false;
+        const editEnabled = !!this.observer.get('poi.enabled');
+
+        return !panelExpanded || editEnabled;
     }
 
     private initOverlay() {
@@ -62,6 +88,10 @@ class PoiController {
 
         this.overlay = document.createElement('div');
         this.overlay.className = 'poi-overlay';
+        this.hoverLabelEl = document.createElement('div');
+        this.hoverLabelEl.className = 'poi-hover-label';
+        this.hoverLabelEl.style.display = 'none';
+        this.overlay.appendChild(this.hoverLabelEl);
         wrapper.appendChild(this.overlay);
     }
 
@@ -210,6 +240,8 @@ class PoiController {
         const nextPoi: PoiEntry = {
             id: `poi-${Date.now()}-${nextNumber}`,
             number: nextNumber,
+            title: `POI ${nextNumber}`,
+            color: '#000000',
             position: [anchored.x, anchored.y, anchored.z],
             normal: [hit.normal.x, hit.normal.y, hit.normal.z]
         };
@@ -236,13 +268,69 @@ class PoiController {
     }
 
     removePoi(id: string) {
+        if (this.pinnedPoiId === id) {
+            this.pinnedPoiId = null;
+        }
         const remaining = this.getPoiList()
             .filter(poi => poi.id !== id)
-            .map((poi, index) => ({ ...poi, number: index + 1 }));
+            .map((poi, index) => ({ ...poi, number: index + 1, title: poi.title || `POI ${index + 1}` }));
         this.setPoiList(remaining);
     }
 
+    updatePoiTitle(id: string, title: string) {
+        const trimmedTitle = title.trim();
+        const updated = this.getPoiList().map((poi) => {
+            if (poi.id !== id) return poi;
+            return {
+                ...poi,
+                title: trimmedTitle || `POI ${poi.number}`
+            };
+        });
+        this.setPoiList(updated);
+    }
+
+    updatePoiColor(id: string, color: string) {
+        const hex = /^#[0-9a-f]{6}$/i.test(color) ? color : '#000000';
+        const updated = this.getPoiList().map((poi) => {
+            if (poi.id !== id) return poi;
+            return {
+                ...poi,
+                color: hex
+            };
+        });
+        this.setPoiList(updated);
+    }
+
+    reorderPoi(sourceId: string, targetId: string) {
+        if (!sourceId || !targetId || sourceId === targetId) {
+            return;
+        }
+
+        const list = this.getPoiList();
+        const sourceIndex = list.findIndex((poi) => poi.id === sourceId);
+        const targetIndex = list.findIndex((poi) => poi.id === targetId);
+        if (sourceIndex === -1 || targetIndex === -1) {
+            return;
+        }
+
+        const reordered = [...list];
+        const [moved] = reordered.splice(sourceIndex, 1);
+        reordered.splice(targetIndex, 0, moved);
+        this.setPoiList(reordered.map((poi, index) => ({
+            ...poi,
+            number: index + 1,
+            title: poi.title || `POI ${index + 1}`
+        })));
+    }
+
+    pulseMarkers() {
+        this.pulseUntil = Date.now() + 650;
+        this.renderNextFrame();
+    }
+
     clearPois() {
+        this.hoveredPoiId = null;
+        this.pinnedPoiId = null;
         this.setPoiList([]);
     }
 
@@ -250,6 +338,17 @@ class PoiController {
         if (!this.overlay) return;
 
         const pois = this.getPoiList();
+        const editEnabled = !!this.observer.get('poi.enabled');
+        const showOverlay = this.shouldShowOverlay(pois.length);
+        this.overlay.style.display = showOverlay ? '' : 'none';
+        if (!showOverlay) {
+            if (this.hoverLabelEl) {
+                this.hoverLabelEl.style.display = 'none';
+            }
+            return;
+        }
+
+        const pulseActive = this.pulseUntil > Date.now();
         const activeIds = new Set<string>();
 
         pois.forEach((poi) => {
@@ -261,10 +360,29 @@ class PoiController {
                 marker.setAttribute('role', 'button');
                 marker.setAttribute('aria-label', `POI ${poi.number}`);
                 marker.draggable = false;
+                marker.addEventListener('mouseenter', () => {
+                    this.hoveredPoiId = poi.id;
+                    this.renderNextFrame();
+                });
+                marker.addEventListener('mouseleave', () => {
+                    if (this.hoveredPoiId === poi.id) {
+                        this.hoveredPoiId = null;
+                        this.renderNextFrame();
+                    }
+                });
+                marker.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    this.pinnedPoiId = poi.id;
+                    this.renderNextFrame();
+                });
                 this.overlay?.appendChild(marker);
                 this.markerEls.set(poi.id, marker);
             }
             marker.textContent = String(poi.number);
+            marker.style.cursor = editEnabled ? 'grab' : 'default';
+            marker.style.backgroundColor = poi.color || '#111111';
+            marker.classList.toggle('poi-marker-pulse', pulseActive);
 
             const screen = worldToScreen(new Vec3(poi.position[0], poi.position[1], poi.position[2]));
             const visible = screen.z > 0;
@@ -281,6 +399,19 @@ class PoiController {
             this.markerEls.delete(id);
             this.poiScreenPositions.delete(id);
         });
+
+        if (!this.hoverLabelEl) return;
+
+        const activePoi = pois.find(poi => poi.id === (this.pinnedPoiId ?? this.hoveredPoiId));
+        const activeScreen = activePoi ? this.poiScreenPositions.get(activePoi.id) : null;
+        if (!activePoi || !activeScreen?.visible) {
+            this.hoverLabelEl.style.display = 'none';
+            return;
+        }
+
+        this.hoverLabelEl.textContent = activePoi.title || `POI ${activePoi.number}`;
+        this.hoverLabelEl.style.display = 'block';
+        this.hoverLabelEl.style.transform = `translate(${activeScreen.x + 22}px, ${activeScreen.y - 10}px)`;
     }
 }
 

@@ -27,7 +27,7 @@ type SettingsServiceArgs = {
 };
 
 class SettingsService {
-    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'enableWebGPU', 'metadata'];
+    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'poi', 'enableWebGPU', 'metadata'];
 
     private static readonly SETTINGS_FILTER_PATHS = ['skybox.options', 'debug.renderMode'];
 
@@ -106,6 +106,16 @@ class SettingsService {
             debug: options.debug,
             shadowCatcher: options.shadowCatcher,
             measure: options.measure,
+            poi: {
+                list: (() => {
+                    try {
+                        const parsed = JSON.parse(String((options.poi as Record<string, unknown> | undefined)?.list ?? '[]'));
+                        return Array.isArray(parsed) ? parsed : [];
+                    } catch {
+                        return [];
+                    }
+                })()
+            },
             enableWebGPU: options.enableWebGPU
         };
         const materialOverrides = this.getMaterialOverrides();
@@ -173,6 +183,8 @@ class SettingsService {
         o.set('measure.lastDistance', null);
         o.set('measure.pointCount', 0);
         o.set('measure.knownDistance', 0);
+        o.set('poi.enabled', false);
+        o.set('poi.list', '[]');
         this.onMeasurementReset();
         this.resetMaterialOverrides();
         this.syncSkyboxAndLightFromObserver();
@@ -200,6 +212,8 @@ class SettingsService {
                     return clampFinite(value, -6, 6);
                 case 'debug.selectedUvSet':
                     return clampFinite(value, 0, 7);
+                case 'poi.list':
+                    return Array.isArray(value) ? JSON.stringify(value) : '[]';
                 default:
                     return value;
             }

@@ -1049,6 +1049,22 @@ class Viewer {
         this.poiController?.removePoi(id);
     }
 
+    updatePoiTitle(id: string, title: string) {
+        this.poiController?.updatePoiTitle(id, title);
+    }
+
+    updatePoiColor(id: string, color: string) {
+        this.poiController?.updatePoiColor(id, color);
+    }
+
+    reorderPoi(sourceId: string, targetId: string) {
+        this.poiController?.reorderPoi(sourceId, targetId);
+    }
+
+    pulsePois() {
+        this.poiController?.pulseMarkers();
+    }
+
     clearPois() {
         this.poiController?.clearPois();
     }
@@ -1240,6 +1256,7 @@ class Viewer {
                     }
                 }
                 this.canvas.style.cursor = enabled ? 'crosshair' : '';
+                this.renderNextFrame();
             },
             'measure.unit': () => {
                 this.updateTexelDensityStats();

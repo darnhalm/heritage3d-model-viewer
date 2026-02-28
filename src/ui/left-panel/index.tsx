@@ -8,6 +8,20 @@ import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, ToggleColo
 
 const rgbToArr = (rgb: { r: number, g: number, b: number }) => [rgb.r, rgb.g, rgb.b, 1];
 const arrToRgb = (arr: number[]) => ({ r: arr[0], g: arr[1], b: arr[2] });
+const hexToArr = (hex?: string) => {
+    const normalized = /^#[0-9a-f]{6}$/i.test(hex || '') ? String(hex) : '#000000';
+    const value = parseInt(normalized.slice(1), 16);
+    return [
+        ((value >> 16) & 255) / 255,
+        ((value >> 8) & 255) / 255,
+        (value & 255) / 255,
+        1
+    ];
+};
+const arrToHex = (arr: number[]) => {
+    const toByte = (value: number) => Math.max(0, Math.min(255, Math.round((value ?? 0) * 255)));
+    return `#${[toByte(arr[0]), toByte(arr[1]), toByte(arr[2])].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+};
 const texelDensityUnitLabel = (unit?: string) => (unit === 'mm' ? 'px/mm' : (unit === 'cm' ? 'px/cm' : 'px/m'));
 const texelDensityDisplayValue = (td: number, unit?: string) => {
     const divisor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
@@ -468,22 +482,120 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
 }
 
 class LeftPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
-    state: { tab: LeftPanelTab } = { tab: 'scene' };
+    state: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null } = {
+        tab: 'scene',
+        poiSaved: false,
+        draggingPoiId: null,
+        dragOverPoiId: null
+    };
 
-    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab }): boolean {
+    private collapseHandler: (() => void) | null = null;
+    private poiSaveTimer: ReturnType<typeof setTimeout> | null = null;
+    private poiPointerMoveHandler: ((event: MouseEvent) => void) | null = null;
+    private poiPointerUpHandler: ((event: MouseEvent) => void) | null = null;
+
+    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null }): boolean {
         const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
-        return JSON.stringify(a) !== JSON.stringify(b) || nextState.tab !== this.state.tab;
+        return JSON.stringify(a) !== JSON.stringify(b) ||
+            nextState.tab !== this.state.tab ||
+            nextState.poiSaved !== this.state.poiSaved ||
+            nextState.draggingPoiId !== this.state.draggingPoiId ||
+            nextState.dragOverPoiId !== this.state.dragOverPoiId;
     }
 
     componentDidMount(): void {
-        document.getElementById('panel-toggle')?.addEventListener('click', () => toggleCollapsed());
-        document.getElementById('title')?.addEventListener('click', () => toggleCollapsed());
+        this.collapseHandler = () => {
+            toggleCollapsed();
+            const leftPanel = document.getElementById('panel-left');
+            const isExpanded = leftPanel?.classList.contains('expanded') ?? false;
+            if (!isExpanded && (this.props.observerData?.poi?.enabled ?? false)) {
+                this.props.setProperty('poi.enabled', false);
+            } else if (isExpanded && this.state.tab === 'poi' && !(this.props.observerData?.poi?.enabled ?? false)) {
+                this.props.setProperty('poi.enabled', true);
+                (window as any).viewer?.pulsePois?.();
+            }
+        };
+        document.getElementById('panel-toggle')?.addEventListener('click', this.collapseHandler);
+        document.getElementById('title')?.addEventListener('click', this.collapseHandler);
+        this.poiPointerMoveHandler = (event: MouseEvent) => {
+            if (!this.state.draggingPoiId) {
+                return;
+            }
+            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-poi-id]') as HTMLElement | null;
+            const targetId = target?.dataset.poiId ?? null;
+            if (targetId !== this.state.dragOverPoiId) {
+                this.setState({ dragOverPoiId: targetId });
+            }
+        };
+        this.poiPointerUpHandler = (event: MouseEvent) => {
+            if (!this.state.draggingPoiId) {
+                return;
+            }
+            const sourceId = this.state.draggingPoiId;
+            const target = document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-poi-id]') as HTMLElement | null;
+            const targetId = target?.dataset.poiId ?? null;
+            if (sourceId && targetId && sourceId !== targetId) {
+                (window as any).viewer?.reorderPoi?.(sourceId, targetId);
+            }
+            this.setState({ draggingPoiId: null, dragOverPoiId: null });
+        };
+        document.addEventListener('mousemove', this.poiPointerMoveHandler);
+        document.addEventListener('mouseup', this.poiPointerUpHandler);
     }
 
+    componentWillUnmount(): void {
+        if (this.poiSaveTimer) {
+            clearTimeout(this.poiSaveTimer);
+        }
+        if (this.poiPointerMoveHandler) {
+            document.removeEventListener('mousemove', this.poiPointerMoveHandler);
+        }
+        if (this.poiPointerUpHandler) {
+            document.removeEventListener('mouseup', this.poiPointerUpHandler);
+        }
+        if (this.collapseHandler) {
+            document.getElementById('panel-toggle')?.removeEventListener('click', this.collapseHandler);
+            document.getElementById('title')?.removeEventListener('click', this.collapseHandler);
+        }
+    }
+
+    componentDidUpdate(_: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, prevState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null }) {
+        if (prevState.tab === this.state.tab) {
+            return;
+        }
+
+        const poiEnabled = this.props.observerData?.poi?.enabled ?? false;
+        if (this.state.tab === 'poi' && !poiEnabled) {
+            this.props.setProperty('poi.enabled', true);
+        } else if (prevState.tab === 'poi' && this.state.tab !== 'poi' && poiEnabled) {
+            this.props.setProperty('poi.enabled', false);
+        }
+    }
+
+    handlePoiSave = () => {
+        this.setState({ poiSaved: true });
+        if (this.poiSaveTimer) {
+            clearTimeout(this.poiSaveTimer);
+        }
+        this.poiSaveTimer = setTimeout(() => this.setState({ poiSaved: false }), 2000);
+    };
+
+    handlePoiPointerDown = (id: string, event: React.MouseEvent<HTMLDivElement>) => {
+        if (event.button !== 0) {
+            return;
+        }
+        const target = event.target as HTMLElement | null;
+        if (target?.closest('input, button, .pcui-color-picker, .pcui-text-input, .pcui-slider, .pcui-numeric-input')) {
+            return;
+        }
+        event.preventDefault();
+        this.setState({ draggingPoiId: id, dragOverPoiId: null });
+    };
+
     render() {
-        const { tab } = this.state;
+        const { tab, draggingPoiId, dragOverPoiId } = this.state;
         const { observerData, setProperty } = this.props;
         const lang = observerData?.ui?.language;
         const texelDensityShortValue = (() => {
@@ -541,7 +653,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     </button>
                     <button
                         type='button'
-                        className={`left-panel-tab left-panel-tab-poi${tab === 'poi' ? ' active' : ''}`}
+                        className={`left-panel-tab left-panel-tab-poi${tab === 'poi' ? ' active' : ''}${observerData?.poi?.enabled ? ' tool-active' : ''}`}
                         onClick={() => this.setState({ tab: 'poi' })}
                     >
                         {t('POI', lang)}
@@ -744,41 +856,54 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     )}
                     {tab === 'poi' && (
                         <Panel headerText={t('POI', lang)} id='poi-panel' flexShrink={'0'} collapsible={false}>
-                            <Toggle
-                                label={t('Add POI', lang)}
-                                value={observerData?.poi?.enabled ?? false}
-                                setProperty={(value: boolean) => setProperty('poi.enabled', value)}
-                            />
-                            {(observerData?.poi?.enabled ?? false) && (
-                                <div className='materials-layer-inline-hint'>{t('Click on the model surface to place a POI.', lang)}</div>
-                            )}
+                            <div className='materials-layer-inline-hint'>{t('Click on the model surface to place a POI.', lang)}</div>
                             <div className='poi-list'>
                                 {poiList.length === 0 && (
                                     <div className='materials-layer-inline-hint'>{t('No POIs yet.', lang)}</div>
                                 )}
                                 {poiList.map((poi: any) => (
-                                    <div key={String(poi.id)} className='poi-list-item'>
-                                        <div className='poi-list-badge'>{poi.number}</div>
-                                        <div className='poi-list-label'>POI {poi.number}</div>
-                                        <button
-                                            type='button'
-                                            className='poi-list-delete'
-                                            onClick={() => (window as any).viewer?.removePoi?.(String(poi.id))}
-                                        >
-                                            {t('Delete', lang)}
-                                        </button>
+                                    <div
+                                        key={String(poi.id)}
+                                        className={`poi-list-item${draggingPoiId === String(poi.id) ? ' poi-list-item-dragging' : ''}${dragOverPoiId === String(poi.id) ? ' poi-list-item-drop-target' : ''}`}
+                                        data-poi-id={String(poi.id)}
+                                        onMouseDown={(event) => this.handlePoiPointerDown(String(poi.id), event)}
+                                    >
+                                        <div className='poi-list-row'>
+                                            <div
+                                                className='poi-list-badge'
+                                                style={{
+                                                    backgroundColor: poi.color || '#111111'
+                                                }}
+                                            >
+                                                {poi.number}
+                                            </div>
+                                            <TextInput
+                                                class='poi-list-input'
+                                                value={String(poi.title ?? `POI ${poi.number}`)}
+                                                onChange={(value: string) => (window as any).viewer?.updatePoiTitle?.(String(poi.id), value)}
+                                            />
+                                        </div>
+                                        <ColorPickerControl
+                                            label={t('Color', lang)}
+                                            value={hexToArr(poi.color)}
+                                            setProperty={(value: number[]) => (window as any).viewer?.updatePoiColor?.(String(poi.id), arrToHex(value))}
+                                        />
+                                        <div className='poi-list-actions'>
+                                            <button
+                                                type='button'
+                                                className='poi-list-delete'
+                                                onClick={() => (window as any).viewer?.removePoi?.(String(poi.id))}
+                                            >
+                                                {t('Delete', lang)}
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
-                            {poiList.length > 0 && (
-                                <div id='export-settings-row'>
-                                    <Button
-                                        class={['secondary', 'export-settings-button']}
-                                        text={t('Clear POIs', lang)}
-                                        onClick={() => (window as any).viewer?.clearPois?.()}
-                                    />
-                                </div>
-                            )}
+                            <div id='poi-save-row'>
+                                <Button class='secondary' text={t('Save', lang)} onClick={this.handlePoiSave} />
+                                {this.state.poiSaved && <span className='metadata-saved-feedback'>✓ {t('Saved', lang)}</span>}
+                            </div>
                         </Panel>
                     )}
                     {tab === 'metadata' && <MetadataPanel observerData={observerData} setProperty={setProperty} />}
