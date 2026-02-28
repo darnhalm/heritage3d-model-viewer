@@ -3,6 +3,7 @@ import {
     ADDRESS_CLAMP_TO_EDGE,
     ADDRESS_REPEAT,
     BLENDMODE_ONE,
+    BLEND_NONE,
     BLEND_NORMAL,
     BLENDMODE_ZERO,
     BLENDEQUATION_ADD,
@@ -401,6 +402,22 @@ class Viewer {
     uvCheckerOriginalVisibility = new Map<number, boolean>();
 
     meshGeometryCache = new WeakMap<object, CachedMeshGeometry | null>();
+
+    materialFactorOverrides: Record<string, {
+        diffuseColor?: {
+            r: number,
+            g: number,
+            b: number
+        },
+        specularColor?: {
+            r: number,
+            g: number,
+            b: number
+        },
+        metallicFactor?: number,
+        roughnessFactor?: number,
+        opacityFactor?: number
+    }> = {};
 
 
     animTracks: Array<AnimTrack>;
@@ -817,7 +834,10 @@ class Viewer {
             setLightColor: this.setLightColor.bind(this),
             onMeasurementReset: () => {
                 this.measurementController?.reset();
-            }
+            },
+            getMaterialOverrides: this.getMaterialOverrides.bind(this),
+            applyMaterialOverrides: this.applyMaterialOverrides.bind(this),
+            resetMaterialOverrides: this.resetMaterialOverrides.bind(this)
         });
 
         const device = this.app.graphicsDevice;
@@ -1488,6 +1508,7 @@ class Viewer {
         this.uvCheckerOriginalVisibility.clear();
         this.uvCheckerEnabled = false;
         this.uvDebugMode = null;
+        this.resetMaterialOverrides();
         this.clearMeasurement();
 
         // reset animation state
@@ -1497,6 +1518,13 @@ class Viewer {
         this.observer.set('scene.materialChannelsWithTextures', '[]');
         this.observer.set('scene.materialChannelFilenames', '{}');
         this.observer.set('scene.selectedMaterialNames', '[]');
+        this.observer.set('scene.selectedMaterialFactors', {
+            metallicPercent: null,
+            roughnessPercent: null,
+            opacityPercent: null
+        });
+        this.observer.set('scene.selectedMaterialColor', null);
+        this.observer.set('scene.selectedSpecularColor', null);
         this.observer.set('scene.availableUvSets', '[]');
         this.observer.set('scene.texelDensitySummary', '');
         this.observer.set('scene.texelDensityReport', '[]');
@@ -1563,6 +1591,360 @@ class Viewer {
         this.observer.set('scene.materialChannelsWithTextures', JSON.stringify([...channelsWithTextures]));
         this.observer.set('scene.materialChannelFilenames', JSON.stringify(channelFilenames));
         this.observer.set('scene.selectedMaterialNames', JSON.stringify([...materialNames]));
+    }
+
+    private getSelectedObjectMaterials() {
+        if (!this.selectedNode) {
+            return [];
+        }
+
+        const materials: StandardMaterial[] = [];
+        const seen = new Set<StandardMaterial>();
+        const selectedMeshes = this.collectMeshInstances(this.selectedNode as Entity);
+
+        selectedMeshes.forEach((meshInstance) => {
+            const material = meshInstance.material as StandardMaterial | undefined;
+            if (!material || typeof material.update !== 'function' || typeof material.opacity !== 'number' || typeof material.gloss !== 'number') {
+                return;
+            }
+            if (!seen.has(material)) {
+                seen.add(material);
+                materials.push(material);
+            }
+        });
+
+        return materials;
+    }
+
+    private cloneSelectedNodeMaterialsForEditing() {
+        if (!this.selectedNode) {
+            return [];
+        }
+
+        type EditableMaterial = StandardMaterial & {
+            __viewerObjectMaterialClone?: boolean,
+            __viewerOriginalBlendType?: number,
+            __viewerOriginalDepthWrite?: boolean
+        };
+
+        const clones = new Map<StandardMaterial, EditableMaterial>();
+        const materials: StandardMaterial[] = [];
+        const seen = new Set<StandardMaterial>();
+        const selectedMeshes = this.collectMeshInstances(this.selectedNode as Entity);
+
+        selectedMeshes.forEach((meshInstance) => {
+            const material = meshInstance.material as StandardMaterial | undefined;
+            if (!material || typeof material.clone !== 'function' || typeof material.update !== 'function' || typeof material.opacity !== 'number' || typeof material.gloss !== 'number') {
+                return;
+            }
+
+            let editableMaterial = material as EditableMaterial;
+
+            if (!editableMaterial.__viewerObjectMaterialClone) {
+                let clonedMaterial = clones.get(material);
+                if (!clonedMaterial) {
+                    clonedMaterial = material.clone() as EditableMaterial;
+                    clonedMaterial.name = material.name;
+                    clonedMaterial.__viewerObjectMaterialClone = true;
+                    clonedMaterial.__viewerOriginalBlendType = material.blendType;
+                    clonedMaterial.__viewerOriginalDepthWrite = material.depthWrite;
+                    clones.set(material, clonedMaterial);
+                }
+                meshInstance.material = clonedMaterial;
+                editableMaterial = clonedMaterial;
+            }
+
+            if (!seen.has(editableMaterial)) {
+                seen.add(editableMaterial);
+                materials.push(editableMaterial);
+            }
+        });
+
+        return materials;
+    }
+
+    private getMaterialFactorSnapshot(material: StandardMaterial) {
+        const roughness = material.glossInvert ? material.gloss : (1 - material.gloss);
+        return {
+            metallicPercent: Math.round(math.clamp((material.useMetalness ? material.metalness : 0) * 100, 0, 100)),
+            roughnessPercent: Math.round(math.clamp(roughness * 100, 0, 100)),
+            opacityPercent: Math.round(math.clamp(material.opacity * 100, 0, 100))
+        };
+    }
+
+    private updateSelectedMaterialFactors() {
+        const materials = this.getSelectedObjectMaterials();
+        if (materials.length === 0) {
+            this.observer.set('scene.selectedMaterialFactors', {
+                metallicPercent: null,
+                roughnessPercent: null,
+                opacityPercent: null
+            });
+            return;
+        }
+
+        const totals = materials.reduce((acc, material) => {
+            const snapshot = this.getMaterialFactorSnapshot(material);
+            acc.metallicPercent += snapshot.metallicPercent;
+            acc.roughnessPercent += snapshot.roughnessPercent;
+            acc.opacityPercent += snapshot.opacityPercent;
+            return acc;
+        }, { metallicPercent: 0, roughnessPercent: 0, opacityPercent: 0 });
+
+        this.observer.set('scene.selectedMaterialFactors', {
+            metallicPercent: Math.round(totals.metallicPercent / materials.length),
+            roughnessPercent: Math.round(totals.roughnessPercent / materials.length),
+            opacityPercent: Math.round(totals.opacityPercent / materials.length)
+        });
+    }
+
+    private updateSelectedMaterialColor() {
+        const materials = this.getSelectedObjectMaterials();
+        if (materials.length === 0) {
+            this.observer.set('scene.selectedMaterialColor', null);
+            return;
+        }
+
+        const totals = materials.reduce((acc, material) => {
+            acc.r += material.diffuse?.r ?? 1;
+            acc.g += material.diffuse?.g ?? 1;
+            acc.b += material.diffuse?.b ?? 1;
+            return acc;
+        }, { r: 0, g: 0, b: 0 });
+
+        this.observer.set('scene.selectedMaterialColor', {
+            r: totals.r / materials.length,
+            g: totals.g / materials.length,
+            b: totals.b / materials.length
+        });
+    }
+
+    private updateSelectedSpecularColor() {
+        const materials = this.getSelectedObjectMaterials();
+        if (materials.length === 0) {
+            this.observer.set('scene.selectedSpecularColor', null);
+            return;
+        }
+
+        const totals = materials.reduce((acc, material) => {
+            acc.r += material.specular?.r ?? 1;
+            acc.g += material.specular?.g ?? 1;
+            acc.b += material.specular?.b ?? 1;
+            return acc;
+        }, { r: 0, g: 0, b: 0 });
+
+        this.observer.set('scene.selectedSpecularColor', {
+            r: totals.r / materials.length,
+            g: totals.g / materials.length,
+            b: totals.b / materials.length
+        });
+    }
+
+    getMaterialOverrides() {
+        return JSON.parse(JSON.stringify(this.materialFactorOverrides));
+    }
+
+    resetMaterialOverrides() {
+        this.materialFactorOverrides = {};
+    }
+
+    applyMaterialOverrides(overrides: Record<string, unknown>) {
+        const nextOverrides: Record<string, {
+            diffuseColor?: {
+                r: number,
+                g: number,
+                b: number
+            },
+            specularColor?: {
+                r: number,
+                g: number,
+                b: number
+            },
+            metallicFactor?: number,
+            roughnessFactor?: number,
+            opacityFactor?: number
+        }> = {};
+        const materials = this.meshInstances
+            .map(meshInstance => meshInstance.material as StandardMaterial | undefined)
+            .filter((material): material is StandardMaterial => !!material && typeof material.update === 'function' && typeof material.opacity === 'number' && typeof material.gloss === 'number');
+
+        Object.entries(overrides).forEach(([materialName, overrideValue]) => {
+            if (!materialName || !overrideValue || typeof overrideValue !== 'object' || Array.isArray(overrideValue)) {
+                return;
+            }
+
+            const override = overrideValue as Record<string, unknown>;
+            const diffuseColor = override.diffuseColor;
+            const specularColor = override.specularColor;
+            const metallicFactor = Number(override.metallicFactor);
+            const roughnessFactor = Number(override.roughnessFactor);
+            const opacityFactor = Number(override.opacityFactor);
+            const sanitized = {
+                diffuseColor: diffuseColor && typeof diffuseColor === 'object' && !Array.isArray(diffuseColor) ? {
+                    r: math.clamp(Number((diffuseColor as Record<string, unknown>).r), 0, 1),
+                    g: math.clamp(Number((diffuseColor as Record<string, unknown>).g), 0, 1),
+                    b: math.clamp(Number((diffuseColor as Record<string, unknown>).b), 0, 1)
+                } : undefined,
+                specularColor: specularColor && typeof specularColor === 'object' && !Array.isArray(specularColor) ? {
+                    r: math.clamp(Number((specularColor as Record<string, unknown>).r), 0, 1),
+                    g: math.clamp(Number((specularColor as Record<string, unknown>).g), 0, 1),
+                    b: math.clamp(Number((specularColor as Record<string, unknown>).b), 0, 1)
+                } : undefined,
+                metallicFactor: Number.isFinite(metallicFactor) ? math.clamp(metallicFactor, 0, 1) : undefined,
+                roughnessFactor: Number.isFinite(roughnessFactor) ? math.clamp(roughnessFactor, 0, 1) : undefined,
+                opacityFactor: Number.isFinite(opacityFactor) ? math.clamp(opacityFactor, 0, 1) : undefined
+            };
+
+            const matches = materials.filter(material => material.name === materialName);
+            if (matches.length === 0) {
+                return;
+            }
+
+            matches.forEach((material) => {
+                if (sanitized.diffuseColor !== undefined) {
+                    (material as any).diffuseTint = true;
+                    material.diffuse.set(sanitized.diffuseColor.r, sanitized.diffuseColor.g, sanitized.diffuseColor.b);
+                }
+                if (sanitized.specularColor !== undefined) {
+                    material.specular.set(sanitized.specularColor.r, sanitized.specularColor.g, sanitized.specularColor.b);
+                }
+                if (sanitized.metallicFactor !== undefined) {
+                    material.useMetalness = true;
+                    material.metalness = sanitized.metallicFactor;
+                }
+                if (sanitized.roughnessFactor !== undefined) {
+                    material.gloss = material.glossInvert ? sanitized.roughnessFactor : (1 - sanitized.roughnessFactor);
+                }
+                if (sanitized.opacityFactor !== undefined) {
+                    material.opacity = sanitized.opacityFactor;
+                    if (sanitized.opacityFactor < 0.999) {
+                        material.blendType = BLEND_NORMAL;
+                        material.depthWrite = false;
+                    } else {
+                        material.blendType = BLEND_NONE;
+                        material.depthWrite = true;
+                    }
+                }
+                material.update();
+            });
+
+            nextOverrides[materialName] = sanitized;
+        });
+
+        this.materialFactorOverrides = nextOverrides;
+        this.updateMaterialChannelInfo();
+        this.updateSelectedMaterialFactors();
+        this.updateSelectedMaterialColor();
+        this.updateSelectedSpecularColor();
+        this.updateTexelDensityStats();
+        this.dirtyWireframe = true;
+        this.dirtySelectionHighlight = true;
+        this.renderNextFrame();
+    }
+
+    setSelectedDiffuseColor(color: { r: number, g: number, b: number }) {
+        const materials = this.cloneSelectedNodeMaterialsForEditing();
+        if (materials.length === 0) {
+            return;
+        }
+
+        const diffuseColor = {
+            r: math.clamp(Number(color.r), 0, 1),
+            g: math.clamp(Number(color.g), 0, 1),
+            b: math.clamp(Number(color.b), 0, 1)
+        };
+
+        materials.forEach((material) => {
+            (material as any).diffuseTint = true;
+            material.diffuse.set(diffuseColor.r, diffuseColor.g, diffuseColor.b);
+            material.update();
+            if (material.name) {
+                this.materialFactorOverrides[material.name] = {
+                    ...this.materialFactorOverrides[material.name],
+                    diffuseColor
+                };
+            }
+        });
+
+        this.updateMaterialChannelInfo();
+        this.updateSelectedMaterialColor();
+        this.renderNextFrame();
+    }
+
+    setSelectedSpecularColor(color: { r: number, g: number, b: number }) {
+        const materials = this.cloneSelectedNodeMaterialsForEditing();
+        if (materials.length === 0) {
+            return;
+        }
+
+        const specularColor = {
+            r: math.clamp(Number(color.r), 0, 1),
+            g: math.clamp(Number(color.g), 0, 1),
+            b: math.clamp(Number(color.b), 0, 1)
+        };
+
+        materials.forEach((material) => {
+            material.specular.set(specularColor.r, specularColor.g, specularColor.b);
+            material.update();
+            if (material.name) {
+                this.materialFactorOverrides[material.name] = {
+                    ...this.materialFactorOverrides[material.name],
+                    specularColor
+                };
+            }
+        });
+
+        this.updateMaterialChannelInfo();
+        this.updateSelectedSpecularColor();
+        this.renderNextFrame();
+    }
+
+    setSelectedMaterialFactor(channel: 'metallic' | 'roughness' | 'opacity', percent: number) {
+        const materials = this.cloneSelectedNodeMaterialsForEditing();
+        if (materials.length === 0) {
+            return;
+        }
+
+        const normalized = math.clamp(Number(percent) / 100, 0, 1);
+        materials.forEach((material) => {
+            if (channel === 'metallic') {
+                material.useMetalness = true;
+                material.metalness = normalized;
+            } else if (channel === 'roughness') {
+                material.gloss = material.glossInvert ? normalized : (1 - normalized);
+            } else if (channel === 'opacity') {
+                material.opacity = normalized;
+                if (normalized < 0.999) {
+                    material.blendType = BLEND_NORMAL;
+                    material.depthWrite = false;
+                } else {
+                    const editableMaterial = material as StandardMaterial & {
+                        __viewerOriginalBlendType?: number,
+                        __viewerOriginalDepthWrite?: boolean
+                    };
+                    material.blendType = editableMaterial.__viewerOriginalBlendType ?? BLEND_NONE;
+                    material.depthWrite = editableMaterial.__viewerOriginalDepthWrite ?? true;
+                }
+            }
+            material.update();
+            if (material.name) {
+                this.materialFactorOverrides[material.name] = {
+                    ...this.materialFactorOverrides[material.name],
+                    metallicFactor: material.useMetalness ? math.clamp(material.metalness, 0, 1) : 0,
+                    roughnessFactor: math.clamp(material.glossInvert ? material.gloss : (1 - material.gloss), 0, 1),
+                    opacityFactor: math.clamp(material.opacity, 0, 1)
+                };
+            }
+        });
+
+        this.updateMaterialChannelInfo();
+        this.updateSelectedMaterialFactors();
+        this.updateSelectedMaterialColor();
+        this.updateSelectedSpecularColor();
+        this.updateTexelDensityStats();
+        this.dirtyWireframe = true;
+        this.dirtySelectionHighlight = true;
+        this.renderNextFrame();
     }
 
     private getSelectedUvSet() {
@@ -2550,6 +2932,9 @@ class Viewer {
         this.selectedNode = graphNode;
         this.selectionController.onSelectionNodeChanged();
         this.updateMaterialChannelInfo();
+        this.updateSelectedMaterialFactors();
+        this.updateSelectedMaterialColor();
+        this.updateSelectedSpecularColor();
         this.updateSelectedUvSets();
         this.updateTexelDensityStats();
         this.dirtyWireframe = true;
@@ -2568,7 +2953,13 @@ class Viewer {
                     resource.applyMaterialVariant(entityAsset.entity, variant);
                 }
             });
+            if (Object.keys(this.materialFactorOverrides).length > 0) {
+                this.applyMaterialOverrides(this.materialFactorOverrides);
+            }
             this.updateMaterialChannelInfo();
+            this.updateSelectedMaterialFactors();
+            this.updateSelectedMaterialColor();
+            this.updateSelectedSpecularColor();
             this.updateSelectedUvSets();
             this.updateTexelDensityStats();
             this.dirtyTexelDensityHeatmap = true;

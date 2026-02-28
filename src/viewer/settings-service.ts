@@ -21,6 +21,9 @@ type SettingsServiceArgs = {
     setSkyboxBackground: (value: string) => void;
     setLightColor: (color: Rgb) => void;
     onMeasurementReset: () => void;
+    getMaterialOverrides: () => Record<string, unknown>;
+    applyMaterialOverrides: (overrides: Record<string, unknown>) => void;
+    resetMaterialOverrides: () => void;
 };
 
 class SettingsService {
@@ -50,6 +53,12 @@ class SettingsService {
 
     private onMeasurementReset: () => void;
 
+    private getMaterialOverrides: () => Record<string, unknown>;
+
+    private applyMaterialOverrides: (overrides: Record<string, unknown>) => void;
+
+    private resetMaterialOverrides: () => void;
+
     constructor(args: SettingsServiceArgs) {
         this.observer = args.observer;
         this.skyboxUrls = args.skyboxUrls;
@@ -60,6 +69,9 @@ class SettingsService {
         this.setSkyboxBackground = args.setSkyboxBackground;
         this.setLightColor = args.setLightColor;
         this.onMeasurementReset = args.onMeasurementReset;
+        this.getMaterialOverrides = args.getMaterialOverrides;
+        this.applyMaterialOverrides = args.applyMaterialOverrides;
+        this.resetMaterialOverrides = args.resetMaterialOverrides;
     }
 
     private static rgbToHex(r: number, g: number, b: number): string {
@@ -96,6 +108,10 @@ class SettingsService {
             measure: options.measure,
             enableWebGPU: options.enableWebGPU
         };
+        const materialOverrides = this.getMaterialOverrides();
+        if (Object.keys(materialOverrides).length > 0) {
+            data.materialOverrides = materialOverrides;
+        }
         if (this.cameraControls.mode === 'orbit') {
             const p = this.cameraControls.getPosition();
             const f = this.cameraControls.getFocus();
@@ -158,6 +174,7 @@ class SettingsService {
         o.set('measure.pointCount', 0);
         o.set('measure.knownDistance', 0);
         this.onMeasurementReset();
+        this.resetMaterialOverrides();
         this.syncSkyboxAndLightFromObserver();
     }
 
@@ -224,6 +241,10 @@ class SettingsService {
         };
         try {
             loadRec('', data);
+            const materialOverrides = data.materialOverrides;
+            if (materialOverrides && typeof materialOverrides === 'object' && !Array.isArray(materialOverrides)) {
+                this.applyMaterialOverrides(materialOverrides as Record<string, unknown>);
+            }
         } catch (_) { /* ignore */ }
     }
 

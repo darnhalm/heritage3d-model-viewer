@@ -38,6 +38,24 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
             observer?.get('measure.knownDistance') === 1.25;
     });
 
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const firstMaterialName = viewer.meshInstances.find((mi: any) => mi?.material?.name)?.material?.name;
+        if (!firstMaterialName) {
+            throw new Error('Expected test model to expose a material name');
+        }
+
+        viewer.applyViewerSettings({
+            materialOverrides: {
+                [firstMaterialName]: {
+                    metallicFactor: 0.2,
+                    roughnessFactor: 0.7,
+                    opacityFactor: 0.9
+                }
+            }
+        });
+    });
+
     const state = await page.evaluate(() => ({
         filenames: (window as any).viewer.observer.get('scene.filenames'),
         materialCount: (window as any).viewer.observer.get('scene.materialCount'),
@@ -46,6 +64,15 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
         unitScale: (window as any).viewer.observer.get('measure.unitScale'),
         knownDistance: (window as any).viewer.observer.get('measure.knownDistance'),
         grid: (window as any).viewer.observer.get('debug.grid'),
+        materialFactors: (window as any).viewer.observer.get('scene.selectedMaterialFactors'),
+        firstMaterial: (() => {
+            const material = (window as any).viewer.meshInstances.find((mi: any) => mi?.material)?.material;
+            return material ? {
+                metalness: material.metalness,
+                roughness: material.glossInvert ? material.gloss : (1 - material.gloss),
+                opacity: material.opacity
+            } : null;
+        })(),
         polluted: (Object.prototype as any).polluted
     }));
 
@@ -56,6 +83,10 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
     expect(state.unitScale).toBe(0.01);
     expect(state.knownDistance).toBe(1.25);
     expect(state.grid).toBe(true);
+    expect(state.firstMaterial).not.toBeNull();
+    expect(state.firstMaterial.metalness).toBeCloseTo(0.2, 3);
+    expect(state.firstMaterial.roughness).toBeCloseTo(0.7, 3);
+    expect(state.firstMaterial.opacity).toBeCloseTo(0.9, 3);
     expect(state.polluted).toBeUndefined();
 });
 

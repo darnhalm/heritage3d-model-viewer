@@ -23,6 +23,10 @@ const texelDensityAreaValue = (areaM2: number, unit?: string) => {
 
 const exportViewerSettings = (observerData: ObserverData) => {
     const viewer = (window as any).viewer;
+    if (viewer?.exportViewerSettings) {
+        viewer.exportViewerSettings();
+        return;
+    }
     const camera: Record<string, unknown> = observerData.camera ? { ...observerData.camera } : {};
     if (viewer?.cameraControls?.mode === 'orbit') {
         const p = viewer.cameraControls.getPosition();
@@ -389,18 +393,15 @@ const MATERIAL_CHANNEL_ITEMS: Array<{ label: string; value: string }> = [
 
 const renderModeCategories = (
     channelsWithTextures: Set<string>,
-    withTextureOnly: boolean,
+    _withTextureOnly: boolean,
     channelFilenames: Record<string, string>
 ): Array<{
     title: string;
     items: Array<{ label: string; value: string; filename?: string }>;
 }> => {
-    const materialItems = (withTextureOnly ?
-        MATERIAL_CHANNEL_ITEMS.filter(item => channelsWithTextures.has(item.value)) :
-        MATERIAL_CHANNEL_ITEMS
-    ).map(item => ({
+    const materialItems = MATERIAL_CHANNEL_ITEMS.map(item => ({
         ...item,
-        filename: channelFilenames[item.value] || undefined
+        filename: channelsWithTextures.has(item.value) ? (channelFilenames[item.value] || undefined) : undefined
     }));
     return [
         { title: 'RENDER', items: [{ label: 'Final Render', value: 'default' }] },
@@ -470,7 +471,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     state: { tab: LeftPanelTab } = { tab: 'scene' };
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) || nextState.tab !== this.state.tab;
@@ -489,6 +490,29 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             const summary = observerData?.scene?.texelDensitySummary || 'n/a';
             return summary.split('|')[0]?.trim() || summary;
         })();
+        const selectedMaterialFactors = observerData?.scene?.selectedMaterialFactors;
+        const hasSelectedObject = !!observerData?.scene?.selectedNode?.path;
+        const materialFactorRows = [
+            { key: 'metallic', label: t('Metallic', lang), value: selectedMaterialFactors?.metallicPercent },
+            { key: 'roughness', label: t('Roughness', lang), value: selectedMaterialFactors?.roughnessPercent },
+            { key: 'opacity', label: t('Opacity', lang), value: selectedMaterialFactors?.opacityPercent }
+        ].filter((item) => item.value !== null && item.value !== undefined);
+        const materialFactorByRenderMode: Record<string, { key: 'metallic' | 'roughness' | 'opacity', label: string, value: number | null | undefined }> = {
+            metalness: { key: 'metallic', label: t('Metallic', lang), value: selectedMaterialFactors?.metallicPercent },
+            gloss: { key: 'roughness', label: t('Roughness', lang), value: selectedMaterialFactors?.roughnessPercent },
+            opacity: { key: 'opacity', label: t('Opacity', lang), value: selectedMaterialFactors?.opacityPercent }
+        };
+        const selectedMaterialColor = observerData?.scene?.selectedMaterialColor;
+        const selectedSpecularColor = observerData?.scene?.selectedSpecularColor;
+        const setSelectedMaterialFactor = (channel: 'metallic' | 'roughness' | 'opacity', value: number) => {
+            (window as any).viewer?.setSelectedMaterialFactor?.(channel, value);
+        };
+        const setSelectedDiffuseColor = (value: number[]) => {
+            (window as any).viewer?.setSelectedDiffuseColor?.(arrToRgb(value));
+        };
+        const setSelectedSpecularColor = (value: number[]) => {
+            (window as any).viewer?.setSelectedSpecularColor?.(arrToRgb(value));
+        };
 
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
@@ -558,24 +582,80 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             {cat.title} ({cat.items.length})
                                         </div>
                                         {cat.title === 'MATERIAL CHANNELS' && (
-                                            <Toggle
-                                                label='With texturemap'
-                                                value={observerData?.debug?.withTextureOnly ?? false}
-                                                setProperty={(value: boolean) => setProperty('debug.withTextureOnly', value)}
-                                            />
+                                                <Toggle
+                                                    label={t('By objects', lang)}
+                                                    value={observerData?.debug?.withTextureOnly ?? false}
+                                                    setProperty={(value: boolean) => setProperty('debug.withTextureOnly', value)}
+                                                />
                                         )}
                                         {cat.items.map(item => (
-                                            <button
-                                                key={item.value}
-                                                type='button'
-                                                className={`materials-layer-item${item.value === 'default' ? ' materials-layer-item-final-render' : ''}${item.value === 'albedo' ? ' materials-layer-item-base-color' : ''}${item.value === 'metalness' ? ' materials-layer-item-metalness' : ''}${item.value === 'gloss' ? ' materials-layer-item-roughness' : ''}${item.value === 'world_normal' ? ' materials-layer-item-normal' : ''}${item.value === 'specularity' ? ' materials-layer-item-specular' : ''}${item.value === 'emission' ? ' materials-layer-item-emissive' : ''}${item.value === 'lighting' ? ' materials-layer-item-lighting' : ''}${item.value === 'ao' ? ' materials-layer-item-ao' : ''}${item.value === 'opacity' ? ' materials-layer-item-opacity' : ''}${(item.value === 'uv0' || item.value === 'uv_checker') ? ' materials-layer-item-uv' : ''}${observerData?.debug?.renderMode === item.value ? ' selected' : ''}`}
-                                                onClick={() => setProperty('debug.renderMode', item.value)}
-                                            >
-                                                <span className='materials-layer-item-label'>
-                                                    {item.label}
-                                                    {observerData?.debug?.withTextureOnly && item.filename ? <span className='materials-layer-item-filename' title={item.filename}> {item.filename}</span> : null}
-                                                </span>
-                                            </button>
+                                            <React.Fragment key={item.value}>
+                                                <button
+                                                    type='button'
+                                                    className={`materials-layer-item${item.value === 'default' ? ' materials-layer-item-final-render' : ''}${item.value === 'albedo' ? ' materials-layer-item-base-color' : ''}${item.value === 'metalness' ? ' materials-layer-item-metalness' : ''}${item.value === 'gloss' ? ' materials-layer-item-roughness' : ''}${item.value === 'world_normal' ? ' materials-layer-item-normal' : ''}${item.value === 'specularity' ? ' materials-layer-item-specular' : ''}${item.value === 'emission' ? ' materials-layer-item-emissive' : ''}${item.value === 'lighting' ? ' materials-layer-item-lighting' : ''}${item.value === 'ao' ? ' materials-layer-item-ao' : ''}${item.value === 'opacity' ? ' materials-layer-item-opacity' : ''}${(item.value === 'uv0' || item.value === 'uv_checker') ? ' materials-layer-item-uv' : ''}${observerData?.debug?.renderMode === item.value ? ' selected' : ''}`}
+                                                    onClick={() => setProperty('debug.renderMode', item.value)}
+                                                >
+                                                    <span className='materials-layer-item-label'>
+                                                        {item.label}
+                                                        {observerData?.debug?.withTextureOnly && item.filename ? <span className='materials-layer-item-filename' title={item.filename}> {item.filename}</span> : null}
+                                                    </span>
+                                                </button>
+                                                {cat.title === 'MATERIAL CHANNELS' && observerData?.debug?.renderMode === item.value && materialFactorByRenderMode[item.value] && (
+                                                    <>
+                                                        {(observerData?.debug?.withTextureOnly ?? false) && !hasSelectedObject && (
+                                                            <div className='materials-layer-inline-hint'>{t('Click an object in the viewport.', lang)}</div>
+                                                        )}
+                                                        {(observerData?.debug?.withTextureOnly ?? false) && hasSelectedObject && (materialFactorByRenderMode[item.value].value === null || materialFactorByRenderMode[item.value].value === undefined) && (
+                                                            <div className='materials-layer-inline-hint'>{t('No editable PBR factors.', lang)}</div>
+                                                        )}
+                                                        {(observerData?.debug?.withTextureOnly ?? false) && hasSelectedObject && materialFactorByRenderMode[item.value].value !== null && materialFactorByRenderMode[item.value].value !== undefined && (
+                                                            <Slider
+                                                                label={`${materialFactorByRenderMode[item.value].label} (%)`}
+                                                                precision={0}
+                                                                min={0}
+                                                                max={100}
+                                                                step={1}
+                                                                value={materialFactorByRenderMode[item.value].value ?? 0}
+                                                                setProperty={(value: number) => setSelectedMaterialFactor(materialFactorByRenderMode[item.value].key, value)}
+                                                            />
+                                                        )}
+                                                    </>
+                                                )}
+                                                {cat.title === 'MATERIAL CHANNELS' && observerData?.debug?.renderMode === item.value && item.value === 'albedo' && (
+                                                    <>
+                                                        {(observerData?.debug?.withTextureOnly ?? false) && !hasSelectedObject && (
+                                                            <div className='materials-layer-inline-hint'>{t('Click an object in the viewport.', lang)}</div>
+                                                        )}
+                                                        {(observerData?.debug?.withTextureOnly ?? false) && hasSelectedObject && !selectedMaterialColor && (
+                                                            <div className='materials-layer-inline-hint'>{t('No editable PBR factors.', lang)}</div>
+                                                        )}
+                                                        {(observerData?.debug?.withTextureOnly ?? false) && hasSelectedObject && selectedMaterialColor && (
+                                                            <ColorPickerControl
+                                                                label={t('Diffuse Color', lang)}
+                                                                value={rgbToArr(selectedMaterialColor)}
+                                                                setProperty={setSelectedDiffuseColor}
+                                                            />
+                                                        )}
+                                                    </>
+                                                )}
+                                                {cat.title === 'MATERIAL CHANNELS' && observerData?.debug?.renderMode === item.value && item.value === 'specularity' && (
+                                                    <>
+                                                        {(observerData?.debug?.withTextureOnly ?? false) && !hasSelectedObject && (
+                                                            <div className='materials-layer-inline-hint'>{t('Click an object in the viewport.', lang)}</div>
+                                                        )}
+                                                        {(observerData?.debug?.withTextureOnly ?? false) && hasSelectedObject && !selectedSpecularColor && (
+                                                            <div className='materials-layer-inline-hint'>{t('No editable PBR factors.', lang)}</div>
+                                                        )}
+                                                        {(observerData?.debug?.withTextureOnly ?? false) && hasSelectedObject && selectedSpecularColor && (
+                                                            <ColorPickerControl
+                                                                label={t('Specular Color', lang)}
+                                                                value={rgbToArr(selectedSpecularColor)}
+                                                                setProperty={setSelectedSpecularColor}
+                                                            />
+                                                        )}
+                                                    </>
+                                                )}
+                                            </React.Fragment>
                                         ))}
                                         {cat.title === 'UV' && (
                                             <>

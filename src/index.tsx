@@ -158,6 +158,13 @@ const observerData: ObserverData = {
         materialChannelsWithTextures: '[]',
         materialChannelFilenames: '{}',
         selectedMaterialNames: '[]',
+        selectedMaterialFactors: {
+            metallicPercent: null,
+            roughnessPercent: null,
+            opacityPercent: null
+        },
+        selectedMaterialColor: null,
+        selectedSpecularColor: null,
         availableUvSets: '[]',
         texelDensitySummary: '',
         texelDensityReport: '[]',

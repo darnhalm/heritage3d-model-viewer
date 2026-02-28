@@ -142,6 +142,21 @@ export interface ObserverData {
         materialChannelsWithTextures?: string,
         materialChannelFilenames?: string,
         selectedMaterialNames?: string,
+        selectedMaterialFactors?: {
+            metallicPercent: number | null,
+            roughnessPercent: number | null,
+            opacityPercent: number | null
+        },
+        selectedMaterialColor?: {
+            r: number,
+            g: number,
+            b: number
+        } | null,
+        selectedSpecularColor?: {
+            r: number,
+            g: number,
+            b: number
+        } | null,
         availableUvSets?: string,
         texelDensitySummary?: string,
         texelDensityReport?: string,
