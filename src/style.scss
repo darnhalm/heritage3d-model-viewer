@@ -397,6 +397,7 @@ body:not(.ui-ready) #panel-left {
 
 .poi-marker {
     position: absolute;
+    z-index: 1;
     width: 28px;
     height: 28px;
     padding: 0;
@@ -445,6 +446,7 @@ body:not(.ui-ready) #panel-left {
 
 .poi-hover-label {
     position: absolute;
+    z-index: 3;
     padding: 6px 10px;
     border-radius: 999px;
     background: rgba(17, 17, 17, 0.92);
@@ -550,6 +552,8 @@ body:not(.ui-ready) #panel-left {
 
 .poi-drag-ghost {
     position: fixed;
+    left: 0;
+    top: 0;
     z-index: 3000;
     pointer-events: none;
     min-width: 240px;
@@ -2208,6 +2212,32 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
 .pcui-select-input:not(.pcui-disabled):not(.pcui-readonly):hover .pcui-select-input-shadow,
 .pcui-select-input:not(.pcui-disabled):not(.pcui-readonly).pcui-focus .pcui-select-input-shadow {
     box-shadow: $panel-focus-shadow;
+}
+
+.pcui-color-input:not(.pcui-disabled):not(.pcui-readonly):hover,
+.pcui-color-input:not(.pcui-disabled):not(.pcui-readonly).pcui-focus {
+    box-shadow: $panel-focus-shadow;
+}
+
+.pcui-color-input:not(.pcui-disabled):not(.pcui-readonly) *:focus,
+.pcui-color-input:not(.pcui-disabled):not(.pcui-readonly) *:focus-visible {
+    outline: none !important;
+    box-shadow: $panel-focus-shadow;
+}
+
+.picker-color .pcui-input-element:not(.pcui-disabled):not(.pcui-readonly):hover,
+.picker-color .pcui-input-element:not(.pcui-disabled):not(.pcui-readonly).pcui-focus,
+.picker-color .pcui-text-input:not(.pcui-disabled):not(.pcui-readonly):hover,
+.picker-color .pcui-text-input:not(.pcui-disabled):not(.pcui-readonly).pcui-focus,
+.picker-color .pcui-numeric-input:not(.pcui-disabled):not(.pcui-readonly):hover,
+.picker-color .pcui-numeric-input:not(.pcui-disabled):not(.pcui-readonly).pcui-focus {
+    outline: none !important;
+    box-shadow: $panel-focus-shadow;
+}
+
+.picker-color input:focus,
+.picker-color input:focus-visible {
+    outline: none !important;
 }
 
 .pcui-button.secondary {
