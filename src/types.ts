@@ -34,6 +34,21 @@ export interface ObserverData {
         error?: string,
         warnings?: string[],
         language?: 'en' | 'ru' | 'zh',
+        embed?: {
+            enabled: boolean,
+            preset: 'full' | 'compact' | 'minimal',
+            autoplay: boolean,
+            waiting?: boolean,
+            placeholderUrl?: string | null,
+            panel: boolean,
+            poi: boolean,
+            measure: boolean,
+            info: boolean,
+            controls: boolean,
+            fullscreen: boolean,
+            fit: boolean,
+            reset: boolean
+        }
     },
     camera: {
         fov: number,

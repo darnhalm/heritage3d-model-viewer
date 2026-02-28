@@ -566,6 +566,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     }
 
     componentDidUpdate(_: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, prevState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }) {
+        if (this.props.observerData?.ui?.embed?.enabled && this.state.tab !== 'scene') {
+            this.setState({ tab: 'scene' });
+            return;
+        }
+
         if (this.state.tab === 'materials' && this.props.observerData?.scene?.hasGsplat) {
             this.setState({ tab: 'scene' });
             return;
@@ -642,7 +647,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const { tab, draggingPoiId, dragOverPoiId, dragX, dragY } = this.state;
         const { observerData, setProperty } = this.props;
         const lang = observerData?.ui?.language;
-        const showMaterialsTab = !observerData?.scene?.hasGsplat;
+        const embedEnabled = !!observerData?.ui?.embed?.enabled;
+        const embedPreset = observerData?.ui?.embed?.preset;
+        const showMaterialsTab = !embedEnabled && !observerData?.scene?.hasGsplat;
         const activePoiCardId = observerData?.poi?.activeId || this.state.activePoiCardId;
         const texelDensityShortValue = (() => {
             const summary = observerData?.scene?.texelDensitySummary || 'n/a';
@@ -701,40 +708,48 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             {t('Materials', lang)}
                         </button>
                     )}
-                    <button
-                        type='button'
-                        className={`left-panel-tab left-panel-tab-poi${tab === 'poi' ? ' active' : ''}${observerData?.poi?.enabled ? ' tool-active' : ''}`}
-                        onClick={() => this.setState({ tab: 'poi' })}
-                    >
-                        {t('POI', lang)}
-                    </button>
-                    <button
-                        type='button'
-                        className={`left-panel-tab left-panel-tab-metadata${tab === 'metadata' ? ' active' : ''}`}
-                        onClick={() => this.setState({ tab: 'metadata' })}
-                    >
-                        {t('Metadata (Dublin Core)', lang)}
-                    </button>
+                    {!embedEnabled && (
+                        <button
+                            type='button'
+                            className={`left-panel-tab left-panel-tab-poi${tab === 'poi' ? ' active' : ''}${observerData?.poi?.enabled ? ' tool-active' : ''}`}
+                            onClick={() => this.setState({ tab: 'poi' })}
+                        >
+                            {t('POI', lang)}
+                        </button>
+                    )}
+                    {!embedEnabled && (
+                        <button
+                            type='button'
+                            className={`left-panel-tab left-panel-tab-metadata${tab === 'metadata' ? ' active' : ''}`}
+                            onClick={() => this.setState({ tab: 'metadata' })}
+                        >
+                            {t('Metadata (Dublin Core)', lang)}
+                        </button>
+                    )}
                 </div>
 
                 <div className='left-panel-tab-content'>
                     {tab === 'scene' && (
                         <>
                             <CameraPanel observerData={observerData} setProperty={setProperty} />
-                            {!observerData?.scene?.hasGsplat && (
+                            {!embedEnabled && !observerData?.scene?.hasGsplat && (
                                 <>
                                     <SkyboxPanel observerData={observerData} setProperty={setProperty} />
                                     <LightPanel observerData={observerData} setProperty={setProperty} />
                                 </>
                             )}
-                            <SettingsPanel observerData={observerData} setProperty={setProperty} />
-                            <div id='export-settings-row'>
-                                <Button
-                                    class={['secondary', 'export-settings-button']}
-                                    text={t('Export viewer settings', lang)}
-                                    onClick={() => exportViewerSettings(observerData)}
-                                />
-                            </div>
+                            {(!embedEnabled || embedPreset === 'full') && (
+                                <SettingsPanel observerData={observerData} setProperty={setProperty} />
+                            )}
+                            {!embedEnabled && (
+                                <div id='export-settings-row'>
+                                    <Button
+                                        class={['secondary', 'export-settings-button']}
+                                        text={t('Export viewer settings', lang)}
+                                        onClick={() => exportViewerSettings(observerData)}
+                                    />
+                                </div>
+                            )}
                         </>
                     )}
                     {showMaterialsTab && tab === 'materials' && (

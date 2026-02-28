@@ -1263,7 +1263,7 @@ class Viewer {
             'debug.uvCheckerScale': this.setUvCheckerScale.bind(this),
             'debug.selectedUvSet': this.setSelectedUvSet.bind(this),
             'debug.withTextureOnly': () => {
-                this.selectionController.onTextureSelectionModeChange(this.observer.get('debug.withTextureOnly'));
+                this.selectionController?.onTextureSelectionModeChange(this.observer.get('debug.withTextureOnly'));
                 this.dirtySelectionHighlight = true;
                 this.dirtyTexelDensityHeatmap = true;
                 this.renderNextFrame();
@@ -3032,7 +3032,7 @@ class Viewer {
         }
 
         this.selectedNode = graphNode;
-        this.selectionController.onSelectionNodeChanged();
+        this.selectionController?.onSelectionNodeChanged();
         this.updateMaterialChannelInfo();
         this.updateSelectedMaterialFactors();
         this.updateSelectedMaterialColor();
@@ -3423,9 +3423,9 @@ class Viewer {
     }
 
     clearCta() {
-        document.querySelector('#panel-left').classList.add('no-cta');
-        document.querySelector('#application-canvas').classList.add('no-cta');
-        document.querySelector('.load-button-panel').classList.add('hide');
+        document.querySelector('#panel-left')?.classList.add('no-cta');
+        document.querySelector('#application-canvas')?.classList.add('no-cta');
+        document.querySelector('.load-button-panel')?.classList.add('hide');
     }
 
     // add a loaded asset to the scene

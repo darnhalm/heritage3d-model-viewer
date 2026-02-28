@@ -28,9 +28,64 @@ declare global {
         };
         pc: any;
         viewer: Viewer;
+        startEmbedPlayback?: () => void;
         webkit?: any;
     }
 }
+
+const loadImage = (src: string) => {
+    return new Promise<string>((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(src);
+        image.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+        image.src = src;
+    });
+};
+
+const getEmbedPlaceholderCandidates = (file: { url: string, filename?: string }) => {
+    const extensions = ['jpg', 'jpeg', 'png', 'webp'];
+    const candidates = new Set<string>();
+    const addCandidatesForUrl = (value?: string) => {
+        if (!value) return;
+        try {
+            const parsed = new URL(value, window.location.href);
+            const pathname = parsed.pathname;
+            const dotIndex = pathname.lastIndexOf('.');
+            if (dotIndex === -1) return;
+            const basePath = pathname.slice(0, dotIndex);
+            extensions.forEach((ext) => {
+                const candidate = new URL(parsed.href);
+                candidate.pathname = `${basePath}.${ext}`;
+                candidate.search = '';
+                candidate.hash = '';
+                candidates.add(candidate.href);
+            });
+        } catch {
+            // ignore invalid urls
+        }
+    };
+
+    addCandidatesForUrl(file.url);
+    addCandidatesForUrl(file.filename);
+
+    return Array.from(candidates);
+};
+
+const findEmbedPlaceholder = async (files: Array<{ url: string, filename?: string }>) => {
+    const firstModel = files[0];
+    if (!firstModel) return null;
+
+    const candidates = getEmbedPlaceholderCandidates(firstModel);
+    for (const candidate of candidates) {
+        try {
+            return await loadImage(candidate);
+        } catch {
+            // try next candidate
+        }
+    }
+
+    return null;
+};
 
 const skyboxes = [
     { label: 'Abandoned Tank Farm', url: './skybox/abandoned_tank_farm_01_2k.hdr' },
@@ -61,7 +116,22 @@ const observerData: ObserverData = {
         spinner: false,
         loadProgress: 0,
         error: null,
-        language: 'en'
+        language: 'en',
+        embed: {
+            enabled: false,
+            preset: 'full',
+            autoplay: true,
+            waiting: false,
+            placeholderUrl: null,
+            panel: true,
+            poi: true,
+            measure: true,
+            info: true,
+            controls: true,
+            fullscreen: true,
+            fit: true,
+            reset: true
+        }
     },
     camera: {
         fov: 40,
@@ -280,6 +350,53 @@ const main = () => {
     const perfParam = url.searchParams.get('perf');
     const perfEnabled = perfParam !== null && perfParam.toLowerCase() !== '0' && perfParam.toLowerCase() !== 'false';
 
+    const parseBool = (key: string, defaultValue: boolean) => {
+        const value = url.searchParams.get(key);
+        if (value === null) return defaultValue;
+        return !['0', 'false', 'off', 'no'].includes(value.toLowerCase());
+    };
+
+    const embedEnabled = parseBool('embed', false);
+    const embedPresetParam = url.searchParams.get('ui');
+    const embedPreset = embedPresetParam === 'compact' || embedPresetParam === 'minimal' || embedPresetParam === 'full'
+        ? embedPresetParam
+        : 'full';
+    const embedDefaults = {
+        full: { panel: true, poi: true, measure: true, info: true, controls: true, fullscreen: true, fit: true, reset: true },
+        compact: { panel: false, poi: true, measure: false, info: true, controls: true, fullscreen: true, fit: true, reset: true },
+        minimal: { panel: false, poi: true, measure: false, info: false, controls: false, fullscreen: true, fit: false, reset: true }
+    } as const;
+    const embedConfig: NonNullable<ObserverData['ui']['embed']> = {
+        enabled: embedEnabled,
+        preset: embedPreset,
+        autoplay: parseBool('autoplay', true),
+        waiting: false,
+        placeholderUrl: null,
+        panel: parseBool('panel', embedDefaults[embedPreset].panel),
+        poi: parseBool('poi', embedDefaults[embedPreset].poi),
+        measure: parseBool('measure', embedDefaults[embedPreset].measure),
+        info: parseBool('info', embedDefaults[embedPreset].info),
+        controls: parseBool('controls', embedDefaults[embedPreset].controls),
+        fullscreen: parseBool('fullscreen', embedDefaults[embedPreset].fullscreen),
+        fit: parseBool('fit', embedDefaults[embedPreset].fit),
+        reset: parseBool('reset', embedDefaults[embedPreset].reset)
+    };
+    const reservedQueryParams = new Set([
+        'embed',
+        'ui',
+        'panel',
+        'autoplay',
+        'poi',
+        'measure',
+        'info',
+        'controls',
+        'fullscreen',
+        'fit',
+        'reset',
+        'lang',
+        'perf'
+    ]);
+
     initMaterials();
 
     basisInitialize({
@@ -304,6 +421,22 @@ const main = () => {
         observer.on('*:set', () => {
             saveOptions(observer, 'uistate');
         });
+    }
+
+    observer.set('ui.embed', embedConfig);
+    if (embedConfig.enabled) {
+        observer.set('ui.active', null);
+        if (!embedConfig.measure) {
+            observer.set('measure.enabled', false);
+        }
+        if (!embedConfig.poi) {
+            observer.set('poi.enabled', false);
+        }
+    }
+
+    const forcedLang = url.searchParams.get('lang');
+    if (forcedLang === 'en' || forcedLang === 'ru' || forcedLang === 'zh') {
+        observer.set('ui.language', forcedLang);
     }
 
     // create react ui
@@ -390,6 +523,9 @@ const main = () => {
                     break;
                 }
                 default: {
+                    if (reservedQueryParams.has(key)) {
+                        break;
+                    }
                     if (observer.has(key)) {
                         switch (typeof observer.get(key)) {
                             case 'boolean':
@@ -408,9 +544,20 @@ const main = () => {
             }
         }
 
-        Promise.all(promises).then(() => {
+        Promise.all(promises).then(async () => {
             if (files.length > 0) {
-                viewer.loadFiles(files);
+                const placeholderUrl = embedConfig.enabled ? await findEmbedPlaceholder(files) : null;
+                observer.set('ui.embed.placeholderUrl', placeholderUrl);
+                if (embedConfig.enabled && !embedConfig.autoplay) {
+                    observer.set('ui.embed.waiting', true);
+                    window.startEmbedPlayback = () => {
+                        observer.set('ui.embed.waiting', false);
+                        window.startEmbedPlayback = undefined;
+                        viewer.loadFiles(files);
+                    };
+                } else {
+                    viewer.loadFiles(files);
+                }
             }
         });
     });

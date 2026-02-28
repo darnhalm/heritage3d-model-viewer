@@ -82,6 +82,74 @@ body {
     }
 }
 
+#embed-start-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+#embed-loading-backdrop,
+#embed-start-poster {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#embed-loading-backdrop {
+    z-index: 5;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+#embed-start-poster {
+    object-fit: cover;
+    object-position: center center;
+    display: block;
+}
+
+#embed-loading-backdrop > img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    object-position: center center;
+}
+
+#embed-start-button {
+    position: relative;
+    z-index: 1;
+    width: 192px;
+    height: 192px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.4);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+#embed-start-button:hover {
+    transform: scale(1.04);
+    background: rgba(0, 0, 0, 0.52);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.34);
+}
+
+#embed-start-button > img {
+    width: 112px;
+    height: 112px;
+    display: block;
+}
+
 body:not(.ui-ready) #panel-left {
     visibility: hidden;
 }
@@ -2120,30 +2188,46 @@ input {
 
 #view-panel > #share-url-wrapper {
     display: flex;
-    flex-direction: inherit;
+    flex-direction: row;
+    position: relative;
+    align-items: center;
+    width: 100%;
+}
+
+#view-panel > #share-url-wrapper > .pcui-text-input {
+    width: 100%;
+    flex: 1 1 auto;
 }
 
 #view-panel > #share-url-wrapper > .pcui-text-input > input {
-    width: calc(100% - 57px);
+    width: 100%;
+    padding-right: 44px;
 }
 
 #view-panel > #share-url-wrapper > #copy-button {
     position: absolute;
     width: 32px;
     right: 16px;
-    height: 24px;
+    height: 32px;
+    top: 50%;
+    transform: translateY(-50%);
     background: inherit;
     border: none;
     box-shadow: none;
     overflow: visible;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #view-panel > #share-url-wrapper > #copy-button::before {
     position: absolute;
     font-size: 24px;
-    line-height: 0px;
-    left: 0px;
-    top: 25px;
+    line-height: 24px;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
 }
 
 #view-panel > #share-url-wrapper > #copy-button:hover::before {
@@ -2156,6 +2240,34 @@ input {
 
 #share-qr {
     width: 150px;
+}
+
+#embed-code-wrapper {
+    width: 100%;
+}
+
+#embed-code-wrapper > textarea {
+    width: 100%;
+    min-height: 180px;
+    resize: vertical;
+    box-sizing: border-box;
+    border: none;
+    outline: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #ddd;
+    padding: 10px 12px;
+    font: 12px/1.45 Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+#copy-embed-button {
+    width: 100%;
+}
+
+#copy-embed-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 @keyframes animation-spin {

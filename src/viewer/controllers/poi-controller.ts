@@ -94,6 +94,8 @@ class PoiController {
 
     private shouldShowOverlay(poiCount: number) {
         if (poiCount === 0) return false;
+        const embed = this.observer.get('ui.embed') as { enabled?: boolean; poi?: boolean } | undefined;
+        if (embed?.enabled && !embed.poi) return false;
 
         const leftPanel = document.getElementById('panel-left');
         const panelExpanded = leftPanel?.classList.contains('expanded') ?? false;

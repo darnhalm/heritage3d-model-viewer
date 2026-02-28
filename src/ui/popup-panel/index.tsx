@@ -59,13 +59,24 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
         };
 
         const lang = this.props.observerData?.ui?.language;
+        const embed = this.props.observerData?.ui?.embed;
+        const embedPreset = embed?.preset;
+        const showAnimationControls = !(embed?.enabled && embedPreset === 'minimal');
+        const showInfoButton = !(embed?.enabled) || embed.info || embed.controls;
+        const showMeasureButton = !(embed?.enabled) || embed.measure;
+        const showFitButton = !(embed?.enabled) || embed.fit;
+        const showFullscreenButton = !(embed?.enabled) || embed.fullscreen;
+        const showHdButton = !(embed?.enabled) || embedPreset === 'full';
+        const showCameraModeButton = !(embed?.enabled) || embedPreset === 'full';
         const wrap = (titleText: string, btn: React.ReactNode) => (
             <span title={titleText} style={{ display: 'contents' }}>{btn}</span>
         );
         return (
             <div id='popup-buttons-parent'>
-                <AnimationControls animationData={this.props.observerData.animation} setProperty={this.props.setProperty} lang={this.props.observerData?.ui?.language} />
-                {wrap(t('Info', lang), (
+                {showAnimationControls && (
+                    <AnimationControls animationData={this.props.observerData.animation} setProperty={this.props.setProperty} lang={this.props.observerData?.ui?.language} />
+                )}
+                {showInfoButton && wrap(t('Info', lang), (
                     <Button
                         class={buildClass('info').concat('info-button')}
                         id='info-button'
@@ -74,7 +85,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         onClick={() => this.handleClick('info')}
                     />
                 ))}
-                {wrap(this.props.observerData.camera.hq ? t('HD mode', lang) : t('SD mode', lang), (
+                {showHdButton && wrap(this.props.observerData.camera.hq ? t('HD mode', lang) : t('SD mode', lang), (
                     <Button
                         class={['popup-button', 'hd-button', this.props.observerData.camera.hq ? 'hd-mode' : 'sd-mode']}
                         id='hd-button'
@@ -85,7 +96,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         }}
                     />
                 ))}
-                {wrap(t('Measurement', lang), (
+                {showMeasureButton && wrap(t('Measurement', lang), (
                     <Button
                         class={buildClass('measurement')
                         .concat('measurement-button')
@@ -102,7 +113,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         }}
                     />
                 ))}
-                {wrap(t('ID', lang), (
+                {!embed?.enabled && wrap(t('ID', lang), (
                     <Button
                         class={buildClass('id').concat('id-button')}
                         id='id-button'
@@ -111,10 +122,10 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         onClick={() => this.handleClick('id')}
                     />
                 ))}
-                {wrap(t('View & share', lang), (
+                {!embed?.enabled && wrap(t('View & share', lang), (
                     <Button class={buildClass('view').concat('view-button')} id='view-button' width={40} height={40} onClick={() => this.handleClick('view')} />
                 ))}
-                {wrap(t('Frame scene', lang), (
+                {showFitButton && wrap(t('Frame scene', lang), (
                     <Button
                         class={['popup-button', 'fit-screen-button']}
                         id='fit-screen-button'
@@ -123,7 +134,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         onClick={() => window.viewer?.frameScene?.()}
                     />
                 ))}
-                {wrap(this.props.observerData.camera.mode === 'orbit' ? t('Orbit mode', lang) : t('Fly mode', lang), (
+                {showCameraModeButton && wrap(this.props.observerData.camera.mode === 'orbit' ? t('Orbit mode', lang) : t('Fly mode', lang), (
                     <Button
                         class={['popup-button', 'camera-mode-button', this.props.observerData.camera.mode]}
                         id='camera-mode-button'
@@ -135,7 +146,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         }}
                     />
                 ))}
-                {wrap(this.props.observerData.ui.fullscreen ? t('Exit fullscreen', lang) : t('Fullscreen', lang), (
+                {showFullscreenButton && wrap(this.props.observerData.ui.fullscreen ? t('Exit fullscreen', lang) : t('Fullscreen', lang), (
                     <Button
                         class={['popup-button', 'fullscreen-button', this.props.observerData.ui.fullscreen ? 'fullscreen-exit' : 'fullscreen-enter']}
                         id='fullscreen-button'
@@ -175,6 +186,8 @@ class PopupPanel extends React.Component <{ observerData: ObserverData, setPrope
     }
 
     render() {
+        const embed = this.props.observerData?.ui?.embed;
+        const showArButton = !(embed?.enabled) || embed.preset === 'full';
         return (<div id='popup' className={this.props.observerData.scene.nodes === '[]' ? 'empty' : null}>
             <PopupPanelControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
             <PopupButtonControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
@@ -183,7 +196,7 @@ class PopupPanel extends React.Component <{ observerData: ObserverData, setPrope
                     class='popup-button'
                     id='launch-ar-button'
                     icon='E189'
-                    hidden={!this.hasArSupport || this.props.observerData.scene.nodes === '[]'}
+                    hidden={!showArButton || !this.hasArSupport || this.props.observerData.scene.nodes === '[]'}
                     width={40}
                     height={40}
                     onClick={() => {

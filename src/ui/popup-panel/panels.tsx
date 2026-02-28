@@ -1,6 +1,4 @@
-import { Container, Button, Label, TextInput, TreeView, TreeViewItem } from '@playcanvas/pcui/react';
-// @ts-ignore no type defs included
-import QRious from 'qrious';
+import { Container, Button, Label, TreeView, TreeViewItem } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import { extract, addEventListenerOnClickOnly } from '../../helpers';
@@ -43,6 +41,23 @@ const bytesToSizeString = (bytes: number): string => {
 
 type InfoTab = 'controls' | 'model' | 'about';
 type ControlsSubTab = 'desktop' | 'touch';
+type EmbedGeneratorState = {
+    embedType: 'responsive' | 'fixed',
+    preset: 'full' | 'compact' | 'minimal',
+    width: number,
+    height: number,
+    panel: boolean,
+    autoplay: boolean,
+    allowFullscreen: boolean,
+    poi: boolean,
+    measure: boolean,
+    info: boolean,
+    controls: boolean,
+    fit: boolean,
+    reset: boolean,
+    language: 'auto' | 'en' | 'ru' | 'zh',
+    copied: boolean
+};
 
 class InfoPanel extends React.Component <{
     observerData: ObserverData,
@@ -68,6 +83,21 @@ class InfoPanel extends React.Component <{
         if (!observerData) return null;
         const scene = observerData.scene;
         const lang = observerData?.ui?.language;
+        const embed = observerData?.ui?.embed;
+        const showControlsTab = !(embed?.enabled) || embed.controls;
+        const showModelTab = !(embed?.enabled) || embed.info;
+        const showAboutTab = !(embed?.enabled) || embed.info;
+        const showFitControl = !(embed?.enabled) || embed.fit;
+        const showResetControl = !(embed?.enabled) || embed.reset;
+        const activeTab = (() => {
+            if (this.state.tab === 'controls' && showControlsTab) return 'controls';
+            if (this.state.tab === 'model' && showModelTab) return 'model';
+            if (this.state.tab === 'about' && showAboutTab) return 'about';
+            if (showControlsTab) return 'controls';
+            if (showModelTab) return 'model';
+            if (showAboutTab) return 'about';
+            return null;
+        })();
         let variantListOptions: Array<{ v: string, t: string }> = [];
         try {
             const parsed = JSON.parse(scene?.variants?.list || '[]');
@@ -81,29 +111,35 @@ class InfoPanel extends React.Component <{
             <div className='popup-panel-parent info-panel-parent' hidden={observerData?.ui?.active !== 'info'}>
                 <Container class={['popup-panel', 'info-panel']} flex>
                     <div className='info-panel-tabs'>
-                        <button
-                            type='button'
-                            className={`info-tab${this.state.tab === 'controls' ? ' active' : ''}`}
-                            onClick={() => this.setState({ tab: 'controls' })}
-                        >
-                            {t('Controls', lang)}
-                        </button>
-                        <button
-                            type='button'
-                            className={`info-tab${this.state.tab === 'model' ? ' active' : ''}`}
-                            onClick={() => this.setState({ tab: 'model' })}
-                        >
-                            {t('Model', lang)}
-                        </button>
-                        <button
-                            type='button'
-                            className={`info-tab${this.state.tab === 'about' ? ' active' : ''}`}
-                            onClick={() => this.setState({ tab: 'about' })}
-                        >
-                            {t('About', lang)}
-                        </button>
+                        {showControlsTab && (
+                            <button
+                                type='button'
+                                className={`info-tab${activeTab === 'controls' ? ' active' : ''}`}
+                                onClick={() => this.setState({ tab: 'controls' })}
+                            >
+                                {t('Controls', lang)}
+                            </button>
+                        )}
+                        {showModelTab && (
+                            <button
+                                type='button'
+                                className={`info-tab${activeTab === 'model' ? ' active' : ''}`}
+                                onClick={() => this.setState({ tab: 'model' })}
+                            >
+                                {t('Model', lang)}
+                            </button>
+                        )}
+                        {showAboutTab && (
+                            <button
+                                type='button'
+                                className={`info-tab${activeTab === 'about' ? ' active' : ''}`}
+                                onClick={() => this.setState({ tab: 'about' })}
+                            >
+                                {t('About', lang)}
+                            </button>
+                        )}
                     </div>
-                    {this.state.tab === 'controls' && (
+                    {activeTab === 'controls' && (
                         <>
                             <div className='info-panel-subtabs'>
                                 <button
@@ -131,31 +167,39 @@ class InfoPanel extends React.Component <{
                                     <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
                                     <ControlDetail label={t('Look Around', lang)} value={t('Left Mouse', lang)} useMouseIcon icons={['right_click']} />
                                     <ControlDetail label={t('Fly', lang)} value='W, S, A, D' icon='keyboard' />
-                                    <Label text={t('General', lang)} class='popup-panel-heading' />
-                                    <Container class={['panel-option', 'control-detail']}>
-                                        <Label class='panel-label' text={t('Frame Scene', lang)} />
-                                        <div className='panel-value control-value'>
-                                            <span>F</span>
-                                            <Button
-                                                class={['fit-screen-button', 'fit-screen-button-inline']}
-                                                width={28}
-                                                height={28}
-                                                onClick={() => window.viewer?.frameScene?.()}
-                                            />
-                                        </div>
-                                    </Container>
-                                    <Container class={['panel-option', 'control-detail']}>
-                                        <Label class='panel-label' text={t('Reset Camera', lang)} />
-                                        <div className='panel-value control-value'>
-                                            <span>R</span>
-                                            <Button
-                                                class={['reset-camera-button', 'reset-camera-button-inline']}
-                                                width={28}
-                                                height={28}
-                                                onClick={() => window.viewer?.resetCamera?.()}
-                                            />
-                                        </div>
-                                    </Container>
+                                    {(showFitControl || showResetControl) && (
+                                        <>
+                                            <Label text={t('General', lang)} class='popup-panel-heading' />
+                                            {showFitControl && (
+                                                <Container class={['panel-option', 'control-detail']}>
+                                                    <Label class='panel-label' text={t('Frame Scene', lang)} />
+                                                    <div className='panel-value control-value'>
+                                                        <span>F</span>
+                                                        <Button
+                                                            class={['fit-screen-button', 'fit-screen-button-inline']}
+                                                            width={28}
+                                                            height={28}
+                                                            onClick={() => window.viewer?.frameScene?.()}
+                                                        />
+                                                    </div>
+                                                </Container>
+                                            )}
+                                            {showResetControl && (
+                                                <Container class={['panel-option', 'control-detail']}>
+                                                    <Label class='panel-label' text={t('Reset Camera', lang)} />
+                                                    <div className='panel-value control-value'>
+                                                        <span>R</span>
+                                                        <Button
+                                                            class={['reset-camera-button', 'reset-camera-button-inline']}
+                                                            width={28}
+                                                            height={28}
+                                                            onClick={() => window.viewer?.resetCamera?.()}
+                                                        />
+                                                    </div>
+                                                </Container>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
                             ) : (
                                 <div className='info-controls-content'>
@@ -171,7 +215,7 @@ class InfoPanel extends React.Component <{
                             )}
                         </>
                     )}
-                    {this.state.tab === 'model' && (
+                    {activeTab === 'model' && (
                         <div className='info-panel-model-combined'>
                             <Label text={t('Model', lang)} class='popup-panel-heading' />
                             {hasModel ? (
@@ -262,7 +306,7 @@ class InfoPanel extends React.Component <{
                             />
                         </div>
                     )}
-                    {this.state.tab === 'about' && (
+                    {activeTab === 'about' && (
                         <div className='info-about-block'>
                             <div className='about-header'>
                                 <img src='static/heritage3d-logo.svg' alt='' className='about-logo' />
@@ -384,22 +428,114 @@ class ViewPanel extends React.Component <{
     uiData: ObserverData['ui'],
     runtimeData: ObserverData['runtime'],
     setProperty: SetProperty }> {
-    isMobile: boolean;
+    declare state: EmbedGeneratorState;
 
-    get shareUrl() {
-        const query = this.props.sceneData.urls.map((url: string) => `load=${encodeURIComponent(url)}`).join('&');
-        return query ? `${location.origin}${location.pathname}?${query}` : `${location.origin}${location.pathname}`;
+    private presetDefaults: Record<'full' | 'compact' | 'minimal', {
+        panel: boolean,
+        poi: boolean,
+        measure: boolean,
+        info: boolean,
+        controls: boolean,
+        allowFullscreen: boolean,
+        fit: boolean,
+        reset: boolean
+    }> = {
+            full: { panel: true, poi: true, measure: true, info: true, controls: true, allowFullscreen: true, fit: true, reset: true },
+            compact: { panel: false, poi: true, measure: false, info: true, controls: true, allowFullscreen: true, fit: true, reset: true },
+            minimal: { panel: false, poi: true, measure: false, info: false, controls: false, allowFullscreen: true, fit: false, reset: true }
+        };
+
+    get embedSrc() {
+        const url = new URL(window.location.href);
+        url.search = '';
+        this.props.sceneData.urls.forEach((modelUrl: string) => {
+            let normalizedUrl = modelUrl;
+            try {
+                const parsed = new URL(modelUrl, window.location.href);
+                if (parsed.origin === window.location.origin) {
+                    normalizedUrl = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+                } else {
+                    normalizedUrl = parsed.toString();
+                }
+            } catch {
+                normalizedUrl = modelUrl;
+            }
+            url.searchParams.append('load', normalizedUrl);
+        });
+        url.searchParams.set('embed', '1');
+        url.searchParams.set('ui', this.state.preset);
+        url.searchParams.set('panel', this.state.panel ? '1' : '0');
+        url.searchParams.set('autoplay', this.state.autoplay ? '1' : '0');
+        url.searchParams.set('poi', this.state.poi ? '1' : '0');
+        url.searchParams.set('measure', this.state.measure ? '1' : '0');
+        url.searchParams.set('info', this.state.info ? '1' : '0');
+        url.searchParams.set('controls', this.state.controls ? '1' : '0');
+        url.searchParams.set('fullscreen', this.state.allowFullscreen ? '1' : '0');
+        url.searchParams.set('fit', this.state.fit ? '1' : '0');
+        url.searchParams.set('reset', this.state.reset ? '1' : '0');
+        if (this.state.language !== 'auto') {
+            url.searchParams.set('lang', this.state.language);
+        }
+        return url.toString();
+    }
+
+    get embedCode() {
+        const allowAttrs = ['autoplay'];
+        if (this.state.allowFullscreen) {
+            allowAttrs.push('fullscreen', 'xr-spatial-tracking', 'web-share');
+        }
+        if (this.state.embedType === 'responsive') {
+            return `<div style="position: relative; width: 100%; height: ${this.state.height}px;">
+  <iframe
+    title="3D Viewer"
+    frameborder="0"
+    ${this.state.allowFullscreen ? 'allowfullscreen\n    mozallowfullscreen="true"\n    webkitallowfullscreen="true"' : ''}
+    allow="${allowAttrs.join('; ')}"
+    src="${this.embedSrc}"
+    style="position: absolute; inset: 0; width: 100%; height: 100%; border: 0;"
+  ></iframe>
+</div>`;
+        }
+        return `<iframe
+  title="3D Viewer"
+  frameborder="0"
+  ${this.state.allowFullscreen ? 'allowfullscreen\n  mozallowfullscreen="true"\n  webkitallowfullscreen="true"' : ''}
+  allow="${allowAttrs.join('; ')}"
+  src="${this.embedSrc}"
+  width="${this.state.width}"
+  height="${this.state.height}"
+  style="border: 0;"
+></iframe>`;
     }
 
     constructor(props: any) {
         super(props);
-        this.isMobile = (/Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+        const embed = props.uiData?.embed;
+        const preset = (embed?.preset ?? 'compact') as EmbedGeneratorState['preset'];
+        const defaults = this.presetDefaults[preset];
+        this.state = {
+            embedType: 'responsive',
+            preset,
+            width: 960,
+            height: 640,
+            panel: embed?.panel ?? defaults.panel,
+            autoplay: embed?.autoplay ?? true,
+            allowFullscreen: embed?.fullscreen ?? defaults.allowFullscreen,
+            poi: embed?.poi ?? defaults.poi,
+            measure: embed?.measure ?? defaults.measure,
+            info: embed?.info ?? defaults.info,
+            controls: embed?.controls ?? defaults.controls,
+            fit: embed?.fit ?? defaults.fit,
+            reset: embed?.reset ?? defaults.reset,
+            language: (props.uiData?.language ?? 'auto') as 'auto' | 'en' | 'ru' | 'zh',
+            copied: false
+        };
     }
 
     shouldComponentUpdate(nextProps: Readonly<{
         sceneData: ObserverData['scene'];
         uiData: ObserverData['ui'];
-        setProperty: SetProperty; }>): boolean {
+        setProperty: SetProperty; }>, nextState: Readonly<EmbedGeneratorState>): boolean {
         const a = nextProps;
         const b = this.props;
         const urlsA = a.sceneData?.urls || [];
@@ -409,32 +545,25 @@ class ViewPanel extends React.Component <{
             if (urlsA[i] !== urlsB[i]) return true;
         }
         return a.uiData?.active !== b.uiData?.active ||
-               a.uiData?.language !== b.uiData?.language;
+               a.uiData?.language !== b.uiData?.language ||
+               JSON.stringify(nextState) !== JSON.stringify(this.state);
     }
 
-    get hasQRCode() {
-        return this.props.sceneData.urls.length > 0 && !this.isMobile;
-    }
-
-    updateQRCode() {
-        const canvas = document.getElementById('share-qr') as HTMLCanvasElement;
-        const qr = new QRious({
-            element: canvas,
-            value: this.shareUrl,
-            size: canvas.getBoundingClientRect().width * window.devicePixelRatio
+    private applyPreset = (preset: 'full' | 'compact' | 'minimal') => {
+        const defaults = this.presetDefaults[preset];
+        this.setState({
+            preset,
+            panel: defaults.panel,
+            autoplay: true,
+            poi: defaults.poi,
+            measure: defaults.measure,
+            info: defaults.info,
+            controls: defaults.controls,
+            allowFullscreen: defaults.allowFullscreen,
+            fit: defaults.fit,
+            reset: defaults.reset,
+            copied: false
         });
-    }
-
-    componentDidMount() {
-        if (this.hasQRCode) {
-            this.updateQRCode();
-        }
-    }
-
-    componentDidUpdate(): void {
-        if (this.hasQRCode) {
-            this.updateQRCode();
-        }
     }
 
     render() {
@@ -443,22 +572,85 @@ class ViewPanel extends React.Component <{
         return (
             <div className='popup-panel-parent'>
                 <Container id='view-panel' class='popup-panel' flex hidden={props.uiData.active !== 'view'}>
-                    { this.hasQRCode ?
-                        <>
-                            <Label text={t('View and share on mobile with QR code', lang)} />
-                            <div id='qr-wrapper'>
-                                <canvas id='share-qr' />
-                            </div>
-                            <Label text={t('View and share on mobile with URL', lang)} />
-                            <div id='share-url-wrapper'>
-                                <TextInput class='secondary' value={this.shareUrl} enabled={false} />
-                                <Button id='copy-button' icon='E126' onClick={() => {
-                                    if (navigator.clipboard && window.isSecureContext) {
-                                        navigator.clipboard.writeText(this.shareUrl);
-                                    }
-                                }}/>
-                            </div>
-                        </> : null }
+                    <Label text={t('Embed Type', lang)} />
+                    <Select
+                        label=''
+                        type='string'
+                        options={[
+                            { v: 'responsive', t: t('Responsive', lang) },
+                            { v: 'fixed', t: t('Fixed', lang) }
+                        ]}
+                        value={this.state.embedType}
+                        setProperty={(value: 'responsive' | 'fixed') => this.setState({ embedType: value })}
+                    />
+                    <Label text={t('UI Preset', lang)} />
+                    <Select
+                        label=''
+                        type='string'
+                        options={[
+                            { v: 'full', t: t('Full', lang) },
+                            { v: 'compact', t: t('Compact', lang) },
+                            { v: 'minimal', t: t('Minimal', lang) }
+                        ]}
+                        value={this.state.preset}
+                        setProperty={(value: 'full' | 'compact' | 'minimal') => this.applyPreset(value)}
+                    />
+                    {this.state.embedType === 'fixed' && (
+                        <Numeric
+                            label={t('Width', lang)}
+                            value={this.state.width}
+                            min={200}
+                            max={4096}
+                            setProperty={(value: number) => this.setState({ width: Math.max(200, Math.round(value || 200)) })}
+                        />
+                    )}
+                    <Numeric
+                        label={t('Height', lang)}
+                        value={this.state.height}
+                        min={200}
+                        max={4096}
+                        setProperty={(value: number) => this.setState({ height: Math.max(200, Math.round(value || 200)) })}
+                    />
+                    <Toggle label={t('Show left panel', lang)} value={this.state.panel} setProperty={(value: boolean) => this.setState({ panel: value })} />
+                    <Toggle label={t('Autoplay', lang)} value={this.state.autoplay} setProperty={(value: boolean) => this.setState({ autoplay: value })} />
+                    <Toggle label={t('Allow fullscreen', lang)} value={this.state.allowFullscreen} setProperty={(value: boolean) => this.setState({ allowFullscreen: value })} />
+                    <Toggle label={t('Show POI', lang)} value={this.state.poi} setProperty={(value: boolean) => this.setState({ poi: value })} />
+                    <Toggle label={t('Enable measure', lang)} value={this.state.measure} setProperty={(value: boolean) => this.setState({ measure: value })} />
+                    <Toggle label={t('Show info', lang)} value={this.state.info} setProperty={(value: boolean) => this.setState({ info: value })} />
+                    <Toggle label={t('Show controls', lang)} value={this.state.controls} setProperty={(value: boolean) => this.setState({ controls: value })} />
+                    <Toggle label={t('Show fit to screen', lang)} value={this.state.fit} setProperty={(value: boolean) => this.setState({ fit: value })} />
+                    <Toggle label={t('Show reset camera', lang)} value={this.state.reset} setProperty={(value: boolean) => this.setState({ reset: value })} />
+                    <Select
+                        label={t('Language', lang)}
+                        type='string'
+                        options={[
+                            { v: 'auto', t: t('Auto', lang) },
+                            { v: 'en', t: 'EN' },
+                            { v: 'ru', t: 'RU' },
+                            { v: 'zh', t: 'ZH' }
+                        ]}
+                        value={this.state.language}
+                        setProperty={(value: 'auto' | 'en' | 'ru' | 'zh') => this.setState({ language: value })}
+                    />
+                    <Label text={t('Generated Embed Code', lang)} />
+                    <div id='embed-code-wrapper'>
+                        <textarea readOnly value={this.embedCode} />
+                    </div>
+                    <div id='copy-embed-row'>
+                        <Button
+                            id='copy-embed-button'
+                            class='secondary'
+                            text={t('Copy Embed Code', lang)}
+                            onClick={() => {
+                                if (navigator.clipboard && window.isSecureContext) {
+                                    navigator.clipboard.writeText(this.embedCode);
+                                    this.setState({ copied: true });
+                                    window.setTimeout(() => this.setState({ copied: false }), 2000);
+                                }
+                            }}
+                        />
+                        {this.state.copied && <span className='metadata-saved-feedback'>✓ {t('Copied', lang)}</span>}
+                    </div>
                     <Button
                         class='secondary'
                         text={t('TAKE A SNAPSHOT AS PNG', lang)}

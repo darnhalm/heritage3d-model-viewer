@@ -55,43 +55,73 @@ class App extends React.Component<{ observer: Observer }> {
 
     render() {
         if (!this.state) return null;
+        const embed = this.state?.ui?.embed;
+        const showLeftPanel = !(embed?.enabled && !embed?.panel);
+        const showLoadControls = !embed?.enabled;
+        const showSelectedNode = !embed?.enabled;
+        const showEmbedStartOverlay = !!(embed?.enabled && embed?.waiting);
+        const showEmbedLoadingBackdrop = !!(embed?.enabled && !embed?.waiting && embed?.placeholderUrl && this.state?.ui?.spinner);
         return <div id="application-container">
-            <Container id="panel-left" width={32} flex resizable='right' resizeMin={220} resizeMax={800}>
-                <div className="header" style={{ display: 'none' }}>
-                    <div id="title">
-                        <img src={'static/heritage3d-logo.svg'}/>
-                        <div>HERITAGE3D Viewer v1.0</div>
+            {showLeftPanel && (
+                <Container id="panel-left" width={32} flex resizable='right' resizeMin={220} resizeMax={800}>
+                    <div className="header" style={{ display: 'none' }}>
+                        <div id="title">
+                            <img src={'static/heritage3d-logo.svg'}/>
+                            <div>HERITAGE3D Viewer v1.0</div>
+                        </div>
                     </div>
-                </div>
-                <div id="panel-toggle">
-                    <img src={'static/heritage3d-logo.svg'}/>
-                </div>
-                <LeftPanel observerData={this.state} setProperty={this._setStateProperty} />
-                <div className='lang-switcher'>
-                    <button
-                        type='button'
-                        className={`fi fi-gb fis${this.state?.ui?.language === 'en' ? ' active' : ''}`}
-                        title='English'
-                        onClick={() => this._setStateProperty('ui.language', 'en')}
-                    />
-                    <button
-                        type='button'
-                        className={`fi fi-ru fis${this.state?.ui?.language === 'ru' ? ' active' : ''}`}
-                        title='Русский'
-                        onClick={() => this._setStateProperty('ui.language', 'ru')}
-                    />
-                    <button
-                        type='button'
-                        className={`fi fi-cn fis${this.state?.ui?.language === 'zh' ? ' active' : ''}`}
-                        title='中文'
-                        onClick={() => this._setStateProperty('ui.language', 'zh')}
-                    />
-                </div>
-            </Container>
+                    <div id="panel-toggle">
+                        <img src={'static/heritage3d-logo.svg'}/>
+                    </div>
+                    <LeftPanel observerData={this.state} setProperty={this._setStateProperty} />
+                    {!embed?.enabled && (
+                        <div className='lang-switcher'>
+                            <button
+                                type='button'
+                                className={`fi fi-gb fis${this.state?.ui?.language === 'en' ? ' active' : ''}`}
+                                title='English'
+                                onClick={() => this._setStateProperty('ui.language', 'en')}
+                            />
+                            <button
+                                type='button'
+                                className={`fi fi-ru fis${this.state?.ui?.language === 'ru' ? ' active' : ''}`}
+                                title='Русский'
+                                onClick={() => this._setStateProperty('ui.language', 'ru')}
+                            />
+                            <button
+                                type='button'
+                                className={`fi fi-cn fis${this.state?.ui?.language === 'zh' ? ' active' : ''}`}
+                                title='中文'
+                                onClick={() => this._setStateProperty('ui.language', 'zh')}
+                            />
+                        </div>
+                    )}
+                </Container>
+            )}
             <div id='canvas-wrapper'>
                 <canvas id="application-canvas" ref={this.canvasRef} />
-                <LoadControls observerData={this.state} setProperty={this._setStateProperty}/>
-                <SelectedNode observerData={this.state} setProperty={this._setStateProperty} />
+                {showEmbedLoadingBackdrop && (
+                    <div id='embed-loading-backdrop'>
+                        <img src={embed.placeholderUrl} alt='' />
+                    </div>
+                )}
+                {showEmbedStartOverlay && (
+                    <div id='embed-start-overlay'>
+                        {embed?.placeholderUrl && (
+                            <img id='embed-start-poster' src={embed.placeholderUrl} alt='' />
+                        )}
+                        <button
+                            type='button'
+                            id='embed-start-button'
+                            title='Start'
+                            onClick={() => window.startEmbedPlayback?.()}
+                        >
+                            <img src='static/icons/embed-play.svg' alt='Start' />
+                        </button>
+                    </div>
+                )}
+                {showLoadControls && <LoadControls observerData={this.state} setProperty={this._setStateProperty}/>}
+                {showSelectedNode && <SelectedNode observerData={this.state} setProperty={this._setStateProperty} />}
                 <PopupPanel observerData={this.state} setProperty={this._setStateProperty} />
                 <ErrorBox observerData={this.state} setProperty={this._setStateProperty} />
                 <WarningsBox observerData={this.state} setProperty={this._setStateProperty} />
