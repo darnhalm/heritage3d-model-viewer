@@ -471,7 +471,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     state: { tab: LeftPanelTab } = { tab: 'scene' };
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) || nextState.tab !== this.state.tab;
@@ -513,6 +513,14 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const setSelectedSpecularColor = (value: number[]) => {
             (window as any).viewer?.setSelectedSpecularColor?.(arrToRgb(value));
         };
+        const poiList = (() => {
+            try {
+                const parsed = JSON.parse(observerData?.poi?.list ?? '[]');
+                return Array.isArray(parsed) ? parsed : [];
+            } catch {
+                return [];
+            }
+        })();
 
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
@@ -734,7 +742,45 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             )}
                         </Panel>
                     )}
-                    {tab === 'poi' && <div id='left-tab-poi' />}
+                    {tab === 'poi' && (
+                        <Panel headerText={t('POI', lang)} id='poi-panel' flexShrink={'0'} collapsible={false}>
+                            <Toggle
+                                label={t('Add POI', lang)}
+                                value={observerData?.poi?.enabled ?? false}
+                                setProperty={(value: boolean) => setProperty('poi.enabled', value)}
+                            />
+                            {(observerData?.poi?.enabled ?? false) && (
+                                <div className='materials-layer-inline-hint'>{t('Click on the model surface to place a POI.', lang)}</div>
+                            )}
+                            <div className='poi-list'>
+                                {poiList.length === 0 && (
+                                    <div className='materials-layer-inline-hint'>{t('No POIs yet.', lang)}</div>
+                                )}
+                                {poiList.map((poi: any) => (
+                                    <div key={String(poi.id)} className='poi-list-item'>
+                                        <div className='poi-list-badge'>{poi.number}</div>
+                                        <div className='poi-list-label'>POI {poi.number}</div>
+                                        <button
+                                            type='button'
+                                            className='poi-list-delete'
+                                            onClick={() => (window as any).viewer?.removePoi?.(String(poi.id))}
+                                        >
+                                            {t('Delete', lang)}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            {poiList.length > 0 && (
+                                <div id='export-settings-row'>
+                                    <Button
+                                        class={['secondary', 'export-settings-button']}
+                                        text={t('Clear POIs', lang)}
+                                        onClick={() => (window as any).viewer?.clearPois?.()}
+                                    />
+                                </div>
+                            )}
+                        </Panel>
+                    )}
                     {tab === 'metadata' && <MetadataPanel observerData={observerData} setProperty={setProperty} />}
                 </div>
 

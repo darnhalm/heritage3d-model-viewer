@@ -83,6 +83,7 @@ class SelectionController {
             if (event.target !== this.canvas) return;
             if (!this.observer.get('debug.withTextureOnly')) return;
             if (this.observer.get('measure.enabled')) return;
+            if (this.observer.get('poi.enabled')) return;
             const rect = this.canvas.getBoundingClientRect();
             this.selectClickDown = {
                 clientX: event.clientX,
@@ -102,7 +103,7 @@ class SelectionController {
         };
         const onSelectMouseup = (event: MouseEvent) => {
             if (event.button !== 0) return;
-            if (this.selectIsPotentialClick && this.selectClickDown && this.observer.get('debug.withTextureOnly') && !this.observer.get('measure.enabled')) {
+            if (this.selectIsPotentialClick && this.selectClickDown && this.observer.get('debug.withTextureOnly') && !this.observer.get('measure.enabled') && !this.observer.get('poi.enabled')) {
                 this.pickAndSelectAt(this.selectClickDown.canvasX, this.selectClickDown.canvasY);
             }
             this.selectIsPotentialClick = false;

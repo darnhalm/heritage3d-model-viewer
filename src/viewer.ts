@@ -86,7 +86,7 @@ import { ShadowCatcher } from './shadow-catcher';
 import arCloseImage from './svg/ar-close.svg';
 import arModeImage from './svg/ar-mode.svg';
 import { File, HierarchyNode, MorphTargetData, SceneCamera } from './types';
-import { MeasurementController, SelectionController } from './viewer/controllers';
+import { MeasurementController, PoiController, SelectionController } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
 import { XRObjectPlacementController } from './xr-mode';
@@ -479,6 +479,8 @@ class Viewer {
     observer: Observer;
 
     measurementController: MeasurementController;
+
+    poiController: PoiController;
 
     selectionController: SelectionController;
 
@@ -873,6 +875,13 @@ class Viewer {
             getPickRay: this.getPickRay.bind(this),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
+        this.poiController = new PoiController({
+            canvas: this.canvas,
+            observer: this.observer,
+            getMeshInstances: () => this.meshInstances,
+            getPickRay: this.getPickRay.bind(this),
+            renderNextFrame: this.renderNextFrame.bind(this)
+        });
         this.selectionController = new SelectionController({
             canvas: this.canvas,
             observer: this.observer,
@@ -1034,6 +1043,14 @@ class Viewer {
         }
         this.observer.set('measure.pointCount', 0);
         this.observer.set('measure.lastDistance', null);
+    }
+
+    removePoi(id: string) {
+        this.poiController?.removePoi(id);
+    }
+
+    clearPois() {
+        this.poiController?.clearPois();
     }
 
     /** Recalibrate unitScale: user measured two points and knows the real-world distance. Sets unitScale so that lastDistance matches knownDistance. */
@@ -1210,6 +1227,17 @@ class Viewer {
             'measure.enabled': (enabled: boolean) => {
                 if (!enabled) {
                     this.clearMeasurement();
+                }
+                this.canvas.style.cursor = enabled ? 'crosshair' : '';
+            },
+            'poi.enabled': (enabled: boolean) => {
+                if (enabled) {
+                    if (this.observer.get('measure.enabled')) {
+                        this.observer.set('measure.enabled', false);
+                    }
+                    if (this.observer.get('debug.withTextureOnly')) {
+                        this.observer.set('debug.withTextureOnly', false);
+                    }
                 }
                 this.canvas.style.cursor = enabled ? 'crosshair' : '';
             },
@@ -3961,6 +3989,7 @@ class Viewer {
         this.debugMeasure.clear();
         this.debugMeasure.update();
         this.measurementController.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
+        this.poiController.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
 
         // fit camera planes to the scene
         this.fitCameraClipPlanes();

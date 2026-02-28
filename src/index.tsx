@@ -185,6 +185,10 @@ const observerData: ObserverData = {
         xrSupported: false,
         xrActive: false
     },
+    poi: {
+        enabled: false,
+        list: '[]'
+    },
     measure: {
         enabled: false,
         unit: 'm',

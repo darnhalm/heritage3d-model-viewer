@@ -12,6 +12,12 @@ type CachedMeshGeometry = {
     }>;
 };
 
+type MeshRaycastHit = {
+    t: number;
+    point: Vec3;
+    normal: Vec3;
+};
+
 type MeshLike = object & {
     primitive?: Array<{ type?: number; base?: number; count?: number; indexed?: boolean; baseVertex?: number }>;
     vertexBuffer?: { getNumVertices?: () => number; numVertices?: number };
@@ -88,7 +94,13 @@ const intersectTriangle = (origin: Vec3, direction: Vec3, a: Vec3, b: Vec3, c: V
     return t >= 0 ? t : null;
 };
 
-const intersectMeshTriangles = (
+const computeTriangleNormal = (a: Vec3, b: Vec3, c: Vec3) => {
+    const edge1 = new Vec3().sub2(b, a);
+    const edge2 = new Vec3().sub2(c, a);
+    return new Vec3().cross(edge1, edge2).normalize();
+};
+
+const intersectMeshTrianglesDetailed = (
     mi: MeshInstance,
     origin: Vec3,
     direction: Vec3,
@@ -101,7 +113,7 @@ const intersectMeshTriangles = (
     const world = mi.node?.getWorldTransform();
     if (!world) return null;
 
-    let bestT = Number.POSITIVE_INFINITY;
+    let bestHit: MeshRaycastHit | null = null;
     const p0 = new Vec3();
     const p1 = new Vec3();
     const p2 = new Vec3();
@@ -122,13 +134,25 @@ const intersectMeshTriangles = (
             world.transformPoint(p2, p2);
 
             const t = intersectTriangle(origin, direction, p0, p1, p2);
-            if (t == null || t > maxDistance || t >= bestT) continue;
-            bestT = t;
+            if (t == null || t > maxDistance || (bestHit && t >= bestHit.t)) continue;
+            const point = origin.clone().add(direction.clone().mulScalar(t));
+            const normal = computeTriangleNormal(p0, p1, p2);
+            bestHit = { t, point, normal };
         }
     });
 
-    return Number.isFinite(bestT) ? bestT : null;
+    return bestHit;
 };
 
-export { getCachedMeshGeometry, intersectMeshTriangles };
-export type { CachedMeshGeometry };
+const intersectMeshTriangles = (
+    mi: MeshInstance,
+    origin: Vec3,
+    direction: Vec3,
+    maxDistance: number,
+    cache: WeakMap<object, CachedMeshGeometry | null>
+) => {
+    return intersectMeshTrianglesDetailed(mi, origin, direction, maxDistance, cache)?.t ?? null;
+};
+
+export { getCachedMeshGeometry, intersectMeshTriangles, intersectMeshTrianglesDetailed };
+export type { CachedMeshGeometry, MeshRaycastHit };

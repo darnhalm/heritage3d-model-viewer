@@ -181,6 +181,10 @@ export interface ObserverData {
         xrSupported: boolean,
         xrActive: boolean
     },
+    poi: {
+        enabled: boolean,
+        list: string
+    },
     measure: {
         enabled: boolean,
         unit: 'mm' | 'cm' | 'm',

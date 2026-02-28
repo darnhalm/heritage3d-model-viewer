@@ -1,7 +1,7 @@
 import { Observer } from '@playcanvas/observer';
 import { MeshInstance, Vec3 } from 'playcanvas';
 
-import { CachedMeshGeometry, intersectMeshTriangles } from './mesh-raycast';
+import { CachedMeshGeometry, intersectMeshTrianglesDetailed } from './mesh-raycast';
 import { Picker } from '../../picker';
 
 const MEASURE_CLICK_DRAG_THRESHOLD = 5;
@@ -191,10 +191,10 @@ class MeasurementController {
                 return;
             }
 
-            const t = intersectMeshTriangles(mi, origin, direction, bestT, this.meshGeometryCache);
-            if (t == null || t >= bestT) return;
-            bestT = t;
-            bestPoint = origin.clone().add(direction.clone().mulScalar(t));
+            const hit = intersectMeshTrianglesDetailed(mi, origin, direction, bestT, this.meshGeometryCache);
+            if (!hit || hit.t >= bestT) return;
+            bestT = hit.t;
+            bestPoint = hit.point.clone();
         });
 
         return bestPoint;
