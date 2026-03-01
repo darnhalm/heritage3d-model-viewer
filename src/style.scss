@@ -1914,15 +1914,19 @@ input {
 
 .selected-node-panel {
     position: absolute;
-    right: 40px;
-    top: 40px;
+    right: 28px;
+    top: 28px;
     display: flex;
-    align-items: center;
-    width: 420px;
-    margin: 12px;
-    padding: 16px 16px 16px 16px;
-    border-radius: 8px;
-    background-color: rgba(64, 64, 64, 0.6);
+    align-items: stretch;
+    width: 360px;
+    max-width: calc(100vw - 72px);
+    margin: 0;
+    padding: 12px;
+    border-radius: 10px;
+    background-color: rgba(26, 26, 26, 0.62);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
 }
 
 .scene-hierarchy-panel .scene-morph-panel {
@@ -1942,11 +1946,25 @@ input {
 }
 
 .selected-node-panel > .pcui-panel-content {
-    padding-right: 6px;
+    width: 100%;
+    padding-right: 0;
 }
 
 .selected-node-panel .panel-option {
-    margin-bottom: 6px;
+    margin-bottom: 4px;
+}
+
+.selected-node-panel .selected-node-multiline-detail {
+    align-items: flex-start;
+    min-height: auto !important;
+    height: auto !important;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+
+.selected-node-panel .selected-node-multiline-value {
+    white-space: pre-line;
+    line-height: 1.35;
 }
 
 .animation-controls-panel-parent {

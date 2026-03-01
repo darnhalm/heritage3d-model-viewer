@@ -1,4 +1,4 @@
-import { Container } from '@playcanvas/pcui/react';
+import { Container, Label } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import { SetProperty, ObserverData } from '../types';
@@ -75,6 +75,7 @@ class SelectedNode extends React.Component < { observerData: ObserverData; setPr
             triangles?: number;
             worldAreaM2?: number;
         } | undefined;
+        const texelDensityMultiline = String(scene?.texelDensitySummary || 'n/a').split('|').map(part => part.trim()).join('\n');
         return hasHierarchy && nodeSelected ? (
             <div className='selected-node-panel-parent'>
                 <Container class='selected-node-panel' flex>
@@ -105,7 +106,10 @@ class SelectedNode extends React.Component < { observerData: ObserverData; setPr
                             enabled={true}
                         />
                     )}
-                    <Detail label={t('Texel Density', lang)} value={scene?.texelDensitySummary || 'n/a'} />
+                    <Container class={['panel-option', 'selected-node-multiline-detail']}>
+                        <Label class='panel-label' text={t('Texel Density', lang)} />
+                        <Label class={['panel-value', 'selected-node-multiline-value']} text={texelDensityMultiline} />
+                    </Container>
                     {texelDensityPrimary && (
                         <>
                             <Detail label={t('Texture Size', lang)} value={texelDensityPrimary.resolution || '-'} />

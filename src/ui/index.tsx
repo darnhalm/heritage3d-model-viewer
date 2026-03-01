@@ -91,7 +91,7 @@ class App extends React.Component<{ observer: Observer }> {
         const currentPoi = currentPoiIndex >= 0 ? poiList[currentPoiIndex] : null;
         const showLeftPanel = !(embed?.enabled && !embed?.panel);
         const showLoadControls = !embed?.enabled;
-        const showSelectedNode = !embed?.enabled;
+        const showSelectedNode = !embed?.enabled && !!this.state?.debug?.withTextureOnly;
         const showEmbedStartOverlay = !!(embed?.enabled && embed?.waiting);
         const showEmbedLoadingBackdrop = !!(embed?.enabled && !embed?.waiting && embed?.placeholderUrl && this.state?.ui?.spinner);
         const showPoiPlayer = poiList.length > 0 && !(embed?.enabled && !embed?.tour);
