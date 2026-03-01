@@ -127,6 +127,7 @@ const observerData: ObserverData = {
             poi: true,
             measure: true,
             info: true,
+            modelInfo: true,
             controls: true,
             fullscreen: true,
             fit: true,
@@ -362,9 +363,9 @@ const main = () => {
         ? embedPresetParam
         : 'full';
     const embedDefaults = {
-        full: { panel: true, poi: true, measure: true, info: true, controls: true, fullscreen: true, fit: true, reset: true },
-        compact: { panel: false, poi: true, measure: false, info: true, controls: true, fullscreen: true, fit: true, reset: true },
-        minimal: { panel: false, poi: true, measure: false, info: false, controls: false, fullscreen: true, fit: false, reset: true }
+        full: { panel: true, poi: true, measure: true, info: true, modelInfo: true, controls: true, fullscreen: true, fit: true, reset: true },
+        compact: { panel: false, poi: true, measure: false, info: true, modelInfo: false, controls: true, fullscreen: true, fit: true, reset: true },
+        minimal: { panel: false, poi: true, measure: false, info: false, modelInfo: false, controls: false, fullscreen: true, fit: false, reset: true }
     } as const;
     const embedConfig: NonNullable<ObserverData['ui']['embed']> = {
         enabled: embedEnabled,
@@ -376,6 +377,7 @@ const main = () => {
         poi: parseBool('poi', embedDefaults[embedPreset].poi),
         measure: parseBool('measure', embedDefaults[embedPreset].measure),
         info: parseBool('info', embedDefaults[embedPreset].info),
+        modelInfo: parseBool('modelInfo', embedDefaults[embedPreset].modelInfo),
         controls: parseBool('controls', embedDefaults[embedPreset].controls),
         fullscreen: parseBool('fullscreen', embedDefaults[embedPreset].fullscreen),
         fit: parseBool('fit', embedDefaults[embedPreset].fit),
@@ -389,6 +391,7 @@ const main = () => {
         'poi',
         'measure',
         'info',
+        'modelInfo',
         'controls',
         'fullscreen',
         'fit',

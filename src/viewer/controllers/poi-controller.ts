@@ -11,6 +11,7 @@ type PoiEntry = {
     id: string;
     number: number;
     title?: string;
+    description?: string;
     color?: string;
     camera?: {
         position: [number, number, number];
@@ -65,6 +66,10 @@ class PoiController {
 
     private hoverLabelEl: HTMLDivElement | null = null;
 
+    private hoverLabelTitleEl: HTMLDivElement | null = null;
+
+    private hoverLabelDescriptionEl: HTMLDivElement | null = null;
+
     private hoveredPoiId: string | null = null;
 
     private pinnedPoiId: string | null = null;
@@ -112,7 +117,13 @@ class PoiController {
         this.overlay.className = 'poi-overlay';
         this.hoverLabelEl = document.createElement('div');
         this.hoverLabelEl.className = 'poi-hover-label';
+        this.hoverLabelTitleEl = document.createElement('div');
+        this.hoverLabelTitleEl.className = 'poi-hover-label-title';
+        this.hoverLabelDescriptionEl = document.createElement('div');
+        this.hoverLabelDescriptionEl.className = 'poi-hover-label-description';
         this.hoverLabelEl.style.display = 'none';
+        this.hoverLabelEl.appendChild(this.hoverLabelTitleEl);
+        this.hoverLabelEl.appendChild(this.hoverLabelDescriptionEl);
         this.overlay.appendChild(this.hoverLabelEl);
         wrapper.appendChild(this.overlay);
     }
@@ -337,6 +348,17 @@ class PoiController {
         this.setPoiList(updated);
     }
 
+    updatePoiDescription(id: string, description: string) {
+        const updated = this.getPoiList().map((poi) => {
+            if (poi.id !== id) return poi;
+            return {
+                ...poi,
+                description
+            };
+        });
+        this.setPoiList(updated);
+    }
+
     updatePoiColor(id: string, color: string) {
         const hex = /^#[0-9a-f]{6}$/i.test(color) ? color : '#000000';
         const updated = this.getPoiList().map((poi) => {
@@ -505,9 +527,16 @@ class PoiController {
             return;
         }
 
-        this.hoverLabelEl.textContent = activePoi.title || `POI ${activePoi.number}`;
+        if (this.hoverLabelTitleEl) {
+            this.hoverLabelTitleEl.textContent = activePoi.title || `POI ${activePoi.number}`;
+        }
+        if (this.hoverLabelDescriptionEl) {
+            const description = String(activePoi.description ?? '').trim();
+            this.hoverLabelDescriptionEl.textContent = description;
+            this.hoverLabelDescriptionEl.style.display = description ? 'block' : 'none';
+        }
         this.hoverLabelEl.style.display = 'block';
-        this.hoverLabelEl.style.transform = `translate(${activeScreen.x + 22}px, ${activeScreen.y - 10}px)`;
+        this.hoverLabelEl.style.transform = `translate(${activeScreen.x + 22}px, ${activeScreen.y}px) translateY(-50%)`;
     }
 }
 

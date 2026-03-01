@@ -1084,6 +1084,10 @@ class Viewer {
         this.poiController?.updatePoiTitle(id, title);
     }
 
+    updatePoiDescription(id: string, description: string) {
+        this.poiController?.updatePoiDescription(id, description);
+    }
+
     updatePoiColor(id: string, color: string) {
         this.poiController?.updatePoiColor(id, color);
     }

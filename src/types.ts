@@ -44,6 +44,7 @@ export interface ObserverData {
             poi: boolean,
             measure: boolean,
             info: boolean,
+            modelInfo: boolean,
             controls: boolean,
             fullscreen: boolean,
             fit: boolean,

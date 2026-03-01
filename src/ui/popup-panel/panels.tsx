@@ -52,6 +52,7 @@ type EmbedGeneratorState = {
     poi: boolean,
     measure: boolean,
     info: boolean,
+    modelInfo: boolean,
     controls: boolean,
     fit: boolean,
     reset: boolean,
@@ -85,7 +86,7 @@ class InfoPanel extends React.Component <{
         const lang = observerData?.ui?.language;
         const embed = observerData?.ui?.embed;
         const showControlsTab = !(embed?.enabled) || embed.controls;
-        const showModelTab = !(embed?.enabled) || embed.info;
+        const showModelTab = !(embed?.enabled) || embed.modelInfo;
         const showAboutTab = !(embed?.enabled) || embed.info;
         const showFitControl = !(embed?.enabled) || embed.fit;
         const showResetControl = !(embed?.enabled) || embed.reset;
@@ -435,14 +436,15 @@ class ViewPanel extends React.Component <{
         poi: boolean,
         measure: boolean,
         info: boolean,
+        modelInfo: boolean,
         controls: boolean,
         allowFullscreen: boolean,
         fit: boolean,
         reset: boolean
     }> = {
-            full: { panel: true, poi: true, measure: true, info: true, controls: true, allowFullscreen: true, fit: true, reset: true },
-            compact: { panel: false, poi: true, measure: false, info: true, controls: true, allowFullscreen: true, fit: true, reset: true },
-            minimal: { panel: false, poi: true, measure: false, info: false, controls: false, allowFullscreen: true, fit: false, reset: true }
+            full: { panel: true, poi: true, measure: true, info: true, modelInfo: true, controls: true, allowFullscreen: true, fit: true, reset: true },
+            compact: { panel: false, poi: true, measure: false, info: true, modelInfo: false, controls: true, allowFullscreen: true, fit: true, reset: true },
+            minimal: { panel: false, poi: true, measure: false, info: false, modelInfo: false, controls: false, allowFullscreen: true, fit: false, reset: true }
         };
 
     get embedSrc() {
@@ -469,6 +471,7 @@ class ViewPanel extends React.Component <{
         url.searchParams.set('poi', this.state.poi ? '1' : '0');
         url.searchParams.set('measure', this.state.measure ? '1' : '0');
         url.searchParams.set('info', this.state.info ? '1' : '0');
+        url.searchParams.set('modelInfo', this.state.modelInfo ? '1' : '0');
         url.searchParams.set('controls', this.state.controls ? '1' : '0');
         url.searchParams.set('fullscreen', this.state.allowFullscreen ? '1' : '0');
         url.searchParams.set('fit', this.state.fit ? '1' : '0');
@@ -524,6 +527,7 @@ class ViewPanel extends React.Component <{
             poi: embed?.poi ?? defaults.poi,
             measure: embed?.measure ?? defaults.measure,
             info: embed?.info ?? defaults.info,
+            modelInfo: embed?.modelInfo ?? defaults.modelInfo,
             controls: embed?.controls ?? defaults.controls,
             fit: embed?.fit ?? defaults.fit,
             reset: embed?.reset ?? defaults.reset,
@@ -558,6 +562,7 @@ class ViewPanel extends React.Component <{
             poi: defaults.poi,
             measure: defaults.measure,
             info: defaults.info,
+            modelInfo: defaults.modelInfo,
             controls: defaults.controls,
             allowFullscreen: defaults.allowFullscreen,
             fit: defaults.fit,
@@ -617,6 +622,7 @@ class ViewPanel extends React.Component <{
                     <Toggle label={t('Show POI', lang)} value={this.state.poi} setProperty={(value: boolean) => this.setState({ poi: value })} />
                     <Toggle label={t('Enable measure', lang)} value={this.state.measure} setProperty={(value: boolean) => this.setState({ measure: value })} />
                     <Toggle label={t('Show info', lang)} value={this.state.info} setProperty={(value: boolean) => this.setState({ info: value })} />
+                    <Toggle label={t('Show model info', lang)} value={this.state.modelInfo} setProperty={(value: boolean) => this.setState({ modelInfo: value })} />
                     <Toggle label={t('Show controls', lang)} value={this.state.controls} setProperty={(value: boolean) => this.setState({ controls: value })} />
                     <Toggle label={t('Show fit to screen', lang)} value={this.state.fit} setProperty={(value: boolean) => this.setState({ fit: value })} />
                     <Toggle label={t('Show reset camera', lang)} value={this.state.reset} setProperty={(value: boolean) => this.setState({ reset: value })} />
