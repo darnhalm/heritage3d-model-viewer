@@ -89,6 +89,7 @@ interface XRObjectPlacementOptions {
     showUI: boolean;
     startArImgSrc: any;
     stopArImgSrc: any;
+    getContentScale?: () => number;
 }
 
 class XRObjectPlacementController {
@@ -341,6 +342,11 @@ class XRObjectPlacementController {
         const bound = new BoundingBox();
         let meshInstances: MeshInstance[];
 
+        const getContentScale = () => {
+            const value = this.options.getContentScale?.() ?? 1;
+            return Number.isFinite(value) && value > 0 ? value : 1;
+        };
+
         const updateBound = () => {
             if (meshInstances.length) {
                 bound.copy(meshInstances[0].aabb);
@@ -371,12 +377,13 @@ class XRObjectPlacementController {
         });
 
         events.on('xr:initial-place', (position: Vec3) => {
+            const contentScale = getContentScale();
             mat.copy(xr.camera.camera.viewMatrix).invert();
             mat.transformPoint(hoverPos, vec);
             mat.getEulerAngles(vec2);
             pos.goto({ x: vec.x, y: vec.y, z: vec.z }, 0);
             rot.goto({ x: vec2.x, y: vec2.y, z: vec2.z }, 0);
-            scale.goto({ scale: 0.55 }, 0);
+            scale.goto({ scale: contentScale }, 0);
 
             rot.goto({ x: 0, y: 0, z: 0 }, lerpSpeed);
             pos.goto({ x: position.x, y: position.y, z: position.z }, lerpSpeed);
@@ -417,16 +424,19 @@ class XRObjectPlacementController {
             const contentRoot = this.options.content;
 
             if (hovering) {
+                const contentScale = getContentScale();
                 mat.transformPoint(hoverPos, vec);
                 mat.getEulerAngles(vec2);
 
                 contentRoot.setLocalPosition(vec.x, vec.y, vec.z);
                 contentRoot.setLocalEulerAngles(vec2.x, vec2.y, vec2.z);
-                contentRoot.setLocalScale(1, 1, 1);
+                contentRoot.setLocalScale(contentScale, contentScale, contentScale);
             } else {
+                const contentScale = getContentScale();
                 contentRoot.setLocalPosition(pos.value.x, pos.value.y, pos.value.z);
                 contentRoot.setLocalEulerAngles(rot.value.x, rot.value.y, rot.value.z);
-                contentRoot.setLocalScale(scale.value.scale, scale.value.scale, scale.value.scale);
+                const appliedScale = scale.value.scale || contentScale;
+                contentRoot.setLocalScale(appliedScale, appliedScale, appliedScale);
             }
 
             // calculate scene bounds

@@ -990,7 +990,11 @@ class Viewer {
             content: this.sceneRoot,
             showUI: true,
             startArImgSrc: arModeImage.src,
-            stopArImgSrc: arCloseImage.src
+            stopArImgSrc: arCloseImage.src,
+            getContentScale: () => {
+                const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
+                return Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
+            }
         });
 
         const events = this.xrMode.events;
