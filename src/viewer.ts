@@ -83,7 +83,7 @@ import {
 import { App } from './app';
 import { CameraControls } from './camera-controls';
 import { DebugLines } from './debug-lines';
-import { CreateDropHandler } from './drop-handler';
+import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
@@ -630,10 +630,15 @@ class Viewer {
         observer.set('camera.multisampleSupported', multisampleSupported);
         observer.set('camera.multisample', multisampleSupported && observer.get('camera.multisample'));
 
-        // create drop handler
-        CreateDropHandler(document.getElementById('app'), (files: Array<File>, resetScene: boolean) => {
-            this.loadFiles(files, resetScene);
-        });
+        // in embed mode block browser drop navigation, but do not allow loading models by drag & drop
+        const appElement = document.getElementById('app');
+        if (observer.get('ui.embed.enabled')) {
+            CreateDropBlocker(appElement);
+        } else {
+            CreateDropHandler(appElement, (files: Array<File>, resetScene: boolean) => {
+                this.loadFiles(files, resetScene);
+            });
+        }
 
         // observe canvas size changes
         new ResizeObserver(() => {

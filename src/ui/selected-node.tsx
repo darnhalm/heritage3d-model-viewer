@@ -1,8 +1,6 @@
-import { Container, Label } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import { SetProperty, ObserverData } from '../types';
-import { Vector, Detail, Select } from './components';
 import { t } from '../i18n/translations';
 
 class SelectedNode extends React.Component < { observerData: ObserverData; setProperty: SetProperty } > {
@@ -24,6 +22,30 @@ class SelectedNode extends React.Component < { observerData: ObserverData; setPr
             a.scene?.texelDensitySummary !== b.scene?.texelDensitySummary ||
             a.scene?.texelDensityReport !== b.scene?.texelDensityReport ||
             a.ui?.language !== b.ui?.language
+        );
+    }
+
+    private formatVector(value: any) {
+        if (!value || typeof value !== 'object') return '-';
+        const keys = Object.keys(value)
+        .filter(key => !Number.isNaN(Number(key)))
+        .sort((a, b) => Number(a) - Number(b))
+        .slice(0, 3);
+
+        if (keys.length === 0) return '-';
+
+        return keys.map((key) => {
+            const num = Number(value[key]);
+            return Number.isFinite(num) ? num.toFixed(3) : '-';
+        }).join(', ');
+    }
+
+    private renderDetail(label: string, value: string | number) {
+        return (
+            <div className='panel-option'>
+                <div className='panel-label'>{label}</div>
+                <div className='panel-value' title={String(value)}>{String(value)}</div>
+            </div>
         );
     }
 
@@ -75,50 +97,70 @@ class SelectedNode extends React.Component < { observerData: ObserverData; setPr
             triangles?: number;
             worldAreaM2?: number;
         } | undefined;
-        const texelDensityMultiline = String(scene?.texelDensitySummary || 'n/a').split('|').map(part => part.trim()).join('\n');
+        const texelDensityLines = String(scene?.texelDensitySummary || 'n/a')
+        .split('|')
+        .map(part => part.trim())
+        .filter(Boolean);
+
         return hasHierarchy && nodeSelected ? (
             <div className='selected-node-panel-parent'>
-                <Container class='selected-node-panel' flex>
-                    <Detail label={t('Name', lang)} value={scene.selectedNode.name || '-'} />
-                    <Vector label={t('Position', lang)} dimensions={3} value={scene.selectedNode.position} enabled={false}/>
-                    <Vector label={t('Rotation', lang)} dimensions={3} value={scene.selectedNode.rotation} enabled={false}/>
-                    <Vector label={t('Scale', lang)} dimensions={3} value={scene.selectedNode.scale} enabled={false}/>
-                    <Detail label={t('Material', lang)} value={selectedMaterialNames.length > 0 ? selectedMaterialNames.join(', ') : '-'} />
+                <div className='selected-node-panel'>
+                    {this.renderDetail(t('Name', lang), scene.selectedNode.name || '-')}
+                    {this.renderDetail(t('Position', lang), this.formatVector(scene.selectedNode.position))}
+                    {this.renderDetail(t('Rotation', lang), this.formatVector(scene.selectedNode.rotation))}
+                    {this.renderDetail(t('Scale', lang), this.formatVector(scene.selectedNode.scale))}
+                    {this.renderDetail(t('Material', lang), selectedMaterialNames.length > 0 ? selectedMaterialNames.join(', ') : '-')}
+
                     {variantListOptions.length > 0 && (
-                        <Select
-                            label={t('Material Variant', lang)}
-                            type='string'
-                            options={variantListOptions}
-                            value={scene?.variant?.selected ?? ''}
-                            setProperty={(value: string) => setProperty('scene.variant.selected', value)}
-                            enabled={true}
-                        />
+                        <div className='panel-option'>
+                            <div className='panel-label'>{t('Material Variant', lang)}</div>
+                            <select
+                                className='panel-value selected-node-native-select'
+                                value={scene?.variant?.selected ?? ''}
+                                onChange={(event) => setProperty('scene.variant.selected', event.target.value)}
+                            >
+                                {variantListOptions.map(option => (
+                                    <option key={option.v} value={option.v}>{option.t}</option>
+                                ))}
+                            </select>
+                        </div>
                     )}
-                    <Detail label={t('Active UV', lang)} value={activeUvSetLabel} />
+
+                    {this.renderDetail(t('Active UV', lang), activeUvSetLabel)}
+
                     {uvSetOptions.length > 1 && (
-                        <Select
-                            label={t('UV Set', lang)}
-                            type='number'
-                            options={uvSetOptions}
-                            selectKey={`${scene?.availableUvSets ?? '[]'}:${observerData?.debug?.selectedUvSet ?? 0}`}
-                            value={observerData?.debug?.selectedUvSet ?? 0}
-                            setProperty={(value: number) => setProperty('debug.selectedUvSet', value)}
-                            enabled={true}
-                        />
+                        <div className='panel-option'>
+                            <div className='panel-label'>{t('UV Set', lang)}</div>
+                            <select
+                                className='panel-value selected-node-native-select'
+                                value={String(observerData?.debug?.selectedUvSet ?? 0)}
+                                onChange={(event) => setProperty('debug.selectedUvSet', Number(event.target.value))}
+                            >
+                                {uvSetOptions.map(option => (
+                                    <option key={option.v} value={String(option.v)}>{option.t}</option>
+                                ))}
+                            </select>
+                        </div>
                     )}
-                    <Container class={['panel-option', 'selected-node-multiline-detail']}>
-                        <Label class='panel-label' text={t('Texel Density', lang)} />
-                        <Label class={['panel-value', 'selected-node-multiline-value']} text={texelDensityMultiline} />
-                    </Container>
+
+                    <div className='panel-option selected-node-multiline-detail'>
+                        <div className='panel-label'>{t('Texel Density', lang)}</div>
+                        <div className='panel-value selected-node-multiline-value'>
+                            {texelDensityLines.map((line, index) => (
+                                <div key={`${line}-${index}`}>{line}</div>
+                            ))}
+                        </div>
+                    </div>
+
                     {texelDensityPrimary && (
                         <>
-                            <Detail label={t('Texture Size', lang)} value={texelDensityPrimary.resolution || '-'} />
-                            <Detail label={t('Texture Channel', lang)} value={texelDensityPrimary.channel || '-'} />
-                            <Detail label={t('Triangles', lang)} value={texelDensityPrimary.triangles ?? '-'} />
-                            <Detail label={t('Surface Area', lang)} value={String(texelDensityPrimary.worldAreaM2 ?? '-')} />
+                            {this.renderDetail(t('Texture Size', lang), texelDensityPrimary.resolution || '-')}
+                            {this.renderDetail(t('Texture Channel', lang), texelDensityPrimary.channel || '-')}
+                            {this.renderDetail(t('Triangles', lang), texelDensityPrimary.triangles ?? '-')}
+                            {this.renderDetail(t('Surface Area', lang), String(texelDensityPrimary.worldAreaM2 ?? '-'))}
                         </>
                     )}
-                </Container>
+                </div>
             </div>
         ) : null;
     }

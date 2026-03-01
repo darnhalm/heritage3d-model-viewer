@@ -108,4 +108,15 @@ const CreateDropHandler = (target: HTMLElement, dropHandler: DropHandlerFunc) =>
     }, false);
 };
 
-export { CreateDropHandler };
+const CreateDropBlocker = (target: HTMLElement) => {
+    const prevent = (ev: DragEvent) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+    };
+
+    target.addEventListener('dragstart', prevent, false);
+    target.addEventListener('dragover', prevent, false);
+    target.addEventListener('drop', prevent, false);
+};
+
+export { CreateDropHandler, CreateDropBlocker };

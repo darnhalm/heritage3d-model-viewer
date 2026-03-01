@@ -2061,6 +2061,18 @@ input {
     line-height: 1.35;
 }
 
+.selected-node-panel .selected-node-native-select {
+    width: 60%;
+    min-width: 0;
+    box-sizing: border-box;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 4px;
+    color: #fff;
+    font: inherit;
+    padding: 6px 8px;
+}
+
 .animation-controls-panel-parent {
     margin: 12px;
     padding: 0px 8px;
