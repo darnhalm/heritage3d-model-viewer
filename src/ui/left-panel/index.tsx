@@ -496,12 +496,12 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
             <Container id='alignment-panel' class='tab-panel'>
                 <Container class={['alignment-action-row', 'alignment-dual-row']}>
                     <Button
-                        class={['secondary', ...((debugData?.alignmentGizmoMode ?? 'rotate') === 'move' ? ['active'] : [])]}
+                        class={['secondary', 'alignment-move-button', ...((debugData?.alignmentGizmoMode ?? 'rotate') === 'move' ? ['active'] : [])]}
                         text={t('Move', lang)}
                         onClick={() => props.setProperty('debug.alignmentGizmoMode', 'move')}
                     />
                     <Button
-                        class={['secondary', ...((debugData?.alignmentGizmoMode ?? 'rotate') === 'rotate' ? ['active'] : [])]}
+                        class={['secondary', 'alignment-rotate-button', ...((debugData?.alignmentGizmoMode ?? 'rotate') === 'rotate' ? ['active'] : [])]}
                         text='Rotate'
                         onClick={() => props.setProperty('debug.alignmentGizmoMode', 'rotate')}
                     />
@@ -511,21 +511,21 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                 </Container>
                 <Container class={['alignment-action-row', 'alignment-single-row']}>
                     <Button
-                        class='secondary'
+                        class={['secondary', 'alignment-object-center-button']}
                         text={t('Object to Center', lang)}
                         onClick={() => (window as any).viewer?.setObjectPivotToCenter?.()}
                     />
                 </Container>
                 <Container class={['alignment-action-row', 'alignment-single-row']}>
                     <Button
-                        class='secondary'
+                        class={['secondary', 'alignment-reset-object-button']}
                         text={t('Reset Object', lang)}
                         onClick={() => (window as any).viewer?.resetObjectTransform?.()}
                     />
                 </Container>
                 <Container class={['alignment-action-row', 'alignment-single-row']}>
                     <Button
-                        class='secondary'
+                        class={['secondary', 'alignment-fit-button']}
                         text={t('Fit to Screen', lang)}
                         onClick={() => (window as any).viewer?.frameScene?.()}
                     />

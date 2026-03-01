@@ -191,6 +191,9 @@ class App extends React.Component<{ observer: Observer }> {
                 {this.state?.ui?.spinner && (
                     <div className="load-progress-wrapper">
                         <Progress value={this.state.ui.loadProgress ?? 0} />
+                        <div className='load-progress-value'>
+                            {`${Math.max(0, Math.min(100, Math.round(this.state.ui.loadProgress ?? 0)))}%`}
+                        </div>
                     </div>
                 )}
             </div>

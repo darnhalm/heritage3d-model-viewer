@@ -344,6 +344,12 @@ const arrToRgb = (arr: number[]) => {
 class MeasurementsPanel extends React.Component <{
     observerData: ObserverData,
     setProperty: SetProperty }> {
+    private cycleReferenceRuler = () => {
+        const next = !this.props.observerData.measure.referenceRuler;
+        this.props.setProperty('measure.referenceRuler', next);
+        (window as any).viewer?.frameScene?.();
+    };
+
     shouldComponentUpdate(nextProps: Readonly<{
         observerData: ObserverData;
         setProperty: SetProperty; }>): boolean {
@@ -353,6 +359,7 @@ class MeasurementsPanel extends React.Component <{
                a.ui?.language !== b.ui?.language ||
                a.measure?.enabled !== b.measure?.enabled ||
                a.measure?.unit !== b.measure?.unit ||
+               a.measure?.referenceRuler !== b.measure?.referenceRuler ||
                a.measure?.unitScale !== b.measure?.unitScale ||
                a.measure?.knownDistance !== b.measure?.knownDistance ||
                a.measure?.lastDistance !== b.measure?.lastDistance ||

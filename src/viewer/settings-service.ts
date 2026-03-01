@@ -192,6 +192,7 @@ class SettingsService {
         o.set('debug.texelDensityHeatmap', false);
         o.set('measure.enabled', false);
         o.set('measure.unit', 'm');
+        o.set('measure.referenceRuler', false);
         o.set('measure.unitScale', 1);
         o.set('measure.lastDistance', null);
         o.set('measure.pointCount', 0);

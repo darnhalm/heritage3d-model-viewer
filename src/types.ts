@@ -209,6 +209,7 @@ export interface ObserverData {
     measure: {
         enabled: boolean,
         unit: 'mm' | 'cm' | 'm',
+        referenceRuler: boolean,
         /** Meters represented by 1 scene/model unit. */
         unitScale: number,
         /** Last measured distance in meters. */

@@ -1824,6 +1824,72 @@ input {
     margin: 0 0 8px;
 }
 
+#alignment-panel .alignment-rotate-button {
+    position: relative;
+    padding-left: 38px !important;
+}
+
+#alignment-panel .alignment-move-button {
+    position: relative;
+    padding-left: 38px !important;
+}
+
+#alignment-panel .alignment-fit-button {
+    position: relative;
+    padding-left: 38px !important;
+}
+
+#alignment-panel .alignment-reset-object-button {
+    position: relative;
+    padding-left: 38px !important;
+}
+
+#alignment-panel .alignment-object-center-button {
+    position: relative;
+    padding-left: 38px !important;
+}
+
+#alignment-panel .alignment-rotate-button::before,
+#alignment-panel .alignment-move-button::before,
+#alignment-panel .alignment-fit-button::before,
+#alignment-panel .alignment-reset-object-button::before,
+#alignment-panel .alignment-object-center-button::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    width: 18px;
+    height: 18px;
+    transform: translateY(-50%);
+    background-color: currentColor;
+    pointer-events: none;
+}
+
+#alignment-panel .alignment-rotate-button::before {
+    -webkit-mask: url('static/icons/alignment-rotate-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/alignment-rotate-icon.svg') no-repeat center / contain;
+}
+
+#alignment-panel .alignment-move-button::before {
+    -webkit-mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
+}
+
+#alignment-panel .alignment-fit-button::before {
+    -webkit-mask: url('static/icons/fit-screen-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/fit-screen-icon.svg') no-repeat center / contain;
+}
+
+#alignment-panel .alignment-reset-object-button::before {
+    -webkit-mask: url('static/icons/alignment-reset-object-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/alignment-reset-object-icon.svg') no-repeat center / contain;
+}
+
+#alignment-panel .alignment-object-center-button::before {
+    -webkit-mask: url('static/icons/alignment-object-center-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/alignment-object-center-icon.svg') no-repeat center / contain;
+}
+
 #alignment-panel .alignment-dual-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2219,8 +2285,7 @@ input {
 #light-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #settings-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #device-panel > .pcui-panel-content > .panel-option:nth-child(even),
-#materials-panel > .panel-option:nth-child(even),
-#metadata-panel > .panel-option:nth-child(even) {
+#materials-panel > .panel-option:nth-child(even) {
     background-color: rgba(0, 0, 0, 0.1);
 }
 
@@ -2532,6 +2597,10 @@ input {
     transform: translateX(-50%);
     width: min(280px, 80vw);
     z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
 
     .pcui-progress-inner {
         transition: width 120ms ease-out;
@@ -2548,6 +2617,14 @@ input {
             rgba(255, 255, 255, 0.7) 100%
         ) !important;
     }
+}
+
+.load-progress-value {
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
 }
 
 #panel-left:not(.expanded) #scene-container, #panel-left:not(.expanded) .header {
@@ -2675,6 +2752,39 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
 
 .pcui-button.secondary:not(.pcui-disabled):hover {
     color: white !important;
+}
+
+.reference-ruler-row {
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.reference-ruler-button {
+    position: relative;
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0 !important;
+    font-size: 0 !important;
+}
+
+.reference-ruler-button::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    width: 18px;
+    height: 18px;
+    transform: translateY(-50%);
+    background-color: currentColor;
+    -webkit-mask: url('static/icons/reference-ruler-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/reference-ruler-icon.svg') no-repeat center / contain;
+    pointer-events: none;
+}
+
+.reference-ruler-row-bottom {
+    margin-top: 4px;
 }
 
 .pcui-text-input.secondary {
