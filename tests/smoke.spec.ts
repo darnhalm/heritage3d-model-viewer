@@ -90,7 +90,7 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
     expect(state.polluted).toBeUndefined();
 });
 
-test('encodes model URLs in the share panel', async ({ page }) => {
+test('encodes model URLs in the embed generator', async ({ page }) => {
     await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
 
@@ -106,9 +106,10 @@ test('encodes model URLs in the share panel', async ({ page }) => {
 
     await page.locator('#view-button').click();
 
-    const shareInput = page.locator('#view-panel input');
-    await expect(shareInput).toBeVisible();
-    await expect(shareInput).toHaveValue('http://127.0.0.1:4173/?load=https%3A%2F%2Fexample.com%2Fmodel.glb%3Fx%3D1%26y%3D2');
+    const embedCode = page.locator('#embed-code-wrapper textarea');
+    await expect(embedCode).toBeVisible();
+    await expect(embedCode).toHaveValue(/load=https%3A%2F%2Fexample\.com%2Fmodel\.glb%3Fx%3D1%26y%3D2/);
+    await expect(embedCode).toHaveValue(/embed=1/);
 });
 
 test('raycast helpers hit secondary mesh primitives for selection and measurement', async ({ page }) => {
