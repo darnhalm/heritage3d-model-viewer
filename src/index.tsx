@@ -125,6 +125,7 @@ const observerData: ObserverData = {
             placeholderUrl: null,
             panel: true,
             poi: true,
+            tour: true,
             measure: true,
             info: true,
             modelInfo: true,
@@ -363,9 +364,9 @@ const main = () => {
         ? embedPresetParam
         : 'full';
     const embedDefaults = {
-        full: { panel: true, poi: true, measure: true, info: true, modelInfo: true, controls: true, fullscreen: true, fit: true, reset: true },
-        compact: { panel: false, poi: true, measure: false, info: true, modelInfo: false, controls: true, fullscreen: true, fit: true, reset: true },
-        minimal: { panel: false, poi: true, measure: false, info: false, modelInfo: false, controls: false, fullscreen: true, fit: false, reset: true }
+        full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, fullscreen: true, fit: true, reset: true },
+        compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, fullscreen: true, fit: true, reset: true },
+        minimal: { panel: false, poi: true, tour: true, measure: false, info: false, modelInfo: false, controls: false, fullscreen: true, fit: false, reset: true }
     } as const;
     const embedConfig: NonNullable<ObserverData['ui']['embed']> = {
         enabled: embedEnabled,
@@ -375,6 +376,7 @@ const main = () => {
         placeholderUrl: null,
         panel: parseBool('panel', embedDefaults[embedPreset].panel),
         poi: parseBool('poi', embedDefaults[embedPreset].poi),
+        tour: parseBool('tour', embedDefaults[embedPreset].tour),
         measure: parseBool('measure', embedDefaults[embedPreset].measure),
         info: parseBool('info', embedDefaults[embedPreset].info),
         modelInfo: parseBool('modelInfo', embedDefaults[embedPreset].modelInfo),
@@ -389,6 +391,7 @@ const main = () => {
         'panel',
         'autoplay',
         'poi',
+        'tour',
         'measure',
         'info',
         'modelInfo',
@@ -477,6 +480,62 @@ const main = () => {
                 const f = viewer.cameraControls.getFocus();
                 observer.set('camera.position', [p.x, p.y, p.z]);
                 observer.set('camera.focus', [f.x, f.y, f.z]);
+            }
+        });
+
+        window.addEventListener('message', (event: MessageEvent) => {
+            const data = event.data;
+            if (!data || typeof data !== 'object') return;
+
+            switch (data.type) {
+                case 'focus-poi':
+                case 'open-poi': {
+                    const id = typeof data.id === 'string' ? data.id : '';
+                    if (id) {
+                        viewer.focusPoi(id);
+                    }
+                    break;
+                }
+                case 'clear-poi': {
+                    viewer.clearFocusedPoi();
+                    break;
+                }
+                case 'next-poi': {
+                    viewer.focusNextPoi();
+                    break;
+                }
+                case 'prev-poi': {
+                    viewer.focusPrevPoi();
+                    break;
+                }
+                default:
+                    break;
+            }
+        });
+
+        observer.on('poi.activeId:set', (activeId: string) => {
+            const poiListRaw = observer.get('poi.list');
+            let poiList: Array<{ id: string; number: number; title?: string; description?: string }> = [];
+            try {
+                const parsed = JSON.parse(String(poiListRaw ?? '[]'));
+                poiList = Array.isArray(parsed) ? parsed : [];
+            } catch {
+                poiList = [];
+            }
+
+            if (activeId) {
+                const poi = poiList.find((entry) => entry.id === activeId);
+                window.parent?.postMessage({
+                    type: 'poi-selected',
+                    id: activeId,
+                    number: poi?.number ?? null,
+                    title: poi?.title ?? null,
+                    description: poi?.description ?? null
+                }, '*');
+            } else {
+                window.parent?.postMessage({
+                    type: 'poi-cleared'
+                }, '*');
             }
         });
 

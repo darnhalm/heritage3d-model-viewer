@@ -63,6 +63,14 @@ body {
     margin: 0px;
     height: 100%;
     max-height: 100%;
+    font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+    font-family: inherit;
 }
 
 #app {
@@ -135,6 +143,7 @@ body {
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.4);
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+    font: inherit;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -152,6 +161,56 @@ body {
     width: 112px;
     height: 112px;
     display: block;
+}
+
+#poi-player-overlay {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 21;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 256px;
+    max-width: min(448px, calc(100vw - 48px));
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: rgba(32, 32, 32, 0.4);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+}
+
+.poi-player-button {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #fff;
+    font-size: 22px;
+    font-family: inherit;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.poi-player-button:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.poi-player-title {
+    flex: 1;
+    min-width: 0;
+    color: #fff;
+    font-size: 13px;
+    font-family: inherit;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 body:not(.ui-ready) #panel-left {
@@ -524,23 +583,22 @@ body:not(.ui-ready) #panel-left {
     border-radius: 6px;
     background: rgba(17, 17, 17, 0.92);
     color: #fff;
-    font-size: 12px;
+    font-family: inherit;
+    font-size: 11px;
     line-height: 1.25;
     pointer-events: none;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 .poi-hover-label-title {
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 700;
     line-height: 1.2;
-    margin-bottom: 6px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+    margin-bottom: 3px;
 }
 
 .poi-hover-label-description {
-    font-size: 14px;
+    font-size: 12px;
     line-height: 1.3;
     color: rgba(255, 255, 255, 0.92);
     white-space: normal;
@@ -658,6 +716,7 @@ body:not(.ui-ready) #panel-left {
     background: rgba(255, 255, 255, 0.06);
     color: #ddd;
     font: inherit;
+    font-size: 12px;
     line-height: 1.35;
     margin: 0;
 }
@@ -666,6 +725,7 @@ body:not(.ui-ready) #panel-left {
     outline: none;
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
 }
+
 
 .poi-list-actions {
     width: 100%;
@@ -688,6 +748,9 @@ body:not(.ui-ready) #panel-left {
     color: #ddd;
     border-radius: 6px;
     padding: 6px 8px;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.2;
     cursor: pointer;
 }
 
@@ -719,6 +782,7 @@ body:not(.ui-ready) #panel-left {
     width: 32px;
     height: 32px;
     padding: 0;
+    font: inherit;
     cursor: pointer;
 }
 
@@ -2417,26 +2481,26 @@ input {
 }
 
 .font-thin {
-    font-family: 'Proxima Nova Thin', 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif;
     font-weight: 100;
     font-style: normal;
 }
 
 .font-light {
-    font-family: 'Proxima Nova Light', 'Helvetica Neue', Arial, Helvetica, sans-serif;
-    font-weight: 200;
+    font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    font-weight: 300;
     font-style: normal;
 }
 
 .font-regular {
-    font-family: 'Proxima Nova Regular', 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif;
     font-weight: normal;
     font-style: normal;
 }
 
 .font-bold {
-    font-family: 'Proxima Nova Bold', 'Helvetica Neue', Arial, Helvetica, sans-serif;
-    font-weight: bold;
+    font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    font-weight: 700;
     font-style: normal;
 }
 
@@ -2538,6 +2602,7 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
 
 .pcui-label, .pcui-button, .pcui-text-input {
     color: white !important;
+    font-family: 'Helvetica Neue', Arial, Helvetica, sans-serif !important;
     font-size: 12px !important;
     font-weight: 400 !important;
     letter-spacing: 0.4px !important;

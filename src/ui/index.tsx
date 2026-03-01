@@ -11,6 +11,12 @@ import LoadControls from './load-controls';
 import PopupPanel from './popup-panel';
 import SelectedNode from './selected-node';
 
+type PoiUiEntry = {
+    id: string;
+    number: number;
+    title?: string;
+};
+
 class App extends React.Component<{ observer: Observer }> {
     state: ObserverData = null;
 
@@ -53,14 +59,42 @@ class App extends React.Component<{ observer: Observer }> {
         this.props.observer.set(path, value);
     };
 
+    private getPoiList(): PoiUiEntry[] {
+        try {
+            const parsed = JSON.parse(String(this.state?.poi?.list ?? '[]'));
+            return Array.isArray(parsed) ? parsed as PoiUiEntry[] : [];
+        } catch {
+            return [];
+        }
+    }
+
+    componentDidUpdate(prevProps: Readonly<{ observer: Observer }>, prevState: Readonly<ObserverData>): void {
+        const prevPoiList = prevState?.poi?.list ?? '[]';
+        const poiList = this.state?.poi?.list ?? '[]';
+        const activeId = this.state?.poi?.activeId ?? '';
+
+        if (poiList !== prevPoiList && poiList !== '[]' && !activeId) {
+            const firstPoi = this.getPoiList()[0];
+            if (firstPoi?.id) {
+                window.viewer?.focusPoi?.(String(firstPoi.id));
+            }
+        }
+    }
+
     render() {
         if (!this.state) return null;
         const embed = this.state?.ui?.embed;
+        const poiList = this.getPoiList();
+        const activePoiId = this.state?.poi?.activeId || '';
+        const activePoiIndex = poiList.findIndex((poi) => String(poi.id) === activePoiId);
+        const currentPoiIndex = activePoiIndex >= 0 ? activePoiIndex : (poiList.length > 0 ? 0 : -1);
+        const currentPoi = currentPoiIndex >= 0 ? poiList[currentPoiIndex] : null;
         const showLeftPanel = !(embed?.enabled && !embed?.panel);
         const showLoadControls = !embed?.enabled;
         const showSelectedNode = !embed?.enabled;
         const showEmbedStartOverlay = !!(embed?.enabled && embed?.waiting);
         const showEmbedLoadingBackdrop = !!(embed?.enabled && !embed?.waiting && embed?.placeholderUrl && this.state?.ui?.spinner);
+        const showPoiPlayer = poiList.length > 0 && !(embed?.enabled && !embed?.tour);
         return <div id="application-container">
             {showLeftPanel && (
                 <Container id="panel-left" width={32} flex resizable='right' resizeMin={220} resizeMax={800}>
@@ -122,6 +156,37 @@ class App extends React.Component<{ observer: Observer }> {
                 )}
                 {showLoadControls && <LoadControls observerData={this.state} setProperty={this._setStateProperty}/>}
                 {showSelectedNode && <SelectedNode observerData={this.state} setProperty={this._setStateProperty} />}
+                {showPoiPlayer && currentPoi && (
+                    <div id='poi-player-overlay'>
+                        <button
+                            type='button'
+                            className='poi-player-button'
+                            title='Previous POI'
+                            onClick={() => {
+                                const prevIndex = currentPoiIndex > 0 ? currentPoiIndex - 1 : poiList.length - 1;
+                                const prevPoi = poiList[prevIndex];
+                                if (prevPoi?.id) window.viewer?.focusPoi?.(String(prevPoi.id));
+                            }}
+                        >
+                            &#8249;
+                        </button>
+                        <div className='poi-player-title'>
+                            {String(currentPoi.title ?? `POI ${currentPoi.number}`)}
+                        </div>
+                        <button
+                            type='button'
+                            className='poi-player-button'
+                            title='Next POI'
+                            onClick={() => {
+                                const nextIndex = currentPoiIndex < poiList.length - 1 ? currentPoiIndex + 1 : 0;
+                                const nextPoi = poiList[nextIndex];
+                                if (nextPoi?.id) window.viewer?.focusPoi?.(String(nextPoi.id));
+                            }}
+                        >
+                            &#8250;
+                        </button>
+                    </div>
+                )}
                 <PopupPanel observerData={this.state} setProperty={this._setStateProperty} />
                 <ErrorBox observerData={this.state} setProperty={this._setStateProperty} />
                 <WarningsBox observerData={this.state} setProperty={this._setStateProperty} />

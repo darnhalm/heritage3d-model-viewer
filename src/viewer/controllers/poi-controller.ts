@@ -6,6 +6,8 @@ import { Picker } from '../../picker';
 
 const POI_CLICK_DRAG_THRESHOLD = 5;
 const POI_MARKER_HIT_RADIUS = 18;
+const POI_TITLE_MAX_LENGTH = 80;
+const POI_DESCRIPTION_MAX_LENGTH = 636;
 
 type PoiEntry = {
     id: string;
@@ -337,7 +339,7 @@ class PoiController {
     }
 
     updatePoiTitle(id: string, title: string) {
-        const trimmedTitle = title.trim();
+        const trimmedTitle = String(title ?? '').slice(0, POI_TITLE_MAX_LENGTH).trim();
         const updated = this.getPoiList().map((poi) => {
             if (poi.id !== id) return poi;
             return {
@@ -349,11 +351,12 @@ class PoiController {
     }
 
     updatePoiDescription(id: string, description: string) {
+        const nextDescription = String(description ?? '').slice(0, POI_DESCRIPTION_MAX_LENGTH);
         const updated = this.getPoiList().map((poi) => {
             if (poi.id !== id) return poi;
             return {
                 ...poi,
-                description
+                description: nextDescription
             };
         });
         this.setPoiList(updated);
@@ -410,6 +413,30 @@ class PoiController {
         } else {
             this.renderNextFrame();
         }
+    }
+
+    clearFocusedPoi() {
+        this.pinnedPoiId = null;
+        this.setActivePoi(null);
+        this.renderNextFrame();
+    }
+
+    focusNextPoi() {
+        const list = this.getPoiList();
+        if (list.length === 0) return;
+        const activeId = String(this.observer.get('poi.activeId') ?? '');
+        const activeIndex = list.findIndex((poi) => poi.id === activeId);
+        const nextIndex = activeIndex >= 0 ? (activeIndex + 1) % list.length : 0;
+        this.focusPoi(list[nextIndex].id);
+    }
+
+    focusPrevPoi() {
+        const list = this.getPoiList();
+        if (list.length === 0) return;
+        const activeId = String(this.observer.get('poi.activeId') ?? '');
+        const activeIndex = list.findIndex((poi) => poi.id === activeId);
+        const prevIndex = activeIndex >= 0 ? (activeIndex - 1 + list.length) % list.length : list.length - 1;
+        this.focusPoi(list[prevIndex].id);
     }
 
     reorderPoi(sourceId: string, targetId: string) {

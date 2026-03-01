@@ -42,6 +42,7 @@ export interface ObserverData {
             placeholderUrl?: string | null,
             panel: boolean,
             poi: boolean,
+            tour: boolean,
             measure: boolean,
             info: boolean,
             modelInfo: boolean,

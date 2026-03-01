@@ -957,20 +957,20 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 onChange={(value: string) => (window as any).viewer?.updatePoiTitle?.(String(poi.id), value)}
                                             />
                                         </div>
-                                        <div className='poi-description-field'>
-                                            <Label class='panel-label' text={t('Description', lang)} />
-                                            <textarea
-                                                className='poi-list-description'
-                                                value={String(poi.description ?? '')}
-                                                placeholder={t('Description', lang)}
-                                                onChange={(event) => (window as any).viewer?.updatePoiDescription?.(String(poi.id), event.target.value)}
-                                            />
-                                        </div>
                                         <ColorPickerControl
                                             label={t('Color', lang)}
                                             value={hexToArr(poi.color)}
                                             setProperty={(value: number[]) => (window as any).viewer?.updatePoiColor?.(String(poi.id), arrToHex(value))}
                                         />
+                                        <div className='poi-description-field'>
+                                            <textarea
+                                                className='poi-list-description'
+                                                value={String(poi.description ?? '')}
+                                                maxLength={636}
+                                                placeholder={t('Description', lang)}
+                                                onChange={(event) => (window as any).viewer?.updatePoiDescription?.(String(poi.id), event.target.value)}
+                                            />
+                                        </div>
                                         <div className='poi-list-actions poi-list-actions-secondary'>
                                             <button
                                                 type='button'

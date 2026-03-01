@@ -1106,6 +1106,18 @@ class Viewer {
         this.poiController?.focusPoi(id);
     }
 
+    clearFocusedPoi() {
+        this.poiController?.clearFocusedPoi();
+    }
+
+    focusNextPoi() {
+        this.poiController?.focusNextPoi();
+    }
+
+    focusPrevPoi() {
+        this.poiController?.focusPrevPoi();
+    }
+
     reorderPoi(sourceId: string, targetId: string) {
         this.poiController?.reorderPoi(sourceId, targetId);
     }

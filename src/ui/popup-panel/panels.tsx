@@ -50,6 +50,7 @@ type EmbedGeneratorState = {
     autoplay: boolean,
     allowFullscreen: boolean,
     poi: boolean,
+    tour: boolean,
     measure: boolean,
     info: boolean,
     modelInfo: boolean,
@@ -434,6 +435,7 @@ class ViewPanel extends React.Component <{
     private presetDefaults: Record<'full' | 'compact' | 'minimal', {
         panel: boolean,
         poi: boolean,
+        tour: boolean,
         measure: boolean,
         info: boolean,
         modelInfo: boolean,
@@ -442,9 +444,9 @@ class ViewPanel extends React.Component <{
         fit: boolean,
         reset: boolean
     }> = {
-            full: { panel: true, poi: true, measure: true, info: true, modelInfo: true, controls: true, allowFullscreen: true, fit: true, reset: true },
-            compact: { panel: false, poi: true, measure: false, info: true, modelInfo: false, controls: true, allowFullscreen: true, fit: true, reset: true },
-            minimal: { panel: false, poi: true, measure: false, info: false, modelInfo: false, controls: false, allowFullscreen: true, fit: false, reset: true }
+            full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, allowFullscreen: true, fit: true, reset: true },
+            compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, allowFullscreen: true, fit: true, reset: true },
+            minimal: { panel: false, poi: true, tour: true, measure: false, info: false, modelInfo: false, controls: false, allowFullscreen: true, fit: false, reset: true }
         };
 
     get embedSrc() {
@@ -469,6 +471,7 @@ class ViewPanel extends React.Component <{
         url.searchParams.set('panel', this.state.panel ? '1' : '0');
         url.searchParams.set('autoplay', this.state.autoplay ? '1' : '0');
         url.searchParams.set('poi', this.state.poi ? '1' : '0');
+        url.searchParams.set('tour', this.state.tour ? '1' : '0');
         url.searchParams.set('measure', this.state.measure ? '1' : '0');
         url.searchParams.set('info', this.state.info ? '1' : '0');
         url.searchParams.set('modelInfo', this.state.modelInfo ? '1' : '0');
@@ -525,6 +528,7 @@ class ViewPanel extends React.Component <{
             autoplay: embed?.autoplay ?? true,
             allowFullscreen: embed?.fullscreen ?? defaults.allowFullscreen,
             poi: embed?.poi ?? defaults.poi,
+            tour: embed?.tour ?? defaults.tour,
             measure: embed?.measure ?? defaults.measure,
             info: embed?.info ?? defaults.info,
             modelInfo: embed?.modelInfo ?? defaults.modelInfo,
@@ -560,6 +564,7 @@ class ViewPanel extends React.Component <{
             panel: defaults.panel,
             autoplay: true,
             poi: defaults.poi,
+            tour: defaults.tour,
             measure: defaults.measure,
             info: defaults.info,
             modelInfo: defaults.modelInfo,
@@ -620,6 +625,7 @@ class ViewPanel extends React.Component <{
                     <Toggle label={t('Autoplay', lang)} value={this.state.autoplay} setProperty={(value: boolean) => this.setState({ autoplay: value })} />
                     <Toggle label={t('Allow fullscreen', lang)} value={this.state.allowFullscreen} setProperty={(value: boolean) => this.setState({ allowFullscreen: value })} />
                     <Toggle label={t('Show POI', lang)} value={this.state.poi} setProperty={(value: boolean) => this.setState({ poi: value })} />
+                    <Toggle label={t('Show tour', lang)} value={this.state.tour} setProperty={(value: boolean) => this.setState({ tour: value })} />
                     <Toggle label={t('Enable measure', lang)} value={this.state.measure} setProperty={(value: boolean) => this.setState({ measure: value })} />
                     <Toggle label={t('Show info', lang)} value={this.state.info} setProperty={(value: boolean) => this.setState({ info: value })} />
                     <Toggle label={t('Show model info', lang)} value={this.state.modelInfo} setProperty={(value: boolean) => this.setState({ modelInfo: value })} />
