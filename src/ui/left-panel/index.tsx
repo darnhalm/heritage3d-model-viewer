@@ -4,7 +4,7 @@ import React from 'react';
 import { extract } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData } from '../../types';
-import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, ToggleColor } from '../components';
+import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, ToggleColor, NakedSlider } from '../components';
 
 const rgbToArr = (rgb: { r: number, g: number, b: number }) => [rgb.r, rgb.g, rgb.b, 1];
 const arrToRgb = (arr: number[]) => ({ r: arr[0], g: arr[1], b: arr[2] });
@@ -521,6 +521,13 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                         class='secondary'
                         text={t('Reset Object', lang)}
                         onClick={() => (window as any).viewer?.resetObjectTransform?.()}
+                    />
+                </Container>
+                <Container class={['alignment-action-row', 'alignment-single-row']}>
+                    <Button
+                        class='secondary'
+                        text={t('Fit to Screen', lang)}
+                        onClick={() => (window as any).viewer?.frameScene?.()}
                     />
                 </Container>
             </Container>
@@ -1086,6 +1093,18 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             ) : null}
                                         </div>
                                         <div className='poi-list-actions'>
+                                            <div className='poi-list-duration'>
+                                                <img src='static/icons/poi-duration.svg' alt='' className='poi-list-duration-icon' />
+                                                <NakedSlider
+                                                    class='poi-list-duration-slider'
+                                                    width={120}
+                                                    precision={1}
+                                                    min={0.1}
+                                                    max={10}
+                                                    value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : 0.8}
+                                                    setProperty={(value: number) => (window as any).viewer?.updatePoiDuration?.(String(poi.id), value)}
+                                                />
+                                            </div>
                                             <button
                                                 type='button'
                                                 className='poi-list-delete'

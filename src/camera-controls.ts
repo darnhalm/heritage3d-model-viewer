@@ -229,7 +229,10 @@ class CameraControls {
 
     reset(focus: Vec3, position: Vec3) {
         this.mode = 'orbit';
-        this._controller.attach(pose.look(position, focus));
+        this._pose.look(position, focus);
+        this._controller.attach(this._pose, false);
+        this._camera.entity.setPosition(this._pose.position);
+        this._camera.entity.setEulerAngles(this._pose.angles);
     }
 
     /**

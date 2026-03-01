@@ -161,14 +161,13 @@ class App extends React.Component<{ observer: Observer }> {
                         <button
                             type='button'
                             className='poi-player-button'
-                            title='Previous POI'
                             onClick={() => {
                                 const prevIndex = currentPoiIndex > 0 ? currentPoiIndex - 1 : poiList.length - 1;
                                 const prevPoi = poiList[prevIndex];
                                 if (prevPoi?.id) window.viewer?.focusPoi?.(String(prevPoi.id));
                             }}
                         >
-                            &#8249;
+                            ‹
                         </button>
                         <div className='poi-player-title'>
                             {String(currentPoi.title ?? `POI ${currentPoi.number}`)}
@@ -176,14 +175,13 @@ class App extends React.Component<{ observer: Observer }> {
                         <button
                             type='button'
                             className='poi-player-button'
-                            title='Next POI'
                             onClick={() => {
                                 const nextIndex = currentPoiIndex < poiList.length - 1 ? currentPoiIndex + 1 : 0;
                                 const nextPoi = poiList[nextIndex];
                                 if (nextPoi?.id) window.viewer?.focusPoi?.(String(nextPoi.id));
                             }}
                         >
-                            &#8250;
+                            ›
                         </button>
                     </div>
                 )}

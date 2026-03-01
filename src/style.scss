@@ -183,6 +183,8 @@ select {
 .poi-player-button {
     width: 28px;
     height: 28px;
+    min-width: 28px;
+    min-height: 28px;
     border: none;
     border-radius: 8px;
     background: transparent;
@@ -194,9 +196,12 @@ select {
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    padding: 0 !important;
+    box-shadow: none !important;
 }
 
-.poi-player-button:hover {
+.poi-player-button:hover,
+.poi-player-button.pcui-focus {
     background: rgba(255, 255, 255, 0.08);
 }
 
@@ -738,7 +743,9 @@ body:not(.ui-ready) #panel-left {
 .poi-list-actions {
     width: 100%;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
 }
 
 .poi-list-actions.poi-list-actions-secondary {
@@ -798,6 +805,27 @@ body:not(.ui-ready) #panel-left {
     width: 16px;
     height: 16px;
     display: block;
+}
+
+.poi-list-duration {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.poi-list-duration-icon {
+    width: 16px;
+    height: 16px;
+    display: block;
+    flex: 0 0 16px;
+    opacity: 0.85;
+}
+
+.poi-list-duration-slider {
+    flex: 1 1 auto;
+    min-width: 90px;
 }
 
 .poi-drag-ghost {
@@ -1759,7 +1787,7 @@ input {
 /* Metadata (Dublin Core) tab */
 #metadata-panel .metadata-section-header {
     color: #888;
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
     padding: 8px 0 2px 0;
 

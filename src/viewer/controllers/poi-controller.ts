@@ -15,6 +15,7 @@ type PoiEntry = {
     title?: string;
     description?: string;
     color?: string;
+    duration?: number;
     camera?: {
         position: [number, number, number];
         focus: [number, number, number];
@@ -31,7 +32,7 @@ type PoiControllerArgs = {
     getMeshInstances: () => Array<MeshInstance>;
     getPickRay: (x: number, y: number) => { origin: Vec3; direction: Vec3 };
     getCameraView: () => { position: [number, number, number]; focus: [number, number, number]; fov?: number } | null;
-    applyCameraView: (view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }) => void;
+    applyCameraView: (view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }, duration?: number) => void;
     renderNextFrame: () => void;
 };
 
@@ -48,7 +49,7 @@ class PoiController {
 
     private getCameraView: () => { position: [number, number, number]; focus: [number, number, number]; fov?: number } | null;
 
-    private applyCameraView: (view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }) => void;
+    private applyCameraView: (view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }, duration?: number) => void;
 
     private renderNextFrame: () => void;
 
@@ -301,6 +302,7 @@ class PoiController {
             number: nextNumber,
             title: `POI ${nextNumber}`,
             color: '#000000',
+            duration: 0.8,
             position: [placement.point.x, placement.point.y, placement.point.z],
             normal: [placement.normal.x, placement.normal.y, placement.normal.z]
         };
@@ -374,6 +376,18 @@ class PoiController {
         this.setPoiList(updated);
     }
 
+    updatePoiDuration(id: string, duration: number) {
+        const safeDuration = Number.isFinite(duration) ? Math.max(0.1, Math.min(10, duration)) : 0.8;
+        const updated = this.getPoiList().map((poi) => {
+            if (poi.id !== id) return poi;
+            return {
+                ...poi,
+                duration: safeDuration
+            };
+        });
+        this.setPoiList(updated);
+    }
+
     capturePoiCameraView(id: string) {
         const cameraView = this.getCameraView();
         if (!cameraView) {
@@ -409,7 +423,7 @@ class PoiController {
         this.pinnedPoiId = poi.id;
         this.setActivePoi(poi.id);
         if (poi.camera) {
-            this.applyCameraView(poi.camera);
+            this.applyCameraView(poi.camera, poi.duration);
         } else {
             this.renderNextFrame();
         }

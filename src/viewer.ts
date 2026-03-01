@@ -563,6 +563,17 @@ class Viewer {
 
     private perfOnPostrenderTotalMs = 0;
 
+    private cameraFlyTransition: {
+        elapsed: number;
+        duration: number;
+        startPosition: Vec3;
+        startFocus: Vec3;
+        startFov: number;
+        endPosition: Vec3;
+        endFocus: Vec3;
+        endFov: number;
+    } | null = null;
+
     constructor(
         canvas: HTMLCanvasElement,
         graphicsDevice: GraphicsDevice,
@@ -989,17 +1000,7 @@ class Viewer {
                 })(),
                 fov: this.camera.camera.fov
             }),
-            applyCameraView: (view) => {
-                if (typeof view.fov === 'number' && Number.isFinite(view.fov)) {
-                    this.camera.camera.fov = view.fov;
-                    this.observer.set('camera.fov', view.fov);
-                }
-                this.cameraControls.reset(
-                    new Vec3(view.focus[0], view.focus[1], view.focus[2]),
-                    new Vec3(view.position[0], view.position[1], view.position[2])
-                );
-                this.renderNextFrame();
-            },
+            applyCameraView: (view, duration) => this.flyToCameraView(view, duration),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
         this.selectionController = new SelectionController({
@@ -1189,6 +1190,10 @@ class Viewer {
 
     updatePoiColor(id: string, color: string) {
         this.poiController?.updatePoiColor(id, color);
+    }
+
+    updatePoiDuration(id: string, duration: number) {
+        this.poiController?.updatePoiDuration(id, duration);
     }
 
     capturePoiCameraView(id: string) {
@@ -2706,18 +2711,21 @@ class Viewer {
 
     /** Fit the camera to the scene (same as pressing F). */
     frameScene() {
+        this.stopCameraFlyTransition();
         this.focus(false);
         this.fitCameraClipPlanes();
     }
 
     /** Reset the camera to default position (same as pressing R). */
     resetCamera() {
+        this.stopCameraFlyTransition();
         this.resetSceneTransform();
         this.cameraControls.reset(Vec3.ZERO, new Vec3(2, 2, 2));
     }
 
     /** Keep the current view direction and distance, but move the orbit pivot to the selected object center. */
     centerPivotToObject() {
+        this.stopCameraFlyTransition();
         if (!this.selectedNode) {
             return;
         }
@@ -2732,6 +2740,53 @@ class Viewer {
         this.cameraControls.reset(focus, nextPosition);
         this.fitCameraClipPlanes();
         this.renderNextFrame();
+    }
+
+    flyToCameraView(view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }, duration = 0.8) {
+        const endPosition = new Vec3(view.position[0], view.position[1], view.position[2]);
+        const endFocus = new Vec3(view.focus[0], view.focus[1], view.focus[2]);
+        const endFov = typeof view.fov === 'number' && Number.isFinite(view.fov) ? view.fov : this.camera.camera.fov;
+
+        this.cameraFlyTransition = {
+            elapsed: 0,
+            duration: Math.max(0.01, duration),
+            startPosition: this.cameraControls.getPosition(),
+            startFocus: this.cameraControls.getFocus(),
+            startFov: this.camera.camera.fov,
+            endPosition,
+            endFocus,
+            endFov
+        };
+        this.cameraControls.enabled = false;
+        this.renderNextFrame();
+    }
+
+    private stopCameraFlyTransition() {
+        this.cameraFlyTransition = null;
+        this.cameraControls.enabled = true;
+    }
+
+    private updateCameraFlyTransition(dt: number) {
+        if (!this.cameraFlyTransition) {
+            return;
+        }
+
+        const transition = this.cameraFlyTransition;
+        transition.elapsed = Math.min(transition.elapsed + dt, transition.duration);
+        const alpha = transition.elapsed / transition.duration;
+        const eased = alpha * alpha * (3 - 2 * alpha);
+
+        const position = transition.startPosition.clone().lerp(transition.startPosition, transition.endPosition, eased);
+        const focus = transition.startFocus.clone().lerp(transition.startFocus, transition.endFocus, eased);
+        this.camera.camera.fov = math.lerp(transition.startFov, transition.endFov, eased);
+        this.cameraControls.reset(focus, position);
+        this.renderNextFrame();
+
+        if (alpha >= 1) {
+            this.observer.set('camera.fov', transition.endFov);
+            this.fitCameraClipPlanes();
+            this.stopCameraFlyTransition();
+        }
     }
 
     private getSceneTransform() {
@@ -3725,8 +3780,10 @@ class Viewer {
     }
 
     update(deltaTime: number) {
+        this.updateCameraFlyTransition(deltaTime);
+
         // update the orbit camera
-        if (!this.xrMode?.active) {
+        if (!this.xrMode?.active && !this.cameraFlyTransition) {
             this.cameraControls.update(deltaTime);
         }
 
