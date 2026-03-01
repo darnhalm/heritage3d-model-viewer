@@ -8,7 +8,9 @@ import {
     BLENDMODE_ZERO,
     BLENDEQUATION_ADD,
     EVENT_KEYDOWN,
+    EVENT_KEYUP,
     FILTER_NEAREST,
+    KEY_CONTROL,
     KEY_F,
     KEY_R,
     LAYERID_DEPTH,
@@ -49,6 +51,7 @@ import {
     EnvLighting,
     GraphicsDevice,
     GraphNode,
+    Gizmo,
     GSplatComponent,
     GSplatData,
     GSplatResource,
@@ -62,6 +65,7 @@ import {
     Mouse,
     MiniStats,
     Quat,
+    RotateGizmo,
     RenderComponent,
     RenderTarget,
     SEMANTIC_POSITION,
@@ -70,6 +74,7 @@ import {
     StandardMaterial,
     Texture,
     TouchDevice,
+    TranslateGizmo,
     Vec3,
     Vec2,
     CameraComponent
@@ -365,6 +370,16 @@ class Viewer {
 
     sceneRoot: Entity;
 
+    sceneContentRoot: Entity;
+
+    sceneTransform: { position: [number, number, number]; rotation: [number, number, number]; scale: [number, number, number]; pivotOffset: [number, number, number] };
+
+    rotateGizmo: RotateGizmo | null;
+
+    translateGizmo: TranslateGizmo | null;
+
+    lastAlignmentContentTransform: Mat4 | null;
+
     debugRoot: Entity;
 
     entities: Array<Entity>;
@@ -642,12 +657,11 @@ class Viewer {
                     break;
                 }
                 case KEY_R: {
-                    this.cameraControls.reset(Vec3.ZERO, new Vec3(2, 2, 2));
+                    this.resetCamera();
                     break;
                 }
             }
         });
-
         // create the light
         const light = new Entity();
         light.addComponent('light', {
@@ -669,6 +683,8 @@ class Viewer {
         // create the scene and debug root nodes
         const sceneRoot = new Entity('sceneRoot', app);
         app.root.addChild(sceneRoot);
+        const sceneContentRoot = new Entity('sceneContentRoot', app);
+        sceneRoot.addChild(sceneContentRoot);
 
         const debugRoot = new Entity('debugRoot', app);
         app.root.addChild(debugRoot);
@@ -679,6 +695,16 @@ class Viewer {
         this.initialCameraFocus = null;
         this.light = light;
         this.sceneRoot = sceneRoot;
+        this.sceneContentRoot = sceneContentRoot;
+        this.sceneTransform = {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+            pivotOffset: [0, 0, 0]
+        };
+        this.rotateGizmo = null;
+        this.translateGizmo = null;
+        this.lastAlignmentContentTransform = null;
         this.debugRoot = debugRoot;
         this.entities = [];
         this.entityAssets = [];
@@ -841,7 +867,76 @@ class Viewer {
             },
             getMaterialOverrides: this.getMaterialOverrides.bind(this),
             applyMaterialOverrides: this.applyMaterialOverrides.bind(this),
-            resetMaterialOverrides: this.resetMaterialOverrides.bind(this)
+            resetMaterialOverrides: this.resetMaterialOverrides.bind(this),
+            getSceneTransform: this.getSceneTransform.bind(this),
+            applySceneTransform: this.applySceneTransform.bind(this),
+            resetSceneTransform: this.resetSceneTransform.bind(this)
+        });
+
+        const gizmoLayer = Gizmo.createLayer(app, 'RotateGizmo');
+        this.rotateGizmo = new RotateGizmo(this.camera.camera, gizmoLayer);
+        this.rotateGizmo.enabled = false;
+        this.rotateGizmo.attach([this.sceneRoot]);
+        this.rotateGizmo.on('transform:start', () => {
+            this.cameraControls.enabled = false;
+            this.lastAlignmentContentTransform = this.captureSceneContentTransform();
+        });
+        this.rotateGizmo.on('transform:move', () => {
+            this.applyPoiTransformFromLastAlignmentState();
+            const eulers = this.sceneRoot.getLocalEulerAngles();
+            this.sceneTransform = {
+                ...this.sceneTransform,
+                rotation: [eulers.x, eulers.y, eulers.z]
+            };
+            this.renderNextFrame();
+        });
+        this.rotateGizmo.on('transform:end', () => {
+            this.applyPoiTransformFromLastAlignmentState();
+            const eulers = this.sceneRoot.getLocalEulerAngles();
+            this.sceneTransform = {
+                ...this.sceneTransform,
+                rotation: [eulers.x, eulers.y, eulers.z]
+            };
+            this.cameraControls.enabled = true;
+            this.lastAlignmentContentTransform = null;
+            this.renderNextFrame();
+        });
+        this.translateGizmo = new TranslateGizmo(this.camera.camera, gizmoLayer);
+        this.translateGizmo.enabled = false;
+        this.translateGizmo.attach([this.sceneRoot]);
+        this.translateGizmo.on('transform:start', () => {
+            this.cameraControls.enabled = false;
+            this.lastAlignmentContentTransform = this.captureSceneContentTransform();
+        });
+        this.translateGizmo.on('transform:move', () => {
+            this.applyPoiTransformFromLastAlignmentState();
+            const position = this.sceneRoot.getLocalPosition();
+            const centered = this.observer.get('centerScene');
+            const boundsCenter = this.sceneBounds.center;
+            const boundsMinY = this.sceneBounds.getMin().y;
+            this.sceneTransform = {
+                ...this.sceneTransform,
+                position: centered ?
+                    [position.x + boundsCenter.x, position.y + boundsMinY, position.z + boundsCenter.z] :
+                    [position.x, position.y, position.z]
+            };
+            this.renderNextFrame();
+        });
+        this.translateGizmo.on('transform:end', () => {
+            this.applyPoiTransformFromLastAlignmentState();
+            const position = this.sceneRoot.getLocalPosition();
+            const centered = this.observer.get('centerScene');
+            const boundsCenter = this.sceneBounds.center;
+            const boundsMinY = this.sceneBounds.getMin().y;
+            this.sceneTransform = {
+                ...this.sceneTransform,
+                position: centered ?
+                    [position.x + boundsCenter.x, position.y + boundsMinY, position.z + boundsCenter.z] :
+                    [position.x, position.y, position.z]
+            };
+            this.cameraControls.enabled = true;
+            this.lastAlignmentContentTransform = null;
+            this.setCenterScene(centered);
         });
 
         const device = this.app.graphicsDevice;
@@ -1279,6 +1374,8 @@ class Viewer {
             'debug.skeleton': this.setDebugSkeleton.bind(this),
             'debug.axes': this.setDebugAxes.bind(this),
             'debug.grid': this.setDebugGrid.bind(this),
+            'debug.alignmentMode': this.setAlignmentMode.bind(this),
+            'debug.alignmentGizmoMode': this.setAlignmentGizmoMode.bind(this),
             'debug.normals': this.setNormalLength.bind(this),
             'debug.uvCheckerScale': this.setUvCheckerScale.bind(this),
             'debug.selectedUvSet': this.setSelectedUvSet.bind(this),
@@ -1606,7 +1703,7 @@ class Viewer {
         this.sceneCameras = [];
 
         this.entities.forEach((entity) => {
-            this.sceneRoot.removeChild(entity);
+            this.sceneContentRoot.removeChild(entity);
             this.shadowCatcher.onEntityRemoved(entity);
             entity.destroy();
         });
@@ -2615,7 +2712,113 @@ class Viewer {
 
     /** Reset the camera to default position (same as pressing R). */
     resetCamera() {
+        this.resetSceneTransform();
         this.cameraControls.reset(Vec3.ZERO, new Vec3(2, 2, 2));
+    }
+
+    /** Keep the current view direction and distance, but move the orbit pivot to the selected object center. */
+    centerPivotToObject() {
+        if (!this.selectedNode) {
+            return;
+        }
+
+        this.calcSceneBounds(bbox, this.selectedNode as Entity);
+        const focus = this.calcFocalPoint(bbox);
+        const currentPosition = this.cameraControls.getPosition().clone();
+        const currentFocus = this.cameraControls.getFocus().clone();
+        const offset = currentPosition.sub(currentFocus);
+        const nextPosition = focus.clone().add(offset);
+
+        this.cameraControls.reset(focus, nextPosition);
+        this.fitCameraClipPlanes();
+        this.renderNextFrame();
+    }
+
+    private getSceneTransform() {
+        return {
+            position: [...this.sceneTransform.position],
+            rotation: [...this.sceneTransform.rotation],
+            scale: [...this.sceneTransform.scale],
+            pivotOffset: [...this.sceneTransform.pivotOffset]
+        };
+    }
+
+    private applySceneTransform(transform: Record<string, unknown>) {
+        const vec3From = (value: unknown, fallback: [number, number, number]): [number, number, number] => {
+            if (!Array.isArray(value) || value.length < 3) {
+                return fallback;
+            }
+            return value.slice(0, 3).map((entry, index) => {
+                const n = Number(entry);
+                return Number.isFinite(n) ? n : fallback[index];
+            }) as [number, number, number];
+        };
+
+        this.sceneTransform = {
+            position: vec3From(transform.position, [0, 0, 0]),
+            rotation: vec3From(transform.rotation, [0, 0, 0]),
+            scale: vec3From(transform.scale, [1, 1, 1]),
+            pivotOffset: vec3From(transform.pivotOffset, [0, 0, 0])
+        };
+        this.setCenterScene(this.observer.get('centerScene'));
+    }
+
+    private resetSceneTransform() {
+        const previousTransform = this.captureSceneContentTransform();
+        this.sceneTransform = {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1],
+            pivotOffset: [0, 0, 0]
+        };
+        this.setCenterScene(this.observer.get('centerScene'));
+        this.transformPoisBetween(previousTransform, this.captureSceneContentTransform());
+    }
+
+    setObjectPivotToCenter() {
+        const previousTransform = this.captureSceneContentTransform();
+        const centered = this.observer.get('centerScene');
+        const positionOffset = this.sceneTransform.position;
+        this.sceneRoot.setLocalPosition(positionOffset[0], positionOffset[1], positionOffset[2]);
+        this.sceneRoot.setLocalEulerAngles(this.sceneTransform.rotation[0], this.sceneTransform.rotation[1], this.sceneTransform.rotation[2]);
+        this.sceneRoot.setLocalScale(this.sceneTransform.scale[0], this.sceneTransform.scale[1], this.sceneTransform.scale[2]);
+        this.sceneContentRoot.setLocalPosition(0, 0, 0);
+        this.calcSceneBounds(this.sceneBounds);
+
+        this.sceneTransform = {
+            ...this.sceneTransform,
+            pivotOffset: centered ?
+                [0, this.sceneBounds.center.y - this.sceneBounds.getMin().y, 0] :
+                [this.sceneBounds.center.x, this.sceneBounds.center.y, this.sceneBounds.center.z]
+        };
+        this.setCenterScene(centered);
+        this.transformPoisBetween(previousTransform, this.captureSceneContentTransform());
+    }
+
+    resetObjectPivot() {
+        const previousTransform = this.captureSceneContentTransform();
+        this.sceneTransform = {
+            ...this.sceneTransform,
+            pivotOffset: [0, 0, 0]
+        };
+        this.setCenterScene(this.observer.get('centerScene'));
+        this.transformPoisBetween(previousTransform, this.captureSceneContentTransform());
+    }
+
+    resetObjectTransform() {
+        this.resetSceneTransform();
+    }
+
+    rotateSelectedObject() {
+        this.sceneTransform = {
+            ...this.sceneTransform,
+            rotation: [
+                this.sceneTransform.rotation[0],
+                this.sceneTransform.rotation[1] + 90,
+                this.sceneTransform.rotation[2]
+            ]
+        };
+        this.setCenterScene(this.observer.get('centerScene'));
     }
 
     // load gltf model given its url and list of external urls
@@ -3147,22 +3350,104 @@ class Viewer {
     }
 
     setCenterScene(value: boolean) {
-        this.sceneRoot.setLocalPosition(0, 0, 0);
+        const positionOffset = this.sceneTransform.position;
+        this.sceneRoot.setLocalPosition(positionOffset[0], positionOffset[1], positionOffset[2]);
+        this.sceneRoot.setLocalEulerAngles(this.sceneTransform.rotation[0], this.sceneTransform.rotation[1], this.sceneTransform.rotation[2]);
+        this.sceneRoot.setLocalScale(this.sceneTransform.scale[0], this.sceneTransform.scale[1], this.sceneTransform.scale[2]);
+        this.sceneContentRoot.setLocalPosition(0, 0, 0);
 
         // calculate scene bounds after first render in order to get accurate morph target and skinned bounds
         this.calcSceneBounds(this.sceneBounds);
 
         // offset scene geometry to place it at the origin
+        const pivotOffset = this.sceneTransform.pivotOffset;
+        let contentX = -pivotOffset[0];
+        let contentY = -pivotOffset[1];
+        let contentZ = -pivotOffset[2];
         if (value) {
-            this.sceneRoot.setLocalPosition(
-                -this.sceneBounds.center.x,
-                -this.sceneBounds.getMin().y,
-                -this.sceneBounds.center.z
-            );
+            contentX += -this.sceneBounds.center.x;
+            contentY += -this.sceneBounds.getMin().y;
+            contentZ += -this.sceneBounds.center.z;
         }
+        this.sceneContentRoot.setLocalPosition(contentX, contentY, contentZ);
 
         this.dirtyBounds = true;
 
+        this.renderNextFrame();
+    }
+
+    private captureSceneContentTransform() {
+        return new Mat4().copy(this.sceneContentRoot.getWorldTransform());
+    }
+
+    private applyPoiTransformFromLastAlignmentState() {
+        if (!this.lastAlignmentContentTransform) {
+            return;
+        }
+        const currentTransform = this.captureSceneContentTransform();
+        this.transformPoisBetween(this.lastAlignmentContentTransform, currentTransform);
+        this.lastAlignmentContentTransform = currentTransform;
+    }
+
+    private transformPoisBetween(previousTransform: Mat4, nextTransform: Mat4) {
+        const poiListRaw = this.observer.get('poi.list');
+        if (!poiListRaw) {
+            return;
+        }
+
+        let poiList: Array<Record<string, unknown>>;
+        try {
+            poiList = JSON.parse(String(poiListRaw));
+        } catch {
+            return;
+        }
+        if (!Array.isArray(poiList) || poiList.length === 0) {
+            return;
+        }
+
+        const previousInverse = new Mat4().copy(previousTransform).invert();
+        const point = new Vec3();
+        const localPoint = new Vec3();
+        const worldPoint = new Vec3();
+        const vector = new Vec3();
+        const localVector = new Vec3();
+        const worldVector = new Vec3();
+
+        const transformPoint = (value: unknown) => {
+            if (!Array.isArray(value) || value.length < 3) return value;
+            point.set(Number(value[0]) || 0, Number(value[1]) || 0, Number(value[2]) || 0);
+            previousInverse.transformPoint(point, localPoint);
+            nextTransform.transformPoint(localPoint, worldPoint);
+            return [worldPoint.x, worldPoint.y, worldPoint.z];
+        };
+
+        const transformVector = (value: unknown) => {
+            if (!Array.isArray(value) || value.length < 3) return value;
+            vector.set(Number(value[0]) || 0, Number(value[1]) || 0, Number(value[2]) || 0);
+            previousInverse.transformVector(vector, localVector);
+            nextTransform.transformVector(localVector, worldVector);
+            worldVector.normalize();
+            return [worldVector.x, worldVector.y, worldVector.z];
+        };
+
+        const updated = poiList.map((poi) => {
+            const nextPoi: Record<string, unknown> = { ...poi };
+            nextPoi.position = transformPoint(poi.position);
+            nextPoi.normal = transformVector(poi.normal);
+
+            if (poi.camera && typeof poi.camera === 'object' && !Array.isArray(poi.camera)) {
+                const camera = poi.camera as Record<string, unknown>;
+                nextPoi.camera = {
+                    ...camera,
+                    position: transformPoint(camera.position),
+                    focus: transformPoint(camera.focus)
+                };
+            }
+
+            return nextPoi;
+        });
+
+        this.observer.set('poi.list', JSON.stringify(updated));
         this.renderNextFrame();
     }
 
@@ -3194,6 +3479,60 @@ class Viewer {
         this.showSkeleton = show;
         this.dirtySkeleton = true;
         this.renderNextFrame();
+    }
+
+    setAlignmentMode(enabled: boolean) {
+        if (!this.rotateGizmo || !this.translateGizmo) {
+            return;
+        }
+
+        this.rotateGizmo.enabled = false;
+        this.translateGizmo.enabled = false;
+        if (enabled) {
+            this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
+        } else {
+            this.rotateGizmo.detach();
+            this.translateGizmo.detach();
+            this.cameraControls.enabled = true;
+        }
+        this.renderNextFrame();
+    }
+
+    setAlignmentGizmoMode(mode: 'move' | 'rotate') {
+        if (!this.rotateGizmo || !this.translateGizmo) {
+            return;
+        }
+
+        const enabled = !!this.observer.get('debug.alignmentMode');
+        this.rotateGizmo.enabled = false;
+        this.translateGizmo.enabled = false;
+        this.rotateGizmo.detach();
+        this.translateGizmo.detach();
+
+        if (!enabled) {
+            this.renderNextFrame();
+            return;
+        }
+
+        if (mode === 'move') {
+            this.translateGizmo.attach([this.sceneRoot]);
+            this.translateGizmo.enabled = true;
+            this.translateGizmo.update();
+        } else {
+            this.rotateGizmo.attach([this.sceneRoot]);
+            this.rotateGizmo.enabled = true;
+            this.rotateGizmo.update();
+        }
+
+        this.renderNextFrame();
+    }
+
+    private setRotationSnap(enabled: boolean) {
+        if (!this.rotateGizmo) {
+            return;
+        }
+        this.rotateGizmo.snap = enabled;
+        this.rotateGizmo.snapIncrement = 10;
     }
 
     setDebugAxes(show: boolean) {
@@ -3391,6 +3730,8 @@ class Viewer {
             this.cameraControls.update(deltaTime);
         }
 
+        this.setRotationSnap(!!this.rotateGizmo?.enabled && this.app.keyboard.isPressed(KEY_CONTROL));
+
         const maxdiff = (a: Mat4, b: Mat4) => {
             let result = 0;
             for (let i = 0; i < 16; ++i) {
@@ -3483,7 +3824,7 @@ class Viewer {
 
             this.entities.push(entity);
             this.entityAssets.push({ entity: entity, asset: asset });
-            this.sceneRoot.addChild(entity);
+            this.sceneContentRoot.addChild(entity);
             this.shadowCatcher.onEntityAdded(entity);
         }
 
@@ -4031,17 +4372,22 @@ class Viewer {
             this.dirtySkeleton = false;
             this.debugSkeleton.clear();
 
-            if (this.showSkeleton || this.showAxes) {
+            if (this.showSkeleton) {
                 this.entities.forEach((entity) => {
                     if (this.meshInstances.length === 0 || entity.findComponent('render')) {
                         this.debugSkeleton.generateSkeleton(
                             entity,
-                            this.showSkeleton,
-                            this.showAxes,
+                            true,
+                            false,
                             this.selectedNode
                         );
                     }
                 });
+            }
+
+            if (this.showAxes) {
+                const axisSize = Math.max(this.dynamicSceneBounds.halfExtents.length() * 0.25, 0.1);
+                this.debugSkeleton.axis(this.sceneRoot.getWorldTransform(), axisSize);
             }
 
             this.debugSkeleton.update();

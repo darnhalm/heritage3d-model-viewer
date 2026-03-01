@@ -294,9 +294,17 @@ body:not(.ui-ready) #panel-left {
 #camera-panel > .pcui-panel-content,
 #sky-panel > .pcui-panel-content,
 #light-panel > .pcui-panel-content,
-#settings-panel > .pcui-panel-content,
-#materials-panel > .pcui-panel-content,
-#metadata-panel > .pcui-panel-content {
+#settings-panel > .pcui-panel-content {
+    margin-right: 6px;
+}
+
+.tab-panel {
+    padding: 6px 8px 8px;
+    box-sizing: border-box;
+}
+
+#materials-panel,
+#metadata-panel {
     margin-right: 6px;
 }
 
@@ -1655,23 +1663,32 @@ input {
     flex-wrap: wrap;
     gap: 4px;
     margin-top: 8px;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
     flex-shrink: 0;
+    padding: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(18, 18, 18, 0.45);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .left-panel-tab {
-    flex: 1;
-    padding: 6px 8px 6px 28px;
+    flex: 1 1 calc(50% - 2px);
+    min-width: 0;
+    padding: 6px 8px 6px 26px;
     border: 1px solid #555;
     background-color: rgba(40, 40, 40, 0.8);
     background-repeat: no-repeat;
-    background-size: 16px;
+    background-size: 15px;
     background-position: 6px center;
     color: #aaa;
-    font-size: 12px;
+    font-size: 11px;
     cursor: pointer;
     border-radius: 6px;
     transition: background-color 250ms ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 
     &:hover {
         background-color: rgba(50, 50, 50, 0.9);
@@ -1694,6 +1711,10 @@ input {
         background-image: url(./static/icons/tab-settings-icon.svg);
     }
 
+    &.left-panel-tab-alignment {
+        background-image: url(./static/icons/tab-alignment-icon.svg);
+    }
+
     &.left-panel-tab-materials {
         background-image: url(./static/icons/tab-texture-icon.svg);
     }
@@ -1703,7 +1724,6 @@ input {
     }
 
     &.left-panel-tab-metadata {
-        flex-basis: 100%;
         background-image: url(./static/icons/id-icon.svg);
     }
 }
@@ -1755,12 +1775,58 @@ input {
     min-height: 30px;
 }
 
+#metadata-panel .metadata-field {
+    margin-bottom: 6px;
+}
+
 #metadata-save-row,
 #poi-save-row {
     padding: 8px 12px;
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+#alignment-panel .alignment-action-row {
+    display: flex;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 8px;
+    gap: 8px;
+    margin: 0 0 8px;
+}
+
+#alignment-panel .alignment-dual-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#alignment-panel .alignment-dual-row .pcui-button {
+    width: 100%;
+    min-width: 0;
+}
+
+#alignment-panel .alignment-single-row .pcui-button {
+    width: 100%;
+    min-width: 0;
+}
+
+#alignment-panel .alignment-single-row {
+    height: auto;
+}
+
+#alignment-panel .alignment-section-header {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 8px 6px;
+    margin: 0;
+}
+
+#alignment-panel .alignment-section-header .panel-label {
+    width: 100%;
+    color: #fff;
 }
 
 /* ID panel — plain HTML, no pcui for text */
@@ -2106,9 +2172,9 @@ input {
 #sky-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #light-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #settings-panel > .pcui-panel-content > .panel-option:nth-child(even),
-#materials-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #device-panel > .pcui-panel-content > .panel-option:nth-child(even),
-#metadata-panel > .pcui-panel-content > .panel-option:nth-child(even) {
+#materials-panel > .panel-option:nth-child(even),
+#metadata-panel > .panel-option:nth-child(even) {
     background-color: rgba(0, 0, 0, 0.1);
 }
 

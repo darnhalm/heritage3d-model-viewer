@@ -70,7 +70,7 @@ const exportViewerSettings = (observerData: ObserverData) => {
     URL.revokeObjectURL(url);
 };
 
-type LeftPanelTab = 'scene' | 'materials' | 'poi' | 'metadata';
+type LeftPanelTab = 'scene' | 'alignment' | 'materials' | 'poi' | 'metadata';
 
 const DUBLIN_CORE_FIELDS: Array<{ key: string; labelKey: string }> = [
     { key: 'title', labelKey: 'Title' }, { key: 'creator', labelKey: 'Creator' }, { key: 'subject', labelKey: 'Subject' },
@@ -113,7 +113,7 @@ class MetadataPanel extends React.Component<{ observerData: ObserverData; setPro
             { v: 'municipal', t: t('Municipal', lang) }
         ];
         return (
-            <Panel id='metadata-panel' flexShrink={'0'} collapsible={false}>
+            <Container id='metadata-panel' class='tab-panel'>
                 {DUBLIN_CORE_FIELDS.map(({ key, labelKey }) => (
                     <Container key={key} class={['panel-option', 'metadata-field']}>
                         <Label class='panel-label' text={t(labelKey, lang)} />
@@ -169,7 +169,7 @@ class MetadataPanel extends React.Component<{ observerData: ObserverData; setPro
                     <Button class='secondary' text={t('Save', lang)} onClick={this.handleSave} />
                     {this.state.saved && <span className='metadata-saved-feedback'>✓ {t('Saved', lang)}</span>}
                 </div>
-            </Panel>
+            </Container>
         );
     }
 }
@@ -481,6 +481,53 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
     }
 }
 
+class AlignmentPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty, setAlignmentMode: (value: boolean) => void }> {
+    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; setAlignmentMode: (value: boolean) => void }>): boolean {
+        const keys = ['debug', 'scene.selectedNode', 'ui.language'];
+        return JSON.stringify(extract(nextProps.observerData, keys)) !== JSON.stringify(extract(this.props.observerData, keys));
+    }
+
+    render() {
+        const props = this.props;
+        const debugData = props.observerData.debug;
+        const lang = props.observerData?.ui?.language;
+
+        return (
+            <Container id='alignment-panel' class='tab-panel'>
+                <Container class={['alignment-action-row', 'alignment-dual-row']}>
+                    <Button
+                        class={['secondary', ...((debugData?.alignmentGizmoMode ?? 'rotate') === 'move' ? ['active'] : [])]}
+                        text={t('Move', lang)}
+                        onClick={() => props.setProperty('debug.alignmentGizmoMode', 'move')}
+                    />
+                    <Button
+                        class={['secondary', ...((debugData?.alignmentGizmoMode ?? 'rotate') === 'rotate' ? ['active'] : [])]}
+                        text='Rotate'
+                        onClick={() => props.setProperty('debug.alignmentGizmoMode', 'rotate')}
+                    />
+                </Container>
+                <Container class='alignment-section-header'>
+                    <Label class='panel-label' text={t('Object Pivot', lang)} />
+                </Container>
+                <Container class={['alignment-action-row', 'alignment-single-row']}>
+                    <Button
+                        class='secondary'
+                        text={t('Object to Center', lang)}
+                        onClick={() => (window as any).viewer?.setObjectPivotToCenter?.()}
+                    />
+                </Container>
+                <Container class={['alignment-action-row', 'alignment-single-row']}>
+                    <Button
+                        class='secondary'
+                        text={t('Reset Object', lang)}
+                        onClick={() => (window as any).viewer?.resetObjectTransform?.()}
+                    />
+                </Container>
+            </Container>
+        );
+    }
+}
+
 class LeftPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
     state: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null } = {
         tab: 'scene',
@@ -496,6 +543,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private poiSaveTimer: ReturnType<typeof setTimeout> | null = null;
     private poiPointerMoveHandler: ((event: MouseEvent) => void) | null = null;
     private poiPointerUpHandler: ((event: MouseEvent) => void) | null = null;
+    private previousAlignmentAxes = false;
+    private previousAlignmentGrid = false;
+    private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
         const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
@@ -516,6 +566,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             toggleCollapsed();
             const leftPanel = document.getElementById('panel-left');
             const isExpanded = leftPanel?.classList.contains('expanded') ?? false;
+            if (!isExpanded && (this.props.observerData?.debug?.alignmentMode ?? false)) {
+                this.setAlignmentMode(false);
+            } else if (isExpanded && this.state.tab === 'alignment' && !(this.props.observerData?.debug?.alignmentMode ?? false)) {
+                this.setAlignmentMode(true);
+            }
             if (!isExpanded && (this.props.observerData?.poi?.enabled ?? false)) {
                 this.props.setProperty('poi.enabled', false);
             } else if (isExpanded && this.state.tab === 'poi' && !(this.props.observerData?.poi?.enabled ?? false)) {
@@ -586,6 +641,12 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         } else if (prevState.tab === 'poi' && this.state.tab !== 'poi' && poiEnabled) {
             this.props.setProperty('poi.enabled', false);
         }
+
+        if (this.state.tab === 'alignment' && prevState.tab !== 'alignment') {
+            this.setAlignmentMode(true);
+        } else if (prevState.tab === 'alignment' && this.state.tab !== 'alignment') {
+            this.setAlignmentMode(false);
+        }
     }
 
     handlePoiSave = () => {
@@ -643,6 +704,27 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         return bestId;
     }
 
+    private setAlignmentMode = (value: boolean) => {
+        const debugData = this.props.observerData.debug;
+
+        if (value) {
+            if (!this.previousAlignmentVisibilitySaved) {
+                this.previousAlignmentAxes = debugData?.axes ?? false;
+                this.previousAlignmentGrid = debugData?.grid ?? false;
+                this.previousAlignmentVisibilitySaved = true;
+            }
+            this.props.setProperty('debug.alignmentMode', true);
+            this.props.setProperty('debug.grid', true);
+            this.props.setProperty('debug.axes', true);
+            return;
+        }
+
+        this.props.setProperty('debug.alignmentMode', false);
+        this.props.setProperty('debug.grid', this.previousAlignmentVisibilitySaved ? this.previousAlignmentGrid : false);
+        this.props.setProperty('debug.axes', this.previousAlignmentVisibilitySaved ? this.previousAlignmentAxes : false);
+        this.previousAlignmentVisibilitySaved = false;
+    };
+
     render() {
         const { tab, draggingPoiId, dragOverPoiId, dragX, dragY } = this.state;
         const { observerData, setProperty } = this.props;
@@ -699,6 +781,15 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     >
                         {t('Settings', lang)}
                     </button>
+                    {!embedEnabled && (
+                        <button
+                            type='button'
+                            className={`left-panel-tab left-panel-tab-alignment${tab === 'alignment' ? ' active tool-active' : ''}`}
+                            onClick={() => this.setState({ tab: 'alignment' })}
+                        >
+                            {t('Object Alignment', lang)}
+                        </button>
+                    )}
                     {showMaterialsTab && (
                         <button
                             type='button'
@@ -752,8 +843,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             )}
                         </>
                     )}
+                    {!embedEnabled && tab === 'alignment' && (
+                        <AlignmentPanel observerData={observerData} setProperty={setProperty} setAlignmentMode={this.setAlignmentMode} />
+                    )}
                     {showMaterialsTab && tab === 'materials' && (
-                        <Panel id='materials-panel' flexShrink={'0'} collapsible={false}>
+                        <Container id='materials-panel' class='tab-panel'>
                             <div className='materials-layer-list'>
                                 {renderModeCategories(
                                     new Set(JSON.parse(observerData?.scene?.materialChannelsWithTextures ?? '[]')),
@@ -921,10 +1015,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                     value={rgbToArr(observerData?.debug?.wireframeColor ?? { r: 0, g: 0, b: 0 })}
                                     setProperty={(value: number[]) => setProperty('debug.wireframeColor', arrToRgb(value))} />
                             )}
-                        </Panel>
+                        </Container>
                     )}
                     {tab === 'poi' && (
-                        <Panel id='poi-panel' flexShrink={'0'} collapsible={false}>
+                        <Container id='poi-panel' class='tab-panel'>
                             <div className='materials-layer-inline-hint'>{t('Click on the model surface to place a POI.', lang)}</div>
                             <div className='poi-list'>
                                 {poiList.length === 0 && (
@@ -1029,7 +1123,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 <Button class='secondary' text={t('Save', lang)} onClick={this.handlePoiSave} />
                                 {this.state.poiSaved && <span className='metadata-saved-feedback'>✓ {t('Saved', lang)}</span>}
                             </div>
-                        </Panel>
+                        </Container>
                     )}
                     {tab === 'metadata' && <MetadataPanel observerData={observerData} setProperty={setProperty} />}
                 </div>

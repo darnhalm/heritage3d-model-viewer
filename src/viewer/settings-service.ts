@@ -24,6 +24,9 @@ type SettingsServiceArgs = {
     getMaterialOverrides: () => Record<string, unknown>;
     applyMaterialOverrides: (overrides: Record<string, unknown>) => void;
     resetMaterialOverrides: () => void;
+    getSceneTransform: () => Record<string, unknown>;
+    applySceneTransform: (transform: Record<string, unknown>) => void;
+    resetSceneTransform: () => void;
 };
 
 class SettingsService {
@@ -59,6 +62,12 @@ class SettingsService {
 
     private resetMaterialOverrides: () => void;
 
+    private getSceneTransform: () => Record<string, unknown>;
+
+    private applySceneTransform: (transform: Record<string, unknown>) => void;
+
+    private resetSceneTransform: () => void;
+
     constructor(args: SettingsServiceArgs) {
         this.observer = args.observer;
         this.skyboxUrls = args.skyboxUrls;
@@ -72,6 +81,9 @@ class SettingsService {
         this.getMaterialOverrides = args.getMaterialOverrides;
         this.applyMaterialOverrides = args.applyMaterialOverrides;
         this.resetMaterialOverrides = args.resetMaterialOverrides;
+        this.getSceneTransform = args.getSceneTransform;
+        this.applySceneTransform = args.applySceneTransform;
+        this.resetSceneTransform = args.resetSceneTransform;
     }
 
     private static rgbToHex(r: number, g: number, b: number): string {
@@ -122,6 +134,7 @@ class SettingsService {
         if (Object.keys(materialOverrides).length > 0) {
             data.materialOverrides = materialOverrides;
         }
+        data.sceneTransform = this.getSceneTransform();
         if (this.cameraControls.mode === 'orbit') {
             const p = this.cameraControls.getPosition();
             const f = this.cameraControls.getFocus();
@@ -187,6 +200,7 @@ class SettingsService {
         o.set('poi.list', '[]');
         this.onMeasurementReset();
         this.resetMaterialOverrides();
+        this.resetSceneTransform();
         this.syncSkyboxAndLightFromObserver();
     }
 
@@ -258,6 +272,10 @@ class SettingsService {
             const materialOverrides = data.materialOverrides;
             if (materialOverrides && typeof materialOverrides === 'object' && !Array.isArray(materialOverrides)) {
                 this.applyMaterialOverrides(materialOverrides as Record<string, unknown>);
+            }
+            const sceneTransform = data.sceneTransform;
+            if (sceneTransform && typeof sceneTransform === 'object' && !Array.isArray(sceneTransform)) {
+                this.applySceneTransform(sceneTransform as Record<string, unknown>);
             }
         } catch (_) { /* ignore */ }
     }

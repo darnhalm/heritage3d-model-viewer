@@ -180,6 +180,8 @@ const observerData: ObserverData = {
         skeleton: false,
         axes: false,
         grid: false,
+        alignmentMode: false,
+        alignmentGizmoMode: 'rotate',
         normals: 0,
         uvCheckerScale: 16,
         selectedUvSet: 0,

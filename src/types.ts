@@ -109,6 +109,8 @@ export interface ObserverData {
         skeleton: boolean,
         axes: boolean,
         grid: boolean,
+        alignmentMode?: boolean,
+        alignmentGizmoMode?: 'move' | 'rotate',
         normals: number,
         uvCheckerScale: number,
         selectedUvSet: number,
