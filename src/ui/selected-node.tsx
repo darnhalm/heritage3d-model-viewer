@@ -25,24 +25,9 @@ class SelectedNode extends React.Component < { observerData: ObserverData; setPr
         );
     }
 
-    private formatVector(value: any) {
-        if (!value || typeof value !== 'object') return '-';
-        const keys = Object.keys(value)
-        .filter(key => !Number.isNaN(Number(key)))
-        .sort((a, b) => Number(a) - Number(b))
-        .slice(0, 3);
-
-        if (keys.length === 0) return '-';
-
-        return keys.map((key) => {
-            const num = Number(value[key]);
-            return Number.isFinite(num) ? num.toFixed(3) : '-';
-        }).join(', ');
-    }
-
-    private renderDetail(label: string, value: string | number) {
+    private renderDetail(label: string, value: string | number, multiline = false) {
         return (
-            <div className='panel-option'>
+            <div className={`panel-option${multiline ? ' selected-node-detail-multiline' : ''}`}>
                 <div className='panel-label'>{label}</div>
                 <div className='panel-value' title={String(value)}>{String(value)}</div>
             </div>
@@ -105,11 +90,8 @@ class SelectedNode extends React.Component < { observerData: ObserverData; setPr
         return hasHierarchy && nodeSelected ? (
             <div className='selected-node-panel-parent'>
                 <div className='selected-node-panel'>
-                    {this.renderDetail(t('Name', lang), scene.selectedNode.name || '-')}
-                    {this.renderDetail(t('Position', lang), this.formatVector(scene.selectedNode.position))}
-                    {this.renderDetail(t('Rotation', lang), this.formatVector(scene.selectedNode.rotation))}
-                    {this.renderDetail(t('Scale', lang), this.formatVector(scene.selectedNode.scale))}
-                    {this.renderDetail(t('Material', lang), selectedMaterialNames.length > 0 ? selectedMaterialNames.join(', ') : '-')}
+                    {this.renderDetail(t('Name', lang), scene.selectedNode.name || '-', true)}
+                    {this.renderDetail(t('Material', lang), selectedMaterialNames.length > 0 ? selectedMaterialNames.join(', ') : '-', true)}
 
                     {variantListOptions.length > 0 && (
                         <div className='panel-option'>
