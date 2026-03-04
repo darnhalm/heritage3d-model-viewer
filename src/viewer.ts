@@ -3531,6 +3531,9 @@ class Viewer {
     }
 
     setWireframeColor(color: { r: number; g: number; b: number }) {
+        this.wireframeMaterial.ambient = new Color(color.r, color.g, color.b);
+        this.wireframeMaterial.diffuse = new Color(color.r, color.g, color.b);
+        this.wireframeMaterial.specular = new Color(0, 0, 0);
         this.wireframeMaterial.emissive = new Color(color.r, color.g, color.b);
         this.wireframeMaterial.update();
         this.renderNextFrame();

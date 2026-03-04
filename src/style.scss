@@ -2042,7 +2042,7 @@ input {
 
 .selected-node-panel .panel-option {
     display: grid;
-    grid-template-columns: 36% minmax(0, 1fr);
+    grid-template-columns: 110px minmax(0, 1fr);
     align-items: center;
     column-gap: 10px;
     width: 100%;
@@ -2100,7 +2100,7 @@ input {
 }
 
 .selected-node-panel .panel-label {
-    width: auto;
+    width: 110px;
     min-width: 0;
 }
 
