@@ -16,24 +16,25 @@ const validUrl = (url: string) => {
 
 const LoadControls = (props: { observerData: ObserverData; setProperty: SetProperty }) => {
     const [urlInputValid, setUrlInputValid] = useState(false);
-    const inputFile = useRef(null);
+    const inputFile = useRef<HTMLInputElement | null>(null);
 
     const onLoadButtonClick = () => {
         // `current` points to the mounted file input element
-        inputFile.current.click();
+        inputFile.current?.click();
     };
 
-    const onFileSelected = (event: React.ChangeEvent<any>) => {
+    const onFileSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
         // `event` points to the selected file
-        const viewer = (window as any).viewer;
+        const viewer = window.viewer;
         const files = event.target.files;
-        if (viewer && files.length) {
+        if (viewer && files && files.length > 0) {
             const loadList: Array<File> = [];
             for (let i = 0; i < files.length; ++i) {
                 const file = files[i];
                 loadList.push({
                     url: URL.createObjectURL(file),
-                    filename: file.name
+                    filename: file.name,
+                    sizeBytes: file.size
                 });
             }
             viewer.loadFiles(loadList);
@@ -41,12 +42,13 @@ const LoadControls = (props: { observerData: ObserverData; setProperty: SetPrope
     };
 
     const onUrlSelected = () => {
-        const viewer = (window as any).viewer;
-        // @ts-ignore
-        const value = document.getElementById('glb-url-input').ui.value;
+        const viewer = window.viewer;
+        const inputElement = document.getElementById('glb-url-input') as (HTMLElement & { ui?: { value?: string } }) | null;
+        const value = inputElement?.ui?.value;
+        if (!value) return;
         const url = new URL(value);
         const filename = url.pathname.split('/').pop();
-        const hasExtension = !!filename.split('.').splice(1).pop();
+        const hasExtension = !!filename?.split('.').splice(1).pop();
         viewer.loadFiles([{
             url: value,
             filename: filename + (hasExtension ? '' : '.glb')

@@ -10,7 +10,7 @@ import {
 } from 'playcanvas';
 
 import { initMaterials } from './material';
-import { ObserverData } from './types';
+import { ObserverData, File as ViewerFile } from './types';
 import initializeUI from './ui';
 import Viewer from './viewer';
 import './style.scss';
@@ -26,10 +26,12 @@ declare global {
         launchQueue: {
             setConsumer: (callback: (launchParams: LaunchParams) => void) => void;
         };
-        pc: any;
+        pc: unknown;
         viewer: Viewer;
         startEmbedPlayback?: () => void;
-        webkit?: any;
+        webkit?: {
+            messageHandlers?: unknown;
+        };
     }
 }
 
@@ -302,7 +304,7 @@ const observerData: ObserverData = {
 };
 
 const saveOptions = (observer: Observer, name: string) => {
-    const options = observer.json() as any;
+    const options = observer.json() as Partial<ObserverData>;
     window.localStorage.setItem(`model-viewer-${name}`, JSON.stringify({
         camera: options.camera,
         skybox: options.skybox,
@@ -319,17 +321,17 @@ const saveOptions = (observer: Observer, name: string) => {
 const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, string>) => {
     const filter = ['skybox.options', 'debug.renderMode'];
 
-    const loadRec = (path: string, value:any) => {
+    const loadRec = (path: string, value: unknown) => {
         if (filter.indexOf(path) !== -1) {
             return;
         }
 
-        if (typeof value === 'object') {
-            Object.keys(value).forEach((k) => {
-                loadRec(path ? `${path}.${k}` : k, value[k]);
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+            Object.keys(value as Record<string, unknown>).forEach((k) => {
+                loadRec(path ? `${path}.${k}` : k, (value as Record<string, unknown>)[k]);
             });
         } else {
-            if (path !== 'skybox.value' || value === 'None' || skyboxUrls.has(value)) {
+            if (path !== 'skybox.value' || value === 'None' || (typeof value === 'string' && skyboxUrls.has(value))) {
                 observer.set(path, value);
             }
         }
@@ -484,6 +486,7 @@ const main = () => {
                 observer.set('camera.position', [p.x, p.y, p.z]);
                 observer.set('camera.focus', [f.x, f.y, f.z]);
             }
+            viewer?.destroy?.();
         });
 
         window.addEventListener('message', (event: MessageEvent) => {
@@ -543,7 +546,7 @@ const main = () => {
         });
 
         // get list of files, decode them
-        const files: { url: string, filename: string }[] = [];
+        const files: ViewerFile[] = [];
 
         // handle OS-based file association in PWA mode
         const promises: Promise<any>[] = [];
@@ -552,7 +555,7 @@ const main = () => {
                 for (const fileHandle of launchParams.files) {
                     promises.push(
                         fileHandle.getFile().then((file) => {
-                            files.push({ url: URL.createObjectURL(file), filename: file.name });
+                            files.push({ url: URL.createObjectURL(file), filename: file.name, sizeBytes: file.size });
                         })
                     );
                 }

@@ -12,6 +12,10 @@ import React from 'react';
 
 import { Option } from '../../types';
 
+type VectorValue = number[];
+type ColorValue = number[];
+type SelectValue = string | number | boolean | null;
+
 export const Detail = (props: { label: string, value:string|number}) => {
     return <Container class='panel-option'>
         <Label
@@ -25,7 +29,7 @@ export const Detail = (props: { label: string, value:string|number}) => {
 
 export const Vector = (props: {
     label: string,
-    value:any,
+    value: VectorValue,
     dimensions: 2 | 3 | 4,
     enabled?: boolean}) => {
 
@@ -62,8 +66,8 @@ export const ToggleColor = (props: {
         label: string,
         booleanValue: boolean,
         setBooleanProperty: (value: boolean) => void,
-        colorValue: any,
-        setColorProperty: (value: any) => void
+        colorValue: ColorValue,
+        setColorProperty: (value: ColorValue) => void
     }) => {
     return <Container class='panel-option'>
         <Label
@@ -77,7 +81,7 @@ export const ToggleColor = (props: {
             <ColorPicker
                 class='panel-value-toggle-color'
                 value={props.colorValue}
-                onChange={(value: any) => props.setColorProperty(value)} />
+                onChange={(value: unknown) => props.setColorProperty(value as ColorValue)} />
         </Container>
     </Container>;
 };
@@ -86,10 +90,10 @@ export const SelectColor = (props: {
     label: string,
     selectType: 'string' | 'number' | 'boolean',
     selectOptions: Array<Option>,
-    selectValue: any,
-    setSelectProperty: (value: any) => void,
-    colorValue: any,
-    setColorProperty: (value: any) => void }) => {
+    selectValue: SelectValue,
+    setSelectProperty: (value: SelectValue) => void,
+    colorValue: ColorValue,
+    setColorProperty: (value: ColorValue) => void }) => {
 
     return <Container class='panel-option'>
         <Label
@@ -101,11 +105,11 @@ export const SelectColor = (props: {
                 type={props.selectType}
                 options={props.selectOptions}
                 value={props.selectValue}
-                onChange={(value: any) => props.setSelectProperty(value)} />
+                onChange={(value: unknown) => props.setSelectProperty(value as SelectValue)} />
             <ColorPicker
                 class='panel-value-color'
                 value={props.colorValue}
-                onChange={(value: any) => props.setColorProperty(value)} />
+                onChange={(value: unknown) => props.setColorProperty(value as ColorValue)} />
         </Container>
     </Container>;
 };
@@ -133,8 +137,8 @@ export const Slider = (props: {
             sliderMax={props.max}
             precision={props.precision}
             step={props.step ?? 0.01}
-            onChange={(value: any) => {
-                props.setProperty(value);
+            onChange={(value: unknown) => {
+                props.setProperty(Number(value));
             }}
             value={props.value}
         />
@@ -157,8 +161,8 @@ export const Numeric = (props: {
             class='panel-value'
             min={props.min}
             max={props.max}
-            onChange={(value: any) => {
-                props.setProperty(value);
+            onChange={(value: unknown) => {
+                props.setProperty(Number(value));
             }}
             value={props.value}
         />
@@ -167,8 +171,8 @@ export const Numeric = (props: {
 
 export const ColorPickerControl = (props: {
     label: string,
-    value: any,
-    setProperty: (value: any) => void,
+    value: ColorValue,
+    setProperty: (value: ColorValue) => void,
     enabled?: boolean,
     hidden?: boolean }) => {
 
@@ -179,7 +183,7 @@ export const ColorPickerControl = (props: {
         <ColorPicker
             class='panel-value'
             value={props.value}
-            onChange={(value: any) => props.setProperty(value)} />
+            onChange={(value: unknown) => props.setProperty(value as ColorValue)} />
     </Container>;
 };
 
@@ -210,8 +214,8 @@ export const MorphSlider = (props: {
             sliderMax={props.max}
             precision={props.precision}
             step={0.01}
-            onChange={(value: any) => {
-                props.setProperty(value);
+            onChange={(value: unknown) => {
+                props.setProperty(Number(value));
             }}
             value={props.value}
         />
@@ -220,8 +224,8 @@ export const MorphSlider = (props: {
 
 export const Select = (props: {
     label: string,
-    value:any,
-    setProperty: (value: any) => void,
+    value: SelectValue,
+    setProperty: (value: SelectValue) => void,
     type: 'string' | 'number' | 'boolean',
     options: Array<Option>,
     enabled?: boolean,
@@ -237,8 +241,8 @@ export const Select = (props: {
             type={props.type}
             options={props.options}
             value={props.value}
-            onChange={(value: any) => {
-                props.setProperty(value);
+            onChange={(value: unknown) => {
+                props.setProperty(value as SelectValue);
             }}
         />
     </Container>;
@@ -247,8 +251,8 @@ export const Select = (props: {
 // naked versions
 
 export const NakedSelect = (props: {
-    value: any,
-    setProperty: any,
+    value: SelectValue,
+    setProperty: (value: SelectValue) => void,
     width: number,
     type: 'string' | 'number' | 'boolean',
     options: Array<Option>,
@@ -264,15 +268,15 @@ export const NakedSelect = (props: {
         options={props.options}
         enabled={props.enabled ?? true}
         value={props.value}
-        onChange={(value: any) => {
-            props.setProperty(value);
+        onChange={(value: unknown) => {
+            props.setProperty(value as SelectValue);
         }}
     />;
 };
 
 export const NakedSlider = (props: {
-    value: any,
-    setProperty: any,
+    value: number,
+    setProperty: (value: number) => void,
     width: number,
     precision: number,
     min: number,
@@ -293,8 +297,8 @@ export const NakedSlider = (props: {
         step={0.01}
         enabled={props.enabled ?? true}
         value={props.value}
-        onChange={(value: any) => {
-            props.setProperty(value);
+        onChange={(value: unknown) => {
+            props.setProperty(Number(value));
         }}
     />;
 };

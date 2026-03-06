@@ -142,3 +142,198 @@ test('raycast helpers hit secondary mesh primitives for selection and measuremen
     expect(Math.abs(result.surface.y)).toBeLessThan(0.1);
     expect(Math.abs(result.surface.z)).toBeLessThan(0.1);
 });
+
+test('metadata and poi tabs stay stable and poi edits persist to observer state', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => {
+        pageErrors.push(error.message);
+    });
+
+    await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+
+    await page.waitForFunction(() => {
+        const observer = (window as any).viewer?.observer;
+        const filenames = observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
+    });
+
+    await page.evaluate(() => {
+        document.getElementById('panel-left')?.classList.add('expanded');
+    });
+
+    await page.locator('.left-panel-tab-metadata').click();
+    await expect(page.locator('#metadata-panel')).toBeVisible();
+
+    const metadataTitleInput = page.locator('#metadata-panel input').first();
+    await metadataTitleInput.fill('Smoke Metadata Title');
+    await metadataTitleInput.blur();
+
+    const metadataTitle = await page.evaluate(() => {
+        const metadata = (window as any).viewer?.observer?.get('metadata');
+        return metadata?.title ?? '';
+    });
+    expect(metadataTitle).toBe('Smoke Metadata Title');
+
+    await page.evaluate(() => {
+        (window as any).viewer?.observer?.set('poi.list', JSON.stringify([{
+            id: 'poi-smoke-1',
+            number: 1,
+            title: 'POI 1',
+            description: '',
+            color: '#000000',
+            duration: 0.8,
+            position: [0, 0, 0],
+            normal: [0, 1, 0]
+        }]));
+    });
+
+    await page.locator('.left-panel-tab-poi').click();
+    await expect(page.locator('#poi-panel')).toBeVisible();
+    await expect(page.locator('.poi-list-item')).toHaveCount(1);
+
+    const poiDescription = page.locator('.poi-list-description').first();
+    await poiDescription.fill('Smoke description');
+    await poiDescription.blur();
+
+    const poiState = await page.evaluate(() => {
+        const raw = (window as any).viewer?.observer?.get('poi.list');
+        return JSON.parse(String(raw ?? '[]'));
+    });
+    expect(Array.isArray(poiState)).toBe(true);
+    expect(poiState[0]?.description).toBe('Smoke description');
+    expect(pageErrors).toEqual([]);
+});
+
+test('alignment tab toggles alignment mode safely without runtime errors', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => {
+        pageErrors.push(error.message);
+    });
+
+    await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+
+    await page.waitForFunction(() => {
+        const observer = (window as any).viewer?.observer;
+        const filenames = observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
+    });
+
+    const initialState = await page.evaluate(() => ({
+        axes: (window as any).viewer?.observer?.get('debug.axes'),
+        grid: (window as any).viewer?.observer?.get('debug.grid')
+    }));
+
+    await page.evaluate(() => {
+        document.getElementById('panel-left')?.classList.add('expanded');
+    });
+
+    await page.locator('.left-panel-tab-alignment').click();
+    await expect(page.locator('#alignment-panel')).toBeVisible();
+
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer?.observer?.set('debug.alignmentGizmoMode', 'move');
+        viewer?.observer?.set('debug.alignmentGizmoMode', 'rotate');
+        viewer?.setObjectPivotToCenter?.();
+        viewer?.resetObjectTransform?.();
+        viewer?.frameScene?.();
+    });
+
+    const activeState = await page.evaluate(() => ({
+        alignmentMode: (window as any).viewer?.observer?.get('debug.alignmentMode'),
+        alignmentGizmoMode: (window as any).viewer?.observer?.get('debug.alignmentGizmoMode'),
+        axes: (window as any).viewer?.observer?.get('debug.axes'),
+        grid: (window as any).viewer?.observer?.get('debug.grid')
+    }));
+    expect(activeState.alignmentMode).toBe(true);
+    expect(activeState.alignmentGizmoMode).toBe('rotate');
+    expect(activeState.axes).toBe(true);
+    expect(activeState.grid).toBe(true);
+
+    await page.locator('.left-panel-tab-scene').click({ force: true });
+
+    const afterExitState = await page.evaluate(() => ({
+        alignmentMode: (window as any).viewer?.observer?.get('debug.alignmentMode'),
+        axes: (window as any).viewer?.observer?.get('debug.axes'),
+        grid: (window as any).viewer?.observer?.get('debug.grid')
+    }));
+    expect(afterExitState.alignmentMode).toBe(false);
+    expect(afterExitState.axes).toBe(initialState.axes);
+    expect(afterExitState.grid).toBe(initialState.grid);
+    expect(pageErrors).toEqual([]);
+});
+
+test('materials by objects mode shows selected-node panel and stays stable', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => {
+        pageErrors.push(error.message);
+    });
+
+    await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+
+    await page.waitForFunction(() => {
+        const observer = (window as any).viewer?.observer;
+        const filenames = observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
+    });
+
+    await page.evaluate(() => {
+        document.getElementById('panel-left')?.classList.add('expanded');
+    });
+
+    await page.locator('.left-panel-tab-materials').click();
+    await expect(page.locator('#materials-panel')).toBeVisible();
+
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer?.observer?.set('debug.withTextureOnly', true);
+        // Stabilize test rendering path for right-side object panel.
+        viewer?.observer?.set('scene.nodes', JSON.stringify([{ name: 'SmokeNode', path: 'SmokeNode' }]));
+        viewer?.observer?.set('scene.selectedNode.path', 'SmokeNode');
+        viewer?.observer?.set('scene.selectedNode.name', 'SmokeNode');
+    });
+
+    await page.waitForFunction(() => {
+        const observer = (window as any).viewer?.observer;
+        return observer?.get('debug.withTextureOnly') === true &&
+            !!observer?.get('scene.selectedNode.path');
+    });
+
+    await expect(page.locator('.selected-node-panel')).toBeVisible();
+    await expect(page.locator('.selected-node-panel .panel-option').first()).toBeVisible();
+    expect(pageErrors).toEqual([]);
+});
+
+test('rejects oversized model and settings files by size limits', async ({ page }) => {
+    await page.goto('/');
+    await waitForViewer(page);
+
+    const result = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const accepted = viewer.loadFiles([
+            {
+                url: 'http://example.com/too-big.glb',
+                filename: 'too-big.glb',
+                sizeBytes: 1024 * 1024 * 1024 + 1
+            },
+            {
+                url: 'http://example.com/test.model-viewer-settings.json',
+                filename: 'test.model-viewer-settings.json',
+                sizeBytes: 10 * 1024 * 1024 + 1
+            }
+        ], true);
+
+        const warnings = viewer.observer.get('ui.warnings') || [];
+        const error = viewer.observer.get('ui.error');
+        return { accepted, warnings, error };
+    });
+
+    expect(result.accepted).toBe(false);
+    expect(Array.isArray(result.warnings)).toBe(true);
+    expect(result.warnings.length).toBe(2);
+    expect(String(result.error)).toContain('exceeds model limit of 1 GB');
+    expect(String(result.error)).toContain('exceeds settings limit of 10 MB');
+});

@@ -62,6 +62,12 @@ class SelectionController {
 
     private meshGeometryCache = new WeakMap<object, CachedMeshGeometry | null>();
 
+    private onSelectMousedown: ((event: MouseEvent) => void) | null = null;
+
+    private onSelectMousemove: ((event: MouseEvent) => void) | null = null;
+
+    private onSelectMouseup: ((event: MouseEvent) => void) | null = null;
+
     constructor(args: SelectionControllerArgs) {
         this.canvas = args.canvas;
         this.observer = args.observer;
@@ -78,7 +84,7 @@ class SelectionController {
     }
 
     private bindEvents() {
-        const onSelectMousedown = (event: MouseEvent) => {
+        this.onSelectMousedown = (event: MouseEvent) => {
             if (event.button !== 0) return;
             if (event.target !== this.canvas) return;
             if (!this.observer.get('debug.withTextureOnly')) return;
@@ -93,7 +99,7 @@ class SelectionController {
             };
             this.selectIsPotentialClick = true;
         };
-        const onSelectMousemove = (event: MouseEvent) => {
+        this.onSelectMousemove = (event: MouseEvent) => {
             if (!this.selectIsPotentialClick || !this.selectClickDown) return;
             const dx = event.clientX - this.selectClickDown.clientX;
             const dy = event.clientY - this.selectClickDown.clientY;
@@ -101,7 +107,7 @@ class SelectionController {
                 this.selectIsPotentialClick = false;
             }
         };
-        const onSelectMouseup = (event: MouseEvent) => {
+        this.onSelectMouseup = (event: MouseEvent) => {
             if (event.button !== 0) return;
             if (this.selectIsPotentialClick && this.selectClickDown && this.observer.get('debug.withTextureOnly') && !this.observer.get('measure.enabled') && !this.observer.get('poi.enabled')) {
                 this.pickAndSelectAt(this.selectClickDown.canvasX, this.selectClickDown.canvasY);
@@ -109,9 +115,24 @@ class SelectionController {
             this.selectIsPotentialClick = false;
             this.selectClickDown = null;
         };
-        this.canvas.addEventListener('mousedown', onSelectMousedown);
-        document.addEventListener('mousemove', onSelectMousemove);
-        document.addEventListener('mouseup', onSelectMouseup);
+        this.canvas.addEventListener('mousedown', this.onSelectMousedown);
+        document.addEventListener('mousemove', this.onSelectMousemove);
+        document.addEventListener('mouseup', this.onSelectMouseup);
+    }
+
+    dispose() {
+        if (this.onSelectMousedown) {
+            this.canvas.removeEventListener('mousedown', this.onSelectMousedown);
+            this.onSelectMousedown = null;
+        }
+        if (this.onSelectMousemove) {
+            document.removeEventListener('mousemove', this.onSelectMousemove);
+            this.onSelectMousemove = null;
+        }
+        if (this.onSelectMouseup) {
+            document.removeEventListener('mouseup', this.onSelectMouseup);
+            this.onSelectMouseup = null;
+        }
     }
 
     private selectNodeAtPoint(worldPoint: Vec3) {

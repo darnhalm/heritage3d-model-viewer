@@ -6,7 +6,8 @@ export interface MorphTargetData {
 
 export interface File {
     url: string,
-    filename?: string
+    filename?: string,
+    sizeBytes?: number
 }
 
 export interface Option {

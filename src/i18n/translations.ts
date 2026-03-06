@@ -222,7 +222,16 @@ export const translations: Record<Lang, Record<string, string>> = {
         Municipal: 'Municipal',
         'Object number': 'Object number',
         'Museum item': 'Museum item',
-        'Goskatalog link': 'Goskatalog link'
+        'Goskatalog link': 'Goskatalog link',
+        'Import from API': 'Import from API',
+        'API URL': 'API URL',
+        Import: 'Import',
+        'Importing...': 'Importing...',
+        Imported: 'Imported',
+        'Import failed': 'Import failed',
+        'Enter API URL': 'Enter API URL',
+        'File "{filename}" ({size}) exceeds model limit of 1 GB.': 'File "{filename}" ({size}) exceeds model limit of 1 GB.',
+        'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'File "{filename}" ({size}) exceeds settings limit of 10 MB.'
     },
     ru: {
         Settings: 'Настройки',
@@ -445,7 +454,16 @@ export const translations: Record<Lang, Record<string, string>> = {
         Municipal: 'Муниципальный',
         'Object number': 'Номер объекта',
         'Museum item': 'Музейный предмет',
-        'Goskatalog link': 'Ссылка на Госкаталог'
+        'Goskatalog link': 'Ссылка на Госкаталог',
+        'Import from API': 'Импорт из API',
+        'API URL': 'URL API',
+        Import: 'Импорт',
+        'Importing...': 'Импорт...',
+        Imported: 'Импортировано',
+        'Import failed': 'Ошибка импорта',
+        'Enter API URL': 'Введите URL API',
+        'File "{filename}" ({size}) exceeds model limit of 1 GB.': 'Файл "{filename}" ({size}) превышает лимит модели 1 ГБ.',
+        'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'Файл "{filename}" ({size}) превышает лимит файла настроек 10 МБ.'
     },
     zh: {
         Settings: '设置',
@@ -668,7 +686,16 @@ export const translations: Record<Lang, Record<string, string>> = {
         Municipal: '市政',
         'Object number': '对象编号',
         'Museum item': '博物馆藏品',
-        'Goskatalog link': 'Госкаталог 链接'
+        'Goskatalog link': 'Госкаталог 链接',
+        'Import from API': '从 API 导入',
+        'API URL': 'API URL',
+        Import: '导入',
+        'Importing...': '导入中...',
+        Imported: '已导入',
+        'Import failed': '导入失败',
+        'Enter API URL': '请输入 API URL',
+        'File "{filename}" ({size}) exceeds model limit of 1 GB.': '文件“{filename}”（{size}）超过模型大小上限 1 GB。',
+        'File "{filename}" ({size}) exceeds settings limit of 10 MB.': '文件“{filename}”（{size}）超过设置文件大小上限 10 MB。'
     }
 };
 

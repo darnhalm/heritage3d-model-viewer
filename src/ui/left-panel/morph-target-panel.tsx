@@ -13,7 +13,7 @@ class MorphTargetPanel extends React.Component <{ morphs: ObserverData['morphs']
     }
 
     render() {
-        const morphs: any = this.props.morphs;
+        const morphs = this.props.morphs;
         return morphs ? (
             <Panel headerText='MORPH TARGETS' class='scene-morph-panel' collapsible={false}>
                 {Object.keys(morphs).map((morphIndex) => {

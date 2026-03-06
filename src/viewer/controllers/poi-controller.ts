@@ -8,6 +8,7 @@ const POI_CLICK_DRAG_THRESHOLD = 5;
 const POI_MARKER_HIT_RADIUS = 18;
 const POI_TITLE_MAX_LENGTH = 80;
 const POI_DESCRIPTION_MAX_LENGTH = 636;
+type ViewerTaggedMeshInstance = MeshInstance & { __viewerIsGsplat?: boolean };
 
 type PoiEntry = {
     id: string;
@@ -81,6 +82,16 @@ class PoiController {
 
     private pulsePoiId: string | null = null;
 
+    private poiListCacheRaw: string | null = null;
+
+    private poiListCache: PoiEntry[] = [];
+
+    private onMouseDown: ((event: MouseEvent) => void) | null = null;
+
+    private onMouseMove: ((event: MouseEvent) => void) | null = null;
+
+    private onMouseUp: ((event: MouseEvent) => void) | null = null;
+
     constructor(args: PoiControllerArgs) {
         this.canvas = args.canvas;
         this.observer = args.observer;
@@ -132,7 +143,7 @@ class PoiController {
     }
 
     private bindEvents() {
-        const onMouseDown = (event: MouseEvent) => {
+        this.onMouseDown = (event: MouseEvent) => {
             if (event.button !== 0) return;
             if (!this.observer.get('poi.enabled')) return;
             if (this.observer.get('measure.enabled')) return;
@@ -159,7 +170,7 @@ class PoiController {
             this.poiIsPotentialClick = true;
         };
 
-        const onMouseMove = (event: MouseEvent) => {
+        this.onMouseMove = (event: MouseEvent) => {
             if (this.draggingPoiId) {
                 const rect = this.canvas.getBoundingClientRect();
                 void this.movePoiTo(this.draggingPoiId, event.clientX - rect.left, event.clientY - rect.top);
@@ -173,7 +184,7 @@ class PoiController {
             }
         };
 
-        const onMouseUp = (event: MouseEvent) => {
+        this.onMouseUp = (event: MouseEvent) => {
             if (event.button !== 0) return;
             if (this.draggingPoiId) {
                 this.draggingPoiId = null;
@@ -186,22 +197,58 @@ class PoiController {
             this.poiClickDown = null;
         };
 
-        document.addEventListener('mousedown', onMouseDown, true);
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
+        document.addEventListener('mousedown', this.onMouseDown, true);
+        document.addEventListener('mousemove', this.onMouseMove);
+        document.addEventListener('mouseup', this.onMouseUp);
+    }
+
+    dispose() {
+        if (this.onMouseDown) {
+            document.removeEventListener('mousedown', this.onMouseDown, true);
+            this.onMouseDown = null;
+        }
+        if (this.onMouseMove) {
+            document.removeEventListener('mousemove', this.onMouseMove);
+            this.onMouseMove = null;
+        }
+        if (this.onMouseUp) {
+            document.removeEventListener('mouseup', this.onMouseUp);
+            this.onMouseUp = null;
+        }
+        this.markerEls.forEach((marker) => marker.remove());
+        this.markerEls.clear();
+        this.poiScreenPositions.clear();
+        this.overlay?.remove();
+        this.overlay = null;
+        this.hoverLabelEl = null;
+        this.hoverLabelTitleEl = null;
+        this.hoverLabelDescriptionEl = null;
     }
 
     private getPoiList() {
+        const raw = String(this.observer.get('poi.list') ?? '[]');
+        if (this.poiListCacheRaw === raw) {
+            return this.poiListCache;
+        }
+
         try {
-            const parsed = JSON.parse(String(this.observer.get('poi.list') ?? '[]'));
-            return Array.isArray(parsed) ? parsed as PoiEntry[] : [];
+            const parsed = JSON.parse(raw);
+            const list = Array.isArray(parsed) ? parsed as PoiEntry[] : [];
+            this.poiListCacheRaw = raw;
+            this.poiListCache = list;
+            return list;
         } catch {
-            return [];
+            this.poiListCacheRaw = raw;
+            this.poiListCache = [];
+            return this.poiListCache;
         }
     }
 
     private setPoiList(list: PoiEntry[]) {
-        this.observer.set('poi.list', JSON.stringify(list));
+        const raw = JSON.stringify(list);
+        this.poiListCacheRaw = raw;
+        this.poiListCache = list;
+        this.observer.set('poi.list', raw);
         this.renderNextFrame();
     }
 
@@ -230,7 +277,7 @@ class PoiController {
         let bestHit: ReturnType<typeof intersectMeshTrianglesDetailed> = null;
 
         this.getMeshInstances().forEach((mi) => {
-            if ((mi as any).__viewerIsGsplat) return;
+            if ((mi as ViewerTaggedMeshInstance).__viewerIsGsplat) return;
             const aabb = mi.aabb;
             if (!aabb) return;
 

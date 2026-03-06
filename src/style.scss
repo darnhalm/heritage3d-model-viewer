@@ -1815,6 +1815,29 @@ input {
     gap: 8px;
 }
 
+.metadata-action-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.metadata-action-feedback {
+    color: #8ce39b;
+    font-size: 12px;
+}
+
+.metadata-import-error-row {
+    align-items: flex-start;
+}
+
+.metadata-import-error {
+    color: #f08b8b;
+    font-size: 12px;
+    line-height: 1.35;
+    padding: 0 0 6px;
+    word-break: break-word;
+}
+
 #alignment-panel .alignment-action-row {
     display: flex;
     width: 100%;

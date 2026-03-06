@@ -28,7 +28,19 @@ import MorphTargetPanel from '../left-panel/morph-target-panel';
 
 declare global {
     interface Navigator {
-      readonly gpu: any;
+      readonly gpu: {
+          requestAdapter: () => Promise<{
+              requestDevice: () => Promise<{
+                  createCommandEncoder: () => {
+                      beginRenderPass: (descriptor: unknown) => { end: () => void };
+                      finish: () => unknown;
+                  };
+                  queue: {
+                      submit: (commands: unknown[]) => void;
+                  };
+              }>;
+          }>;
+      };
     }
 }
 
@@ -72,10 +84,10 @@ class InfoPanel extends React.Component <{
         const prevPath = prevProps.observerData?.scene?.selectedNode?.path ?? '';
         const path = this.props.observerData?.scene?.selectedNode?.path ?? '';
         if (path && path !== prevPath && this.state.tab === 'model') {
-            const selectedEl = this.modelHierarchyRef.current?.querySelector('.pcui-treeview-item.pcui-treeview-item-selected') as HTMLElement | null;
+            const selectedEl = this.modelHierarchyRef.current?.querySelector<HTMLElement>('.pcui-treeview-item.pcui-treeview-item-selected');
             selectedEl?.scrollIntoView({ block: 'nearest' });
         } else if (this.state.tab === 'model' && prevState.tab !== 'model' && path) {
-            const selectedEl = this.modelHierarchyRef.current?.querySelector('.pcui-treeview-item.pcui-treeview-item-selected') as HTMLElement | null;
+            const selectedEl = this.modelHierarchyRef.current?.querySelector<HTMLElement>('.pcui-treeview-item.pcui-treeview-item-selected');
             selectedEl?.scrollIntoView({ block: 'nearest' });
         }
     }
@@ -271,10 +283,10 @@ class InfoPanel extends React.Component <{
                                         text={node.name}
                                         selected={selectedPath === node.path}
                                         open={isSelfOrAncestor(node.path)}
-                                        onSelect={(tv: any) => {
+                                        onSelect={(deselect: () => void) => {
                                             setProperty('scene.selectedNode.path', node.path);
                                             const remove = addEventListenerOnClickOnly(document.body, () => {
-                                                tv.selected = false;
+                                                deselect();
                                                 remove();
                                             }, 4);
                                         }}
@@ -347,7 +359,7 @@ class MeasurementsPanel extends React.Component <{
     private cycleReferenceRuler = () => {
         const next = !this.props.observerData.measure.referenceRuler;
         this.props.setProperty('measure.referenceRuler', next);
-        (window as any).viewer?.frameScene?.();
+        window.viewer?.frameScene?.();
     };
 
     shouldComponentUpdate(nextProps: Readonly<{
@@ -521,7 +533,12 @@ class ViewPanel extends React.Component <{
 ></iframe>`;
     }
 
-    constructor(props: any) {
+    constructor(props: {
+        sceneData: ObserverData['scene'],
+        uiData: ObserverData['ui'],
+        runtimeData: ObserverData['runtime'],
+        setProperty: SetProperty
+    }) {
         super(props);
         const embed = props.uiData?.embed;
         const preset = (embed?.preset ?? 'compact') as EmbedGeneratorState['preset'];

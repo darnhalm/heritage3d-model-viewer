@@ -5,6 +5,7 @@ import { CachedMeshGeometry, intersectMeshTrianglesDetailed } from './mesh-rayca
 import { Picker } from '../../picker';
 
 const MEASURE_CLICK_DRAG_THRESHOLD = 5;
+type ViewerTaggedMeshInstance = MeshInstance & { __viewerIsGsplat?: boolean };
 
 type MeasurementControllerArgs = {
     canvas: HTMLCanvasElement;
@@ -54,6 +55,12 @@ class MeasurementController {
 
     private meshGeometryCache = new WeakMap<object, CachedMeshGeometry | null>();
 
+    private onMeasureMousedown: ((event: MouseEvent) => void) | null = null;
+
+    private onMeasureMousemove: ((event: MouseEvent) => void) | null = null;
+
+    private onMeasureMouseup: ((event: MouseEvent) => void) | null = null;
+
     constructor(args: MeasurementControllerArgs) {
         this.canvas = args.canvas;
         this.observer = args.observer;
@@ -96,7 +103,7 @@ class MeasurementController {
     }
 
     private bindEvents() {
-        const onMeasureMousedown = (event: MouseEvent) => {
+        this.onMeasureMousedown = (event: MouseEvent) => {
             if (!this.observer.get('measure.enabled')) return;
             if (event.button !== 0) return;
             if (event.target !== this.canvas) return;
@@ -109,7 +116,7 @@ class MeasurementController {
             };
             this.measureIsPotentialClick = true;
         };
-        const onMeasureMousemove = (event: MouseEvent) => {
+        this.onMeasureMousemove = (event: MouseEvent) => {
             if (!this.measureIsPotentialClick || !this.measureClickDown) return;
             const dx = event.clientX - this.measureClickDown.clientX;
             const dy = event.clientY - this.measureClickDown.clientY;
@@ -117,7 +124,7 @@ class MeasurementController {
                 this.measureIsPotentialClick = false;
             }
         };
-        const onMeasureMouseup = (event: MouseEvent) => {
+        this.onMeasureMouseup = (event: MouseEvent) => {
             if (event.button !== 0) return;
             if (this.measureIsPotentialClick && this.measureClickDown && this.observer.get('measure.enabled')) {
                 this.pickAndMeasureAt(this.measureClickDown.canvasX, this.measureClickDown.canvasY);
@@ -125,9 +132,33 @@ class MeasurementController {
             this.measureIsPotentialClick = false;
             this.measureClickDown = null;
         };
-        this.canvas.addEventListener('mousedown', onMeasureMousedown);
-        document.addEventListener('mousemove', onMeasureMousemove);
-        document.addEventListener('mouseup', onMeasureMouseup);
+        this.canvas.addEventListener('mousedown', this.onMeasureMousedown);
+        document.addEventListener('mousemove', this.onMeasureMousemove);
+        document.addEventListener('mouseup', this.onMeasureMouseup);
+    }
+
+    dispose() {
+        if (this.onMeasureMousedown) {
+            this.canvas.removeEventListener('mousedown', this.onMeasureMousedown);
+            this.onMeasureMousedown = null;
+        }
+        if (this.onMeasureMousemove) {
+            document.removeEventListener('mousemove', this.onMeasureMousemove);
+            this.onMeasureMousemove = null;
+        }
+        if (this.onMeasureMouseup) {
+            document.removeEventListener('mouseup', this.onMeasureMouseup);
+            this.onMeasureMouseup = null;
+        }
+        this.measureOverlay?.remove();
+        this.measureOverlay = null;
+        this.measureSvgEl = null;
+        this.measureLineEl = null;
+        this.measureStartHX = null;
+        this.measureStartVY = null;
+        this.measureEndHX = null;
+        this.measureEndVY = null;
+        this.measureLabelEl = null;
     }
 
     private async pickAndMeasureAt(x: number, y: number) {
@@ -160,7 +191,7 @@ class MeasurementController {
         let bestPoint: Vec3 | null = null;
 
         this.getMeshInstances().forEach((mi) => {
-            if ((mi as any).__viewerIsGsplat) return;
+            if ((mi as ViewerTaggedMeshInstance).__viewerIsGsplat) return;
             const aabb = mi.aabb;
             if (!aabb) return;
 

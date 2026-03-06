@@ -18,13 +18,13 @@ type PoiUiEntry = {
 };
 
 class App extends React.Component<{ observer: Observer }> {
-    state: ObserverData = null;
+    state: ObserverData | null = null;
 
-    canvasRef: any;
+    canvasRef: React.RefObject<HTMLCanvasElement | null>;
 
     private stateUpdateRaf: number | null = null;
 
-    constructor(props: any) {
+    constructor(props: { observer: Observer }) {
         super(props);
 
         this.canvasRef = React.createRef();
@@ -48,11 +48,7 @@ class App extends React.Component<{ observer: Observer }> {
     }
 
     _retrieveState = () => {
-        const state: any = {};
-        (this.props.observer as any)._keys.forEach((key: string) => {
-            state[key] = this.props.observer.get(key);
-        });
-        return state;
+        return this.props.observer.json() as ObserverData;
     };
 
     _setStateProperty = (path: string, value: string) => {

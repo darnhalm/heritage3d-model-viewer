@@ -1,5 +1,5 @@
 import { Button } from '@playcanvas/pcui/react';
-import { UsdzExporter } from 'playcanvas';
+import { Entity, UsdzExporter } from 'playcanvas';
 import React from 'react';
 
 import AnimationControls from './animation-controls';
@@ -7,6 +7,24 @@ import { MeasurementsPanel, ViewPanel, InfoPanel, IDPanel } from './panels';
 import { addEventListenerOnClickOnly } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData } from '../../types';
+
+type ViewerWithApp = {
+    app?: {
+        root?: {
+            findByName?: (name: string) => unknown;
+        };
+    };
+    xrMode?: {
+        start: () => void;
+    };
+};
+
+type ViewerWindow = Window & {
+    viewer?: ViewerWithApp;
+    webkit?: {
+        messageHandlers?: unknown;
+    };
+};
 
 const PopupPanelControls = (props: { observerData: ObserverData, setProperty: SetProperty }) => {
     return (<>
@@ -18,7 +36,7 @@ const PopupPanelControls = (props: { observerData: ObserverData, setProperty: Se
 };
 
 class PopupButtonControls extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
-    popupPanelElement: any;
+    popupPanelElement: HTMLElement | null = null;
 
     removeDeselectEvents: (() => void) | null = null;
 
@@ -41,8 +59,9 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
         if (!this.popupPanelElement) this.popupPanelElement = document.getElementById('popup');
 
         setTimeout(() => {
-            const deactivateUi = (e: any) => {
-                if (this.popupPanelElement?.contains(e.target)) {
+            const deactivateUi = (e: MouseEvent) => {
+                const target = e.target;
+                if (target instanceof Node && this.popupPanelElement?.contains(target)) {
                     return;
                 }
                 this.props.setProperty('ui.active', null);
@@ -169,18 +188,19 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
 }
 
 class PopupPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
-    link: HTMLAnchorElement;
+    link: HTMLAnchorElement | null;
 
-    usdzExporter: any;
+    usdzExporter: UsdzExporter | null = null;
 
     get hasArSupport() {
-        return this.props.observerData.runtime.xrSupported || this.usdzExporter;
+        return !!(this.props.observerData.runtime.xrSupported || this.usdzExporter);
     }
 
-    constructor(props: any) {
+    constructor(props: { observerData: ObserverData, setProperty: SetProperty }) {
         super(props);
-        this.link = (document.getElementById('ar-link') as HTMLAnchorElement);
-        if (this.link.relList.supports('ar') || (Boolean(window.webkit?.messageHandlers) && Boolean(/CriOS\/|EdgiOS\/|FxiOS\/|GSA\/|DuckDuckGo\//.test(navigator.userAgent)))) {
+        this.link = document.getElementById('ar-link') as HTMLAnchorElement | null;
+        const viewerWindow = window as ViewerWindow;
+        if (this.link?.relList?.supports?.('ar') || (Boolean(viewerWindow.webkit?.messageHandlers) && Boolean(/CriOS\/|EdgiOS\/|FxiOS\/|GSA\/|DuckDuckGo\//.test(navigator.userAgent)))) {
             this.usdzExporter = new UsdzExporter();
         }
     }
@@ -201,15 +221,16 @@ class PopupPanel extends React.Component <{ observerData: ObserverData, setPrope
                     height={40}
                     onClick={() => {
                         if (this.usdzExporter) {
-                            const sceneRoot = (window as any).viewer.app.root.findByName('sceneRoot');
+                            const sceneRoot = (window as ViewerWindow).viewer?.app?.root?.findByName?.('sceneRoot');
+                            if (!(sceneRoot instanceof Entity) || !this.link) return;
                             // convert the loaded entity into asdz file
-                            this.usdzExporter.build(sceneRoot).then((arrayBuffer: any) => {
+                            this.usdzExporter.build(sceneRoot).then((arrayBuffer: ArrayBuffer) => {
                                 const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
                                 this.link.href = URL.createObjectURL(blob);
                                 this.link.click();
                             }).catch(console.error);
                         } else {
-                            if (window.viewer) window.viewer.xrMode.start();
+                            (window as ViewerWindow).viewer?.xrMode?.start?.();
                         }
                     } }
                 />

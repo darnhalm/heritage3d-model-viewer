@@ -3,8 +3,127 @@ import React from 'react';
 
 import { extract } from '../../helpers';
 import { t } from '../../i18n/translations';
-import { SetProperty, ObserverData } from '../../types';
-import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, ToggleColor, NakedSlider } from '../components';
+import { SetProperty, ObserverData, Option } from '../../types';
+import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
+
+type PoiItem = {
+    id: string;
+    number: number;
+    title?: string;
+    color?: string;
+    description?: string;
+    duration?: number;
+    camera?: unknown;
+};
+
+type SceneCameraOption = {
+    name: string;
+    path: string;
+};
+
+type ViewerApi = {
+    exportViewerSettings?: () => void;
+    observer?: { get?: (path: string) => unknown };
+    cameraControls?: {
+        mode?: string;
+        getPosition: () => { x: number; y: number; z: number };
+        getFocus: () => { x: number; y: number; z: number };
+    };
+    setObjectPivotToCenter?: () => void;
+    resetObjectTransform?: () => void;
+    frameScene?: () => void;
+    pulsePois?: () => void;
+    reorderPoi?: (sourceId: string, targetId: string) => void;
+    setSelectedMaterialFactor?: (channel: 'metallic' | 'roughness' | 'opacity', value: number) => void;
+    setSelectedDiffuseColor?: (value: { r: number; g: number; b: number }) => void;
+    setSelectedSpecularColor?: (value: { r: number; g: number; b: number }) => void;
+    updatePoiTitle?: (id: string, value: string) => void;
+    updatePoiColor?: (id: string, hexColor: string) => void;
+    updatePoiDescription?: (id: string, value: string) => void;
+    capturePoiCameraView?: (id: string) => void;
+    clearPoiCameraView?: (id: string) => void;
+    updatePoiDuration?: (id: string, value: number) => void;
+    removePoi?: (id: string) => void;
+};
+
+const getViewer = (): ViewerApi | undefined => (window as Window & { viewer?: ViewerApi }).viewer;
+const isHTMLElement = (value: EventTarget | null): value is HTMLElement => value instanceof HTMLElement;
+
+const parseJsonArray = <T,>(raw: string | undefined, mapItem?: (value: unknown) => T | null): T[] => {
+    try {
+        const parsed = JSON.parse(raw ?? '[]');
+        if (!Array.isArray(parsed)) return [];
+        if (!mapItem) return parsed as T[];
+        return parsed.map(mapItem).filter((value): value is T => value !== null);
+    } catch {
+        return [];
+    }
+};
+
+const parseStringArray = (raw: string | undefined): string[] =>
+    parseJsonArray<string>(raw, (value) => (typeof value === 'string' ? value : null));
+
+const parseStringArrayLoose = (raw: unknown): string[] => {
+    if (Array.isArray(raw)) {
+        return raw.filter((value): value is string => typeof value === 'string');
+    }
+    if (typeof raw === 'string') {
+        return parseStringArray(raw);
+    }
+    return [];
+};
+
+const parseSceneCameras = (raw: string | undefined): SceneCameraOption[] =>
+    parseJsonArray<SceneCameraOption>(raw, (value) => {
+        if (!value || typeof value !== 'object') return null;
+        const candidate = value as { name?: unknown; path?: unknown };
+        if (typeof candidate.name !== 'string' || typeof candidate.path !== 'string') return null;
+        return { name: candidate.name, path: candidate.path };
+    });
+
+const parseOptions = (raw: string | undefined): Option[] =>
+    parseJsonArray<Option>(raw, (value) => {
+        if (!value || typeof value !== 'object') return null;
+        const candidate = value as { v?: unknown; t?: unknown };
+        if (typeof candidate.t !== 'string') return null;
+        const v = candidate.v;
+        if (typeof v === 'string' || typeof v === 'number' || v === null) {
+            return { v: v as Option['v'], t: candidate.t };
+        }
+        return null;
+    });
+
+const parseStringRecord = (raw: string | undefined): Record<string, string> => {
+    try {
+        const parsed = JSON.parse(raw ?? '{}');
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+        const out: Record<string, string> = {};
+        Object.entries(parsed).forEach(([key, value]) => {
+            if (typeof value === 'string') out[key] = value;
+        });
+        return out;
+    } catch {
+        return {};
+    }
+};
+
+const parsePoiList = (raw: string | undefined): PoiItem[] =>
+    parseJsonArray<PoiItem>(raw, (value) => {
+        if (!value || typeof value !== 'object') return null;
+        const candidate = value as Record<string, unknown>;
+        const id = candidate.id;
+        const number = candidate.number;
+        if ((typeof id !== 'string' && typeof id !== 'number') || typeof number !== 'number') return null;
+        return {
+            id: String(id),
+            number,
+            title: typeof candidate.title === 'string' ? candidate.title : undefined,
+            color: typeof candidate.color === 'string' ? candidate.color : undefined,
+            description: typeof candidate.description === 'string' ? candidate.description : undefined,
+            duration: typeof candidate.duration === 'number' ? candidate.duration : undefined,
+            camera: candidate.camera
+        };
+    });
 
 const rgbToArr = (rgb: { r: number, g: number, b: number }) => [rgb.r, rgb.g, rgb.b, 1];
 const arrToRgb = (arr: number[]) => ({ r: arr[0], g: arr[1], b: arr[2] });
@@ -36,7 +155,7 @@ const texelDensityAreaValue = (areaM2: number, unit?: string) => {
 };
 
 const exportViewerSettings = (observerData: ObserverData) => {
-    const viewer = (window as any).viewer;
+    const viewer = getViewer();
     if (viewer?.exportViewerSettings) {
         viewer.exportViewerSettings();
         return;
@@ -62,7 +181,7 @@ const exportViewerSettings = (observerData: ObserverData) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const filenames = viewer?.observer?.get?.('scene.filenames') as string[] | undefined;
+    const filenames = parseStringArrayLoose(viewer?.observer?.get?.('scene.filenames'));
     const firstFilename = Array.isArray(filenames) && filenames.length > 0 ? filenames[0] : null;
     const baseName = firstFilename ? firstFilename.replace(/\.[^/.]+$/, '') || null : null;
     a.download = baseName ? `${baseName}.model-viewer-settings.json` : 'model-viewer-settings.json';
@@ -200,7 +319,7 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
 
     render() {
         const props = this.props;
-        const sceneCameras: Array<{ name: string, path: string }> = JSON.parse(props.observerData.scene?.cameras || '[]');
+        const sceneCameras = parseSceneCameras(props.observerData.scene?.cameras);
         const cameraOptions = [{ v: 'viewer', t: 'Viewer' }].concat(
             sceneCameras.map(c => ({ v: c.path, t: c.name }))
         );
@@ -271,7 +390,7 @@ class SkyboxPanel extends React.Component <{ observerData: ObserverData, setProp
                 <Select
                     label={t('Environment', lang)}
                     type='string'
-                    options={JSON.parse(skybox?.options || '[]')}
+                    options={parseOptions(skybox?.options)}
                     value={skybox?.value}
                     setProperty={(value: string) => props.setProperty('skybox.value', value)} />
                 <Slider
@@ -513,21 +632,21 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                     <Button
                         class={['secondary', 'alignment-object-center-button']}
                         text={t('Object to Center', lang)}
-                        onClick={() => (window as any).viewer?.setObjectPivotToCenter?.()}
+                        onClick={() => getViewer()?.setObjectPivotToCenter?.()}
                     />
                 </Container>
                 <Container class={['alignment-action-row', 'alignment-single-row']}>
                     <Button
                         class={['secondary', 'alignment-reset-object-button']}
                         text={t('Reset Object', lang)}
-                        onClick={() => (window as any).viewer?.resetObjectTransform?.()}
+                        onClick={() => getViewer()?.resetObjectTransform?.()}
                     />
                 </Container>
                 <Container class={['alignment-action-row', 'alignment-single-row']}>
                     <Button
                         class={['secondary', 'alignment-fit-button']}
                         text={t('Fit to Screen', lang)}
-                        onClick={() => (window as any).viewer?.frameScene?.()}
+                        onClick={() => getViewer()?.frameScene?.()}
                     />
                 </Container>
             </Container>
@@ -582,7 +701,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                 this.props.setProperty('poi.enabled', false);
             } else if (isExpanded && this.state.tab === 'poi' && !(this.props.observerData?.poi?.enabled ?? false)) {
                 this.props.setProperty('poi.enabled', true);
-                (window as any).viewer?.pulsePois?.();
+                getViewer()?.pulsePois?.();
             }
         };
         document.getElementById('panel-toggle')?.addEventListener('click', this.collapseHandler);
@@ -603,7 +722,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             const sourceId = this.state.draggingPoiId;
             const targetId = this.getPoiDropTarget(event.clientY);
             if (sourceId && targetId && sourceId !== targetId) {
-                (window as any).viewer?.reorderPoi?.(sourceId, targetId);
+                getViewer()?.reorderPoi?.(sourceId, targetId);
             }
             this.setState({ draggingPoiId: null, dragOverPoiId: null, dragX: 0, dragY: 0 });
         };
@@ -668,7 +787,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         if (event.button !== 0) {
             return;
         }
-        const target = event.target as HTMLElement | null;
+        const target = isHTMLElement(event.target) ? event.target : null;
         if (target?.closest('input, button, .pcui-color-picker, .pcui-text-input, .pcui-slider, .pcui-numeric-input')) {
             return;
         }
@@ -689,7 +808,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             return null;
         }
 
-        const items = Array.from(document.querySelectorAll('.poi-list-item[data-poi-id]')) as HTMLElement[];
+        const items = Array.from(document.querySelectorAll<HTMLElement>('.poi-list-item[data-poi-id]'));
         let bestId: string | null = null;
         let bestDistance = Number.POSITIVE_INFINITY;
 
@@ -759,24 +878,17 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const selectedMaterialColor = observerData?.scene?.selectedMaterialColor;
         const selectedSpecularColor = observerData?.scene?.selectedSpecularColor;
         const setSelectedMaterialFactor = (channel: 'metallic' | 'roughness' | 'opacity', value: number) => {
-            (window as any).viewer?.setSelectedMaterialFactor?.(channel, value);
+            getViewer()?.setSelectedMaterialFactor?.(channel, value);
         };
         const setSelectedDiffuseColor = (value: number[]) => {
-            (window as any).viewer?.setSelectedDiffuseColor?.(arrToRgb(value));
+            getViewer()?.setSelectedDiffuseColor?.(arrToRgb(value));
         };
         const setSelectedSpecularColor = (value: number[]) => {
-            (window as any).viewer?.setSelectedSpecularColor?.(arrToRgb(value));
+            getViewer()?.setSelectedSpecularColor?.(arrToRgb(value));
         };
-        const poiList = (() => {
-            try {
-                const parsed = JSON.parse(observerData?.poi?.list ?? '[]');
-                return Array.isArray(parsed) ? parsed : [];
-            } catch {
-                return [];
-            }
-        })();
-        const draggedPoi = poiList.find((poi: any) => String(poi.id) === draggingPoiId) ?? null;
-        const visiblePoiList = draggingPoiId ? poiList.filter((poi: any) => String(poi.id) !== draggingPoiId) : poiList;
+        const poiList = parsePoiList(observerData?.poi?.list);
+        const draggedPoi = poiList.find((poi) => String(poi.id) === draggingPoiId) ?? null;
+        const visiblePoiList = draggingPoiId ? poiList.filter((poi) => String(poi.id) !== draggingPoiId) : poiList;
 
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
@@ -857,15 +969,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                         <Container id='materials-panel' class='tab-panel'>
                             <div className='materials-layer-list'>
                                 {renderModeCategories(
-                                    new Set(JSON.parse(observerData?.scene?.materialChannelsWithTextures ?? '[]')),
+                                    new Set(parseStringArray(observerData?.scene?.materialChannelsWithTextures)),
                                     observerData?.debug?.withTextureOnly ?? false,
-                                    (() => {
-                                        try {
-                                            return JSON.parse(observerData?.scene?.materialChannelFilenames ?? '{}');
-                                        } catch {
-                                            return {};
-                                        }
-                                    })()
+                                    parseStringRecord(observerData?.scene?.materialChannelFilenames)
                                 ).map((cat, ci) => (
                                     <div key={ci} className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>
@@ -1031,7 +1137,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {poiList.length === 0 && (
                                     <div className='materials-layer-inline-hint'>{t('No POIs yet.', lang)}</div>
                                 )}
-                                {visiblePoiList.map((poi: any) => (
+                                {visiblePoiList.map((poi) => (
                                     <React.Fragment key={String(poi.id)}>
                                         {draggingPoiId && dragOverPoiId === String(poi.id) && <div className='poi-list-placeholder' />}
                                         <div
@@ -1055,13 +1161,13 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             <TextInput
                                                 class='poi-list-input'
                                                 value={String(poi.title ?? `POI ${poi.number}`)}
-                                                onChange={(value: string) => (window as any).viewer?.updatePoiTitle?.(String(poi.id), value)}
+                                                onChange={(value: string) => getViewer()?.updatePoiTitle?.(String(poi.id), value)}
                                             />
                                         </div>
                                         <ColorPickerControl
                                             label={t('Color', lang)}
                                             value={hexToArr(poi.color)}
-                                            setProperty={(value: number[]) => (window as any).viewer?.updatePoiColor?.(String(poi.id), arrToHex(value))}
+                                            setProperty={(value: number[]) => getViewer()?.updatePoiColor?.(String(poi.id), arrToHex(value))}
                                         />
                                         <div className='poi-description-field'>
                                             <textarea
@@ -1069,14 +1175,14 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 value={String(poi.description ?? '')}
                                                 maxLength={636}
                                                 placeholder={t('Description', lang)}
-                                                onChange={(event) => (window as any).viewer?.updatePoiDescription?.(String(poi.id), event.target.value)}
+                                                onChange={(event) => getViewer()?.updatePoiDescription?.(String(poi.id), event.target.value)}
                                             />
                                         </div>
                                         <div className='poi-list-actions poi-list-actions-secondary'>
                                             <button
                                                 type='button'
                                                 className={`poi-list-secondary-button${poi.camera ? ' is-saved' : ''}`}
-                                                onClick={() => (window as any).viewer?.capturePoiCameraView?.(String(poi.id))}
+                                                onClick={() => getViewer()?.capturePoiCameraView?.(String(poi.id))}
                                             >
                                                 <img src='static/icons/poi-capture-view.svg' alt='' className='poi-list-secondary-button-icon' />
                                                 {t(poi.camera ? 'Retake View' : 'Capture View', lang)}
@@ -1085,7 +1191,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 <button
                                                     type='button'
                                                     className='poi-list-secondary-button poi-list-secondary-button-delete-view'
-                                                    onClick={() => (window as any).viewer?.clearPoiCameraView?.(String(poi.id))}
+                                                    onClick={() => getViewer()?.clearPoiCameraView?.(String(poi.id))}
                                                 >
                                                     <img src='static/icons/poi-delete-view.svg' alt='' className='poi-list-secondary-button-icon' />
                                                     {t('Delete View', lang)}
@@ -1102,14 +1208,14 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     min={0.1}
                                                     max={10}
                                                     value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : 0.8}
-                                                    setProperty={(value: number) => (window as any).viewer?.updatePoiDuration?.(String(poi.id), value)}
+                                                    setProperty={(value: number) => getViewer()?.updatePoiDuration?.(String(poi.id), value)}
                                                 />
                                             </div>
                                             <button
                                                 type='button'
                                                 className='poi-list-delete'
                                                 title={t('Delete', lang)}
-                                                onClick={() => (window as any).viewer?.removePoi?.(String(poi.id))}
+                                                onClick={() => getViewer()?.removePoi?.(String(poi.id))}
                                             >
                                                 <img src='static/icons/poi-delete.svg' alt='' className='poi-list-delete-icon' />
                                             </button>

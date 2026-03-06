@@ -90,6 +90,7 @@ import { PngExporter } from './png-exporter';
 import { ShadowCatcher } from './shadow-catcher';
 import arCloseImage from './svg/ar-close.svg';
 import arModeImage from './svg/ar-mode.svg';
+import { t } from './i18n/translations';
 import { File, HierarchyNode, MorphTargetData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
@@ -112,6 +113,57 @@ const doubleTapDelay = 400;
 const doubleTapRadius = 45;
 const RIPPLE_CAMERA_DELAY_MS = 380;
 const RIPPLE_REMOVE_MS = 900;
+type ViewerTaggedMeshInstance = MeshInstance & { __viewerIsGsplat?: boolean };
+type TextureAssetFile = { filename?: string };
+type TextureLike = {
+    name?: string;
+};
+type MaterialLike = {
+    name?: string;
+    diffuseMap?: TextureLike | null;
+    metalnessMap?: TextureLike | null;
+    glossMap?: TextureLike | null;
+    normalMap?: TextureLike | null;
+    specularMap?: TextureLike | null;
+    emissiveMap?: TextureLike | null;
+    aoMap?: TextureLike | null;
+    opacityMap?: TextureLike | null;
+};
+type RenderResourceLike = {
+    meshes?: Mesh[];
+};
+type ContainerResourceLike = {
+    materials?: Asset[];
+    renders?: Asset[];
+    textures?: Asset[];
+    animations?: Array<{ resource: AnimTrack }>;
+    getMaterialVariants?: () => string[];
+    instantiateRenderEntity?: () => Entity;
+};
+type AssetFileLike = {
+    filename?: string;
+};
+type MeshoptCompressionExt = {
+    buffer: number;
+    byteOffset?: number;
+    byteLength?: number;
+    count: number;
+    byteStride: number;
+    mode: string;
+    filter: string;
+};
+type GltfBufferLike = {
+    uri?: string;
+    extensions?: {
+        EXT_meshopt_compression?: MeshoptCompressionExt;
+    };
+};
+type GltfImageLike = {
+    uri?: string;
+};
+type GltfTextureLike = object;
+type AssetProcessContinuation = (err: string | null, result: unknown) => void;
+type AssetLoadProcessOptions = Record<string, unknown>;
 
 // override global pick to pack depth instead of meshInstance id
 const pickDepthGlsl = /* glsl */ `
@@ -348,6 +400,9 @@ const createUvColorCanvas = (size = 1024): HTMLCanvasElement => {
 };
 
 class Viewer {
+    private static readonly MODEL_FILE_SIZE_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
+    private static readonly SETTINGS_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024; // 10 MB
+
     canvas: HTMLCanvasElement;
 
     app: App;
@@ -580,6 +635,8 @@ class Viewer {
         endFov: number;
     } | null = null;
 
+    private destroyed = false;
+
     constructor(
         canvas: HTMLCanvasElement,
         graphicsDevice: GraphicsDevice,
@@ -625,8 +682,8 @@ class Viewer {
         };
         app.touch.attach(canvas);
 
-        // @ts-ignore
-        const multisampleSupported = app.graphicsDevice.maxSamples > 1;
+        const graphicsDeviceWithSamples = app.graphicsDevice as GraphicsDevice & { maxSamples?: number };
+        const multisampleSupported = Number(graphicsDeviceWithSamples.maxSamples ?? 1) > 1;
         observer.set('camera.multisampleSupported', multisampleSupported);
         observer.set('camera.multisample', multisampleSupported && observer.get('camera.multisample'));
 
@@ -1188,6 +1245,14 @@ class Viewer {
         this.observer.set('measure.lastDistance', null);
     }
 
+    destroy() {
+        if (this.destroyed) return;
+        this.destroyed = true;
+        this.measurementController?.dispose?.();
+        this.poiController?.dispose?.();
+        this.selectionController?.dispose?.();
+    }
+
     removePoi(id: string) {
         this.poiController?.removePoi(id);
     }
@@ -1283,7 +1348,7 @@ class Viewer {
             for (let i = 0; i < gsplatComponents.length; i++) {
                 const gsplat = gsplatComponents[i] as GSplatComponent;
                 if (gsplat.instance) {
-                    (gsplat.instance.meshInstance as any).__viewerIsGsplat = true;
+                    (gsplat.instance.meshInstance as ViewerTaggedMeshInstance).__viewerIsGsplat = true;
                     meshInstances.push(gsplat.instance.meshInstance);
                 }
             }
@@ -1332,7 +1397,7 @@ class Viewer {
 
     // construct the controls interface and initialize controls
     private bindControlEvents() {
-        const controlEvents: Record<string, (...args: any[]) => void> = {
+        const controlEvents: Record<string, (...args: unknown[]) => void> = {
             // camera
             'camera.fov': this.setFov.bind(this),
             'camera.tonemapping': this.setTonemapping.bind(this),
@@ -1607,9 +1672,10 @@ class Viewer {
     private focus(init: boolean, forceAspectRatio?: number) {
         // restore saved orbit camera position when loading
         if (init) {
-            const toVec3 = (v: any): Vec3 | null => {
+            const toVec3 = (v: unknown): Vec3 | null => {
                 if (!v || typeof v !== 'object') return null;
-                const a = Array.isArray(v) ? v : ('0' in v && '1' in v && '2' in v ? [v[0], v[1], v[2]] : null);
+                const obj = v as Record<string, unknown>;
+                const a = Array.isArray(v) ? v : ('0' in obj && '1' in obj && '2' in obj ? [obj[0], obj[1], obj[2]] : null);
                 if (!a || a.length !== 3 || !a.every(Number.isFinite)) return null;
                 return new Vec3(a[0], a[1], a[2]);
             };
@@ -1689,8 +1755,7 @@ class Viewer {
             });
         };
 
-        // @ts-ignore
-        const maxSamples = device.maxSamples;
+        const maxSamples = Number((device as GraphicsDevice & { maxSamples?: number }).maxSamples ?? 1);
 
         // in with the new
         const colorBuffer = createTexture(widthPixels, heightPixels, PIXELFORMAT_RGBA8);
@@ -1770,15 +1835,15 @@ class Viewer {
         const channelFilenames: Record<string, string> = {};
         const materialNames = new Set<string>();
 
-        const getTextureFilename = (tex: any): string | undefined => {
+        const getTextureFilename = (tex: TextureLike | null | undefined): string | undefined => {
             if (!tex) return undefined;
             const texAssets = this.app.assets.filter((a: Asset) => a.type === 'texture');
             const texAsset = texAssets.find((a: Asset) => a.resource === tex);
-            const file = texAsset?.file as { filename?: string } | undefined;
+            const file = texAsset?.file as TextureAssetFile | undefined;
             return file?.filename;
         };
 
-        const collectFromMaterial = (mat: any) => {
+        const collectFromMaterial = (mat: MaterialLike | null | undefined) => {
             if (!mat) return;
             if (typeof mat.name === 'string' && mat.name.trim()) {
                 materialNames.add(mat.name.trim());
@@ -1811,15 +1876,15 @@ class Viewer {
 
         if (this.selectedNode) {
             const selectedEntity = this.selectedNode as Entity;
-            selectedEntity.findComponents('render').forEach((renderComponent: any) => {
-                const meshes = renderComponent?.meshInstances ?? [];
+            selectedEntity.findComponents('render').forEach((renderComponent) => {
+                const meshes = (renderComponent as RenderComponent)?.meshInstances ?? [];
                 meshes.forEach((mi: MeshInstance) => collectFromMaterial(mi.material));
             });
         } else {
             this.assets.forEach((asset) => {
                 if (asset.type === 'gsplat') return;
-                const resource = asset.resource as any;
-                (resource.materials ?? []).forEach((matAsset: Asset) => collectFromMaterial(matAsset?.resource));
+                const resource = asset.resource as ContainerResourceLike | null;
+                (resource?.materials ?? []).forEach((matAsset: Asset) => collectFromMaterial(matAsset?.resource as MaterialLike | null | undefined));
             });
         }
 
@@ -2435,14 +2500,15 @@ class Viewer {
                 }
             } else {
                 // ContainerResource type isn't picked up correctly for some reason
-                const resource = asset.resource as any;
+                const resource = asset.resource as ContainerResourceLike | null;
 
-                variants = variants.concat(resource.getMaterialVariants() ?? []);
+                variants = variants.concat(resource?.getMaterialVariants?.() ?? []);
 
-                resource.renders.forEach((renderAsset: Asset) => {
-                    const res = renderAsset.resource as any;
-                    meshCount += res.meshes.length;
-                    res.meshes.forEach((mesh: Mesh) => {
+                (resource?.renders ?? []).forEach((renderAsset: Asset) => {
+                    const res = renderAsset.resource as RenderResourceLike | null;
+                    const meshes = res?.meshes ?? [];
+                    meshCount += meshes.length;
+                    meshes.forEach((mesh: Mesh) => {
                         vertexCount += mesh.vertexBuffer.getNumVertices();
 
                         (mesh.primitive ?? []).forEach((prim: { type?: number; count?: number }) => {
@@ -2894,15 +2960,15 @@ class Viewer {
             // provide buffer view callback so we can handle models compressed with MeshOptimizer
             // https://github.com/zeux/meshoptimizer
             const processBufferView = (
-                gltfBuffer: any,
-                buffers: Array<any>,
-                continuation: (err: string, result: any) => void
+                gltfBuffer: GltfBufferLike,
+                buffers: Array<Uint8Array>,
+                continuation: AssetProcessContinuation
             ) => {
-                if (gltfBuffer.extensions && gltfBuffer.extensions.EXT_meshopt_compression) {
+                if (gltfBuffer.extensions?.EXT_meshopt_compression) {
                     const extensionDef = gltfBuffer.extensions.EXT_meshopt_compression;
 
                     Promise.all([MeshoptDecoder.ready, buffers[extensionDef.buffer]]).then((promiseResult) => {
-                        const buffer = promiseResult[1];
+                        const buffer = promiseResult[1] as Uint8Array;
 
                         const byteOffset = extensionDef.byteOffset || 0;
                         const byteLength = extensionDef.byteLength || 0;
@@ -2954,7 +3020,7 @@ class Viewer {
                 return asset;
             };
 
-            const processImage = (gltfImage: any, continuation: (err: string, result: any) => void) => {
+            const processImage = (gltfImage: GltfImageLike, continuation: AssetProcessContinuation) => {
                 const u: File = externalUrls.find((url) => {
                     return url.filename === decodeURIComponent(path.normalize(gltfImage.uri || ''));
                 });
@@ -2982,7 +3048,7 @@ class Viewer {
                 }
             };
 
-            const postProcessTexture = (gltfTexture: any, textureAsset: Asset) => {
+            const postProcessTexture = (gltfTexture: GltfTextureLike, textureAsset: Asset) => {
                 // Set max anisotropy only for textures that use linear filtering, as anisotropic
                 // filtering only makes sense with linear filtering modes
                 const texture = textureAsset.resource as Texture;
@@ -2991,7 +3057,7 @@ class Viewer {
                 }
             };
 
-            const processBuffer = (gltfBuffer: any, continuation: (err: string, result: any) => void) => {
+            const processBuffer = (gltfBuffer: GltfBufferLike, continuation: AssetProcessContinuation) => {
                 const u = externalUrls.find((url) => {
                     return url.filename === decodeURIComponent(path.normalize(gltfBuffer.uri || ''));
                 });
@@ -3024,8 +3090,7 @@ class Viewer {
                 }
             };
 
-            const containerAsset = new Asset(gltfUrl.filename, 'container', gltfUrl, null, {
-                // @ts-ignore TODO no definition in pc
+            const containerAssetOptions: AssetLoadProcessOptions = {
                 bufferView: {
                     processAsync: processBufferView
                 },
@@ -3038,6 +3103,9 @@ class Viewer {
                 buffer: {
                     processAsync: processBuffer
                 }
+            };
+            const containerAsset = new Asset(gltfUrl.filename, 'container', gltfUrl, null, {
+                ...(containerAssetOptions as object)
             });
             containerAsset.on('load', () => resolve(containerAsset));
             containerAsset.on('error', (err: string) => reject(err));
@@ -3052,14 +3120,16 @@ class Viewer {
     }
 
     private loadPly(url: File, externalUrls: Array<File>, onProgress?: (progress: number) => void) {
-        const urls: any = {};
+        const urls: Record<string, string> = {};
         externalUrls.forEach((url) => {
             urls[url.filename] = url.url;
         });
         return new Promise((resolve, reject) => {
+            const gsplatOptions: AssetLoadProcessOptions = {
+                mapUrl: (mapUrl: string) => urls[mapUrl]
+            };
             const asset = new Asset(url.filename, 'gsplat', url, null, {
-                // @ts-ignore TODO no definition in pc
-                mapUrl: mapUrl => urls[mapUrl]
+                ...(gsplatOptions as object)
             });
             asset.on('load', () => resolve(asset));
             asset.on('error', (err: string) => reject(err));
@@ -3086,6 +3156,24 @@ class Viewer {
         return result;
     }
 
+    private isViewerSettingsFilename(filename: string): boolean {
+        const cleanName = filename.split('?')[0].split('/').pop()?.toLowerCase() ?? '';
+        return /\.model-viewer-settings(\(\d+\))?\.json$/.test(cleanName);
+    }
+
+    private formatBytes(bytes: number): string {
+        const mb = bytes / (1024 * 1024);
+        if (mb < 1024) return `${mb.toFixed(1)} MB`;
+        return `${(mb / 1024).toFixed(2)} GB`;
+    }
+
+    private formatLimitMessage(key: string, filename: string, sizeBytes: number): string {
+        const lang = this.observer.get('ui.language') as string | undefined;
+        return t(key, lang)
+            .replace('{filename}', filename)
+            .replace('{size}', this.formatBytes(sizeBytes));
+    }
+
     // load the list of urls.
     // urls can reference glTF files, glb files and skybox textures.
     // returns true if a model was loaded.
@@ -3093,6 +3181,39 @@ class Viewer {
         // convert single url to list
         if (!Array.isArray(files)) {
             files = [files];
+        }
+
+        const rejectedFiles: string[] = [];
+        const acceptedFiles = files.filter((file) => {
+            const filename = file.filename ?? file.url ?? '';
+            const sizeBytes = file.sizeBytes;
+            if (typeof sizeBytes !== 'number' || sizeBytes <= 0) {
+                return true;
+            }
+
+            if ((this.isModelFilename(filename) || this.isGSplatFilename(filename)) &&
+                sizeBytes > Viewer.MODEL_FILE_SIZE_LIMIT_BYTES) {
+                rejectedFiles.push(this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', filename, sizeBytes));
+                return false;
+            }
+
+            if (this.isViewerSettingsFilename(filename) &&
+                sizeBytes > Viewer.SETTINGS_FILE_SIZE_LIMIT_BYTES) {
+                rejectedFiles.push(this.formatLimitMessage('File "{filename}" ({size}) exceeds settings limit of 10 MB.', filename, sizeBytes));
+                return false;
+            }
+
+            return true;
+        });
+
+        files = acceptedFiles;
+
+        if (rejectedFiles.length > 0) {
+            this.observer.set('ui.warnings', rejectedFiles);
+            if (files.length === 0) {
+                this.observer.set('ui.error', rejectedFiles.join('\n'));
+                return false;
+            }
         }
 
         // check if any file is a model
@@ -3117,7 +3238,7 @@ class Viewer {
             // Defer load to next frame so the progress bar can paint at 0%
             requestAnimationFrame(() => {
                 this.resetViewerSettingsToDefaults();
-                const warnings: string[] = [];
+                const warnings: string[] = rejectedFiles.slice();
                 const modelFiles = files.filter(f => this.isModelFilename(f.filename) || this.isGSplatFilename(f.filename));
                 const total = modelFiles.length;
                 const progressPerFile: number[] = new Array(total).fill(0);
@@ -3864,9 +3985,9 @@ class Viewer {
     // add a loaded asset to the scene
     // asset is a container asset with renders and/or animations
     private addToScene(asset: Asset) {
-        const resource = asset.resource as any;
-        const meshesLoaded = resource.renders && resource.renders.length > 0;
-        const animsLoaded = resource.animations && resource.animations.length > 0;
+        const resource = asset.resource as ContainerResourceLike | null;
+        const meshesLoaded = !!(resource?.renders && resource.renders.length > 0);
+        const animsLoaded = !!(resource?.animations && resource.animations.length > 0);
         const prevEntity: Entity = this.entities.length === 0 ? null : this.entities[this.entities.length - 1];
 
         let entity: Entity;
@@ -3877,9 +3998,9 @@ class Viewer {
         } else {
             if (asset.type === 'container') {
                 // container/glb
-                entity = resource.instantiateRenderEntity();
+                entity = resource?.instantiateRenderEntity?.() ?? new Entity();
             } else {
-                const unified = ((asset.file as any)?.filename ?? '').endsWith('lod-meta.json');
+                const unified = ((asset.file as AssetFileLike | undefined)?.filename ?? '').endsWith('lod-meta.json');
 
                 // gaussian splat scene
                 entity = new Entity();
@@ -3903,7 +4024,7 @@ class Viewer {
         // create animation component
         if (animsLoaded) {
             // append anim tracks to global list
-            resource.animations.forEach((a: any) => {
+            (resource?.animations ?? []).forEach((a) => {
                 this.animTracks.push(a.resource);
             });
         }
