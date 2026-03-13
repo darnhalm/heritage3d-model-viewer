@@ -84,13 +84,13 @@ import { App } from './app';
 import { CameraControls } from './camera-controls';
 import { DebugLines } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
+import { t } from './i18n/translations';
 import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
 import { ShadowCatcher } from './shadow-catcher';
 import arCloseImage from './svg/ar-close.svg';
 import arModeImage from './svg/ar-mode.svg';
-import { t } from './i18n/translations';
 import { File, HierarchyNode, MorphTargetData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
@@ -401,7 +401,10 @@ const createUvColorCanvas = (size = 1024): HTMLCanvasElement => {
 
 class Viewer {
     private static readonly MODEL_FILE_SIZE_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
+
     private static readonly SETTINGS_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024; // 10 MB
+
+    private static readonly REMOTE_HEAD_TIMEOUT_MS = 5000;
 
     canvas: HTMLCanvasElement;
 
@@ -1153,7 +1156,7 @@ class Viewer {
             xr: xr,
             camera: this.camera,
             content: this.sceneRoot,
-            showUI: true,
+            showUI: false,
             startArImgSrc: arModeImage.src,
             stopArImgSrc: arCloseImage.src,
             getContentScale: () => {
@@ -1164,7 +1167,17 @@ class Viewer {
 
         const events = this.xrMode.events;
 
+        // Reflect runtime AR capability/state for UI visibility logic.
+        this.observer.set('runtime.xrSupported', this.xrMode.available);
+        this.observer.set('runtime.xrActive', false);
+
+        events.on('xr:available', (available: boolean) => {
+            this.observer.set('runtime.xrSupported', available);
+        });
+
         events.on('xr:started', () => {
+            this.observer.set('runtime.xrActive', true);
+
             // prepare scene settings for AR mode
             this.setShadowCatcherEnabled(true);
             this.setShadowCatcherIntensity(0.4);
@@ -1188,6 +1201,8 @@ class Viewer {
         });
 
         events.on('xr:ended', () => {
+            this.observer.set('runtime.xrActive', false);
+
             // reload all user options
             this.reloadSettings();
 
@@ -1316,7 +1331,8 @@ class Viewer {
             return;
         }
         this.captureFlashEl.classList.remove('active');
-        void this.captureFlashEl.offsetWidth;
+        const { offsetWidth } = this.captureFlashEl;
+        if (offsetWidth < 0) return;
         this.captureFlashEl.classList.add('active');
     }
 
@@ -2065,8 +2081,8 @@ class Viewer {
             opacityFactor?: number
         }> = {};
         const materials = this.meshInstances
-            .map(meshInstance => meshInstance.material as StandardMaterial | undefined)
-            .filter((material): material is StandardMaterial => !!material && typeof material.update === 'function' && typeof material.opacity === 'number' && typeof material.gloss === 'number');
+        .map(meshInstance => meshInstance.material as StandardMaterial | undefined)
+        .filter((material): material is StandardMaterial => !!material && typeof material.update === 'function' && typeof material.opacity === 'number' && typeof material.gloss === 'number');
 
         Object.entries(overrides).forEach(([materialName, overrideValue]) => {
             if (!materialName || !overrideValue || typeof overrideValue !== 'object' || Array.isArray(overrideValue)) {
@@ -2577,7 +2593,7 @@ class Viewer {
         this.observer.set('scene.primitiveCount', primitiveCount);
         this.observer.set('scene.textureVRAM', textureVRAM);
         this.observer.set('scene.meshVRAM', meshVRAM);
-        this.observer.set('scene.hasGsplat', this.entities.some((entity) => entity.findComponents('gsplat').length > 0));
+        this.observer.set('scene.hasGsplat', this.entities.some(entity => entity.findComponents('gsplat').length > 0));
 
         // variant stats
         this.observer.set('scene.variants.list', JSON.stringify(variants));
@@ -2956,190 +2972,208 @@ class Viewer {
 
     // load gltf model given its url and list of external urls
     private loadGltf(gltfUrl: File, externalUrls: Array<File>, warnings: string[], onProgress?: (progress: number) => void) {
-        return new Promise((resolve, reject) => {
+        return this.exceedsRemoteSizeLimit(gltfUrl, Viewer.MODEL_FILE_SIZE_LIMIT_BYTES)
+        .then((oversizedBytes) => {
+            if (oversizedBytes === 'unknown') {
+                throw new Error(this.formatUnknownRemoteSizeMessage(gltfUrl.filename ?? gltfUrl.url ?? '', '1 GB'));
+            }
+            if (oversizedBytes !== null) {
+                throw new Error(this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', gltfUrl.filename ?? gltfUrl.url ?? '', oversizedBytes));
+            }
+            return new Promise((resolve, reject) => {
             // provide buffer view callback so we can handle models compressed with MeshOptimizer
             // https://github.com/zeux/meshoptimizer
-            const processBufferView = (
-                gltfBuffer: GltfBufferLike,
-                buffers: Array<Uint8Array>,
-                continuation: AssetProcessContinuation
-            ) => {
-                if (gltfBuffer.extensions?.EXT_meshopt_compression) {
-                    const extensionDef = gltfBuffer.extensions.EXT_meshopt_compression;
+                const processBufferView = (
+                    gltfBuffer: GltfBufferLike,
+                    buffers: Array<Uint8Array>,
+                    continuation: AssetProcessContinuation
+                ) => {
+                    if (gltfBuffer.extensions?.EXT_meshopt_compression) {
+                        const extensionDef = gltfBuffer.extensions.EXT_meshopt_compression;
 
-                    Promise.all([MeshoptDecoder.ready, buffers[extensionDef.buffer]]).then((promiseResult) => {
-                        const buffer = promiseResult[1] as Uint8Array;
+                        Promise.all([MeshoptDecoder.ready, buffers[extensionDef.buffer]]).then((promiseResult) => {
+                            const buffer = promiseResult[1] as Uint8Array;
 
-                        const byteOffset = extensionDef.byteOffset || 0;
-                        const byteLength = extensionDef.byteLength || 0;
+                            const byteOffset = extensionDef.byteOffset || 0;
+                            const byteLength = extensionDef.byteLength || 0;
 
-                        const count = extensionDef.count;
-                        const stride = extensionDef.byteStride;
+                            const count = extensionDef.count;
+                            const stride = extensionDef.byteStride;
 
-                        const result = new Uint8Array(count * stride);
-                        const source = new Uint8Array(buffer.buffer, buffer.byteOffset + byteOffset, byteLength);
+                            const result = new Uint8Array(count * stride);
+                            const source = new Uint8Array(buffer.buffer, buffer.byteOffset + byteOffset, byteLength);
 
-                        MeshoptDecoder.decodeGltfBuffer(
-                            result,
-                            count,
-                            stride,
-                            source,
-                            extensionDef.mode,
-                            extensionDef.filter
-                        );
+                            MeshoptDecoder.decodeGltfBuffer(
+                                result,
+                                count,
+                                stride,
+                                source,
+                                extensionDef.mode,
+                                extensionDef.filter
+                            );
 
-                        continuation(null, result);
-                    });
-                } else {
-                    continuation(null, null);
-                }
-            };
+                            continuation(null, result);
+                        });
+                    } else {
+                        continuation(null, null);
+                    }
+                };
 
-            const createPlaceholderTexture = (name: string) => {
+                const createPlaceholderTexture = (name: string) => {
                 // Create a small placeholder texture (magenta to indicate missing texture)
-                const texture = new Texture(this.app.graphicsDevice, {
-                    name: `placeholder-${name}`,
-                    width: 2,
-                    height: 2,
-                    format: PIXELFORMAT_RGBA8
-                });
-                // Fill with magenta color to indicate missing texture
-                const pixels = texture.lock();
-                for (let i = 0; i < 4; i++) {
-                    pixels[i * 4 + 0] = 255; // R
-                    pixels[i * 4 + 1] = 0;   // G
-                    pixels[i * 4 + 2] = 255; // B
-                    pixels[i * 4 + 3] = 255; // A
-                }
-                texture.unlock();
-
-                const asset = new Asset(name, 'texture', null, null);
-                asset.resource = texture;
-                asset.loaded = true;
-                this.app.assets.add(asset);
-                return asset;
-            };
-
-            const processImage = (gltfImage: GltfImageLike, continuation: AssetProcessContinuation) => {
-                const u: File = externalUrls.find((url) => {
-                    return url.filename === decodeURIComponent(path.normalize(gltfImage.uri || ''));
-                });
-                if (u) {
-                    const textureAsset = new Asset(u.filename, 'texture', {
-                        url: u.url,
-                        filename: u.filename
+                    const texture = new Texture(this.app.graphicsDevice, {
+                        name: `placeholder-${name}`,
+                        width: 2,
+                        height: 2,
+                        format: PIXELFORMAT_RGBA8
                     });
-                    textureAsset.on('load', () => {
-                        continuation(null, textureAsset);
+                    // Fill with magenta color to indicate missing texture
+                    const pixels = texture.lock();
+                    for (let i = 0; i < 4; i++) {
+                        pixels[i * 4 + 0] = 255; // R
+                        pixels[i * 4 + 1] = 0;   // G
+                        pixels[i * 4 + 2] = 255; // B
+                        pixels[i * 4 + 3] = 255; // A
+                    }
+                    texture.unlock();
+
+                    const asset = new Asset(name, 'texture', null, null);
+                    asset.resource = texture;
+                    asset.loaded = true;
+                    this.app.assets.add(asset);
+                    return asset;
+                };
+
+                const processImage = (gltfImage: GltfImageLike, continuation: AssetProcessContinuation) => {
+                    const u: File = externalUrls.find((url) => {
+                        return url.filename === decodeURIComponent(path.normalize(gltfImage.uri || ''));
                     });
-                    textureAsset.on('error', (err: string) => {
+                    if (u) {
+                        const textureAsset = new Asset(u.filename, 'texture', {
+                            url: u.url,
+                            filename: u.filename
+                        });
+                        textureAsset.on('load', () => {
+                            continuation(null, textureAsset);
+                        });
+                        textureAsset.on('error', (err: string) => {
                         // Texture failed to load - warn but continue with placeholder
-                        warnings.push(`Failed to load texture '${u.filename}': ${err}`);
-                        continuation(null, createPlaceholderTexture(u.filename));
-                    });
-                    this.app.assets.add(textureAsset);
-                    this.app.assets.load(textureAsset);
-                } else if (gltfImage.uri && !gltfImage.uri.startsWith('data:')) {
+                            warnings.push(`Failed to load texture '${u.filename}': ${err}`);
+                            continuation(null, createPlaceholderTexture(u.filename));
+                        });
+                        this.app.assets.add(textureAsset);
+                        this.app.assets.load(textureAsset);
+                    } else if (gltfImage.uri && !gltfImage.uri.startsWith('data:')) {
                     // External texture referenced but not provided - warn but continue with placeholder
-                    warnings.push(`External texture not found: '${gltfImage.uri}'`);
-                    continuation(null, createPlaceholderTexture(gltfImage.uri));
-                } else {
-                    continuation(null, null);
-                }
-            };
+                        warnings.push(`External texture not found: '${gltfImage.uri}'`);
+                        continuation(null, createPlaceholderTexture(gltfImage.uri));
+                    } else {
+                        continuation(null, null);
+                    }
+                };
 
-            const postProcessTexture = (gltfTexture: GltfTextureLike, textureAsset: Asset) => {
+                const postProcessTexture = (gltfTexture: GltfTextureLike, textureAsset: Asset) => {
                 // Set max anisotropy only for textures that use linear filtering, as anisotropic
                 // filtering only makes sense with linear filtering modes
-                const texture = textureAsset.resource as Texture;
-                if (texture.minFilter !== FILTER_NEAREST && texture.magFilter !== FILTER_NEAREST) {
-                    texture.anisotropy = this.app.graphicsDevice.maxAnisotropy;
-                }
-            };
+                    const texture = textureAsset.resource as Texture;
+                    if (texture.minFilter !== FILTER_NEAREST && texture.magFilter !== FILTER_NEAREST) {
+                        texture.anisotropy = this.app.graphicsDevice.maxAnisotropy;
+                    }
+                };
 
-            const processBuffer = (gltfBuffer: GltfBufferLike, continuation: AssetProcessContinuation) => {
-                const u = externalUrls.find((url) => {
-                    return url.filename === decodeURIComponent(path.normalize(gltfBuffer.uri || ''));
-                });
-                if (u) {
-                    const bufferAsset = new Asset(u.filename, 'binary', {
-                        url: u.url,
-                        filename: u.filename
+                const processBuffer = (gltfBuffer: GltfBufferLike, continuation: AssetProcessContinuation) => {
+                    const u = externalUrls.find((url) => {
+                        return url.filename === decodeURIComponent(path.normalize(gltfBuffer.uri || ''));
                     });
-                    bufferAsset.on('load', () => {
-                        continuation(null, new Uint8Array(bufferAsset.resource as ArrayBuffer));
-                    });
-                    bufferAsset.on('error', (err: string) => {
-                        continuation(`Failed to load buffer file '${u.filename}': ${err}`, null);
-                    });
-                    this.app.assets.add(bufferAsset);
-                    this.app.assets.load(bufferAsset);
-                } else if (gltfBuffer.uri && !gltfBuffer.uri.startsWith('data:')) {
+                    if (u) {
+                        const bufferAsset = new Asset(u.filename, 'binary', {
+                            url: u.url,
+                            filename: u.filename
+                        });
+                        bufferAsset.on('load', () => {
+                            continuation(null, new Uint8Array(bufferAsset.resource as ArrayBuffer));
+                        });
+                        bufferAsset.on('error', (err: string) => {
+                            continuation(`Failed to load buffer file '${u.filename}': ${err}`, null);
+                        });
+                        this.app.assets.add(bufferAsset);
+                        this.app.assets.load(bufferAsset);
+                    } else if (gltfBuffer.uri && !gltfBuffer.uri.startsWith('data:')) {
                     // External buffer file referenced but not provided
                     // Check if only the current .gltf file was dragged (no other files provided)
-                    const onlyGltfFile = externalUrls.length === 1 &&
+                        const onlyGltfFile = externalUrls.length === 1 &&
                         this.isModelFilename(externalUrls[0].filename) &&
                         externalUrls[0].filename === gltfUrl.filename;
-                    if (onlyGltfFile) {
-                        continuation(`External buffer file '${gltfBuffer.uri}' not found. Try dragging the folder containing the .gltf file instead of the file itself.`, null);
+                        if (onlyGltfFile) {
+                            continuation(`External buffer file '${gltfBuffer.uri}' not found. Try dragging the folder containing the .gltf file instead of the file itself.`, null);
+                        } else {
+                            continuation(`External buffer file not found: '${gltfBuffer.uri}'. Make sure to include the associated .bin file(s).`, null);
+                        }
                     } else {
-                        continuation(`External buffer file not found: '${gltfBuffer.uri}'. Make sure to include the associated .bin file(s).`, null);
+                        continuation(null, null);
                     }
-                } else {
-                    continuation(null, null);
-                }
-            };
+                };
 
-            const containerAssetOptions: AssetLoadProcessOptions = {
-                bufferView: {
-                    processAsync: processBufferView
-                },
-                image: {
-                    processAsync: processImage
-                },
-                texture: {
-                    postprocess: postProcessTexture
-                },
-                buffer: {
-                    processAsync: processBuffer
-                }
-            };
-            const containerAsset = new Asset(gltfUrl.filename, 'container', gltfUrl, null, {
-                ...(containerAssetOptions as object)
-            });
-            containerAsset.on('load', () => resolve(containerAsset));
-            containerAsset.on('error', (err: string) => reject(err));
-            if (onProgress) {
-                containerAsset.on('progress', (receivedBytes: number, totalBytes: number) => {
-                    onProgress(totalBytes > 0 ? receivedBytes / totalBytes : 0);
+                const containerAssetOptions: AssetLoadProcessOptions = {
+                    bufferView: {
+                        processAsync: processBufferView
+                    },
+                    image: {
+                        processAsync: processImage
+                    },
+                    texture: {
+                        postprocess: postProcessTexture
+                    },
+                    buffer: {
+                        processAsync: processBuffer
+                    }
+                };
+                const containerAsset = new Asset(gltfUrl.filename, 'container', gltfUrl, null, {
+                    ...(containerAssetOptions as object)
                 });
-            }
-            this.app.assets.add(containerAsset);
-            this.app.assets.load(containerAsset);
+                containerAsset.on('load', () => resolve(containerAsset));
+                containerAsset.on('error', (err: string) => reject(err));
+                if (onProgress) {
+                    containerAsset.on('progress', (receivedBytes: number, totalBytes: number) => {
+                        onProgress(totalBytes > 0 ? receivedBytes / totalBytes : 0);
+                    });
+                }
+                this.app.assets.add(containerAsset);
+                this.app.assets.load(containerAsset);
+            });
         });
     }
 
     private loadPly(url: File, externalUrls: Array<File>, onProgress?: (progress: number) => void) {
-        const urls: Record<string, string> = {};
-        externalUrls.forEach((url) => {
-            urls[url.filename] = url.url;
-        });
-        return new Promise((resolve, reject) => {
-            const gsplatOptions: AssetLoadProcessOptions = {
-                mapUrl: (mapUrl: string) => urls[mapUrl]
-            };
-            const asset = new Asset(url.filename, 'gsplat', url, null, {
-                ...(gsplatOptions as object)
-            });
-            asset.on('load', () => resolve(asset));
-            asset.on('error', (err: string) => reject(err));
-            if (onProgress) {
-                asset.on('progress', (receivedBytes: number, totalBytes: number) => {
-                    onProgress(totalBytes > 0 ? receivedBytes / totalBytes : 0);
-                });
+        return this.exceedsRemoteSizeLimit(url, Viewer.MODEL_FILE_SIZE_LIMIT_BYTES)
+        .then((oversizedBytes) => {
+            if (oversizedBytes === 'unknown') {
+                throw new Error(this.formatUnknownRemoteSizeMessage(url.filename ?? url.url ?? '', '1 GB'));
             }
-            this.app.assets.add(asset);
-            this.app.assets.load(asset);
+            if (oversizedBytes !== null) {
+                throw new Error(this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', url.filename ?? url.url ?? '', oversizedBytes));
+            }
+            const urls: Record<string, string> = {};
+            externalUrls.forEach((externalUrl) => {
+                urls[externalUrl.filename] = externalUrl.url;
+            });
+            return new Promise((resolve, reject) => {
+                const gsplatOptions: AssetLoadProcessOptions = {
+                    mapUrl: (mapUrl: string) => urls[mapUrl]
+                };
+                const asset = new Asset(url.filename, 'gsplat', url, null, {
+                    ...(gsplatOptions as object)
+                });
+                asset.on('load', () => resolve(asset));
+                asset.on('error', (err: string) => reject(err));
+                if (onProgress) {
+                    asset.on('progress', (receivedBytes: number, totalBytes: number) => {
+                        onProgress(totalBytes > 0 ? receivedBytes / totalBytes : 0);
+                    });
+                }
+                this.app.assets.add(asset);
+                this.app.assets.load(asset);
+            });
         });
     }
 
@@ -3158,7 +3192,7 @@ class Viewer {
 
     private isViewerSettingsFilename(filename: string): boolean {
         const cleanName = filename.split('?')[0].split('/').pop()?.toLowerCase() ?? '';
-        return /\.model-viewer-settings(\(\d+\))?\.json$/.test(cleanName);
+        return /\.model-viewer-settings(?:\(\d+\))?\.json$/.test(cleanName);
     }
 
     private formatBytes(bytes: number): string {
@@ -3170,8 +3204,78 @@ class Viewer {
     private formatLimitMessage(key: string, filename: string, sizeBytes: number): string {
         const lang = this.observer.get('ui.language') as string | undefined;
         return t(key, lang)
-            .replace('{filename}', filename)
-            .replace('{size}', this.formatBytes(sizeBytes));
+        .replace('{filename}', filename)
+        .replace('{size}', this.formatBytes(sizeBytes));
+    }
+
+    private formatUnknownRemoteSizeMessage(filename: string, limitLabel: string): string {
+        const lang = this.observer.get('ui.language') as string | undefined;
+        return t('File "{filename}" was blocked because server does not provide size metadata. Limit: {size}.', lang)
+        .replace('{filename}', filename)
+        .replace('{size}', limitLabel);
+    }
+
+    private parseContentRangeTotal(contentRange: string | null): number | null {
+        if (!contentRange) return null;
+        const match = /^bytes\s+\d+-\d+\/(\d+|\*)$/i.exec(contentRange.trim());
+        if (!match || match[1] === '*') return null;
+        const total = Number(match[1]);
+        return Number.isFinite(total) && total > 0 ? total : null;
+    }
+
+    private async resolveRemoteFileSize(url: string): Promise<number | null> {
+        const headController = new AbortController();
+        const headTimeoutId = setTimeout(() => headController.abort(), Viewer.REMOTE_HEAD_TIMEOUT_MS);
+        try {
+            const response = await fetch(url, { method: 'HEAD', signal: headController.signal, cache: 'no-store' });
+            if (response.ok) {
+                const contentLength = response.headers.get('content-length');
+                const bytes = Number(contentLength);
+                if (Number.isFinite(bytes) && bytes > 0) {
+                    return bytes;
+                }
+            }
+        } catch {
+            // ignore and try range probe
+        } finally {
+            clearTimeout(headTimeoutId);
+        }
+
+        const rangeController = new AbortController();
+        const rangeTimeoutId = setTimeout(() => rangeController.abort(), Viewer.REMOTE_HEAD_TIMEOUT_MS);
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { Range: 'bytes=0-0' },
+                signal: rangeController.signal,
+                cache: 'no-store'
+            });
+            if (!response.ok) return null;
+
+            const rangeTotal = this.parseContentRangeTotal(response.headers.get('content-range'));
+            if (rangeTotal !== null) return rangeTotal;
+
+            const contentLength = response.headers.get('content-length');
+            const bytes = Number(contentLength);
+            return Number.isFinite(bytes) && bytes > 0 ? bytes : null;
+        } catch {
+            return null;
+        } finally {
+            clearTimeout(rangeTimeoutId);
+        }
+    }
+
+    private async exceedsRemoteSizeLimit(file: File, limitBytes: number): Promise<number | 'unknown' | null> {
+        if (typeof file.sizeBytes === 'number' && file.sizeBytes > 0) {
+            return file.sizeBytes > limitBytes ? file.sizeBytes : null;
+        }
+        const fileUrl = file.url ?? '';
+        if (!/^https?:\/\//i.test(fileUrl)) {
+            return null;
+        }
+        const resolvedBytes = await this.resolveRemoteFileSize(fileUrl);
+        if (resolvedBytes === null) return 'unknown';
+        return resolvedBytes > limitBytes ? resolvedBytes : null;
     }
 
     // load the list of urls.
@@ -3335,6 +3439,9 @@ class Viewer {
                 })
                 .catch((err) => {
                     console.log(err);
+                    if (warnings.length > 0) {
+                        this.observer.set('ui.warnings', warnings);
+                    }
                     this.observer.set('ui.error', err?.toString() || err);
                 })
                 .finally(() => {
@@ -4674,8 +4781,8 @@ class Viewer {
         const kneeY = sceneHeight * 0.22;
 
         const pointAt = (horizontal: number, vertical: number) => anchor.clone()
-            .add(cameraRight.clone().mulScalar(horizontal))
-            .add(cameraUp.clone().mulScalar(vertical));
+        .add(cameraRight.clone().mulScalar(horizontal))
+        .add(cameraUp.clone().mulScalar(vertical));
 
         const v0 = this.tmpRulerV0;
         const v1 = this.tmpRulerV1;
@@ -4708,11 +4815,11 @@ class Viewer {
             const a0 = (Math.PI * 2 * i) / segments;
             const a1 = (Math.PI * 2 * (i + 1)) / segments;
             v0.copy(headCenter)
-                .add(cameraRight.clone().mulScalar(Math.cos(a0) * headRadius))
-                .add(cameraUp.clone().mulScalar(Math.sin(a0) * headRadius));
+            .add(cameraRight.clone().mulScalar(Math.cos(a0) * headRadius))
+            .add(cameraUp.clone().mulScalar(Math.sin(a0) * headRadius));
             v1.copy(headCenter)
-                .add(cameraRight.clone().mulScalar(Math.cos(a1) * headRadius))
-                .add(cameraUp.clone().mulScalar(Math.sin(a1) * headRadius));
+            .add(cameraRight.clone().mulScalar(Math.cos(a1) * headRadius))
+            .add(cameraUp.clone().mulScalar(Math.sin(a1) * headRadius));
             this.debugRuler.line(v0, v1, 0xffffffff);
         }
 

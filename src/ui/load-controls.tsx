@@ -43,16 +43,21 @@ const LoadControls = (props: { observerData: ObserverData; setProperty: SetPrope
 
     const onUrlSelected = () => {
         const viewer = window.viewer;
+        if (!viewer) return;
         const inputElement = document.getElementById('glb-url-input') as (HTMLElement & { ui?: { value?: string } }) | null;
         const value = inputElement?.ui?.value;
         if (!value) return;
-        const url = new URL(value);
-        const filename = url.pathname.split('/').pop();
-        const hasExtension = !!filename?.split('.').splice(1).pop();
-        viewer.loadFiles([{
-            url: value,
-            filename: filename + (hasExtension ? '' : '.glb')
-        }]);
+        try {
+            const url = new URL(value);
+            const filename = url.pathname.split('/').pop();
+            const hasExtension = !!filename?.split('.').splice(1).pop();
+            viewer.loadFiles([{
+                url: value,
+                filename: filename + (hasExtension ? '' : '.glb')
+            }]);
+        } catch {
+            // TextInput already validates URLs; this is a runtime safety guard.
+        }
     };
 
     const lang = props.observerData?.ui?.language;

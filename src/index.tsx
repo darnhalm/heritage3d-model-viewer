@@ -73,20 +73,17 @@ const getEmbedPlaceholderCandidates = (file: { url: string, filename?: string })
     return Array.from(candidates);
 };
 
-const findEmbedPlaceholder = async (files: Array<{ url: string, filename?: string }>) => {
+const findEmbedPlaceholder = (files: Array<{ url: string, filename?: string }>) => {
     const firstModel = files[0];
     if (!firstModel) return null;
 
     const candidates = getEmbedPlaceholderCandidates(firstModel);
-    for (const candidate of candidates) {
-        try {
-            return await loadImage(candidate);
-        } catch {
-            // try next candidate
-        }
-    }
+    const tryCandidateAt = (index: number): Promise<string | null> => {
+        if (index >= candidates.length) return Promise.resolve(null);
+        return loadImage(candidates[index]).catch(() => tryCandidateAt(index + 1));
+    };
 
-    return null;
+    return tryCandidateAt(0);
 };
 
 const skyboxes = [
@@ -365,9 +362,9 @@ const main = () => {
 
     const embedEnabled = parseBool('embed', false);
     const embedPresetParam = url.searchParams.get('ui');
-    const embedPreset = embedPresetParam === 'compact' || embedPresetParam === 'minimal' || embedPresetParam === 'full'
-        ? embedPresetParam
-        : 'full';
+    const embedPreset = embedPresetParam === 'compact' || embedPresetParam === 'minimal' || embedPresetParam === 'full' ?
+        embedPresetParam :
+        'full';
     const embedDefaults = {
         full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, fullscreen: true, fit: true, reset: true },
         compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, fullscreen: true, fit: true, reset: true },
@@ -530,7 +527,7 @@ const main = () => {
             }
 
             if (activeId) {
-                const poi = poiList.find((entry) => entry.id === activeId);
+                const poi = poiList.find(entry => entry.id === activeId);
                 window.parent?.postMessage({
                     type: 'poi-selected',
                     id: activeId,

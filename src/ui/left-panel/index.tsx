@@ -49,7 +49,7 @@ type ViewerApi = {
 const getViewer = (): ViewerApi | undefined => (window as Window & { viewer?: ViewerApi }).viewer;
 const isHTMLElement = (value: EventTarget | null): value is HTMLElement => value instanceof HTMLElement;
 
-const parseJsonArray = <T,>(raw: string | undefined, mapItem?: (value: unknown) => T | null): T[] => {
+const parseJsonArray = <T, >(raw: string | undefined, mapItem?: (value: unknown) => T | null): T[] => {
     try {
         const parsed = JSON.parse(raw ?? '[]');
         if (!Array.isArray(parsed)) return [];
@@ -60,8 +60,7 @@ const parseJsonArray = <T,>(raw: string | undefined, mapItem?: (value: unknown) 
     }
 };
 
-const parseStringArray = (raw: string | undefined): string[] =>
-    parseJsonArray<string>(raw, (value) => (typeof value === 'string' ? value : null));
+const parseStringArray = (raw: string | undefined): string[] => parseJsonArray<string>(raw, value => (typeof value === 'string' ? value : null));
 
 const parseStringArrayLoose = (raw: unknown): string[] => {
     if (Array.isArray(raw)) {
@@ -73,25 +72,23 @@ const parseStringArrayLoose = (raw: unknown): string[] => {
     return [];
 };
 
-const parseSceneCameras = (raw: string | undefined): SceneCameraOption[] =>
-    parseJsonArray<SceneCameraOption>(raw, (value) => {
-        if (!value || typeof value !== 'object') return null;
-        const candidate = value as { name?: unknown; path?: unknown };
-        if (typeof candidate.name !== 'string' || typeof candidate.path !== 'string') return null;
-        return { name: candidate.name, path: candidate.path };
-    });
+const parseSceneCameras = (raw: string | undefined): SceneCameraOption[] => parseJsonArray<SceneCameraOption>(raw, (value) => {
+    if (!value || typeof value !== 'object') return null;
+    const candidate = value as { name?: unknown; path?: unknown };
+    if (typeof candidate.name !== 'string' || typeof candidate.path !== 'string') return null;
+    return { name: candidate.name, path: candidate.path };
+});
 
-const parseOptions = (raw: string | undefined): Option[] =>
-    parseJsonArray<Option>(raw, (value) => {
-        if (!value || typeof value !== 'object') return null;
-        const candidate = value as { v?: unknown; t?: unknown };
-        if (typeof candidate.t !== 'string') return null;
-        const v = candidate.v;
-        if (typeof v === 'string' || typeof v === 'number' || v === null) {
-            return { v: v as Option['v'], t: candidate.t };
-        }
-        return null;
-    });
+const parseOptions = (raw: string | undefined): Option[] => parseJsonArray<Option>(raw, (value) => {
+    if (!value || typeof value !== 'object') return null;
+    const candidate = value as { v?: unknown; t?: unknown };
+    if (typeof candidate.t !== 'string') return null;
+    const v = candidate.v;
+    if (typeof v === 'string' || typeof v === 'number' || v === null) {
+        return { v: v as Option['v'], t: candidate.t };
+    }
+    return null;
+});
 
 const parseStringRecord = (raw: string | undefined): Record<string, string> => {
     try {
@@ -107,23 +104,22 @@ const parseStringRecord = (raw: string | undefined): Record<string, string> => {
     }
 };
 
-const parsePoiList = (raw: string | undefined): PoiItem[] =>
-    parseJsonArray<PoiItem>(raw, (value) => {
-        if (!value || typeof value !== 'object') return null;
-        const candidate = value as Record<string, unknown>;
-        const id = candidate.id;
-        const number = candidate.number;
-        if ((typeof id !== 'string' && typeof id !== 'number') || typeof number !== 'number') return null;
-        return {
-            id: String(id),
-            number,
-            title: typeof candidate.title === 'string' ? candidate.title : undefined,
-            color: typeof candidate.color === 'string' ? candidate.color : undefined,
-            description: typeof candidate.description === 'string' ? candidate.description : undefined,
-            duration: typeof candidate.duration === 'number' ? candidate.duration : undefined,
-            camera: candidate.camera
-        };
-    });
+const parsePoiList = (raw: string | undefined): PoiItem[] => parseJsonArray<PoiItem>(raw, (value) => {
+    if (!value || typeof value !== 'object') return null;
+    const candidate = value as Record<string, unknown>;
+    const id = candidate.id;
+    const number = candidate.number;
+    if ((typeof id !== 'string' && typeof id !== 'number') || typeof number !== 'number') return null;
+    return {
+        id: String(id),
+        number,
+        title: typeof candidate.title === 'string' ? candidate.title : undefined,
+        color: typeof candidate.color === 'string' ? candidate.color : undefined,
+        description: typeof candidate.description === 'string' ? candidate.description : undefined,
+        duration: typeof candidate.duration === 'number' ? candidate.duration : undefined,
+        camera: candidate.camera
+    };
+});
 
 const rgbToArr = (rgb: { r: number, g: number, b: number }) => [rgb.r, rgb.g, rgb.b, 1];
 const arrToRgb = (arr: number[]) => ({ r: arr[0], g: arr[1], b: arr[2] });
@@ -139,7 +135,7 @@ const hexToArr = (hex?: string) => {
 };
 const arrToHex = (arr: number[]) => {
     const toByte = (value: number) => Math.max(0, Math.min(255, Math.round((value ?? 0) * 255)));
-    return `#${[toByte(arr[0]), toByte(arr[1]), toByte(arr[2])].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+    return `#${[toByte(arr[0]), toByte(arr[1]), toByte(arr[2])].map(value => value.toString(16).padStart(2, '0')).join('')}`;
 };
 const texelDensityUnitLabel = (unit?: string) => (unit === 'mm' ? 'px/mm' : (unit === 'cm' ? 'px/cm' : 'px/m'));
 const texelDensityDisplayValue = (td: number, unit?: string) => {
@@ -666,11 +662,17 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     };
 
     private collapseHandler: (() => void) | null = null;
+
     private poiSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
     private poiPointerMoveHandler: ((event: MouseEvent) => void) | null = null;
+
     private poiPointerUpHandler: ((event: MouseEvent) => void) | null = null;
+
     private previousAlignmentAxes = false;
+
     private previousAlignmentGrid = false;
+
     private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
@@ -869,7 +871,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             { key: 'metallic', label: t('Metallic', lang), value: selectedMaterialFactors?.metallicPercent },
             { key: 'roughness', label: t('Roughness', lang), value: selectedMaterialFactors?.roughnessPercent },
             { key: 'opacity', label: t('Opacity', lang), value: selectedMaterialFactors?.opacityPercent }
-        ].filter((item) => item.value !== null && item.value !== undefined);
+        ].filter(item => item.value !== null && item.value !== undefined);
         const materialFactorByRenderMode: Record<string, { key: 'metallic' | 'roughness' | 'opacity', label: string, value: number | null | undefined }> = {
             metalness: { key: 'metallic', label: t('Metallic', lang), value: selectedMaterialFactors?.metallicPercent },
             gloss: { key: 'roughness', label: t('Roughness', lang), value: selectedMaterialFactors?.roughnessPercent },
@@ -887,8 +889,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             getViewer()?.setSelectedSpecularColor?.(arrToRgb(value));
         };
         const poiList = parsePoiList(observerData?.poi?.list);
-        const draggedPoi = poiList.find((poi) => String(poi.id) === draggingPoiId) ?? null;
-        const visiblePoiList = draggingPoiId ? poiList.filter((poi) => String(poi.id) !== draggingPoiId) : poiList;
+        const draggedPoi = poiList.find(poi => String(poi.id) === draggingPoiId) ?? null;
+        const visiblePoiList = draggingPoiId ? poiList.filter(poi => String(poi.id) !== draggingPoiId) : poiList;
 
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
@@ -978,11 +980,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             {cat.title} ({cat.items.length})
                                         </div>
                                         {cat.title === 'MATERIAL CHANNELS' && (
-                                                <Toggle
-                                                    label={t('By objects', lang)}
-                                                    value={observerData?.debug?.withTextureOnly ?? false}
-                                                    setProperty={(value: boolean) => setProperty('debug.withTextureOnly', value)}
-                                                />
+                                            <Toggle
+                                                label={t('By objects', lang)}
+                                                value={observerData?.debug?.withTextureOnly ?? false}
+                                                setProperty={(value: boolean) => setProperty('debug.withTextureOnly', value)}
+                                            />
                                         )}
                                         {cat.items.map(item => (
                                             <React.Fragment key={item.value}>
@@ -1137,7 +1139,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {poiList.length === 0 && (
                                     <div className='materials-layer-inline-hint'>{t('No POIs yet.', lang)}</div>
                                 )}
-                                {visiblePoiList.map((poi) => (
+                                {visiblePoiList.map(poi => (
                                     <React.Fragment key={String(poi.id)}>
                                         {draggingPoiId && dragOverPoiId === String(poi.id) && <div className='poi-list-placeholder' />}
                                         <div
@@ -1145,81 +1147,81 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             data-poi-id={String(poi.id)}
                                             onClick={() => this.handlePoiCardClick(String(poi.id))}
                                         >
-                                        <div className='poi-list-row'>
-                                            <div
-                                                className='poi-list-drag-handle'
-                                                onMouseDown={(event) => this.handlePoiPointerDown(String(poi.id), event)}
-                                            />
-                                            <div
-                                                className='poi-list-badge'
-                                                style={{
-                                                    backgroundColor: poi.color || '#111111'
-                                                }}
-                                            >
-                                                {poi.number}
-                                            </div>
-                                            <TextInput
-                                                class='poi-list-input'
-                                                value={String(poi.title ?? `POI ${poi.number}`)}
-                                                onChange={(value: string) => getViewer()?.updatePoiTitle?.(String(poi.id), value)}
-                                            />
-                                        </div>
-                                        <ColorPickerControl
-                                            label={t('Color', lang)}
-                                            value={hexToArr(poi.color)}
-                                            setProperty={(value: number[]) => getViewer()?.updatePoiColor?.(String(poi.id), arrToHex(value))}
-                                        />
-                                        <div className='poi-description-field'>
-                                            <textarea
-                                                className='poi-list-description'
-                                                value={String(poi.description ?? '')}
-                                                maxLength={636}
-                                                placeholder={t('Description', lang)}
-                                                onChange={(event) => getViewer()?.updatePoiDescription?.(String(poi.id), event.target.value)}
-                                            />
-                                        </div>
-                                        <div className='poi-list-actions poi-list-actions-secondary'>
-                                            <button
-                                                type='button'
-                                                className={`poi-list-secondary-button${poi.camera ? ' is-saved' : ''}`}
-                                                onClick={() => getViewer()?.capturePoiCameraView?.(String(poi.id))}
-                                            >
-                                                <img src='static/icons/poi-capture-view.svg' alt='' className='poi-list-secondary-button-icon' />
-                                                {t(poi.camera ? 'Retake View' : 'Capture View', lang)}
-                                            </button>
-                                            {poi.camera ? (
-                                                <button
-                                                    type='button'
-                                                    className='poi-list-secondary-button poi-list-secondary-button-delete-view'
-                                                    onClick={() => getViewer()?.clearPoiCameraView?.(String(poi.id))}
+                                            <div className='poi-list-row'>
+                                                <div
+                                                    className='poi-list-drag-handle'
+                                                    onMouseDown={event => this.handlePoiPointerDown(String(poi.id), event)}
+                                                />
+                                                <div
+                                                    className='poi-list-badge'
+                                                    style={{
+                                                        backgroundColor: poi.color || '#111111'
+                                                    }}
                                                 >
-                                                    <img src='static/icons/poi-delete-view.svg' alt='' className='poi-list-secondary-button-icon' />
-                                                    {t('Delete View', lang)}
-                                                </button>
-                                            ) : null}
-                                        </div>
-                                        <div className='poi-list-actions'>
-                                            <div className='poi-list-duration'>
-                                                <img src='static/icons/poi-duration.svg' alt='' className='poi-list-duration-icon' />
-                                                <NakedSlider
-                                                    class='poi-list-duration-slider'
-                                                    width={120}
-                                                    precision={1}
-                                                    min={0.1}
-                                                    max={10}
-                                                    value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : 0.8}
-                                                    setProperty={(value: number) => getViewer()?.updatePoiDuration?.(String(poi.id), value)}
+                                                    {poi.number}
+                                                </div>
+                                                <TextInput
+                                                    class='poi-list-input'
+                                                    value={String(poi.title ?? `POI ${poi.number}`)}
+                                                    onChange={(value: string) => getViewer()?.updatePoiTitle?.(String(poi.id), value)}
                                                 />
                                             </div>
-                                            <button
-                                                type='button'
-                                                className='poi-list-delete'
-                                                title={t('Delete', lang)}
-                                                onClick={() => getViewer()?.removePoi?.(String(poi.id))}
-                                            >
-                                                <img src='static/icons/poi-delete.svg' alt='' className='poi-list-delete-icon' />
-                                            </button>
-                                        </div>
+                                            <ColorPickerControl
+                                                label={t('Color', lang)}
+                                                value={hexToArr(poi.color)}
+                                                setProperty={(value: number[]) => getViewer()?.updatePoiColor?.(String(poi.id), arrToHex(value))}
+                                            />
+                                            <div className='poi-description-field'>
+                                                <textarea
+                                                    className='poi-list-description'
+                                                    value={String(poi.description ?? '')}
+                                                    maxLength={636}
+                                                    placeholder={t('Description', lang)}
+                                                    onChange={event => getViewer()?.updatePoiDescription?.(String(poi.id), event.target.value)}
+                                                />
+                                            </div>
+                                            <div className='poi-list-actions poi-list-actions-secondary'>
+                                                <button
+                                                    type='button'
+                                                    className={`poi-list-secondary-button${poi.camera ? ' is-saved' : ''}`}
+                                                    onClick={() => getViewer()?.capturePoiCameraView?.(String(poi.id))}
+                                                >
+                                                    <img src='static/icons/poi-capture-view.svg' alt='' className='poi-list-secondary-button-icon' />
+                                                    {t(poi.camera ? 'Retake View' : 'Capture View', lang)}
+                                                </button>
+                                                {poi.camera ? (
+                                                    <button
+                                                        type='button'
+                                                        className='poi-list-secondary-button poi-list-secondary-button-delete-view'
+                                                        onClick={() => getViewer()?.clearPoiCameraView?.(String(poi.id))}
+                                                    >
+                                                        <img src='static/icons/poi-delete-view.svg' alt='' className='poi-list-secondary-button-icon' />
+                                                        {t('Delete View', lang)}
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                            <div className='poi-list-actions'>
+                                                <div className='poi-list-duration'>
+                                                    <img src='static/icons/poi-duration.svg' alt='' className='poi-list-duration-icon' />
+                                                    <NakedSlider
+                                                        class='poi-list-duration-slider'
+                                                        width={120}
+                                                        precision={1}
+                                                        min={0.1}
+                                                        max={10}
+                                                        value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : 0.8}
+                                                        setProperty={(value: number) => getViewer()?.updatePoiDuration?.(String(poi.id), value)}
+                                                    />
+                                                </div>
+                                                <button
+                                                    type='button'
+                                                    className='poi-list-delete'
+                                                    title={t('Delete', lang)}
+                                                    onClick={() => getViewer()?.removePoi?.(String(poi.id))}
+                                                >
+                                                    <img src='static/icons/poi-delete.svg' alt='' className='poi-list-delete-icon' />
+                                                </button>
+                                            </div>
                                         </div>
                                     </React.Fragment>
                                 ))}

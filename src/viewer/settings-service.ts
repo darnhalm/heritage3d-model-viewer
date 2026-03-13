@@ -1,9 +1,11 @@
 import { Observer } from '@playcanvas/observer';
 import { Vec3 } from 'playcanvas';
 
+import { t } from '../i18n/translations';
+
 type Rgb = { r: number; g: number; b: number };
 
-type ModelFile = { url: string; filename?: string };
+type ModelFile = { url: string; filename?: string; sizeBytes?: number };
 
 type CameraControlsLike = {
     mode: 'orbit' | 'fly';
@@ -36,7 +38,13 @@ class SettingsService {
 
     private static readonly SETTINGS_CANDIDATE_VERSIONS = 20;
 
-    private static readonly SETTINGS_FETCH_TIMEOUT_MS = 5000;
+    private static readonly SETTINGS_FETCH_TIMEOUT_MS = 30000;
+
+    private static readonly SETTINGS_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
+
+    private static readonly SETTINGS_HEAD_TIMEOUT_MS = 5000;
+
+    private static readonly SETTINGS_MISS_CACHE_TTL_MS = 60 * 1000;
 
     private observer: Observer;
 
@@ -68,6 +76,8 @@ class SettingsService {
 
     private resetSceneTransform: () => void;
 
+    private remoteSettingsMissCache = new Map<string, number>();
+
     constructor(args: SettingsServiceArgs) {
         this.observer = args.observer;
         this.skyboxUrls = args.skyboxUrls;
@@ -96,6 +106,135 @@ class SettingsService {
         if (!m) return null;
         const n = parseInt(m[1], 16);
         return { r: ((n >> 16) & 0xff) / 255, g: ((n >> 8) & 0xff) / 255, b: (n & 0xff) / 255 };
+    }
+
+    private formatBytes(bytes: number): string {
+        const mb = bytes / (1024 * 1024);
+        if (mb < 1024) return `${mb.toFixed(1)} MB`;
+        return `${(mb / 1024).toFixed(2)} GB`;
+    }
+
+    private formatSettingsLimitMessage(filename: string, sizeBytes: number): string {
+        const lang = this.observer.get('ui.language') as string | undefined;
+        return t('File "{filename}" ({size}) exceeds settings limit of 10 MB.', lang)
+        .replace('{filename}', filename)
+        .replace('{size}', this.formatBytes(sizeBytes));
+    }
+
+    private formatUnknownSettingsSizeMessage(filename: string): string {
+        const lang = this.observer.get('ui.language') as string | undefined;
+        return t('File "{filename}" was blocked because server does not provide size metadata. Limit: 10 MB.', lang)
+        .replace('{filename}', filename);
+    }
+
+    private parseContentRangeTotal(contentRange: string | null): number | null {
+        if (!contentRange) return null;
+        const match = /^bytes\s+\d+-\d+\/(\d+|\*)$/i.exec(contentRange.trim());
+        if (!match || match[1] === '*') return null;
+        const total = Number(match[1]);
+        return Number.isFinite(total) && total > 0 ? total : null;
+    }
+
+    private async resolveRemoteFileSize(url: string): Promise<number | null> {
+        const headController = new AbortController();
+        const headTimeoutId = setTimeout(() => headController.abort(), SettingsService.SETTINGS_HEAD_TIMEOUT_MS);
+        try {
+            const response = await fetch(url, { method: 'HEAD', signal: headController.signal, cache: 'no-store' });
+            if (response.ok) {
+                const contentLength = response.headers.get('content-length');
+                const bytes = Number(contentLength);
+                if (Number.isFinite(bytes) && bytes > 0) {
+                    return bytes;
+                }
+            }
+        } catch {
+            // ignore and try range probe
+        } finally {
+            clearTimeout(headTimeoutId);
+        }
+
+        const rangeController = new AbortController();
+        const rangeTimeoutId = setTimeout(() => rangeController.abort(), SettingsService.SETTINGS_HEAD_TIMEOUT_MS);
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: { Range: 'bytes=0-0' },
+                signal: rangeController.signal,
+                cache: 'no-store'
+            });
+            if (!response.ok) return null;
+
+            const rangeTotal = this.parseContentRangeTotal(response.headers.get('content-range'));
+            if (rangeTotal !== null) return rangeTotal;
+
+            const contentLength = response.headers.get('content-length');
+            const bytes = Number(contentLength);
+            return Number.isFinite(bytes) && bytes > 0 ? bytes : null;
+        } catch {
+            return null;
+        } finally {
+            clearTimeout(rangeTimeoutId);
+        }
+    }
+
+    private async exceedsSettingsSizeLimit(url: string, filename: string, knownSizeBytes?: number): Promise<string | null> {
+        if (typeof knownSizeBytes === 'number' && knownSizeBytes > SettingsService.SETTINGS_FILE_SIZE_LIMIT_BYTES) {
+            return this.formatSettingsLimitMessage(filename, knownSizeBytes);
+        }
+        if (!/^https?:\/\//i.test(url)) {
+            return null;
+        }
+        const resolvedBytes = await this.resolveRemoteFileSize(url);
+        if (resolvedBytes === null) return null;
+        if (resolvedBytes > SettingsService.SETTINGS_FILE_SIZE_LIMIT_BYTES) {
+            return this.formatSettingsLimitMessage(filename, resolvedBytes);
+        }
+        return null;
+    }
+
+    private async fetchJsonWithSizeLimit(url: string, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
+        try {
+            const response = await fetch(url, { method: 'GET', signal, cache: 'no-store' });
+            if (!response.ok) return null;
+
+            let size = 0;
+            if (response.body?.getReader) {
+                const reader = response.body.getReader();
+                const chunks: Uint8Array[] = [];
+                const readChunk = (): Promise<boolean | null> => reader.read().then(({ done, value }) => {
+                    if (done) return true;
+                    if (value) {
+                        size += value.byteLength;
+                        if (size > SettingsService.SETTINGS_FILE_SIZE_LIMIT_BYTES) {
+                            return null;
+                        }
+                        chunks.push(value);
+                    }
+                    return readChunk();
+                });
+                const readResult = await readChunk();
+                if (readResult === null) {
+                    return null;
+                }
+                const merged = new Uint8Array(size);
+                let offset = 0;
+                chunks.forEach((chunk) => {
+                    merged.set(chunk, offset);
+                    offset += chunk.byteLength;
+                });
+                const text = new TextDecoder().decode(merged);
+                return JSON.parse(text) as Record<string, unknown>;
+            }
+
+            const text = await response.text();
+            size = new TextEncoder().encode(text).byteLength;
+            if (size > SettingsService.SETTINGS_FILE_SIZE_LIMIT_BYTES) {
+                return null;
+            }
+            return JSON.parse(text) as Record<string, unknown>;
+        } catch {
+            return null;
+        }
     }
 
     exportViewerSettings() {
@@ -311,14 +450,65 @@ class SettingsService {
         return m ? parseInt(m[1], 10) : -1;
     }
 
+    private resolveAbsoluteHttpUrl(url: string): string | null {
+        try {
+            const absoluteUrl =
+                url.startsWith('http://') || url.startsWith('https://') ?
+                    url :
+                    new URL(url, typeof window !== 'undefined' ? window.location.href : 'http://localhost').href;
+            const parsed = new URL(absoluteUrl);
+            if (!parsed.protocol.startsWith('http')) return null;
+            return parsed.href;
+        } catch {
+            return null;
+        }
+    }
+
+    private shouldBypassSettingsMissCache(absoluteModelUrl: string): boolean {
+        try {
+            const parsed = new URL(absoluteModelUrl);
+            for (const [key] of parsed.searchParams.entries()) {
+                const normalized = key.toLowerCase();
+                if (['v', 'ver', 'version', 't', 'ts', 'timestamp', 'cachebust', 'cb'].includes(normalized)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch {
+            return true;
+        }
+    }
+
+    private hasFreshSettingsMissCache(cacheKey: string): boolean {
+        const expiresAt = this.remoteSettingsMissCache.get(cacheKey);
+        if (!expiresAt) return false;
+        if (Date.now() >= expiresAt) {
+            this.remoteSettingsMissCache.delete(cacheKey);
+            return false;
+        }
+        return true;
+    }
+
+    private markSettingsMissCache(cacheKey: string) {
+        this.remoteSettingsMissCache.set(cacheKey, Date.now() + SettingsService.SETTINGS_MISS_CACHE_TTL_MS);
+    }
+
+    private clearSettingsMissCache(cacheKey: string) {
+        this.remoteSettingsMissCache.delete(cacheKey);
+    }
+
     tryFetchAndApplySettings(firstModelUrl: string, allFiles?: ModelFile[]): Promise<void> {
         const firstModelFilename = allFiles?.find(f => (f.filename && this.isModelFilename(f.filename)) || (f.filename && this.isGSplatFilename(f.filename))
         )?.filename;
         const baseName = firstModelFilename ? firstModelFilename.replace(/\.[^/.]+$/, '').split('/').pop() || '' : '';
+        const warnings: string[] = [];
+        const cacheKey = this.resolveAbsoluteHttpUrl(firstModelUrl);
+        const canUseMissCache = !!cacheKey && !this.shouldBypassSettingsMissCache(cacheKey);
+        const skipRemoteLookup = !!cacheKey && canUseMissCache && this.hasFreshSettingsMissCache(cacheKey);
 
         const fromDroppedFiles = (): Promise<{ data: Record<string, unknown>; version: number } | null> => {
             if (!allFiles || !baseName) return Promise.resolve(null);
-            const best: { file: { url: string }; version: number } | null = allFiles.reduce(
+            const best: { file: ModelFile; version: number } | null = allFiles.reduce(
                 (acc, f) => {
                     if (!f.filename) return acc;
                     const v = SettingsService.settingsVersionFromFilename(f.filename, baseName);
@@ -326,16 +516,24 @@ class SettingsService {
                     if (!acc || v > acc.version) return { file: f, version: v };
                     return acc;
                 },
-                null as { file: { url: string }; version: number } | null
+                null as { file: ModelFile; version: number } | null
             );
             if (!best) return Promise.resolve(null);
-            return fetch(best.file.url, { cache: 'no-store' })
-            .then(res => (res.ok ? res.json().then((data: Record<string, unknown>) => ({ data, version: best.version })) : null))
+            const filename = best.file.filename ?? best.file.url;
+            return this.exceedsSettingsSizeLimit(best.file.url, filename, best.file.sizeBytes)
+            .then((limitWarning) => {
+                if (limitWarning) {
+                    warnings.push(limitWarning);
+                    return null;
+                }
+                return this.fetchJsonWithSizeLimit(best.file.url)
+                .then(data => (data ? { data, version: best.version } : null));
+            })
             .catch((): null => null);
         };
 
         const candidates = SettingsService.settingsUrlCandidatesForModelUrl(firstModelUrl);
-        if (candidates.length === 0) {
+        if (candidates.length === 0 || skipRemoteLookup) {
             return fromDroppedFiles().then((r) => {
                 if (r) {
                     this.applyViewerSettings(r.data);
@@ -350,17 +548,27 @@ class SettingsService {
 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), SettingsService.SETTINGS_FETCH_TIMEOUT_MS);
-        const fetchOne = (c: { url: string; version: number }): Promise<{ data: Record<string, unknown>; version: number } | null> => fetch(c.url, { method: 'GET', signal: controller.signal, cache: 'no-store' })
-        .then((res) => {
-            if (!res.ok) return null;
-            return res.json().then((data: Record<string, unknown>) => ({ data, version: c.version })).catch((): null => null);
+        const fetchOne = (c: { url: string; version: number }): Promise<{ data: Record<string, unknown>; version: number } | null> => this.fetchJsonWithSizeLimit(c.url, controller.signal)
+        .then((data) => {
+            if (!data) return null;
+            return { data, version: c.version };
         })
         .catch((): null => null);
 
         return Promise.all([...candidates.map(fetchOne), fromDroppedFiles()])
         .then((results) => {
-            const ok = results.filter((r): r is { data: Record<string, unknown>; version: number } => r != null && typeof (r as any).data === 'object');
+            if (warnings.length > 0) {
+                this.observer.set('ui.warnings', warnings);
+            }
+            const ok = results.filter((r): r is { data: Record<string, unknown>; version: number } => {
+                if (!r || typeof r !== 'object') return false;
+                const record = r as { data?: unknown; version?: unknown };
+                return !!record.data && typeof record.data === 'object' && typeof record.version === 'number';
+            });
             if (ok.length === 0) {
+                if (cacheKey && canUseMissCache) {
+                    this.markSettingsMissCache(cacheKey);
+                }
                 if (typeof console !== 'undefined' && console.warn) {
                     console.warn('[model-viewer] Settings file not found. Tried:', candidates.slice(0, 3).map(c => c.url));
                 }
@@ -370,6 +578,9 @@ class SettingsService {
                 return;
             }
             const best = ok.reduce((a, b) => (a.version >= b.version ? a : b));
+            if (cacheKey && canUseMissCache) {
+                this.clearSettingsMissCache(cacheKey);
+            }
             this.applyViewerSettings(best.data);
             this.syncSkyboxAndLightFromObserver();
             if (typeof console !== 'undefined' && console.debug) {

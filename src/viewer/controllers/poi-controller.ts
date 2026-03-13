@@ -173,7 +173,7 @@ class PoiController {
         this.onMouseMove = (event: MouseEvent) => {
             if (this.draggingPoiId) {
                 const rect = this.canvas.getBoundingClientRect();
-                void this.movePoiTo(this.draggingPoiId, event.clientX - rect.left, event.clientY - rect.top);
+                this.movePoiTo(this.draggingPoiId, event.clientX - rect.left, event.clientY - rect.top).catch(() => {});
                 return;
             }
             if (!this.poiIsPotentialClick || !this.poiClickDown) return;
@@ -191,7 +191,7 @@ class PoiController {
                 this.renderNextFrame();
             }
             if (this.poiIsPotentialClick && this.poiClickDown && this.observer.get('poi.enabled') && !this.observer.get('measure.enabled')) {
-                void this.addPoiAt(this.poiClickDown.canvasX, this.poiClickDown.canvasY);
+                this.addPoiAt(this.poiClickDown.canvasX, this.poiClickDown.canvasY).catch(() => {});
             }
             this.poiIsPotentialClick = false;
             this.poiClickDown = null;
@@ -215,7 +215,7 @@ class PoiController {
             document.removeEventListener('mouseup', this.onMouseUp);
             this.onMouseUp = null;
         }
-        this.markerEls.forEach((marker) => marker.remove());
+        this.markerEls.forEach(marker => marker.remove());
         this.markerEls.clear();
         this.poiScreenPositions.clear();
         this.overlay?.remove();
@@ -382,8 +382,8 @@ class PoiController {
             this.setActivePoi(null);
         }
         const remaining = this.getPoiList()
-            .filter(poi => poi.id !== id)
-            .map((poi, index) => ({ ...poi, number: index + 1, title: poi.title || `POI ${index + 1}` }));
+        .filter(poi => poi.id !== id)
+        .map((poi, index) => ({ ...poi, number: index + 1, title: poi.title || `POI ${index + 1}` }));
         this.setPoiList(remaining);
     }
 
@@ -462,7 +462,7 @@ class PoiController {
     }
 
     focusPoi(id: string) {
-        const poi = this.getPoiList().find((entry) => entry.id === id);
+        const poi = this.getPoiList().find(entry => entry.id === id);
         if (!poi) {
             return;
         }
@@ -486,7 +486,7 @@ class PoiController {
         const list = this.getPoiList();
         if (list.length === 0) return;
         const activeId = String(this.observer.get('poi.activeId') ?? '');
-        const activeIndex = list.findIndex((poi) => poi.id === activeId);
+        const activeIndex = list.findIndex(poi => poi.id === activeId);
         const nextIndex = activeIndex >= 0 ? (activeIndex + 1) % list.length : 0;
         this.focusPoi(list[nextIndex].id);
     }
@@ -495,7 +495,7 @@ class PoiController {
         const list = this.getPoiList();
         if (list.length === 0) return;
         const activeId = String(this.observer.get('poi.activeId') ?? '');
-        const activeIndex = list.findIndex((poi) => poi.id === activeId);
+        const activeIndex = list.findIndex(poi => poi.id === activeId);
         const prevIndex = activeIndex >= 0 ? (activeIndex - 1 + list.length) % list.length : list.length - 1;
         this.focusPoi(list[prevIndex].id);
     }
@@ -506,8 +506,8 @@ class PoiController {
         }
 
         const list = this.getPoiList();
-        const sourceIndex = list.findIndex((poi) => poi.id === sourceId);
-        const targetIndex = list.findIndex((poi) => poi.id === targetId);
+        const sourceIndex = list.findIndex(poi => poi.id === sourceId);
+        const targetIndex = list.findIndex(poi => poi.id === targetId);
         if (sourceIndex === -1 || targetIndex === -1) {
             return;
         }

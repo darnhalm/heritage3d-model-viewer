@@ -1,5 +1,4 @@
 import { Button } from '@playcanvas/pcui/react';
-import { Entity, UsdzExporter } from 'playcanvas';
 import React from 'react';
 
 import AnimationControls from './animation-controls';
@@ -7,24 +6,6 @@ import { MeasurementsPanel, ViewPanel, InfoPanel, IDPanel } from './panels';
 import { addEventListenerOnClickOnly } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData } from '../../types';
-
-type ViewerWithApp = {
-    app?: {
-        root?: {
-            findByName?: (name: string) => unknown;
-        };
-    };
-    xrMode?: {
-        start: () => void;
-    };
-};
-
-type ViewerWindow = Window & {
-    viewer?: ViewerWithApp;
-    webkit?: {
-        messageHandlers?: unknown;
-    };
-};
 
 const PopupPanelControls = (props: { observerData: ObserverData, setProperty: SetProperty }) => {
     return (<>
@@ -188,53 +169,10 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
 }
 
 class PopupPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
-    link: HTMLAnchorElement | null;
-
-    usdzExporter: UsdzExporter | null = null;
-
-    get hasArSupport() {
-        return !!(this.props.observerData.runtime.xrSupported || this.usdzExporter);
-    }
-
-    constructor(props: { observerData: ObserverData, setProperty: SetProperty }) {
-        super(props);
-        this.link = document.getElementById('ar-link') as HTMLAnchorElement | null;
-        const viewerWindow = window as ViewerWindow;
-        if (this.link?.relList?.supports?.('ar') || (Boolean(viewerWindow.webkit?.messageHandlers) && Boolean(/CriOS\/|EdgiOS\/|FxiOS\/|GSA\/|DuckDuckGo\//.test(navigator.userAgent)))) {
-            this.usdzExporter = new UsdzExporter();
-        }
-    }
-
     render() {
-        const embed = this.props.observerData?.ui?.embed;
-        const showArButton = !(embed?.enabled) || embed.preset === 'full';
         return (<div id='popup' className={this.props.observerData.scene.nodes === '[]' ? 'empty' : null}>
             <PopupPanelControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
             <PopupButtonControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
-            <span title={t('View in AR', this.props.observerData?.ui?.language)} style={{ display: 'contents' }}>
-                <Button
-                    class='popup-button'
-                    id='launch-ar-button'
-                    icon='E189'
-                    hidden={!showArButton || !this.hasArSupport || this.props.observerData.scene.nodes === '[]'}
-                    width={40}
-                    height={40}
-                    onClick={() => {
-                        if (this.usdzExporter) {
-                            const sceneRoot = (window as ViewerWindow).viewer?.app?.root?.findByName?.('sceneRoot');
-                            if (!(sceneRoot instanceof Entity) || !this.link) return;
-                            // convert the loaded entity into asdz file
-                            this.usdzExporter.build(sceneRoot).then((arrayBuffer: ArrayBuffer) => {
-                                const blob = new Blob([arrayBuffer], { type: 'application/octet-stream' });
-                                this.link.href = URL.createObjectURL(blob);
-                                this.link.click();
-                            }).catch(console.error);
-                        } else {
-                            (window as ViewerWindow).viewer?.xrMode?.start?.();
-                        }
-                    } }
-                />
-            </span>
         </div>);
     }
 }

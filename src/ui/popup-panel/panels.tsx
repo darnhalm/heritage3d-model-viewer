@@ -598,7 +598,7 @@ class ViewPanel extends React.Component <{
             reset: defaults.reset,
             copied: false
         });
-    }
+    };
 
     render() {
         const props = this.props;

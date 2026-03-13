@@ -4,6 +4,7 @@ import {
     XRTRACKABLE_POINT,
     XRTRACKABLE_PLANE,
     XRTRACKABLE_MESH,
+    XRHAND_RIGHT,
     XRTYPE_AR,
     BoundingBox,
     Entity,
@@ -22,6 +23,10 @@ const vec2 = new Vec3();
 const translation = new Vec3();
 const forward = new Vec3();
 const mat = new Mat4();
+const XR_RIGHT_STICK_DEADZONE = 0.2;
+const XR_RIGHT_STICK_ROTATE_SPEED_DEG = 120;
+const XR_TAP_MAX_DURATION_MS = 300;
+const XR_TAP_MAX_MOVE_PX = 12;
 
 // modulo dealing with negative numbers
 const mod = (n: number, m: number) => ((n % m) + m) % m;
@@ -137,8 +142,18 @@ class XRObjectPlacementController {
             });
         };
 
+        // fallback placement request used by overlay tap handling
+        this.events.on('xr:request-place', () => {
+            if (!this.active || this.rotating) {
+                return;
+            }
+            hitTest((position: Vec3) => {
+                this.events.fire('xr:place', position);
+            });
+        });
+
         // handle xr mode availability change
-        xr.on(`available: ${XRTYPE_AR}`, (available: boolean) => {
+        xr.on(`available:${XRTYPE_AR}`, (available: boolean) => {
             this.events.fire('xr:available', available);
         });
 
@@ -193,6 +208,8 @@ class XRObjectPlacementController {
                 start: {x: number; y: number};
                 previous: {x: number; y: number};
                 current: {x: number; y: number};
+                startMs: number;
+                moved: boolean;
             }
         > = new Map();
         let baseAngle = 0;
@@ -203,13 +220,15 @@ class XRObjectPlacementController {
             e.stopPropagation();
         };
 
-        const onPointerDown = (e: PointerEvent) => {
-            eventDefault(e);
+        const shouldConsumePointerEvent = () => this.rotating || touches.size > 1;
 
+        const onPointerDown = (e: PointerEvent) => {
             touches.set(e.pointerId, {
                 start: { x: e.clientX, y: e.clientY },
                 previous: { x: e.clientX, y: e.clientY },
-                current: { x: e.clientX, y: e.clientY }
+                current: { x: e.clientX, y: e.clientY },
+                startMs: performance.now(),
+                moved: false
             });
 
             if (this.rotating) {
@@ -219,17 +238,23 @@ class XRObjectPlacementController {
             } else {
                 this.rotating = touches.size > 1;
             }
+
+            if (shouldConsumePointerEvent()) {
+                eventDefault(e);
+            }
         };
 
         const onPointerMove = (e: PointerEvent) => {
-            eventDefault(e);
-
             const touch = touches.get(e.pointerId);
             if (touch) {
                 touch.previous.x = touch.current.x;
                 touch.previous.y = touch.current.y;
                 touch.current.x = e.clientX;
                 touch.current.y = e.clientY;
+                const moveDistance = Math.hypot(touch.current.x - touch.start.x, touch.current.y - touch.start.y);
+                if (moveDistance > XR_TAP_MAX_MOVE_PX) {
+                    touch.moved = true;
+                }
             }
 
             if (touches.size === 2) {
@@ -243,16 +268,32 @@ class XRObjectPlacementController {
 
                 this.events.fire('xr:rotate', ((baseAngle + angle) * -180) / Math.PI);
             }
+
+            if (shouldConsumePointerEvent()) {
+                eventDefault(e);
+            }
         };
 
         const onPointerUp = (e: PointerEvent) => {
-            eventDefault(e);
+            const touch = touches.get(e.pointerId);
+            const singleTouchBeforeRelease = touches.size === 1;
 
             if (touches.size === 2) {
                 baseAngle += angle;
             }
 
             touches.delete(e.pointerId);
+            if (touches.size < 2) {
+                this.rotating = false;
+            }
+
+            if (singleTouchBeforeRelease && touch && !touch.moved && performance.now() - touch.startMs <= XR_TAP_MAX_DURATION_MS) {
+                this.events.fire('xr:request-place');
+            }
+
+            if (shouldConsumePointerEvent()) {
+                eventDefault(e);
+            }
         };
 
         const dom = document.createElement('div');
@@ -347,6 +388,23 @@ class XRObjectPlacementController {
             return Number.isFinite(value) && value > 0 ? value : 1;
         };
 
+        const getRightStickX = () => {
+            const inputSources = this.options.xr.input?.inputSources ?? [];
+            const rightHandSource = inputSources.find(source => source.handedness === XRHAND_RIGHT && !!source.gamepad);
+            const fallbackSource = inputSources.find(source => !!source.gamepad);
+            const gamepad = rightHandSource?.gamepad ?? fallbackSource?.gamepad;
+            if (!gamepad?.axes?.length) return 0;
+
+            const raw = Number(gamepad.axes[2] ?? gamepad.axes[0] ?? 0);
+            if (!Number.isFinite(raw)) return 0;
+
+            const abs = Math.abs(raw);
+            if (abs < XR_RIGHT_STICK_DEADZONE) return 0;
+
+            const normalized = (abs - XR_RIGHT_STICK_DEADZONE) / (1 - XR_RIGHT_STICK_DEADZONE);
+            return Math.sign(raw) * Math.max(0, Math.min(1, normalized));
+        };
+
         const updateBound = () => {
             if (meshInstances.length) {
                 bound.copy(meshInstances[0].aabb);
@@ -411,6 +469,16 @@ class XRObjectPlacementController {
             pos.update(dt);
             rot.update(dt);
             scale.update(dt);
+
+            if (!hovering) {
+                const stickX = getRightStickX();
+                if (stickX !== 0) {
+                    const nextY = mod(rot.value.y + stickX * XR_RIGHT_STICK_ROTATE_SPEED_DEG * dt, 360);
+                    rot.value.y = nextY;
+                    rot.source.y = nextY;
+                    rot.target.y = nextY;
+                }
+            }
         });
 
         xr.on('update', () => {

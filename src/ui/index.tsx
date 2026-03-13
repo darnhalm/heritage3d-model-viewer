@@ -82,7 +82,7 @@ class App extends React.Component<{ observer: Observer }> {
         const embed = this.state?.ui?.embed;
         const poiList = this.getPoiList();
         const activePoiId = this.state?.poi?.activeId || '';
-        const activePoiIndex = poiList.findIndex((poi) => String(poi.id) === activePoiId);
+        const activePoiIndex = poiList.findIndex(poi => String(poi.id) === activePoiId);
         const currentPoiIndex = activePoiIndex >= 0 ? activePoiIndex : (poiList.length > 0 ? 0 : -1);
         const currentPoi = currentPoiIndex >= 0 ? poiList[currentPoiIndex] : null;
         const showLeftPanel = !(embed?.enabled && !embed?.panel);
