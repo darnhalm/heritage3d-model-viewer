@@ -404,6 +404,8 @@ class Viewer {
 
     private static readonly SETTINGS_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024; // 10 MB
 
+    private static readonly SKYBOX_FILE_SIZE_LIMIT_BYTES = 50 * 1024 * 1024; // 50 MB
+
     private static readonly REMOTE_HEAD_TIMEOUT_MS = 5000;
 
     canvas: HTMLCanvasElement;
@@ -1286,6 +1288,10 @@ class Viewer {
 
     updatePoiDuration(id: string, duration: number) {
         this.poiController?.updatePoiDuration(id, duration);
+    }
+
+    updatePoiHoldTime(id: string, holdTime: number) {
+        this.poiController?.updatePoiHoldTime(id, holdTime);
     }
 
     capturePoiCameraView(id: string) {
@@ -2836,7 +2842,7 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    flyToCameraView(view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }, duration = 0.8) {
+    flyToCameraView(view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }, duration = 1.0) {
         const endPosition = new Vec3(view.position[0], view.position[1], view.position[2]);
         const endFocus = new Vec3(view.focus[0], view.focus[1], view.focus[2]);
         const endFov = typeof view.fov === 'number' && Number.isFinite(view.fov) ? view.fov : this.camera.camera.fov;
@@ -3304,6 +3310,12 @@ class Viewer {
             if (this.isViewerSettingsFilename(filename) &&
                 sizeBytes > Viewer.SETTINGS_FILE_SIZE_LIMIT_BYTES) {
                 rejectedFiles.push(this.formatLimitMessage('File "{filename}" ({size}) exceeds settings limit of 10 MB.', filename, sizeBytes));
+                return false;
+            }
+
+            const isKnownType = this.isModelFilename(filename) || this.isGSplatFilename(filename) || this.isViewerSettingsFilename(filename);
+            if (!isKnownType && sizeBytes > Viewer.SKYBOX_FILE_SIZE_LIMIT_BYTES) {
+                rejectedFiles.push(this.formatLimitMessage('File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.', filename, sizeBytes));
                 return false;
             }
 

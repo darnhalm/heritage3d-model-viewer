@@ -231,6 +231,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Import failed': 'Import failed',
         'Enter API URL': 'Enter API URL',
         'File "{filename}" ({size}) exceeds model limit of 1 GB.': 'File "{filename}" ({size}) exceeds model limit of 1 GB.',
+        'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.': 'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.',
         'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'File "{filename}" ({size}) exceeds settings limit of 10 MB.'
     },
     ru: {
@@ -463,6 +464,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Import failed': 'Ошибка импорта',
         'Enter API URL': 'Введите URL API',
         'File "{filename}" ({size}) exceeds model limit of 1 GB.': 'Файл "{filename}" ({size}) превышает лимит модели 1 ГБ.',
+        'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.': 'Файл "{filename}" ({size}) превышает лимит HDRI/Skybox в 50 МБ.',
         'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'Файл "{filename}" ({size}) превышает лимит файла настроек 10 МБ.'
     },
     zh: {
@@ -695,6 +697,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Import failed': '导入失败',
         'Enter API URL': '请输入 API URL',
         'File "{filename}" ({size}) exceeds model limit of 1 GB.': '文件“{filename}”（{size}）超过模型大小上限 1 GB。',
+        'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.': '文件“{filename}”（{size}）超过 HDRI/Skybox 大小上限 50 MB。',
         'File "{filename}" ({size}) exceeds settings limit of 10 MB.': '文件“{filename}”（{size}）超过设置文件大小上限 10 MB。'
     }
 };

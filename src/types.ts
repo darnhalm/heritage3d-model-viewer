@@ -205,7 +205,8 @@ export interface ObserverData {
     poi: {
         enabled: boolean,
         activeId?: string,
-        list: string
+        list: string,
+        playing?: boolean
     },
     measure: {
         enabled: boolean,

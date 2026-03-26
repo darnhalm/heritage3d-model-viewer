@@ -15,6 +15,8 @@ type PoiUiEntry = {
     id: string;
     number: number;
     title?: string;
+    duration?: number;
+    holdTime?: number;
 };
 
 class App extends React.Component<{ observer: Observer }> {
@@ -23,6 +25,13 @@ class App extends React.Component<{ observer: Observer }> {
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
 
     private stateUpdateRaf: number | null = null;
+    private poiSlideshowTimeout: ReturnType<typeof setTimeout> | null = null;
+    private poiProgressRaf: number | null = null;
+
+    private currentPoiStartTime: number = 0;
+    private currentPoiDuration: number = 0;
+    private currentPoiHoldTime: number = 0;
+    private activePoiId: string = '';
 
     constructor(props: { observer: Observer }) {
         super(props);
@@ -38,12 +47,55 @@ class App extends React.Component<{ observer: Observer }> {
                 this.setState(this._retrieveState());
             });
         });
+
+        this.updatePoiProgress();
     }
+
+    private updatePoiProgress = () => {
+        if (!this.state?.poi?.playing || !this.activePoiId) {
+            document.querySelectorAll('.poi-progress-transition, .poi-progress-hold').forEach(el => {
+                (el as HTMLElement).style.width = '0%';
+            });
+            this.poiProgressRaf = requestAnimationFrame(this.updatePoiProgress);
+            return;
+        }
+
+        const elapsed = (Date.now() - this.currentPoiStartTime) / 1000;
+        const duration = this.currentPoiDuration;
+        const holdTime = this.currentPoiHoldTime;
+        
+        const transitionProgress = Math.min(100, Math.max(0, duration > 0 ? (elapsed / duration) * 100 : 100));
+        let holdProgress = 0;
+        if (elapsed > duration && holdTime > 0) {
+            holdProgress = Math.min(100, Math.max(0, ((elapsed - duration) / holdTime) * 100));
+        }
+
+        document.querySelectorAll('.poi-progress-transition').forEach(el => {
+            const castEl = el as HTMLElement;
+            if (el.id === `poi-progress-transition-${this.activePoiId}`) castEl.style.width = `${transitionProgress}%`;
+            else castEl.style.width = '0%';
+        });
+        document.querySelectorAll('.poi-progress-hold').forEach(el => {
+            const castEl = el as HTMLElement;
+            if (el.id === `poi-progress-hold-${this.activePoiId}`) castEl.style.width = `${holdProgress}%`;
+            else castEl.style.width = '0%';
+        });
+
+        this.poiProgressRaf = requestAnimationFrame(this.updatePoiProgress);
+    };
 
     componentWillUnmount(): void {
         if (this.stateUpdateRaf !== null) {
             window.cancelAnimationFrame(this.stateUpdateRaf);
             this.stateUpdateRaf = null;
+        }
+        if (this.poiSlideshowTimeout !== null) {
+            clearTimeout(this.poiSlideshowTimeout);
+            this.poiSlideshowTimeout = null;
+        }
+        if (this.poiProgressRaf !== null) {
+            cancelAnimationFrame(this.poiProgressRaf);
+            this.poiProgressRaf = null;
         }
     }
 
@@ -51,7 +103,7 @@ class App extends React.Component<{ observer: Observer }> {
         return this.props.observer.json() as ObserverData;
     };
 
-    _setStateProperty = (path: string, value: string) => {
+    _setStateProperty = (path: string, value: any) => {
         this.props.observer.set(path, value);
     };
 
@@ -68,11 +120,44 @@ class App extends React.Component<{ observer: Observer }> {
         const prevPoiList = prevState?.poi?.list ?? '[]';
         const poiList = this.state?.poi?.list ?? '[]';
         const activeId = this.state?.poi?.activeId ?? '';
+        const prevActiveId = prevState?.poi?.activeId ?? '';
+        const playing = this.state?.poi?.playing ?? false;
+        const prevPlaying = prevState?.poi?.playing ?? false;
 
         if (poiList !== prevPoiList && poiList !== '[]' && !activeId) {
             const firstPoi = this.getPoiList()[0];
             if (firstPoi?.id) {
                 window.viewer?.focusPoi?.(String(firstPoi.id));
+            }
+        }
+
+        if (playing && (!prevPlaying || activeId !== prevActiveId)) {
+            if (this.poiSlideshowTimeout !== null) {
+                clearTimeout(this.poiSlideshowTimeout);
+            }
+            
+            const list = this.getPoiList();
+            const currentPoi = list.find(poi => String(poi.id) === activeId);
+            const duration = currentPoi?.duration ?? 1.0;
+            const holdTime = currentPoi?.holdTime ?? 1.0;
+
+            this.currentPoiStartTime = Date.now();
+            this.currentPoiDuration = duration;
+            this.currentPoiHoldTime = holdTime;
+            this.activePoiId = activeId;
+
+            this.poiSlideshowTimeout = setTimeout(() => {
+                const currentIndex = list.findIndex(poi => String(poi.id) === activeId);
+                const nextIndex = currentIndex < list.length - 1 ? currentIndex + 1 : 0;
+                const nextPoi = list[nextIndex];
+                if (nextPoi?.id) {
+                    window.viewer?.focusPoi?.(String(nextPoi.id));
+                }
+            }, (duration + holdTime) * 1000);
+        } else if (!playing && prevPlaying) {
+            if (this.poiSlideshowTimeout !== null) {
+                clearTimeout(this.poiSlideshowTimeout);
+                this.poiSlideshowTimeout = null;
             }
         }
     }
@@ -154,6 +239,16 @@ class App extends React.Component<{ observer: Observer }> {
                 {showSelectedNode && <SelectedNode observerData={this.state} setProperty={this._setStateProperty} />}
                 {showPoiPlayer && currentPoi && (
                     <div id='poi-player-overlay'>
+                        <button
+                            type='button'
+                            className='poi-player-button poi-player-play-button'
+                            onClick={() => {
+                                this._setStateProperty('poi.playing', !(this.state?.poi?.playing ?? false));
+                            }}
+                            title={this.state?.poi?.playing ? 'Pause' : 'Play'}
+                        >
+                            {this.state?.poi?.playing ? '⏸' : '►'}
+                        </button>
                         <button
                             type='button'
                             className='poi-player-button'

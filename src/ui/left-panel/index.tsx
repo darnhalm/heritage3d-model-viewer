@@ -13,6 +13,7 @@ type PoiItem = {
     color?: string;
     description?: string;
     duration?: number;
+    holdTime?: number;
     camera?: unknown;
 };
 
@@ -43,6 +44,7 @@ type ViewerApi = {
     capturePoiCameraView?: (id: string) => void;
     clearPoiCameraView?: (id: string) => void;
     updatePoiDuration?: (id: string, value: number) => void;
+    updatePoiHoldTime?: (id: string, value: number) => void;
     removePoi?: (id: string) => void;
 };
 
@@ -117,6 +119,7 @@ const parsePoiList = (raw: string | undefined): PoiItem[] => parseJsonArray<PoiI
         color: typeof candidate.color === 'string' ? candidate.color : undefined,
         description: typeof candidate.description === 'string' ? candidate.description : undefined,
         duration: typeof candidate.duration === 'number' ? candidate.duration : undefined,
+        holdTime: typeof candidate.holdTime === 'number' ? candidate.holdTime : undefined,
         camera: candidate.camera
     };
 });
@@ -1201,17 +1204,41 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 ) : null}
                                             </div>
                                             <div className='poi-list-actions'>
-                                                <div className='poi-list-duration'>
-                                                    <img src='static/icons/poi-duration.svg' alt='' className='poi-list-duration-icon' />
-                                                    <NakedSlider
-                                                        class='poi-list-duration-slider'
-                                                        width={120}
-                                                        precision={1}
-                                                        min={0.1}
-                                                        max={10}
-                                                        value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : 0.8}
-                                                        setProperty={(value: number) => getViewer()?.updatePoiDuration?.(String(poi.id), value)}
-                                                    />
+                                                <div className='poi-list-sliders' style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <div className='poi-list-duration'>
+                                                        <span title={t('Transition', lang)} style={{ width: 24, display: 'inline-block', textAlign: 'center' }}>
+                                                            <img src='static/icons/poi-transition.svg' alt='' className='poi-list-duration-icon' style={{ margin: 0 }} />
+                                                        </span>
+                                                        <div style={{ position: 'relative', width: 120 }}>
+                                                            <div id={`poi-progress-transition-${String(poi.id)}`} className='poi-progress-transition' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', backgroundColor: 'rgba(50, 200, 255, 0.25)', pointerEvents: 'none', borderRadius: 2 }} />
+                                                            <NakedSlider
+                                                                class='poi-list-duration-slider'
+                                                                width={120}
+                                                                precision={1}
+                                                                min={0}
+                                                                max={10}
+                                                                value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : 1.0}
+                                                                setProperty={(value: number) => getViewer()?.updatePoiDuration?.(String(poi.id), value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <div className='poi-list-duration'>
+                                                        <span title={t('Hold time', lang)} style={{ width: 24, display: 'inline-block', textAlign: 'center' }}>
+                                                            <img src='static/icons/poi-duration.svg' alt='' className='poi-list-duration-icon' style={{ margin: 0 }} />
+                                                        </span>
+                                                        <div style={{ position: 'relative', width: 120 }}>
+                                                            <div id={`poi-progress-hold-${String(poi.id)}`} className='poi-progress-hold' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', backgroundColor: 'rgba(50, 255, 150, 0.25)', pointerEvents: 'none', borderRadius: 2 }} />
+                                                            <NakedSlider
+                                                                class='poi-list-duration-slider'
+                                                                width={120}
+                                                                precision={1}
+                                                                min={0}
+                                                                max={60}
+                                                                value={Number.isFinite(Number(poi.holdTime)) ? Number(poi.holdTime) : 1.0}
+                                                                setProperty={(value: number) => getViewer()?.updatePoiHoldTime?.(String(poi.id), value)}
+                                                            />
+                                                        </div>
+                                                    </div>
                                                 </div>
                                                 <button
                                                     type='button'
