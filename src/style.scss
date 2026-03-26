@@ -1748,6 +1748,26 @@ input {
     &.left-panel-tab-metadata {
         background-image: url(./static/icons/id-icon.svg);
     }
+
+    &.left-panel-tab-effects {
+        background-image: none;
+        position: relative;
+
+        .left-panel-tab-effects-icon {
+            position: absolute;
+            left: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 15px;
+            width: 15px;
+            height: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            color: inherit;
+        }
+    }
 }
 
 .left-panel-tab-content {

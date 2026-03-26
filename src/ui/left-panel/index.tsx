@@ -188,7 +188,7 @@ const exportViewerSettings = (observerData: ObserverData) => {
     URL.revokeObjectURL(url);
 };
 
-type LeftPanelTab = 'scene' | 'alignment' | 'materials' | 'poi' | 'metadata';
+type LeftPanelTab = 'scene' | 'alignment' | 'materials' | 'poi' | 'metadata' | 'effects';
 
 const DUBLIN_CORE_FIELDS: Array<{ key: string; labelKey: string }> = [
     { key: 'title', labelKey: 'Title' }, { key: 'creator', labelKey: 'Creator' }, { key: 'subject', labelKey: 'Subject' },
@@ -941,6 +941,16 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             {t('Metadata (Dublin Core)', lang)}
                         </button>
                     )}
+                    {!embedEnabled && (
+                        <button
+                            type='button'
+                            className={`left-panel-tab left-panel-tab-effects${tab === 'effects' ? ' active' : ''}`}
+                            onClick={() => this.setState({ tab: 'effects' })}
+                        >
+                            <span className='material-symbols-outlined left-panel-tab-effects-icon' aria-hidden='true'>wand_stars</span>
+                            {t('Effects', lang)}
+                        </button>
+                    )}
                 </div>
 
                 <div className='left-panel-tab-content'>
@@ -1280,6 +1290,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                         </Container>
                     )}
                     {tab === 'metadata' && <MetadataPanel observerData={observerData} setProperty={setProperty} />}
+                    {tab === 'effects' && (
+                        <Container id='effects-panel' class='tab-panel' />
+                    )}
                 </div>
 
                 <div id='scene-scrolly-bits' />
