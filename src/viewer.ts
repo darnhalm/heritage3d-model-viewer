@@ -77,7 +77,8 @@ import {
     TranslateGizmo,
     Vec3,
     Vec2,
-    CameraComponent
+    CameraComponent,
+    PostEffect
 } from 'playcanvas';
 
 import { App } from './app';
@@ -91,10 +92,19 @@ import { PngExporter } from './png-exporter';
 import { ShadowCatcher } from './shadow-catcher';
 import arCloseImage from './svg/ar-close.svg';
 import arModeImage from './svg/ar-mode.svg';
-import { File, HierarchyNode, MorphTargetData, SceneCamera } from './types';
+import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
+import { createLut1DTextureFromCubeData, createLutTextureFromCubeData } from './viewer/lut/createLutTexture';
+import { parseCubeLut } from './viewer/lut/parseCubeLut';
+import { BloomEffect } from './viewer/posteffects/BloomEffect';
+import { BokehEffect } from './viewer/posteffects/BokehEffect';
+import { BrightnessContrastEffect } from './viewer/posteffects/BrightnessContrastEffect';
+import { FXAAEffect } from './viewer/posteffects/FXAAEffect';
+import { HueSaturationEffect } from './viewer/posteffects/HueSaturationEffect';
+import { LutEffect } from './viewer/posteffects/LutEffect';
+import { SSAOEffect } from './viewer/posteffects/SSAOEffect';
 import { XRObjectPlacementController } from './xr-mode';
 import { MeshoptDecoder } from '../lib/meshopt_decoder.module.js';
 
@@ -571,6 +581,22 @@ class Viewer {
 
     multiframeBusy = false;
 
+    private postEffectsBloom!: BloomEffect;
+
+    private postEffectsSsao!: SSAOEffect;
+
+    private postEffectsBokeh!: BokehEffect;
+
+    private postEffectsBrightnessContrast!: BrightnessContrastEffect;
+
+    private postEffectsHueSaturation!: HueSaturationEffect;
+
+    private postEffectsFxaa!: FXAAEffect;
+
+    private lutEffect!: LutEffect;
+
+    private lutTextureResource: Texture | null = null;
+
     private isCapturingCoverImage = false;
 
     picker: Picker = null;
@@ -937,6 +963,17 @@ class Viewer {
         this.miniStats.enabled = observer.get('debug.stats');
 
         this.observer = observer;
+
+        const gd = app.graphicsDevice;
+        this.postEffectsBloom = new BloomEffect(gd);
+        this.postEffectsSsao = new SSAOEffect(gd);
+        this.postEffectsBokeh = new BokehEffect(gd);
+        this.postEffectsBrightnessContrast = new BrightnessContrastEffect(gd);
+        this.postEffectsHueSaturation = new HueSaturationEffect(gd);
+        this.postEffectsFxaa = new FXAAEffect(gd);
+        this.lutEffect = new LutEffect(gd);
+        this.installPostEffectsObserverBindings();
+
         this.observer.set('debug.texelDensityHeatmap', false);
         this.settingsService = new SettingsService({
             observer: this.observer,
@@ -1265,9 +1302,226 @@ class Viewer {
     destroy() {
         if (this.destroyed) return;
         this.destroyed = true;
+        this.clearPostEffectsQueueOnCamera(this.camera.camera);
+        if (this.activeSceneCamera) {
+            this.clearPostEffectsQueueOnCamera(this.activeSceneCamera);
+        }
+        this.lutTextureResource?.destroy();
+        this.lutTextureResource = null;
+        this.lutEffect.lutTexture = null;
+        this.lutEffect.lutSize = 0;
         this.measurementController?.dispose?.();
         this.poiController?.dispose?.();
         this.selectionController?.dispose?.();
+    }
+
+    /**
+     * Load a 3D LUT from an Iridas/Adobe ASCII .cube file (Effects tab).
+     */
+    loadLutFromCubeFile(domFile: globalThis.File): void {
+        void (async () => {
+            try {
+                const text = await domFile.text();
+                const parsed = parseCubeLut(text);
+                if (parsed.ok === false) {
+                    this.observer.set('ui.error', parsed.reason);
+                    return;
+                }
+                this.lutTextureResource?.destroy();
+                const lut = parsed.lut;
+                let tex: Texture;
+                if (lut.kind === '3d') {
+                    this.lutEffect.lutIs1D = false;
+                    tex = createLutTextureFromCubeData(this.app.graphicsDevice, lut.rgb, lut.size);
+                    this.lutEffect.lutSize = lut.size;
+                } else {
+                    this.lutEffect.lutIs1D = true;
+                    this.lutEffect.lutDomainMin = lut.domainMin;
+                    this.lutEffect.lutDomainMax = lut.domainMax;
+                    this.lutEffect.lutOutputMin = lut.outputMin;
+                    this.lutEffect.lutOutputMax = lut.outputMax;
+                    tex = createLut1DTextureFromCubeData(
+                        this.app.graphicsDevice,
+                        lut.rgb,
+                        lut.size,
+                        lut.outputMin,
+                        lut.outputMax
+                    );
+                    this.lutEffect.lutSize = lut.size;
+                }
+                this.lutTextureResource = tex;
+                this.lutEffect.lutTexture = tex;
+                this.observer.set('posteffects.lut.fileName', domFile.name);
+                this.observer.set('posteffects.lut.enabled', true);
+                this.applyPostEffectsParamsFromObserver();
+                this.rebuildPostEffectsQueue();
+                this.renderNextFrame();
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                this.observer.set('ui.error', msg);
+            }
+        })();
+    }
+
+    clearLut(): void {
+        this.lutTextureResource?.destroy();
+        this.lutTextureResource = null;
+        this.lutEffect.lutTexture = null;
+        this.lutEffect.lutSize = 0;
+        this.lutEffect.lutIs1D = false;
+        this.observer.set('posteffects.lut.fileName', null);
+        this.observer.set('posteffects.lut.enabled', false);
+        this.applyPostEffectsParamsFromObserver();
+        this.rebuildPostEffectsQueue();
+        this.renderNextFrame();
+    }
+
+    private syncLutEffectFromObserver(): void {
+        const enabled = !!this.observer.get('posteffects.lut.enabled');
+        const intensity = Math.max(0, Math.min(1, Number(this.observer.get('posteffects.lut.intensity') ?? 1)));
+        this.lutEffect.intensity = enabled ? intensity : 0;
+    }
+
+    /** Camera that actually draws the viewport (glTF scene camera or viewer camera). Post-effects must attach here. */
+    private getRenderingCamera(): CameraComponent {
+        return this.activeSceneCamera ?? this.camera.camera;
+    }
+
+    private clearPostEffectsQueueOnCamera(cam: CameraComponent): void {
+        const q = cam.postEffects;
+        while (q.effects.length > 0) {
+            q.removeEffect(q.effects[0].effect);
+        }
+    }
+
+    private applyPostEffectsParamsFromObserver(): void {
+        const pe = this.observer.get('posteffects') as ObserverData['posteffects'] | undefined;
+        const rc = this.getRenderingCamera();
+        if (!pe) {
+            return;
+        }
+
+        this.postEffectsBloom.bloomThreshold = Math.max(0, Math.min(1, Number(pe.bloom?.threshold ?? 0.25)));
+        this.postEffectsBloom.blurAmount = Math.max(1, Math.min(20, Number(pe.bloom?.blurAmount ?? 4)));
+        this.postEffectsBloom.bloomIntensity = Math.max(0, Math.min(5, Number(pe.bloom?.intensity ?? 1.25)));
+
+        this.postEffectsSsao.radius = Math.max(0.01, Math.min(1, Number(pe.ssao?.radius ?? 0.2)));
+        this.postEffectsSsao.samples = Math.max(4, Math.min(64, Math.round(Number(pe.ssao?.samples ?? 20))));
+        const ssaoInt = Number(pe.ssao?.intensity ?? 2);
+        this.postEffectsSsao.brightness = Math.max(0, Math.min(1, 1 - Math.min(1, ssaoInt / 5)));
+        this.postEffectsSsao.cameraFarClip = rc.farClip;
+
+        this.postEffectsBokeh.maxBlur = Math.max(0.001, Math.min(0.15, Number(pe.bokeh?.maxBlur ?? 0.02)));
+        this.postEffectsBokeh.aperture = Math.max(0.01, Math.min(5, Number(pe.bokeh?.aperture ?? 1)));
+        this.postEffectsBokeh.focus = Math.max(0.01, Math.min(5, Number(pe.bokeh?.focus ?? 1)));
+
+        this.postEffectsBrightnessContrast.brightness = Math.max(-1, Math.min(1, Number(pe.brightnessContrast?.brightness ?? 0)));
+        this.postEffectsBrightnessContrast.contrast = Math.max(-1, Math.min(1, Number(pe.brightnessContrast?.contrast ?? 0)));
+
+        this.postEffectsHueSaturation.hue = Math.max(-1, Math.min(1, Number(pe.hueSaturation?.hue ?? 0)));
+        this.postEffectsHueSaturation.saturation = Math.max(-1, Math.min(1, Number(pe.hueSaturation?.saturation ?? 0)));
+
+        this.syncLutEffectFromObserver();
+    }
+
+    private rebuildPostEffectsQueue(): void {
+        this.clearPostEffectsQueueOnCamera(this.camera.camera);
+        if (this.activeSceneCamera) {
+            this.clearPostEffectsQueueOnCamera(this.activeSceneCamera);
+        }
+        this.applyPostEffectsParamsFromObserver();
+
+        const cam = this.getRenderingCamera();
+        /* Post stack needs a render target; scene camera may hold the shared viewer RT when orbit cam is off */
+        if (!cam.renderTarget) {
+            if (this.multiframe) {
+                this.multiframe.camera = cam;
+            }
+            return;
+        }
+        const pe = this.observer.get('posteffects') as ObserverData['posteffects'] | undefined;
+        if (!pe) {
+            if (this.multiframe) {
+                this.multiframe.camera = cam;
+            }
+            return;
+        }
+        const add = (eff: PostEffect) => {
+            cam.postEffects.addEffect(eff);
+        };
+        if (pe.ssao?.enabled) {
+            add(this.postEffectsSsao);
+        }
+        if (pe.bloom?.enabled) {
+            add(this.postEffectsBloom);
+        }
+        if (pe.bokeh?.enabled) {
+            add(this.postEffectsBokeh);
+        }
+        if (pe.brightnessContrast?.enabled) {
+            add(this.postEffectsBrightnessContrast);
+        }
+        if (pe.hueSaturation?.enabled) {
+            add(this.postEffectsHueSaturation);
+        }
+        if (this.lutEffect.lutTexture && pe.lut?.enabled && pe.lut?.fileName) {
+            add(this.lutEffect);
+        }
+        if (pe.fxaa?.enabled) {
+            add(this.postEffectsFxaa);
+        }
+        if (this.multiframe) {
+            this.multiframe.camera = cam;
+        }
+    }
+
+    /**
+     * Post-effects: see docs/POST-EFFECTS.md. With `app.autoRender === false`, every path that
+     * calls `rebuildPostEffectsQueue()` must also call `renderNextFrame()` or the canvas may not
+     * redraw until the camera moves.
+     */
+    private installPostEffectsObserverBindings(): void {
+        const paths = [
+            'posteffects.bloom.enabled',
+            'posteffects.bloom.intensity',
+            'posteffects.bloom.threshold',
+            'posteffects.bloom.blurAmount',
+            'posteffects.ssao.enabled',
+            'posteffects.ssao.radius',
+            'posteffects.ssao.intensity',
+            'posteffects.ssao.samples',
+            'posteffects.bokeh.enabled',
+            'posteffects.bokeh.aperture',
+            'posteffects.bokeh.maxBlur',
+            'posteffects.bokeh.focus',
+            'posteffects.brightnessContrast.enabled',
+            'posteffects.brightnessContrast.brightness',
+            'posteffects.brightnessContrast.contrast',
+            'posteffects.hueSaturation.enabled',
+            'posteffects.hueSaturation.hue',
+            'posteffects.hueSaturation.saturation',
+            'posteffects.lut.enabled',
+            'posteffects.lut.intensity',
+            'posteffects.fxaa.enabled'
+        ];
+        for (const p of paths) {
+            this.observer.on(`${p}:set`, () => {
+                this.applyPostEffectsParamsFromObserver();
+                this.rebuildPostEffectsQueue();
+                this.renderNextFrame();
+            });
+        }
+        /* Whole-object set (mergePosteffectsDefaults, localStorage) does not fire leaf :set events */
+        this.observer.on('posteffects:set', () => {
+            this.applyPostEffectsParamsFromObserver();
+            this.rebuildPostEffectsQueue();
+            this.renderNextFrame();
+        });
+        this.observer.on('posteffects.lut.fileName:set', () => {
+            this.applyPostEffectsParamsFromObserver();
+            this.rebuildPostEffectsQueue();
+            this.renderNextFrame();
+        });
     }
 
     removePoi(id: string) {
@@ -1553,6 +1807,8 @@ class Viewer {
         this.controlEventKeys.forEach((e) => {
             this.observer.set(e, this.observer.get(e), false, false, true);
         });
+        this.rebuildPostEffectsQueue();
+        this.renderNextFrame();
     }
 
     private clearSkybox() {
@@ -1740,6 +1996,13 @@ class Viewer {
 
     destroyRenderTargets() {
         const rt = this.camera.camera.renderTarget;
+        if (rt && this.activeSceneCamera && this.activeSceneCamera.renderTarget === rt) {
+            this.activeSceneCamera.renderTarget = null;
+        }
+        this.clearPostEffectsQueueOnCamera(this.camera.camera);
+        if (this.activeSceneCamera) {
+            this.clearPostEffectsQueueOnCamera(this.activeSceneCamera);
+        }
         if (rt) {
             rt.colorBuffer?.destroy();
             rt.depthBuffer?.destroy();
@@ -1791,6 +2054,10 @@ class Viewer {
             autoResolve: false
         });
         this.camera.camera.renderTarget = renderTarget;
+        if (this.activeSceneCamera) {
+            this.activeSceneCamera.renderTarget = renderTarget;
+        }
+        this.rebuildPostEffectsQueue();
     }
 
     // reset the viewer, unloading resources
@@ -3653,6 +3920,7 @@ class Viewer {
             this.cameraControls.enabled = true;
         }
 
+        this.rebuildPostEffectsQueue();
         this.renderNextFrame();
     }
 
@@ -4847,9 +5115,12 @@ class Viewer {
             this.initSceneBounds();
         }
 
-        // resolve the (possibly multisampled) render target
-        const rt = this.camera.camera.renderTarget;
-        if (rt.samples > 1) {
+        // resolve the (possibly multisampled) render target — use post-effect output when the queue is active
+        const cam = this.getRenderingCamera();
+        const pq = cam.postEffects;
+        const dest = pq.enabled && pq.effects.length > 0 ? pq.destinationRenderTarget : null;
+        const rt = dest ?? cam.renderTarget;
+        if (rt && rt.samples > 1) {
             rt.resolve();
         }
 

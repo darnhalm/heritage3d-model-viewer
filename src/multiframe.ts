@@ -270,7 +270,12 @@ class Multiframe {
     }
 
     get sourceTex() {
-        return this.camera.renderTarget.colorBuffer;
+        const cam = this.camera;
+        const pq = cam.postEffects;
+        if (pq.enabled && pq.effects.length > 0 && pq.destinationRenderTarget) {
+            return pq.destinationRenderTarget.colorBuffer;
+        }
+        return cam.renderTarget.colorBuffer;
     }
 
     // set the samples array which contains one Vec3 per multiframe sample

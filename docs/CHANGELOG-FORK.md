@@ -101,3 +101,11 @@
 | 3 | Автоподхват настроек — доверие origin модели | `fetch` + Same-Origin policy | Настройки загружаются с того же origin, что и модель; злонамеренный CDN может подставить свои настройки | Информирование пользователя; опция отключения автоподхвата для недоверенных источников |
 | 4 | `measure.unitScale` без валидации из JSON | `applyViewerSettings` + числовые значения | Значения `Infinity`, `NaN`, отрицательные числа из JSON передаются в observer без проверки | В `applyViewerSettings` для `measure.unitScale` ограничивать: `clamp(Number(value), 0.000001, 1e6)` с fallback на 1 |
 | 5 | Share URL — спецсимволы в query string | Формирование URL + `encodeURIComponent` | `sceneData.urls` с `&`, `=`, `?` ломают структуру `?load=url1&load=url2` | Использовать `encodeURIComponent(url)` для каждого значения `load=` |
+
+---
+
+## Post-processing (вкладка Effects)
+
+**Документация для разработчиков:** [POST-EFFECTS.md](./POST-EFFECTS.md).
+
+Кратко: при `autoRender === false` после изменения очереди/параметров post-effects нужно вызывать **`renderNextFrame()`**, иначе при неподвижной камере кадр не перерисуется и эффекты кажутся «мёртвыми».

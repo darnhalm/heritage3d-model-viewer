@@ -220,6 +220,15 @@ export interface ObserverData {
         /** Known real-world distance (in current unit) for recalibrating unitScale. */
         knownDistance: number
     },
+    posteffects?: {
+        bloom: { enabled: boolean; intensity: number; threshold: number; blurAmount: number };
+        ssao: { enabled: boolean; radius: number; intensity: number; samples: number };
+        bokeh: { enabled: boolean; aperture: number; maxBlur: number; focus: number };
+        brightnessContrast: { enabled: boolean; brightness: number; contrast: number };
+        hueSaturation: { enabled: boolean; hue: number; saturation: number };
+        lut: { enabled: boolean; intensity: number; fileName: string | null };
+        fxaa: { enabled: boolean };
+    },
     enableWebGPU: boolean,
     centerScene: boolean,
     /** Dublin Core metadata */

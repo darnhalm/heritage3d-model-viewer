@@ -273,6 +273,44 @@ const observerData: ObserverData = {
         pointCount: 0,
         knownDistance: 0
     },
+    posteffects: {
+        bloom: {
+            enabled: false,
+            intensity: 1.25,
+            threshold: 0.25,
+            blurAmount: 4
+        },
+        ssao: {
+            enabled: false,
+            radius: 0.2,
+            intensity: 2,
+            samples: 20
+        },
+        bokeh: {
+            enabled: false,
+            aperture: 1,
+            maxBlur: 0.02,
+            focus: 1
+        },
+        brightnessContrast: {
+            enabled: false,
+            brightness: 0,
+            contrast: 0
+        },
+        hueSaturation: {
+            enabled: false,
+            hue: 0,
+            saturation: 0
+        },
+        lut: {
+            enabled: false,
+            intensity: 1,
+            fileName: null
+        },
+        fxaa: {
+            enabled: false
+        }
+    },
     morphs: null,
     enableWebGPU: false,
     centerScene: false,
@@ -298,6 +336,31 @@ const observerData: ObserverData = {
         isMuseumItem: false,
         goskatalogLink: ''
     }
+};
+
+/** Merge saved posteffects with defaults so keys (e.g. lut) exist after partial localStorage load. */
+const mergePosteffectsDefaults = (observer: Observer) => {
+    const d = observerData.posteffects;
+    const stored = observer.get('posteffects') as ObserverData['posteffects'] | undefined;
+    const mergeSec = <K extends keyof typeof d>(key: K) => ({
+        ...d[key],
+        ...(typeof stored?.[key] === 'object' && stored[key] !== null && !Array.isArray(stored[key])
+            ? (stored[key] as object)
+            : {})
+    });
+    if (!stored || typeof stored !== 'object') {
+        observer.set('posteffects', d);
+        return;
+    }
+    observer.set('posteffects', {
+        bloom: mergeSec('bloom'),
+        ssao: mergeSec('ssao'),
+        bokeh: mergeSec('bokeh'),
+        brightnessContrast: mergeSec('brightnessContrast'),
+        hueSaturation: mergeSec('hueSaturation'),
+        lut: mergeSec('lut'),
+        fxaa: mergeSec('fxaa')
+    });
 };
 
 const saveOptions = (observer: Observer, name: string) => {
@@ -425,6 +488,7 @@ const main = () => {
     if (!url.searchParams.has('default')) {
         // handle options
         loadOptions(observer, 'uistate', skyboxUrls);
+        mergePosteffectsDefaults(observer);
 
         observer.on('*:set', () => {
             saveOptions(observer, 'uistate');

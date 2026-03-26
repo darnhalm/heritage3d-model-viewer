@@ -75,6 +75,8 @@ Open a browser and navigate to http://localhost:3000.
 
 N.B. To load local models run `npx server --cors` in the directory containing the model (disables CORS).
 
+This fork adds developer notes under `docs/` (for example [`docs/POST-EFFECTS.md`](docs/POST-EFFECTS.md) — post-processing and the `autoRender` / `renderNextFrame` contract).
+
 ## Library integration testing
 
 The Model Viewer is built on the following open source libraries:

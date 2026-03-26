@@ -5,6 +5,7 @@ import { extract } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
+import PostEffectsPanel from './PostEffectsPanel';
 
 type PoiItem = {
     id: string;
@@ -679,7 +680,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata', 'posteffects'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) ||
@@ -1291,7 +1292,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     )}
                     {tab === 'metadata' && <MetadataPanel observerData={observerData} setProperty={setProperty} />}
                     {tab === 'effects' && (
-                        <Container id='effects-panel' class='tab-panel' />
+                        <Container id='effects-panel' class='tab-panel'>
+                            <PostEffectsPanel observerData={observerData} setProperty={setProperty} />
+                        </Container>
                     )}
                 </div>
 
