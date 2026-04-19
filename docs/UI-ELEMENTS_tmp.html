@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>UI-ELEMENTS.md</title>
+    <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+    
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+html,footer,header{
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Custom MD PDF CSS
+ */
+html,footer,header{
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+
+ }
+body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+<link rel="stylesheet" href="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/R%3A%5C2.Travail%5C1.Enseignement%5CCours%5C_1.Outils%5C2.Developpement%5C1.SCSS%5Cmain.css" type="text/css"><link rel="stylesheet" href="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/D%3A%5Crdaros%5CCours%5C_1.Outils%5C2.Developpement%5C1.SCSS%5Cmain.css" type="text/css">
+</head>
+
+<body>
+    <h1 id="heritage3d-viewer--%D0%B4%D0%BE%D0%BA%D1%83%D0%BC%D0%B5%D0%BD%D1%82%D0%B0%D1%86%D0%B8%D1%8F-%D0%BF%D0%BE%D0%BB%D1%8C%D0%B7%D0%BE%D0%B2%D0%B0%D1%82%D0%B5%D0%BB%D1%8C%D1%81%D0%BA%D0%BE%D0%B3%D0%BE-%D0%B8%D0%BD%D1%82%D0%B5%D1%80%D1%84%D0%B5%D0%B9%D1%81%D0%B0">Heritage3D Viewer — Документация пользовательского интерфейса</h1>
+<blockquote>
+<p>Открыть preview в Cursor/VS Code: <strong>Cmd+Shift+V</strong></p>
+</blockquote>
+<hr>
+<h2 id="%D0%B0%D1%80%D1%85%D0%B8%D1%82%D0%B5%D0%BA%D1%82%D1%83%D1%80%D0%B0-ui">Архитектура UI</h2>
+<pre class="hljs"><code><div>App (ui/index.tsx)
+├── LeftPanel (left-panel/index.tsx)
+│   ├── CameraPanel
+│   ├── SkyboxPanel
+│   ├── LightPanel
+│   ├── SettingsPanel
+│   ├── AlignmentPanel
+│   ├── MaterialsTab
+│   ├── PoiPanel
+│   ├── MetadataPanel
+│   └── EffectsPanel (пустая)
+├── PopupPanel (popup-panel/)
+│   ├── InfoPanel
+│   ├── MeasurementsPanel
+│   ├── ViewPanel
+│   └── IDPanel
+├── LoadControls
+├── SelectedNode
+└── ErrorBox / WarningsBox
+</div></code></pre>
+<hr>
+<h2 id="1-%D0%BB%D0%B5%D0%B2%D0%B0%D1%8F-%D0%BF%D0%B0%D0%BD%D0%B5%D0%BB%D1%8C-srcuileft-panelindextsx">1. Левая панель (<code>src/ui/left-panel/index.tsx</code>)</h2>
+<p>Сворачиваемая панель слева. Переключается кнопкой с логотипом Heritage3D (<code>#panel-toggle</code>).</p>
+<h3 id="11-%D0%B2%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B8">1.1 Вкладки</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Иконка</th>
+<th>Вкладка</th>
+<th>CSS класс</th>
+<th>Условие</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/tab-settings-icon.png" alt=""></td>
+<td><strong>Settings</strong></td>
+<td><code>left-panel-tab-scene</code></td>
+<td>Всегда</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/tab-alignment-icon.png" alt=""></td>
+<td><strong>Object Alignment</strong></td>
+<td><code>left-panel-tab-alignment</code></td>
+<td><code>!embedEnabled</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/tab-texture-icon.png" alt=""></td>
+<td><strong>Materials</strong></td>
+<td><code>left-panel-tab-materials</code></td>
+<td><code>!embedEnabled &amp;&amp; !hasGsplat</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/tab-poi-icon.png" alt=""></td>
+<td><strong>POI</strong></td>
+<td><code>left-panel-tab-poi</code></td>
+<td><code>!embedEnabled</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/id-icon.png" alt=""></td>
+<td><strong>Metadata (Dublin Core)</strong></td>
+<td><code>left-panel-tab-metadata</code></td>
+<td><code>!embedEnabled</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/tab-settings-icon.png" alt=""></td>
+<td><strong>Effects / Эффекты / 效果</strong></td>
+<td><code>left-panel-tab-effects</code></td>
+<td><code>!embedEnabled</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3 id="12-%D0%B2%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0-%C2%ABsettings%C2%BB">1.2 Вкладка «Settings»</h3>
+<h4 id="camerapanel-camera-panel"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/settings-camera-icon.png" alt=""> CameraPanel (<code>#camera-panel</code>)</h4>
+<table>
+<thead>
+<tr>
+<th>Элемент</th>
+<th>Тип</th>
+<th>Observer path</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Active Camera</td>
+<td>Select</td>
+<td><code>scene.selectedCamera</code></td>
+<td>Камера сцены или Viewer</td>
+</tr>
+<tr>
+<td>Fov</td>
+<td>Slider 35–150</td>
+<td><code>camera.fov</code></td>
+<td>Угол обзора (только Viewer)</td>
+</tr>
+<tr>
+<td>Tonemapping</td>
+<td>Select</td>
+<td><code>camera.tonemapping</code></td>
+<td>None / Linear / Neutral / Filmic / Hejl / ACES / ACES2</td>
+</tr>
+<tr>
+<td>Pixel Scale</td>
+<td>Select</td>
+<td><code>camera.pixelScale</code></td>
+<td>1x / 2x / 4x / 8x / 16x</td>
+</tr>
+<tr>
+<td>Viewport</td>
+<td>Detail</td>
+<td><code>runtime.viewportWidth/Height</code></td>
+<td>Размер вьюпорта (read-only)</td>
+</tr>
+<tr>
+<td>Multisample</td>
+<td>Toggle</td>
+<td><code>camera.multisample</code></td>
+<td>MSAA (если GPU поддерживает)</td>
+</tr>
+<tr>
+<td>HD</td>
+<td>Toggle</td>
+<td><code>camera.hq</code></td>
+<td>Высококачественный рендер</td>
+</tr>
+</tbody>
+</table>
+<h4 id="skyboxpanel-sky-panel"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/sky-icon.png" alt=""> SkyboxPanel (<code>#sky-panel</code>)</h4>
+<table>
+<thead>
+<tr>
+<th>Элемент</th>
+<th>Тип</th>
+<th>Observer path</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Environment</td>
+<td>Select</td>
+<td><code>skybox.value</code></td>
+<td>Список HDRI + drag&amp;drop</td>
+</tr>
+<tr>
+<td>Exposure</td>
+<td>Slider −6..+6</td>
+<td><code>skybox.exposure</code></td>
+<td>Яркость окружения</td>
+</tr>
+<tr>
+<td>Rotation</td>
+<td>Slider −180..+180</td>
+<td><code>skybox.rotation</code></td>
+<td>Поворот скайбокса</td>
+</tr>
+<tr>
+<td>Background</td>
+<td>Select</td>
+<td><code>skybox.background</code></td>
+<td>Solid Color / Infinite Sphere / Projective Dome / Box</td>
+</tr>
+<tr>
+<td>Background Color</td>
+<td>ColorPicker</td>
+<td><code>skybox.backgroundColor</code></td>
+<td>Цвет фона</td>
+</tr>
+<tr>
+<td>Blur</td>
+<td>Slider 0–5</td>
+<td><code>skybox.blur</code></td>
+<td>Размытие (Infinite Sphere)</td>
+</tr>
+<tr>
+<td>Scale</td>
+<td>Numeric</td>
+<td><code>skybox.domeProjection.domeRadius</code></td>
+<td>Масштаб купола</td>
+</tr>
+<tr>
+<td>Tripod Offset</td>
+<td>Slider 0–1</td>
+<td><code>skybox.domeProjection.tripodOffset</code></td>
+<td>Смещение купола</td>
+</tr>
+</tbody>
+</table>
+<h4 id="lightpanel-light-panel"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/light-icon.png" alt=""> LightPanel (<code>#light-panel</code>)</h4>
+<table>
+<thead>
+<tr>
+<th>Элемент</th>
+<th>Тип</th>
+<th>Observer path</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shadow Catcher</td>
+<td>Toggle</td>
+<td><code>shadowCatcher.enabled</code></td>
+<td>Ловитель теней на полу</td>
+</tr>
+<tr>
+<td>Shadow Intensity</td>
+<td>Slider</td>
+<td><code>shadowCatcher.intensity</code></td>
+<td>Интенсивность тени</td>
+</tr>
+<tr>
+<td>Directional</td>
+<td>ToggleColor</td>
+<td><code>light.enabled</code> / <code>light.color</code></td>
+<td>Вкл/выкл + цвет</td>
+</tr>
+<tr>
+<td>Intensity</td>
+<td>Slider</td>
+<td><code>light.intensity</code></td>
+<td>Яркость</td>
+</tr>
+<tr>
+<td>Shadow</td>
+<td>Toggle</td>
+<td><code>light.shadow</code></td>
+<td>Тени</td>
+</tr>
+<tr>
+<td>Rotate</td>
+<td>Toggle</td>
+<td><code>light.rotate</code></td>
+<td>Авто-вращение</td>
+</tr>
+</tbody>
+</table>
+<h4 id="settingspanel-settings-panel"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/tab-settings-icon.png" alt=""> SettingsPanel (<code>#settings-panel</code>)</h4>
+<table>
+<thead>
+<tr>
+<th>Элемент</th>
+<th>Тип</th>
+<th>Observer path</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WebGPU</td>
+<td>Toggle</td>
+<td><code>enableWebGPU</code></td>
+<td>WebGPU вместо WebGL</td>
+</tr>
+<tr>
+<td><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/wireframe-icon.png" alt=""> Wireframe</td>
+<td>ToggleColor</td>
+<td><code>debug.wireframe</code> / <code>debug.wireframeColor</code></td>
+<td>Полигональная сетка + цвет</td>
+</tr>
+<tr>
+<td>Bounds</td>
+<td>Toggle</td>
+<td><code>debug.bounds</code></td>
+<td>AABB bounding box</td>
+</tr>
+<tr>
+<td>Skeleton</td>
+<td>Toggle</td>
+<td><code>debug.skeleton</code></td>
+<td>Скелет анимации</td>
+</tr>
+<tr>
+<td>Axes</td>
+<td>Toggle</td>
+<td><code>debug.axes</code></td>
+<td>Оси координат</td>
+</tr>
+<tr>
+<td>Grid</td>
+<td>Toggle</td>
+<td><code>debug.grid</code></td>
+<td>Сетка на полу</td>
+</tr>
+<tr>
+<td><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/vertex-normals-icon.png" alt=""> Normal Length</td>
+<td>Slider</td>
+<td><code>debug.normals</code></td>
+<td>Длина нормалей</td>
+</tr>
+<tr>
+<td>UV Checker Scale</td>
+<td>Slider</td>
+<td><code>debug.uvCheckerScale</code></td>
+<td>Масштаб UV-шашки</td>
+</tr>
+<tr>
+<td>Render Mode</td>
+<td>Select</td>
+<td><code>debug.renderMode</code></td>
+<td>default / albedo / normals / metalness / …</td>
+</tr>
+<tr>
+<td><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/file-json-icon.png" alt=""> Export Settings</td>
+<td>Button</td>
+<td>—</td>
+<td>Скачать <code>.model-viewer-settings.json</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3 id="13-%D0%B2%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0-%C2%ABobject-alignment%C2%BB">1.3 Вкладка <img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/tab-alignment-icon.png" alt=""> «Object Alignment»</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Иконка</th>
+<th>Кнопка</th>
+<th>Действие</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/alignment-move-icon.png" alt=""></td>
+<td>Move</td>
+<td>Режим перемещения гизмо</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/alignment-rotate-icon.png" alt=""></td>
+<td>Rotate</td>
+<td>Режим вращения гизмо</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/alignment-object-center-icon.png" alt=""></td>
+<td>Object to Center</td>
+<td><code>viewer.setObjectPivotToCenter()</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/alignment-reset-object-icon.png" alt=""></td>
+<td>Reset Object</td>
+<td><code>viewer.resetObjectTransform()</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/fit-screen-icon.png" alt=""></td>
+<td>Fit to Screen</td>
+<td><code>viewer.frameScene()</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3 id="14-%D0%B2%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0-%C2%ABmaterials%C2%BB--render-%D0%BA%D0%B0%D0%BD%D0%B0%D0%BB%D1%8B">1.4 Вкладка <img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/tab-texture-icon.png" alt=""> «Materials» — Render каналы</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Иконка</th>
+<th>Канал</th>
+<th><code>renderMode</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/final-render-icon.png" alt=""></td>
+<td>Final Render</td>
+<td><code>default</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/diffuse-icon.png" alt=""></td>
+<td>Albedo / Base Color</td>
+<td><code>albedo</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/metalness-icon.png" alt=""></td>
+<td>Metalness</td>
+<td><code>metalness</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/roughness-icon.png" alt=""></td>
+<td>Roughness / Gloss</td>
+<td><code>gloss</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/normal-icon.png" alt=""></td>
+<td>World Normal</td>
+<td><code>world_normal</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/specular-icon.png" alt=""></td>
+<td>Specularity</td>
+<td><code>specularity</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/emissive-icon.png" alt=""></td>
+<td>Emissive</td>
+<td><code>emission</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/lighting-icon.png" alt=""></td>
+<td>Lighting</td>
+<td><code>lighting</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/ao-icon.png" alt=""></td>
+<td>AO</td>
+<td><code>ao</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/opacity-icon.png" alt=""></td>
+<td>Opacity</td>
+<td><code>opacity</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/uv-icon.png" alt=""></td>
+<td>UV / UV Checker</td>
+<td><code>uv0</code> / <code>uv_checker</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/texel-density.png" alt=""></td>
+<td>Texel Density</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3 id="15-%D0%B2%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0-%C2%ABpoi%C2%BB">1.5 Вкладка <img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/tab-poi-icon.png" alt=""> «POI»</h3>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Иконка</th>
+<th>Элемент</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">—</td>
+<td>Toggle <code>poi.enabled</code></td>
+<td>Входим в режим добавления точек</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/poi-capture-view.png" alt=""></td>
+<td>Capture View</td>
+<td>Сохранить ракурс камеры</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/poi-delete-view.png" alt=""></td>
+<td>Delete View</td>
+<td>Удалить ракурс</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/poi-transition.png" alt=""></td>
+<td>Transition</td>
+<td>Slider времени перехода (0–60 с)</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/poi-duration.png" alt=""></td>
+<td>Hold Time</td>
+<td>Slider задержки (0–60 с)</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/poi-delete.png" alt=""></td>
+<td>Delete POI</td>
+<td>Удалить точку</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h3 id="16-%D0%B2%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B0-%C2%ABmetadata-dublin-core%C2%BB">1.6 Вкладка <img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/id-icon.png" alt=""> «Metadata (Dublin Core)»</h3>
+<p>15 полей стандарта Dublin Core:<br>
+<code>title</code>, <code>creator</code>, <code>subject</code>, <code>description</code>, <code>publisher</code>, <code>contributor</code>, <code>date</code>, <code>type</code>, <code>format</code>, <code>identifier</code>, <code>source</code>, <code>language</code>, <code>relation</code>, <code>coverage</code>, <code>rights</code></p>
+<p>Кнопки: <strong>Save</strong> · <strong>Import from JSON</strong> · <strong>Export JSON</strong></p>
+<hr>
+<h2 id="2-%D0%BF%D1%80%D0%B0%D0%B2%D1%8B%D0%B9-%D0%B1%D0%BB%D0%BE%D0%BA-%D0%BA%D0%BD%D0%BE%D0%BF%D0%BE%D0%BA-popuppanel">2. Правый блок кнопок (PopupPanel)</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align:center">Иконка</th>
+<th>Кнопка</th>
+<th>ID</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:center">—</td>
+<td>Animation</td>
+<td>—</td>
+<td>Play/Stop/Scrub/Speed</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/info-icon.png" alt=""></td>
+<td>Info</td>
+<td><code>#info-button</code></td>
+<td>Popup: Controls / Model / About</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/hd-icon.png" alt=""></td>
+<td>HD/SD</td>
+<td><code>#hd-button</code></td>
+<td><code>camera.hq</code> toggle</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/ruler-icon.png" alt=""></td>
+<td>Measurement</td>
+<td><code>#measurement-button</code></td>
+<td>Панель измерений</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/id-icon.png" alt=""></td>
+<td>ID</td>
+<td><code>#id-button</code></td>
+<td>Скоп файлов привязки</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/share-icon.png" alt=""></td>
+<td>View &amp; Share</td>
+<td><code>#view-button</code></td>
+<td>Генератор embed-кода</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/fit-screen-icon.png" alt=""></td>
+<td>Frame scene</td>
+<td><code>#fit-screen-button</code></td>
+<td><code>viewer.frameScene()</code></td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/orbit-mode.png" alt=""> / <img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/fly-mode.png" alt=""></td>
+<td>Camera Mode</td>
+<td><code>#camera-mode-button</code></td>
+<td>Orbit ↔ Fly</td>
+</tr>
+<tr>
+<td style="text-align:center"><img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/fullscreen-icon.png" alt=""> / <img src="file:///Users/darnhalm/Documents/CURSOR/model-viewer/docs/icons/fullscreen-exit-icon.png" alt=""></td>
+<td>Fullscreen</td>
+<td><code>#fullscreen-button</code></td>
+<td>Fullscreen API</td>
+</tr>
+</tbody>
+</table>
+<h3 id="infopanel--%D0%B2%D0%BA%D0%BB%D0%B0%D0%B4%D0%BA%D0%B8">InfoPanel — вкладки</h3>
+<table>
+<thead>
+<tr>
+<th>Вкладка</th>
+<th>Содержимое</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Controls</strong></td>
+<td>Управление: мышь / тачпад / тач (ctrl-detail)</td>
+</tr>
+<tr>
+<td><strong>Model</strong></td>
+<td>Иерархия, полигоны, вершины, текстуры, VRAM, UV, morph targets</td>
+</tr>
+<tr>
+<td><strong>About</strong></td>
+<td>Версия Heritage3D Viewer, ссылки на PlayCanvas</td>
+</tr>
+</tbody>
+</table>
+<h3 id="viewpanel-view--share">ViewPanel (View &amp; Share)</h3>
+<p>Генератор iFrame-кода. Параметры: Responsive/Fixed, пресет, размер, флаги <code>panel/poi/tour/measure/info/controls/fit/reset/fullscreen</code>, язык.<br>
+Форматы экспорта: ссылка · QR-код · TAKE A SNAPSHOT · EXPORT VIEWER SETTINGS</p>
+<hr>
+<h2 id="3-%D0%BF%D1%80%D0%BE%D1%87%D0%B8%D0%B5-%D0%BA%D0%BE%D0%BC%D0%BF%D0%BE%D0%BD%D0%B5%D0%BD%D1%82%D1%8B">3. Прочие компоненты</h2>
+<table>
+<thead>
+<tr>
+<th>Компонент</th>
+<th>Файл</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>LoadControls</strong></td>
+<td><code>load-controls.tsx</code></td>
+<td>Кнопка «Открыть файл» при пустой сцене</td>
+</tr>
+<tr>
+<td><strong>SelectedNode</strong></td>
+<td><code>selected-node.tsx</code></td>
+<td>Карточка выбранного объекта (withTextureOnly)</td>
+</tr>
+<tr>
+<td><strong>POI Player</strong></td>
+<td><code>ui/index.tsx</code></td>
+<td>Оверлей ◄/►/❚❚ для слайд-шоу POI</td>
+</tr>
+<tr>
+<td><strong>Language switcher</strong></td>
+<td><code>ui/index.tsx</code></td>
+<td>🇬🇧 EN / 🇷🇺 RU / 🇨🇳 ZH → <code>ui.language</code></td>
+</tr>
+<tr>
+<td><strong>Spinner/Progress</strong></td>
+<td><code>ui/index.tsx</code></td>
+<td>Прогресс-бар 0–100% при загрузке</td>
+</tr>
+<tr>
+<td><strong>ErrorBox/WarningsBox</strong></td>
+<td><code>errors.tsx</code></td>
+<td>Ошибки и предупреждения</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="4-reusable-%D0%BA%D0%BE%D0%BC%D0%BF%D0%BE%D0%BD%D0%B5%D0%BD%D1%82%D1%8B-srcuicomponentsindextsx">4. Reusable компоненты (<code>src/ui/components/index.tsx</code>)</h2>
+<table>
+<thead>
+<tr>
+<th>Компонент</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Detail</code></td>
+<td>Read-only строка label + value</td>
+</tr>
+<tr>
+<td><code>Toggle</code></td>
+<td>Переключатель с подписью</td>
+</tr>
+<tr>
+<td><code>ToggleColor</code></td>
+<td>Переключатель + ColorPicker</td>
+</tr>
+<tr>
+<td><code>Slider</code></td>
+<td>Ползунок с подписью (min/max/precision/step)</td>
+</tr>
+<tr>
+<td><code>NakedSlider</code></td>
+<td>Голый ползунок без обёртки</td>
+</tr>
+<tr>
+<td><code>Select</code></td>
+<td>Выпадающий список</td>
+</tr>
+<tr>
+<td><code>NakedSelect</code></td>
+<td>Голый дропдаун</td>
+</tr>
+<tr>
+<td><code>Numeric</code></td>
+<td>Числовой ввод</td>
+</tr>
+<tr>
+<td><code>ColorPickerControl</code></td>
+<td>ColorPicker с подписью</td>
+</tr>
+<tr>
+<td><code>Vector</code></td>
+<td>Числовой вектор (2/3/4D, read-only)</td>
+</tr>
+<tr>
+<td><code>MorphSlider</code></td>
+<td>Ползунок для morph target</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="5-embed-mode">5. Embed Mode</h2>
+<p>Активируется параметром URL <code>?embed=true</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Пресет</th>
+<th>Описание</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>full</code></td>
+<td>Полный интерфейс</td>
+</tr>
+<tr>
+<td><code>compact</code></td>
+<td>Скрыт ряд кнопок</td>
+</tr>
+<tr>
+<td><code>minimal</code></td>
+<td>Только canvas + play</td>
+</tr>
+</tbody>
+</table>
+<p>Параметры: <code>panel</code>, <code>poi</code>, <code>tour</code>, <code>measure</code>, <code>info</code>, <code>modelInfo</code>, <code>controls</code>, <code>fit</code>, <code>reset</code>, <code>fullscreen</code>, <code>autoplay</code>, <code>ui=compact|minimal|full</code></p>
+
+</body>
+
+</html>

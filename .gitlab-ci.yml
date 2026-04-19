@@ -1,0 +1,21 @@
+# GitLab Pages: статическая сборка вьюера → артефакт public/
+# Настройки проекта: Deploy → Pages — включить для нужной ветки (часто main).
+# URL вида: https://<namespace>.gitlab.io/<project>/
+
+image: node:20-alpine
+
+cache:
+  paths:
+    - node_modules/
+
+pages:
+  stage: deploy
+  script:
+    - npm ci
+    - npm run build
+    - mv dist public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

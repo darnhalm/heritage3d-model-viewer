@@ -286,12 +286,6 @@ const observerData: ObserverData = {
             intensity: 2,
             samples: 20
         },
-        bokeh: {
-            enabled: false,
-            aperture: 1,
-            maxBlur: 0.02,
-            focus: 1
-        },
         brightnessContrast: {
             enabled: false,
             brightness: 0,
@@ -355,7 +349,6 @@ const mergePosteffectsDefaults = (observer: Observer) => {
     observer.set('posteffects', {
         bloom: mergeSec('bloom'),
         ssao: mergeSec('ssao'),
-        bokeh: mergeSec('bokeh'),
         brightnessContrast: mergeSec('brightnessContrast'),
         hueSaturation: mergeSec('hueSaturation'),
         lut: mergeSec('lut'),

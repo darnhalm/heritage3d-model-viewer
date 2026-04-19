@@ -1,0 +1,14 @@
+# 2×2×2 test LUT: full color inversion (visible correction vs identity).
+# For each input RGB grid corner, output is (1-r, 1-g, 1-b).
+TITLE "invert 2"
+LUT_3D_SIZE 2
+DOMAIN_MIN 0.0 0.0 0.0
+DOMAIN_MAX 1.0 1.0 1.0
+1.0 1.0 1.0
+0.0 1.0 1.0
+1.0 0.0 1.0
+0.0 0.0 1.0
+1.0 1.0 0.0
+0.0 1.0 0.0
+1.0 0.0 0.0
+0.0 0.0 0.0

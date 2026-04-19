@@ -97,9 +97,10 @@ import { MeasurementController, PoiController, SelectionController } from './vie
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
 import { createLut1DTextureFromCubeData, createLutTextureFromCubeData } from './viewer/lut/createLutTexture';
-import { parseCubeLut } from './viewer/lut/parseCubeLut';
+import { decodeLutFileBuffer, lutBufferLooksBinaryAfterUtf8Decode } from './viewer/lut/decodeLutFile';
+import { tryParseBinaryCubeLut } from './viewer/lut/parseBinaryCubeLut';
+import { MAX_LUT_FILE_BYTES, parseCubeLut, type ParseCubeLutResult } from './viewer/lut/parseCubeLut';
 import { BloomEffect } from './viewer/posteffects/BloomEffect';
-import { BokehEffect } from './viewer/posteffects/BokehEffect';
 import { BrightnessContrastEffect } from './viewer/posteffects/BrightnessContrastEffect';
 import { FXAAEffect } from './viewer/posteffects/FXAAEffect';
 import { HueSaturationEffect } from './viewer/posteffects/HueSaturationEffect';
@@ -585,7 +586,6 @@ class Viewer {
 
     private postEffectsSsao!: SSAOEffect;
 
-    private postEffectsBokeh!: BokehEffect;
 
     private postEffectsBrightnessContrast!: BrightnessContrastEffect;
 
@@ -967,7 +967,6 @@ class Viewer {
         const gd = app.graphicsDevice;
         this.postEffectsBloom = new BloomEffect(gd);
         this.postEffectsSsao = new SSAOEffect(gd);
-        this.postEffectsBokeh = new BokehEffect(gd);
         this.postEffectsBrightnessContrast = new BrightnessContrastEffect(gd);
         this.postEffectsHueSaturation = new HueSaturationEffect(gd);
         this.postEffectsFxaa = new FXAAEffect(gd);
@@ -1321,8 +1320,36 @@ class Viewer {
     loadLutFromCubeFile(domFile: globalThis.File): void {
         void (async () => {
             try {
-                const text = await domFile.text();
-                const parsed = parseCubeLut(text);
+                const buf = await domFile.arrayBuffer();
+                if (buf.byteLength > MAX_LUT_FILE_BYTES) {
+                    this.observer.set(
+                        'ui.error',
+                        `LUT file is too large (max ${MAX_LUT_FILE_BYTES / (1024 * 1024)} MB).`
+                    );
+                    return;
+                }
+                const head = new Uint8Array(buf.slice(0, 2));
+                const utf16Bom =
+                    buf.byteLength >= 2 &&
+                    ((head[0] === 0xff && head[1] === 0xfe) || (head[0] === 0xfe && head[1] === 0xff));
+
+                let parsed: ParseCubeLutResult;
+                if (utf16Bom) {
+                    parsed = parseCubeLut(decodeLutFileBuffer(buf));
+                } else {
+                    const binary = tryParseBinaryCubeLut(buf);
+                    if (binary !== null) {
+                        parsed = binary;
+                    } else if (lutBufferLooksBinaryAfterUtf8Decode(buf)) {
+                        this.observer.set(
+                            'ui.error',
+                            'Binary LUT is not supported. Use Iridas/Adobe text .cube/.lut, or a raw float32 3D LUT with the supported 28-byte header.'
+                        );
+                        return;
+                    } else {
+                        parsed = parseCubeLut(decodeLutFileBuffer(buf));
+                    }
+                }
                 if (parsed.ok === false) {
                     this.observer.set('ui.error', parsed.reason);
                     return;
@@ -1411,10 +1438,6 @@ class Viewer {
         this.postEffectsSsao.brightness = Math.max(0, Math.min(1, 1 - Math.min(1, ssaoInt / 5)));
         this.postEffectsSsao.cameraFarClip = rc.farClip;
 
-        this.postEffectsBokeh.maxBlur = Math.max(0.001, Math.min(0.15, Number(pe.bokeh?.maxBlur ?? 0.02)));
-        this.postEffectsBokeh.aperture = Math.max(0.01, Math.min(5, Number(pe.bokeh?.aperture ?? 1)));
-        this.postEffectsBokeh.focus = Math.max(0.01, Math.min(5, Number(pe.bokeh?.focus ?? 1)));
-
         this.postEffectsBrightnessContrast.brightness = Math.max(-1, Math.min(1, Number(pe.brightnessContrast?.brightness ?? 0)));
         this.postEffectsBrightnessContrast.contrast = Math.max(-1, Math.min(1, Number(pe.brightnessContrast?.contrast ?? 0)));
 
@@ -1455,9 +1478,6 @@ class Viewer {
         if (pe.bloom?.enabled) {
             add(this.postEffectsBloom);
         }
-        if (pe.bokeh?.enabled) {
-            add(this.postEffectsBokeh);
-        }
         if (pe.brightnessContrast?.enabled) {
             add(this.postEffectsBrightnessContrast);
         }
@@ -1490,10 +1510,6 @@ class Viewer {
             'posteffects.ssao.radius',
             'posteffects.ssao.intensity',
             'posteffects.ssao.samples',
-            'posteffects.bokeh.enabled',
-            'posteffects.bokeh.aperture',
-            'posteffects.bokeh.maxBlur',
-            'posteffects.bokeh.focus',
             'posteffects.brightnessContrast.enabled',
             'posteffects.brightnessContrast.brightness',
             'posteffects.brightnessContrast.contrast',

@@ -65,6 +65,25 @@ Run:
 
 Open a browser and navigate to http://localhost:3000.
 
+### Docker
+
+The viewer is a static site (`dist/` after `npm run build`). You can serve it from a container:
+
+```sh
+docker build -t heritage3d-viewer .
+docker run --rm -p 8080:80 heritage3d-viewer
+```
+
+Then open http://localhost:8080 . WebGL and GPU work in the **browser** on the client machine; the container only hosts HTML/JS/assets.
+
+If you need **CORS** for `?load=` from other origins (like `npm run serve -- --cors`), add a custom `nginx.conf` or use a dev image that runs `npx serve --cors dist`.
+
+### GitLab (Pages / CI)
+
+- **GitLab Pages:** в репозитории есть [`.gitlab-ci.yml`](.gitlab-ci.yml) — пайплайн на ветке по умолчанию собирает проект и публикует содержимое `dist/` как сайт (артефакт `public/`). В проекте включите **Deploy → Pages** и при необходимости поправьте `rules` под вашу ветку.
+- **Контейнер:** образ из `Dockerfile` можно собирать в GitLab CI и пушить в **Container Registry**, деплой на свой оркестратор или хостинг по желанию.
+- Загрузка моделей по `?load=` с **других доменов** на Pages может потребовать CORS на стороне сервера, отдающего GLB (или прокси в том же origin).
+
 ## Development 
 
 Run:
@@ -76,6 +95,8 @@ Open a browser and navigate to http://localhost:3000.
 N.B. To load local models run `npx server --cors` in the directory containing the model (disables CORS).
 
 This fork adds developer notes under `docs/` (for example [`docs/POST-EFFECTS.md`](docs/POST-EFFECTS.md) — post-processing and the `autoRender` / `renderNextFrame` contract).
+
+**Heritage3D fork vs upstream:** short comparison for users and integrators — [`docs/FORK-VS-UPSTREAM.md`](docs/FORK-VS-UPSTREAM.md) (Russian). Detailed change list — [`docs/CHANGELOG-FORK.md`](docs/CHANGELOG-FORK.md).
 
 ## Library integration testing
 

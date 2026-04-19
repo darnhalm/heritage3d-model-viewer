@@ -61,6 +61,7 @@
         "lint:fix": "eslint src rollup.config.mjs eslint.config.mjs --fix",
         "serve": "serve --cors dist",
         "test:smoke": "npm run build && playwright test",
+        "docs:embed-ui-icons": "python3 scripts/embed-docs-ui-icons.py",
         "watch": "rollup -c -w"
     },
     "engines": {
