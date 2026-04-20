@@ -6,6 +6,7 @@ import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
 import PostEffectsPanel from './PostEffectsPanel';
+import { maybeAutoStartTour, startLeftPanelTour } from './tour';
 
 type PoiItem = {
     id: string;
@@ -709,6 +710,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                 this.props.setProperty('poi.enabled', true);
                 getViewer()?.pulsePois?.();
             }
+            // First time the user opens the panel — run the guided tour.
+            if (isExpanded && !this.props.observerData?.ui?.embed?.enabled) {
+                maybeAutoStartTour(this.props.observerData?.ui?.language);
+            }
         };
         document.getElementById('panel-toggle')?.addEventListener('click', this.collapseHandler);
         document.getElementById('title')?.addEventListener('click', this.collapseHandler);
@@ -950,6 +955,22 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                         >
                             <span className='material-symbols-outlined left-panel-tab-effects-icon' aria-hidden='true'>wand_stars</span>
                             {t('Effects', lang)}
+                        </button>
+                    )}
+                    {!embedEnabled && (
+                        <button
+                            type='button'
+                            className='left-panel-tour-button'
+                            title={t('Tour: Help button', lang)}
+                            aria-label={t('Tour: Help button', lang)}
+                            onClick={(event) => {
+                                event.stopPropagation();
+                                this.setState({ tab: 'scene' }, () => {
+                                    startLeftPanelTour(lang);
+                                });
+                            }}
+                        >
+                            ?
                         </button>
                     )}
                 </div>

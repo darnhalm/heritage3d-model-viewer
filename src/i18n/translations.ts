@@ -241,7 +241,31 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Enter API URL': 'Enter API URL',
         'File "{filename}" ({size}) exceeds model limit of 1 GB.': 'File "{filename}" ({size}) exceeds model limit of 1 GB.',
         'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.': 'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.',
-        'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'File "{filename}" ({size}) exceeds settings limit of 10 MB.'
+        'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'File "{filename}" ({size}) exceeds settings limit of 10 MB.',
+
+        // Tour
+        'Start tour': 'Start guided tour',
+        Next: 'Next',
+        Previous: 'Back',
+        Done: 'Done',
+        'Skip tour': 'Skip',
+        'Tour: Alignment title': 'Step 1. Align the model',
+        'Tour: Alignment body': 'Start here — position and orient the model correctly. Use Move / Rotate, set the object pivot, reset the transform or fit the scene to the screen.',
+        'Tour: Measurement title': 'Step 2. Set the real scene scale',
+        'Tour: Measurement body': 'If you know the real distance between two points on the model, open Measurement, pick those points and enter the known distance. The whole scene will be calibrated automatically.',
+        'Tour: Camera title': 'Step 3. Initial camera view',
+        'Tour: Camera body': 'Set the starting camera position, zoom and orbit. Here you can also pick the active camera, change FOV, tonemapping and turn on HD mode.',
+        'Tour: Background title': 'Step 4. Background & environment',
+        'Tour: Background body': 'Pick a solid background color, an HDRI environment or a dome / box projection. Tune exposure and rotation of the sky.',
+        'Tour: Light title': 'Step 5. Scene lighting',
+        'Tour: Light body': 'Turn the key light on/off, set its color, intensity and shadows, and enable the shadow catcher under the model.',
+        'Tour: POI title': 'Step 6. Points of interest (optional)',
+        'Tour: POI body': 'Add points of interest for a guided tour. POIs can be dragged directly on the model, given a color, title, description and a saved camera view.',
+        'Tour: Metadata title': 'Step 7. Metadata',
+        'Tour: Metadata body': 'Fill in Dublin Core fields (title, author, description, rights…). This metadata is shown in the Info panel next to the model.',
+        'Tour: Export title': 'Step 8. Save settings',
+        'Tour: Export body': 'Export all your choices as a settings file. If you put it next to the model, the viewer will load these settings automatically.',
+        'Tour: Help button': 'Show the tour again'
     },
     ru: {
         Settings: 'Настройки',
@@ -483,7 +507,31 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Enter API URL': 'Введите URL API',
         'File "{filename}" ({size}) exceeds model limit of 1 GB.': 'Файл "{filename}" ({size}) превышает лимит модели 1 ГБ.',
         'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.': 'Файл "{filename}" ({size}) превышает лимит HDRI/Skybox в 50 МБ.',
-        'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'Файл "{filename}" ({size}) превышает лимит файла настроек 10 МБ.'
+        'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'Файл "{filename}" ({size}) превышает лимит файла настроек 10 МБ.',
+
+        // Tour
+        'Start tour': 'Запустить обучение',
+        Next: 'Далее',
+        Previous: 'Назад',
+        Done: 'Готово',
+        'Skip tour': 'Пропустить',
+        'Tour: Alignment title': 'Шаг 1. Выравнивание модели',
+        'Tour: Alignment body': 'Начните с выравнивания — правильно разместите и поверните модель. Режимы «Move / Rotate», установка точки опоры (pivot), сброс трансформации и кнопка «Fit to Screen».',
+        'Tour: Measurement title': 'Шаг 2. Масштаб сцены',
+        'Tour: Measurement body': 'Если вы знаете реальное расстояние между двумя точками модели — откройте «Измерения» внизу, отметьте эти точки и задайте известное расстояние. Вся сцена автоматически получит правильный масштаб.',
+        'Tour: Camera title': 'Шаг 3. Начальный ракурс камеры',
+        'Tour: Camera body': 'Настройте стартовое положение, зум и орбиту камеры. Здесь же выбирается активная камера, FOV, тонмэппинг и HD-режим.',
+        'Tour: Background title': 'Шаг 4. Фон и окружение',
+        'Tour: Background body': 'Выберите сплошной цвет фона, HDRI-окружение или проекционный купол / бокс. Отрегулируйте экспозицию и поворот неба.',
+        'Tour: Light title': 'Шаг 5. Освещение сцены',
+        'Tour: Light body': 'Включите/выключите основной свет, задайте его цвет, интенсивность и тени, активируйте «ловушку теней» под моделью.',
+        'Tour: POI title': 'Шаг 6. Точки интереса (по желанию)',
+        'Tour: POI body': 'При желании добавьте точки интереса — POI. Их можно перетаскивать прямо по модели, задавать цвет, название, описание и сохранять ракурс камеры для каждой.',
+        'Tour: Metadata title': 'Шаг 7. Метаданные',
+        'Tour: Metadata body': 'Заполните поля Dublin Core (название, автор, описание, права…). Эти данные будут показаны в панели «Информация» рядом с моделью.',
+        'Tour: Export title': 'Шаг 8. Сохраните файл настроек',
+        'Tour: Export body': 'Экспортируйте все выбранные настройки в файл. Если положить его рядом с моделью — просмотрщик подхватит эти настройки автоматически при загрузке.',
+        'Tour: Help button': 'Показать тур снова'
     },
     zh: {
         Settings: '设置',
@@ -725,7 +773,31 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Enter API URL': '请输入 API URL',
         'File "{filename}" ({size}) exceeds model limit of 1 GB.': '文件“{filename}”（{size}）超过模型大小上限 1 GB。',
         'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.': '文件“{filename}”（{size}）超过 HDRI/Skybox 大小上限 50 MB。',
-        'File "{filename}" ({size}) exceeds settings limit of 10 MB.': '文件“{filename}”（{size}）超过设置文件大小上限 10 MB。'
+        'File "{filename}" ({size}) exceeds settings limit of 10 MB.': '文件“{filename}”（{size}）超过设置文件大小上限 10 MB。',
+
+        // Tour
+        'Start tour': '开始引导教程',
+        Next: '下一步',
+        Previous: '上一步',
+        Done: '完成',
+        'Skip tour': '跳过',
+        'Tour: Alignment title': '第 1 步：对齐模型',
+        'Tour: Alignment body': '从对齐开始——正确放置和旋转模型。可以切换“Move / Rotate”模式、设置物体支点、重置变换或一键适配到屏幕。',
+        'Tour: Measurement title': '第 2 步：设置场景比例',
+        'Tour: Measurement body': '如果您知道模型上两点之间的真实距离，请打开下方的“测量”功能，点选这两点并输入已知距离，整个场景的比例将自动校准。',
+        'Tour: Camera title': '第 3 步：相机的初始视角',
+        'Tour: Camera body': '设置相机的起始位置、缩放和轨道。您还可以选择活动相机、视场角 (FOV)、色调映射，并启用 HD 模式。',
+        'Tour: Background title': '第 4 步：背景与环境',
+        'Tour: Background body': '选择纯色背景、HDRI 环境或穹顶 / 盒子投影。调整天空的曝光和旋转。',
+        'Tour: Light title': '第 5 步：场景照明',
+        'Tour: Light body': '开关主光源，设置其颜色、强度和阴影，并启用模型下方的“阴影接收器”。',
+        'Tour: POI title': '第 6 步：兴趣点（可选）',
+        'Tour: POI body': '如需要可以添加兴趣点 (POI)，在模型上直接拖动它们，设置颜色、标题、描述并保存对应的相机视角。',
+        'Tour: Metadata title': '第 7 步：元数据',
+        'Tour: Metadata body': '填写 Dublin Core 字段（标题、作者、描述、版权……）。这些信息会显示在模型旁的“信息”面板中。',
+        'Tour: Export title': '第 8 步：保存设置文件',
+        'Tour: Export body': '将所选设置导出为文件。如果把它放在模型旁边，查看器将在加载时自动读取这些设置。',
+        'Tour: Help button': '再次显示教程'
     }
 };
 

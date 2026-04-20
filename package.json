@@ -68,6 +68,7 @@
         "node": ">=18.0.0"
     },
     "dependencies": {
+        "driver.js": "^1.4.0",
         "flag-icons": "^7.5.0"
     }
 }
