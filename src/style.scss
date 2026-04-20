@@ -1004,12 +1004,45 @@ body:not(.ui-ready) #panel-left {
     stroke: rgba(120, 255, 255, 0.95);
     stroke-width: 4;
     stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+    pointer-events: none;
+}
+
+.measure-polygon {
+    stroke: rgba(120, 255, 255, 0.95);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: rgba(120, 255, 255, 0.15);
+    pointer-events: none;
 }
 
 .measure-cross {
     stroke: rgba(255, 255, 255, 0.95);
     stroke-width: 4;
     stroke-linecap: round;
+    pointer-events: none;
+}
+
+.measure-handle {
+    fill: rgba(255, 255, 255, 0.001);
+    stroke: rgba(120, 255, 255, 0.0);
+    stroke-width: 2;
+    pointer-events: all;
+    cursor: grab;
+    transition: stroke 0.1s ease, fill 0.1s ease;
+}
+
+.measure-handle:hover {
+    stroke: rgba(120, 255, 255, 0.9);
+    fill: rgba(120, 255, 255, 0.15);
+}
+
+.measure-handle.dragging {
+    stroke: rgba(120, 255, 255, 1);
+    fill: rgba(120, 255, 255, 0.25);
+    cursor: grabbing;
 }
 
 .measure-label {
@@ -1022,6 +1055,67 @@ body:not(.ui-ready) #panel-left {
     font-size: 12px;
     font-weight: 600;
     white-space: nowrap;
+}
+
+.measure-edge-label {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.62);
+    color: #eaf8f8;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.measure-mode-toolbar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 6px 4px 10px;
+}
+
+.measure-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+    padding: 0;
+}
+
+.measure-mode-btn .material-symbols-outlined {
+    font-size: 22px;
+    line-height: 1;
+    color: inherit;
+    pointer-events: none;
+}
+
+.measure-mode-btn:hover {
+    background-color: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.32);
+    color: #ffffff;
+}
+
+.measure-mode-btn.active {
+    background-color: rgba(34, 163, 98, 0.92);
+    border-color: rgba(142, 255, 198, 0.55);
+    box-shadow: 0 0 0 1px rgba(142, 255, 198, 0.55), 0 0 10px rgba(34, 163, 98, 0.45);
+    color: #ffffff;
+}
+
+.measure-mode-btn.active:hover {
+    background-color: rgba(34, 163, 98, 1);
 }
 
 .ripple-element {

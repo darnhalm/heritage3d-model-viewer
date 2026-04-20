@@ -269,7 +269,11 @@ const observerData: ObserverData = {
         unit: 'm',
         referenceRuler: false,
         unitScale: 1,
+        mode: 'distance',
         lastDistance: null,
+        lastAngle: null,
+        lastArea: null,
+        areaPlanarity: null,
         pointCount: 0,
         knownDistance: 0
     },

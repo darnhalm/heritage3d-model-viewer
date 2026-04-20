@@ -1792,6 +1792,10 @@ class Viewer {
                 }
                 this.canvas.style.cursor = enabled ? 'crosshair' : '';
             },
+            'measure.mode': () => {
+                // switching tools resets the current measurement so the new tool starts fresh
+                this.clearMeasurement();
+            },
             'poi.enabled': (enabled: boolean) => {
                 if (enabled) {
                     if (this.observer.get('measure.enabled')) {

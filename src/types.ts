@@ -214,9 +214,18 @@ export interface ObserverData {
         referenceRuler: boolean,
         /** Meters represented by 1 scene/model unit. */
         unitScale: number,
+        /** Current active tool. */
+        mode: 'distance' | 'angle' | 'area',
         /** Last measured distance in meters. */
         lastDistance: number | null,
-        pointCount: 0 | 1,
+        /** Last measured angle in degrees (0..180). */
+        lastAngle: number | null,
+        /** Last measured area in square meters. */
+        lastArea: number | null,
+        /** Max deviation of picked points from the best-fit plane, in meters. */
+        areaPlanarity: number | null,
+        /** How many points are already picked in the current measurement. */
+        pointCount: 0 | 1 | 2 | 3,
         /** Known real-world distance (in current unit) for recalibrating unitScale. */
         knownDistance: number
     },

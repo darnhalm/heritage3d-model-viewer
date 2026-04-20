@@ -362,6 +362,11 @@ class MeasurementsPanel extends React.Component <{
         window.viewer?.frameScene?.();
     };
 
+    private setMode = (mode: 'distance' | 'angle' | 'area') => {
+        if (this.props.observerData.measure.mode === mode) return;
+        this.props.setProperty('measure.mode', mode);
+    };
+
     shouldComponentUpdate(nextProps: Readonly<{
         observerData: ObserverData;
         setProperty: SetProperty; }>): boolean {
@@ -375,6 +380,10 @@ class MeasurementsPanel extends React.Component <{
                a.measure?.unitScale !== b.measure?.unitScale ||
                a.measure?.knownDistance !== b.measure?.knownDistance ||
                a.measure?.lastDistance !== b.measure?.lastDistance ||
+               a.measure?.lastAngle !== b.measure?.lastAngle ||
+               a.measure?.lastArea !== b.measure?.lastArea ||
+               a.measure?.areaPlanarity !== b.measure?.areaPlanarity ||
+               a.measure?.mode !== b.measure?.mode ||
                a.measure?.pointCount !== b.measure?.pointCount;
     }
 
@@ -382,15 +391,71 @@ class MeasurementsPanel extends React.Component <{
         const props = this.props;
         const measureData = props.observerData.measure;
         const lang = props.observerData?.ui?.language;
-        const meters = measureData.lastDistance;
+        const mode = measureData.mode || 'distance';
         const factor = measureData.unit === 'mm' ? 1000 : (measureData.unit === 'cm' ? 100 : 1);
         const precision = measureData.unit === 'mm' ? 0 : 2;
-        const measuredValue = meters === null ? '-' : `${(meters * factor).toFixed(precision)} ${measureData.unit}`;
+        const areaPrecision = measureData.unit === 'mm' ? 0 : 3;
+
+        const meters = measureData.lastDistance;
+        const measuredDistance = meters === null ? '-' : `${(meters * factor).toFixed(precision)} ${measureData.unit}`;
+
+        const angleDeg = measureData.lastAngle;
+        const measuredAngle = angleDeg === null ? '-' : `${angleDeg.toFixed(2)}°`;
+
+        const areaSqM = measureData.lastArea;
+        const measuredArea = areaSqM === null ?
+            '-' :
+            `${(areaSqM * factor * factor).toFixed(areaPrecision)} ${measureData.unit}²`;
+
+        const planarity = measureData.areaPlanarity;
+        const planarityValue = planarity === null ?
+            '-' :
+            `${(planarity * factor).toFixed(precision)} ${measureData.unit}`;
+        const planarityWarn = planarity !== null && areaSqM !== null && areaSqM > 0 &&
+            (planarity / Math.sqrt(areaSqM)) > 0.05;
+
+        const needed = mode === 'distance' ? 2 : (mode === 'angle' ? 3 : 4);
+        const pointsHintKey = (() => {
+            const pc = measureData.pointCount || 0;
+            if (pc >= needed) return 'Pick first point';
+            if (pc === 0) return 'Pick first point';
+            if (pc === 1) return 'Pick second point';
+            if (pc === 2) return 'Pick third point';
+            return 'Pick fourth point';
+        })();
 
         return (
             <div className='popup-panel-parent'>
                 <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'measurement'}>
                     <Label text={t('Measurement', lang)} class='popup-panel-heading' />
+
+                    <div className='measure-mode-toolbar'>
+                        <button
+                            type='button'
+                            title={t('Distance tool', lang)}
+                            className={`measure-mode-btn${mode === 'distance' ? ' active' : ''}`}
+                            onClick={() => this.setMode('distance')}
+                        >
+                            <span className='material-symbols-outlined'>linear_scale</span>
+                        </button>
+                        <button
+                            type='button'
+                            title={t('Angle tool', lang)}
+                            className={`measure-mode-btn${mode === 'angle' ? ' active' : ''}`}
+                            onClick={() => this.setMode('angle')}
+                        >
+                            <span className='material-symbols-outlined'>square_foot</span>
+                        </button>
+                        <button
+                            type='button'
+                            title={t('Area tool', lang)}
+                            className={`measure-mode-btn${mode === 'area' ? ' active' : ''}`}
+                            onClick={() => this.setMode('area')}
+                        >
+                            <span className='material-symbols-outlined'>crop_3_2</span>
+                        </button>
+                    </div>
+
                     <Toggle
                         label={t('Measure Mode', lang)}
                         value={measureData.enabled}
@@ -414,23 +479,43 @@ class MeasurementsPanel extends React.Component <{
                         max={1000000}
                         setProperty={(value: number) => props.setProperty('measure.unitScale', Math.max(0.000001, value))}
                     />
-                    <Numeric
-                        label={`${t('Known distance', lang)} (${measureData.unit})`}
-                        value={measureData.knownDistance ?? 0}
-                        min={0}
-                        max={1e9}
-                        setProperty={(value: number) => props.setProperty('measure.knownDistance', Math.max(0, value))}
-                    />
-                    <Button
-                        class='secondary'
-                        text={t('RECALCULATE SCENE SIZE', lang)}
-                        onClick={() => {
-                            if (window.viewer) window.viewer.recalculateSceneSize();
-                        }}
-                        enabled={measureData.lastDistance != null && measureData.lastDistance > 0 && (measureData.knownDistance ?? 0) > 0}
-                    />
-                    <Detail label={t('Last Distance', lang)} value={measuredValue} />
-                    <Detail label={t('Points', lang)} value={measureData.pointCount === 0 ? t('Pick first point', lang) : t('Pick second point', lang)} />
+
+                    {mode === 'distance' && (
+                        <>
+                            <Numeric
+                                label={`${t('Known distance', lang)} (${measureData.unit})`}
+                                value={measureData.knownDistance ?? 0}
+                                min={0}
+                                max={1e9}
+                                setProperty={(value: number) => props.setProperty('measure.knownDistance', Math.max(0, value))}
+                            />
+                            <Button
+                                class='secondary'
+                                text={t('RECALCULATE SCENE SIZE', lang)}
+                                onClick={() => {
+                                    if (window.viewer) window.viewer.recalculateSceneSize();
+                                }}
+                                enabled={measureData.lastDistance != null && measureData.lastDistance > 0 && (measureData.knownDistance ?? 0) > 0}
+                            />
+                            <Detail label={t('Last Distance', lang)} value={measuredDistance} />
+                        </>
+                    )}
+
+                    {mode === 'angle' && (
+                        <Detail label={t('Last Angle', lang)} value={measuredAngle} />
+                    )}
+
+                    {mode === 'area' && (
+                        <>
+                            <Detail label={t('Last Area', lang)} value={measuredArea} />
+                            <Detail
+                                label={`${t('Planarity deviation', lang)}${planarityWarn ? ' ⚠' : ''}`}
+                                value={planarityValue}
+                            />
+                        </>
+                    )}
+
+                    <Detail label={t('Points', lang)} value={t(pointsHintKey, lang)} />
                     <Button
                         class='secondary'
                         text={t('CLEAR MEASUREMENT', lang)}

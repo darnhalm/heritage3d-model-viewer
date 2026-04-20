@@ -333,7 +333,11 @@ class SettingsService {
         o.set('measure.unit', 'm');
         o.set('measure.referenceRuler', false);
         o.set('measure.unitScale', 1);
+        o.set('measure.mode', 'distance');
         o.set('measure.lastDistance', null);
+        o.set('measure.lastAngle', null);
+        o.set('measure.lastArea', null);
+        o.set('measure.areaPlanarity', null);
         o.set('measure.pointCount', 0);
         o.set('measure.knownDistance', 0);
         o.set('poi.enabled', false);
