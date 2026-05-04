@@ -379,6 +379,7 @@ class MeasurementsPanel extends React.Component <{
                a.measure?.referenceRuler !== b.measure?.referenceRuler ||
                a.measure?.unitScale !== b.measure?.unitScale ||
                a.measure?.knownDistance !== b.measure?.knownDistance ||
+               a.measure?.knownDistanceWarning !== b.measure?.knownDistanceWarning ||
                a.measure?.lastDistance !== b.measure?.lastDistance ||
                a.measure?.lastAngle !== b.measure?.lastAngle ||
                a.measure?.lastArea !== b.measure?.lastArea ||
@@ -414,9 +415,15 @@ class MeasurementsPanel extends React.Component <{
         const planarityWarn = planarity !== null && areaSqM !== null && areaSqM > 0 &&
             (planarity / Math.sqrt(areaSqM)) > 0.05;
 
-        const needed = mode === 'distance' ? 2 : (mode === 'angle' ? 3 : 4);
         const pointsHintKey = (() => {
             const pc = measureData.pointCount || 0;
+            if (mode === 'area') {
+                if (pc === 0) return 'Pick first point';
+                if (pc === 1) return 'Pick second point';
+                if (pc === 2) return 'Pick third point';
+                return 'Pick next point or close polygon';
+            }
+            const needed = mode === 'distance' ? 2 : 3;
             if (pc >= needed) return 'Pick first point';
             if (pc === 0) return 'Pick first point';
             if (pc === 1) return 'Pick second point';
@@ -457,9 +464,16 @@ class MeasurementsPanel extends React.Component <{
                     </div>
 
                     <Toggle
-                        label={t('Measure Mode', lang)}
+                        label={t('Enable measuring', lang)}
                         value={measureData.enabled}
                         setProperty={(value: boolean) => props.setProperty('measure.enabled', value)}
+                    />
+                    <Button
+                        class='secondary'
+                        text={t('CLEAR MEASUREMENTS', lang)}
+                        onClick={() => {
+                            if (window.viewer) window.viewer.clearMeasurement();
+                        }}
                     />
                     <Select
                         label={t('Units', lang)}
@@ -489,6 +503,11 @@ class MeasurementsPanel extends React.Component <{
                                 max={1e9}
                                 setProperty={(value: number) => props.setProperty('measure.knownDistance', Math.max(0, value))}
                             />
+                            {measureData.knownDistanceWarning && (
+                                <div className='measure-warning'>
+                                    {t('Only one known segment can be used for scene scale. A new distance replaces the previous one.', lang)}
+                                </div>
+                            )}
                             <Button
                                 class='secondary'
                                 text={t('RECALCULATE SCENE SIZE', lang)}
@@ -516,13 +535,6 @@ class MeasurementsPanel extends React.Component <{
                     )}
 
                     <Detail label={t('Points', lang)} value={t(pointsHintKey, lang)} />
-                    <Button
-                        class='secondary'
-                        text={t('CLEAR MEASUREMENT', lang)}
-                        onClick={() => {
-                            if (window.viewer) window.viewer.clearMeasurement();
-                        }}
-                    />
                 </Container>
             </div>
         );

@@ -19,6 +19,14 @@ type PoiUiEntry = {
     holdTime?: number;
 };
 
+const rgbToCssColor = (color?: { r: number; g: number; b: number } | null) => {
+    if (!color) return '#ffffff';
+    const channel = (value: number) => Math.max(0, Math.min(255, Math.round(value * 255)));
+    return `rgb(${channel(color.r)}, ${channel(color.g)}, ${channel(color.b)})`;
+};
+
+const DEFAULT_LOADING_BACKGROUND_COLOR = '#ffffff';
+
 class App extends React.Component<{ observer: Observer }> {
     state: ObserverData | null = null;
 
@@ -176,6 +184,10 @@ class App extends React.Component<{ observer: Observer }> {
         const showEmbedStartOverlay = !!(embed?.enabled && embed?.waiting);
         const showEmbedLoadingBackdrop = !!(embed?.enabled && !embed?.waiting && embed?.placeholderUrl && this.state?.ui?.spinner);
         const showPoiPlayer = poiList.length > 0 && !(embed?.enabled && !embed?.tour);
+        const showLoadProgressBackdrop = !!this.state?.ui?.spinner;
+        const loadProgressBackdropColor = this.state?.ui?.loadingBackgroundReady && this.state?.skybox?.background === 'Solid Color' ?
+            rgbToCssColor(this.state.skybox.backgroundColor) :
+            DEFAULT_LOADING_BACKGROUND_COLOR;
         return <div id="application-container">
             {showLeftPanel && (
                 <Container id="panel-left" width={32} flex resizable='right' resizeMin={220} resizeMax={800}>
@@ -279,6 +291,9 @@ class App extends React.Component<{ observer: Observer }> {
                 <PopupPanel observerData={this.state} setProperty={this._setStateProperty} />
                 <ErrorBox observerData={this.state} setProperty={this._setStateProperty} />
                 <WarningsBox observerData={this.state} setProperty={this._setStateProperty} />
+                {showLoadProgressBackdrop && (
+                    <div className="load-progress-backdrop" style={{ backgroundColor: loadProgressBackdropColor }} />
+                )}
                 {this.state?.ui?.spinner && (
                     <div className="load-progress-wrapper">
                         <Progress value={this.state.ui.loadProgress ?? 0} />

@@ -32,6 +32,7 @@ export interface ObserverData {
         active?: string,
         spinner: boolean,
         loadProgress?: number,
+        loadingBackgroundReady?: boolean,
         error?: string,
         warnings?: string[],
         language?: 'en' | 'ru' | 'zh',
@@ -225,9 +226,11 @@ export interface ObserverData {
         /** Max deviation of picked points from the best-fit plane, in meters. */
         areaPlanarity: number | null,
         /** How many points are already picked in the current measurement. */
-        pointCount: 0 | 1 | 2 | 3,
+        pointCount: number,
         /** Known real-world distance (in current unit) for recalibrating unitScale. */
-        knownDistance: number
+        knownDistance: number,
+        /** Warning shown when scene-scale calibration collapses multiple distance segments to one. */
+        knownDistanceWarning: boolean
     },
     posteffects?: {
         bloom: { enabled: boolean; intensity: number; threshold: number; blurAmount: number };

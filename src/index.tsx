@@ -275,7 +275,8 @@ const observerData: ObserverData = {
         lastArea: null,
         areaPlanarity: null,
         pointCount: 0,
-        knownDistance: 0
+        knownDistance: 0,
+        knownDistanceWarning: false
     },
     posteffects: {
         bloom: {
@@ -362,11 +363,15 @@ const mergePosteffectsDefaults = (observer: Observer) => {
 
 const saveOptions = (observer: Observer, name: string) => {
     const options = observer.json() as Partial<ObserverData>;
+    const debug = options.debug ? {
+        ...options.debug,
+        alignmentMode: false
+    } : options.debug;
     window.localStorage.setItem(`model-viewer-${name}`, JSON.stringify({
         camera: options.camera,
         skybox: options.skybox,
         light: options.light,
-        debug: options.debug,
+        debug,
         shadowCatcher: options.shadowCatcher,
         measure: options.measure,
         enableWebGPU: options.enableWebGPU,
@@ -376,7 +381,7 @@ const saveOptions = (observer: Observer, name: string) => {
 };
 
 const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, string>) => {
-    const filter = ['skybox.options', 'debug.renderMode'];
+    const filter = ['skybox.options', 'debug.renderMode', 'debug.alignmentMode'];
 
     const loadRec = (path: string, value: unknown) => {
         if (filter.indexOf(path) !== -1) {
@@ -579,7 +584,7 @@ const main = () => {
 
         observer.on('poi.activeId:set', (activeId: string) => {
             const poiListRaw = observer.get('poi.list');
-            let poiList: Array<{ id: string; number: number; title?: string; description?: string }> = [];
+            let poiList: Array<{ id: string; number: number; title?: string; description?: string; color?: string }> = [];
             try {
                 const parsed = JSON.parse(String(poiListRaw ?? '[]'));
                 poiList = Array.isArray(parsed) ? parsed : [];
@@ -594,7 +599,8 @@ const main = () => {
                     id: activeId,
                     number: poi?.number ?? null,
                     title: poi?.title ?? null,
-                    description: poi?.description ?? null
+                    description: poi?.description ?? null,
+                    color: poi?.color ?? null
                 }, '*');
             } else {
                 window.parent?.postMessage({

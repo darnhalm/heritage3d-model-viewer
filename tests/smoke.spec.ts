@@ -181,7 +181,7 @@ test('metadata and poi tabs stay stable and poi edits persist to observer state'
             number: 1,
             title: 'POI 1',
             description: '',
-            color: '#000000',
+            color: '#123abc',
             duration: 0.8,
             position: [0, 0, 0],
             normal: [0, 1, 0]
@@ -202,6 +202,22 @@ test('metadata and poi tabs stay stable and poi edits persist to observer state'
     });
     expect(Array.isArray(poiState)).toBe(true);
     expect(poiState[0]?.description).toBe('Smoke description');
+
+    const poiSelectedMessage = await page.evaluate(() => new Promise<Record<string, unknown>>((resolve) => {
+        const onMessage = (event: MessageEvent) => {
+            const data = event.data;
+            if (data && typeof data === 'object' && data.type === 'poi-selected') {
+                window.removeEventListener('message', onMessage);
+                resolve(data as Record<string, unknown>);
+            }
+        };
+        window.addEventListener('message', onMessage);
+
+        const viewer = (window as any).viewer;
+        viewer?.clearFocusedPoi?.();
+        viewer?.focusPoi?.('poi-smoke-1');
+    }));
+    expect(poiSelectedMessage.color).toBe('#123abc');
     expect(pageErrors).toEqual([]);
 });
 

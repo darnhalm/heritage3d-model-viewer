@@ -997,7 +997,6 @@ class Viewer {
         const gizmoLayer = Gizmo.createLayer(app, 'RotateGizmo');
         this.rotateGizmo = new RotateGizmo(this.camera.camera, gizmoLayer);
         this.rotateGizmo.enabled = false;
-        this.rotateGizmo.attach([this.sceneRoot]);
         this.rotateGizmo.on('transform:start', () => {
             this.cameraControls.enabled = false;
             this.lastAlignmentContentTransform = this.captureSceneContentTransform();
@@ -1024,7 +1023,6 @@ class Viewer {
         });
         this.translateGizmo = new TranslateGizmo(this.camera.camera, gizmoLayer);
         this.translateGizmo.enabled = false;
-        this.translateGizmo.attach([this.sceneRoot]);
         this.translateGizmo.on('transform:start', () => {
             this.cameraControls.enabled = false;
             this.lastAlignmentContentTransform = this.captureSceneContentTransform();
@@ -1296,6 +1294,7 @@ class Viewer {
         }
         this.observer.set('measure.pointCount', 0);
         this.observer.set('measure.lastDistance', null);
+        this.observer.set('measure.knownDistanceWarning', false);
     }
 
     destroy() {
@@ -1787,14 +1786,12 @@ class Viewer {
 
             // measurements
             'measure.enabled': (enabled: boolean) => {
-                if (!enabled) {
-                    this.clearMeasurement();
-                }
                 this.canvas.style.cursor = enabled ? 'crosshair' : '';
+                this.renderNextFrame();
             },
             'measure.mode': () => {
-                // switching tools resets the current measurement so the new tool starts fresh
-                this.clearMeasurement();
+                // Switching tools resets only the in-progress draft; completed measurements stay visible.
+                this.measurementController?.cancelDraft();
             },
             'poi.enabled': (enabled: boolean) => {
                 if (enabled) {
@@ -1811,6 +1808,13 @@ class Viewer {
             'measure.unit': () => {
                 this.updateTexelDensityStats();
                 this.renderNextFrame();
+            },
+            'measure.unitScale': () => {
+                this.updateTexelDensityStats();
+                this.renderNextFrame();
+            },
+            'measure.knownDistance': () => {
+                this.measurementController?.limitToLatestKnownDistanceSegment();
             }
         };
 
@@ -3064,6 +3068,10 @@ class Viewer {
         return this.settingsService.tryFetchAndApplySettings(firstModelUrl, allFiles);
     }
 
+    private preloadLoadingBackgroundFromSettings(firstModelUrl: string, allFiles?: Array<{ url: string; filename?: string; sizeBytes?: number }>): Promise<void> {
+        return this.settingsService.preloadLoadingBackgroundFromSettings(firstModelUrl, allFiles);
+    }
+
     /** Apply current observer skybox/light to the scene (e.g. after loading settings from file). */
     private syncSkyboxAndLightFromObserver() {
         this.settingsService.syncSkyboxAndLightFromObserver();
@@ -3631,18 +3639,20 @@ class Viewer {
             }
 
             const loadTimestamp = Date.now();
+            const modelFiles = files.filter(f => this.isModelFilename(f.filename) || this.isGSplatFilename(f.filename));
 
+            this.resetViewerSettingsToDefaults();
             this.observer.set('ui.spinner', true);
             this.observer.set('ui.loadProgress', 0);
+            this.observer.set('ui.loadingBackgroundReady', false);
             this.observer.set('ui.error', null);
             this.observer.set('ui.warnings', []);
             this.clearCta();
+            this.preloadLoadingBackgroundFromSettings(modelFiles[0]?.url, files).catch(() => {});
 
             // Defer load to next frame so the progress bar can paint at 0%
             requestAnimationFrame(() => {
-                this.resetViewerSettingsToDefaults();
                 const warnings: string[] = rejectedFiles.slice();
-                const modelFiles = files.filter(f => this.isModelFilename(f.filename) || this.isGSplatFilename(f.filename));
                 const total = modelFiles.length;
                 const progressPerFile: number[] = new Array(total).fill(0);
                 let lastProgressUpdate = 0;
@@ -3748,6 +3758,7 @@ class Viewer {
                     this.observer.set('ui.loadProgress', 100);
                     setTimeout(() => {
                         this.observer.set('ui.spinner', false);
+                        this.observer.set('ui.loadingBackgroundReady', false);
                     }, 250);
                 });
             });

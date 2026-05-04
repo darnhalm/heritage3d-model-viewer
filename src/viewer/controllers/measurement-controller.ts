@@ -5,13 +5,23 @@ import { CachedMeshGeometry, intersectMeshTrianglesDetailed } from './mesh-rayca
 import { Picker } from '../../picker';
 
 const MEASURE_CLICK_DRAG_THRESHOLD = 5;
+const AREA_CLOSE_HIT_RADIUS = 16;
 type ViewerTaggedMeshInstance = MeshInstance & { __viewerIsGsplat?: boolean };
 type MeasureMode = 'distance' | 'angle' | 'area';
+type ScreenPoint = { x: number; y: number; z: number };
+type StoredMeasurement = {
+    id: number;
+    mode: MeasureMode;
+    points: Vec3[];
+    distance?: number;
+    angle?: number;
+    area?: number;
+    areaPlanarity?: number;
+};
 
-const MODE_POINT_COUNT: Record<MeasureMode, 2 | 3 | 4> = {
+const MODE_POINT_COUNT: Record<Exclude<MeasureMode, 'area'>, 2 | 3> = {
     distance: 2,
-    angle: 3,
-    area: 4
+    angle: 3
 };
 
 type MeasurementControllerArgs = {
@@ -40,7 +50,9 @@ class MeasurementController {
 
     private measureSvgEl: SVGSVGElement | null = null;
 
-    /** One cross (two lines) per potential point. Indexed 0..3. */
+    private completedMeasureGroupEl: SVGGElement | null = null;
+
+    /** One cross (two lines) per picked point. */
     private measureCrosses: Array<{ hx: SVGLineElement; vy: SVGLineElement }> = [];
 
     /** Invisible-ish hit circles for dragging each point. */
@@ -54,8 +66,14 @@ class MeasurementController {
 
     private measureLabelEl: HTMLDivElement | null = null;
 
-    /** Per-edge length labels; up to 4 (one per polygon side in area mode). */
+    /** Per-edge length labels. */
     private measureEdgeLabels: HTMLDivElement[] = [];
+
+    private completedMeasureLabels: HTMLDivElement[] = [];
+
+    private completedMeasurements: StoredMeasurement[] = [];
+
+    private nextMeasurementId = 1;
 
     private measureClickDown: { clientX: number; clientY: number; canvasX: number; canvasY: number } | null = null;
 
@@ -63,6 +81,8 @@ class MeasurementController {
 
     /** World-space positions of picked points in order of picking. */
     private points: Vec3[] = [];
+
+    private lastScreenPoints: Array<{ x: number; y: number; z: number }> = [];
 
     /** Index of the currently dragged point (null when not dragging). */
     private dragIndex: number | null = null;
@@ -74,6 +94,8 @@ class MeasurementController {
     private onMeasureMousemove: ((event: MouseEvent) => void) | null = null;
 
     private onMeasureMouseup: ((event: MouseEvent) => void) | null = null;
+
+    private onMeasureDblClick: ((event: MouseEvent) => void) | null = null;
 
     private onHandlePointerMove: ((event: PointerEvent) => void) | null = null;
 
@@ -100,6 +122,10 @@ class MeasurementController {
         this.measureSvgEl.setAttribute('class', 'measure-svg');
         this.measureSvgEl.style.display = 'none';
 
+        this.completedMeasureGroupEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        this.completedMeasureGroupEl.setAttribute('class', 'measure-completed-group');
+        this.measureSvgEl.appendChild(this.completedMeasureGroupEl);
+
         // Polygon first so crosses render on top.
         this.measurePolygonEl = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
         this.measurePolygonEl.setAttribute('class', 'measure-polygon');
@@ -112,30 +138,6 @@ class MeasurementController {
         this.measurePolylineEl.style.display = 'none';
         this.measureSvgEl.appendChild(this.measurePolylineEl);
 
-        const mkLine = (cls: string) => {
-            const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            el.setAttribute('class', cls);
-            this.measureSvgEl?.appendChild(el);
-            return el;
-        };
-        for (let i = 0; i < 4; i++) {
-            this.measureCrosses.push({
-                hx: mkLine('measure-cross'),
-                vy: mkLine('measure-cross')
-            });
-        }
-
-        // Drag handles on top of crosses. One invisible circle per point; pointer-events: all.
-        for (let i = 0; i < 4; i++) {
-            const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            c.setAttribute('class', 'measure-handle');
-            c.setAttribute('r', '12');
-            c.style.display = 'none';
-            const index = i;
-            c.addEventListener('pointerdown', (e: PointerEvent) => this.beginHandleDrag(e, index));
-            this.measureSvgEl.appendChild(c);
-            this.measureHandles.push(c);
-        }
         this.measureOverlay.appendChild(this.measureSvgEl);
 
         this.measureLabelEl = document.createElement('div');
@@ -143,15 +145,52 @@ class MeasurementController {
         this.measureLabelEl.style.display = 'none';
         this.measureOverlay.appendChild(this.measureLabelEl);
 
-        for (let i = 0; i < 4; i++) {
-            const el = document.createElement('div');
-            el.className = 'measure-edge-label';
-            el.style.display = 'none';
-            this.measureOverlay.appendChild(el);
-            this.measureEdgeLabels.push(el);
-        }
-
         wrapper.appendChild(this.measureOverlay);
+    }
+
+    private createMeasureCross() {
+        const mkLine = (cls: string) => {
+            const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            el.setAttribute('class', cls);
+            this.measureSvgEl?.appendChild(el);
+            return el;
+        };
+        this.measureCrosses.push({
+            hx: mkLine('measure-cross'),
+            vy: mkLine('measure-cross')
+        });
+    }
+
+    private createMeasureHandle(index: number) {
+        if (!this.measureSvgEl) return;
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('class', 'measure-handle');
+        c.setAttribute('r', '12');
+        c.style.display = 'none';
+        c.addEventListener('pointerdown', (e: PointerEvent) => this.beginHandleDrag(e, index));
+        this.measureSvgEl.appendChild(c);
+        this.measureHandles.push(c);
+    }
+
+    private createMeasureEdgeLabel() {
+        if (!this.measureOverlay) return;
+        const el = document.createElement('div');
+        el.className = 'measure-edge-label';
+        el.style.display = 'none';
+        this.measureOverlay.appendChild(el);
+        this.measureEdgeLabels.push(el);
+    }
+
+    private ensureMeasureElements(count: number) {
+        while (this.measureCrosses.length < count) {
+            this.createMeasureCross();
+        }
+        while (this.measureHandles.length < count) {
+            this.createMeasureHandle(this.measureHandles.length);
+        }
+        while (this.measureEdgeLabels.length < count) {
+            this.createMeasureEdgeLabel();
+        }
     }
 
     private bindEvents() {
@@ -184,7 +223,16 @@ class MeasurementController {
             this.measureIsPotentialClick = false;
             this.measureClickDown = null;
         };
+        this.onMeasureDblClick = (event: MouseEvent) => {
+            if (!this.observer.get('measure.enabled')) return;
+            if (event.button !== 0) return;
+            if (event.target !== this.canvas) return;
+            if (this.getMode() !== 'area' || this.points.length < 3) return;
+            event.preventDefault();
+            this.closeAreaMeasurement();
+        };
         this.canvas.addEventListener('mousedown', this.onMeasureMousedown);
+        this.canvas.addEventListener('dblclick', this.onMeasureDblClick);
         document.addEventListener('mousemove', this.onMeasureMousemove);
         document.addEventListener('mouseup', this.onMeasureMouseup);
 
@@ -201,6 +249,10 @@ class MeasurementController {
         if (index < 0 || index >= this.points.length) return;
         event.preventDefault();
         event.stopPropagation();
+        if (this.getMode() === 'area' && index === 0 && this.observer.get('measure.pointCount') !== 0 && this.points.length >= 3) {
+            this.closeAreaMeasurement();
+            return;
+        }
         this.dragIndex = index;
         // Don't let the canvas mousedown/mouseup path treat this as a fresh click.
         this.measureIsPotentialClick = false;
@@ -231,8 +283,7 @@ class MeasurementController {
         this.points[idx] = hit.clone();
         // If the measurement is already complete for the current mode, re-finalize live.
         const mode = this.getMode();
-        const needed = MODE_POINT_COUNT[mode];
-        if (this.points.length === needed) {
+        if ((mode === 'area' && this.isAreaComplete()) || (mode !== 'area' && this.points.length === MODE_POINT_COUNT[mode])) {
             this.finalizeMeasurement(mode);
         }
         this.renderNextFrame();
@@ -263,6 +314,10 @@ class MeasurementController {
             document.removeEventListener('mouseup', this.onMeasureMouseup);
             this.onMeasureMouseup = null;
         }
+        if (this.onMeasureDblClick) {
+            this.canvas.removeEventListener('dblclick', this.onMeasureDblClick);
+            this.onMeasureDblClick = null;
+        }
         if (this.onHandlePointerMove) {
             document.removeEventListener('pointermove', this.onHandlePointerMove);
             this.onHandlePointerMove = null;
@@ -275,12 +330,15 @@ class MeasurementController {
         this.measureOverlay?.remove();
         this.measureOverlay = null;
         this.measureSvgEl = null;
+        this.completedMeasureGroupEl = null;
         this.measureCrosses = [];
         this.measureHandles = [];
         this.measurePolylineEl = null;
         this.measurePolygonEl = null;
         this.measureLabelEl = null;
         this.measureEdgeLabels = [];
+        this.completedMeasureLabels = [];
+        this.completedMeasurements = [];
     }
 
     private getMode(): MeasureMode {
@@ -290,30 +348,84 @@ class MeasurementController {
     }
 
     private async pickAndMeasureAt(x: number, y: number) {
+        const mode = this.getMode();
+        if (mode === 'area' && this.observer.get('measure.pointCount') !== 0 && this.points.length >= 3 && this.isNearFirstPoint(x, y)) {
+            this.closeAreaMeasurement();
+            return;
+        }
+
         const p = this.pickSurfacePoint(x, y) ?? await this.picker.pick(x, y);
         if (!p) return;
 
-        const mode = this.getMode();
-        const needed = MODE_POINT_COUNT[mode];
-
-        // If previous measurement completed (pointCount === 0 but previous result exists)
-        // and this is the first point of a new one, reset.
+        // Start a new draft after each completed measurement.
         if (this.observer.get('measure.pointCount') === 0) {
             this.points = [];
         }
 
         this.points.push(p.clone());
 
-        if (this.points.length < needed) {
-            this.observer.set('measure.pointCount', this.points.length as 0 | 1 | 2 | 3);
+        if (mode === 'area') {
+            this.observer.set('measure.pointCount', this.points.length);
+            this.observer.set('measure.lastArea', null);
+            this.observer.set('measure.areaPlanarity', null);
+            this.observer.set('measure.lastDistance', null);
+            this.observer.set('measure.lastAngle', null);
             this.renderNextFrame();
             return;
         }
 
+        const needed = MODE_POINT_COUNT[mode];
+        if (this.points.length < needed) {
+            this.observer.set('measure.pointCount', this.points.length);
+            this.renderNextFrame();
+            return;
+        }
         // Measurement complete.
-        this.finalizeMeasurement(mode);
+        this.completeMeasurement(mode);
         this.observer.set('measure.pointCount', 0);
         this.renderNextFrame();
+    }
+
+    private isNearFirstPoint(x: number, y: number) {
+        const first = this.lastScreenPoints[0];
+        return !!first && first.z > 0 && Math.hypot(first.x - x, first.y - y) <= AREA_CLOSE_HIT_RADIUS;
+    }
+
+    private isAreaComplete() {
+        return this.getMode() === 'area' &&
+            this.points.length >= 3 &&
+            this.observer.get('measure.pointCount') === 0 &&
+            this.observer.get('measure.lastArea') !== null;
+    }
+
+    private closeAreaMeasurement() {
+        if (this.getMode() !== 'area' || this.points.length < 3) return;
+        this.completeMeasurement('area');
+        this.observer.set('measure.pointCount', 0);
+        this.renderNextFrame();
+    }
+
+    private completeMeasurement(mode: MeasureMode) {
+        const result = this.finalizeMeasurement(mode);
+        if (mode === 'distance' && this.isKnownDistanceSet()) {
+            const hadDistanceMeasurement = this.completedMeasurements.some(measurement => measurement.mode === 'distance');
+            this.observer.set('measure.knownDistanceWarning', hadDistanceMeasurement);
+            this.completedMeasurements = this.completedMeasurements.filter(measurement => measurement.mode !== 'distance');
+        } else if (mode === 'distance') {
+            this.observer.set('measure.knownDistanceWarning', false);
+        }
+        this.completedMeasurements.push({
+            id: this.nextMeasurementId++,
+            mode,
+            points: this.points.map(p => p.clone()),
+            ...result
+        });
+        this.points = [];
+    }
+
+    private isKnownDistanceSet() {
+        const knownDistance = Number(this.observer.get('measure.knownDistance') ?? 0);
+        return Number.isFinite(knownDistance) && knownDistance > 0;
     }
 
     private finalizeMeasurement(mode: MeasureMode) {
@@ -328,7 +440,7 @@ class MeasurementController {
                 this.observer.set('measure.lastAngle', null);
                 this.observer.set('measure.lastArea', null);
                 this.observer.set('measure.areaPlanarity', null);
-                return;
+                return { distance: d };
             }
             case 'angle': {
                 const [a, vertex, b] = this.points;
@@ -345,15 +457,17 @@ class MeasurementController {
                 this.observer.set('measure.lastDistance', null);
                 this.observer.set('measure.lastArea', null);
                 this.observer.set('measure.areaPlanarity', null);
-                return;
+                return { angle: deg };
             }
             case 'area': {
                 const { area, maxDeviation } = this.computeArea(this.points);
-                this.observer.set('measure.lastArea', area * scale * scale);
-                this.observer.set('measure.areaPlanarity', maxDeviation * scale);
+                const scaledArea = area * scale * scale;
+                const scaledPlanarity = maxDeviation * scale;
+                this.observer.set('measure.lastArea', scaledArea);
+                this.observer.set('measure.areaPlanarity', scaledPlanarity);
                 this.observer.set('measure.lastDistance', null);
                 this.observer.set('measure.lastAngle', null);
-                break;
+                return { area: scaledArea, areaPlanarity: scaledPlanarity };
             }
         }
     }
@@ -364,7 +478,7 @@ class MeasurementController {
      * (in unscaled scene units). Works for any simple, non-self-intersecting order
      * of picks.
      *
-     * @param pts - Picked world-space points (3 or 4).
+     * @param pts - Picked world-space points.
      * @returns Area in squared scene units and max out-of-plane deviation in scene units.
      */
     private computeArea(pts: Vec3[]) {
@@ -518,22 +632,58 @@ class MeasurementController {
         if (this.measureSvgEl) this.measureSvgEl.style.display = 'none';
         if (this.measureLabelEl) this.measureLabelEl.style.display = 'none';
         for (const el of this.measureEdgeLabels) el.style.display = 'none';
+        for (const el of this.completedMeasureLabels) el.style.display = 'none';
     }
 
     clearMeasurement() {
+        this.cancelDraft();
+        this.completedMeasurements = [];
+        this.completedMeasureGroupEl?.replaceChildren();
+        for (const el of this.completedMeasureLabels) el.remove();
+        this.completedMeasureLabels = [];
+        this.hideOverlay();
+        this.renderNextFrame();
+    }
+
+    cancelDraft() {
         this.points = [];
         this.observer.set('measure.pointCount', 0);
         this.observer.set('measure.lastDistance', null);
         this.observer.set('measure.lastAngle', null);
         this.observer.set('measure.lastArea', null);
         this.observer.set('measure.areaPlanarity', null);
-        this.hideOverlay();
+        this.observer.set('measure.knownDistanceWarning', false);
         this.renderNextFrame();
     }
 
     reset() {
         this.points = [];
+        this.completedMeasurements = [];
+        this.completedMeasureGroupEl?.replaceChildren();
+        for (const el of this.completedMeasureLabels) el.remove();
+        this.completedMeasureLabels = [];
         this.hideOverlay();
+    }
+
+    limitToLatestKnownDistanceSegment() {
+        if (!this.isKnownDistanceSet()) {
+            this.observer.set('measure.knownDistanceWarning', false);
+            return;
+        }
+        let latestDistance: StoredMeasurement | null = null;
+        const otherMeasurements: StoredMeasurement[] = [];
+        let distanceCount = 0;
+        for (const measurement of this.completedMeasurements) {
+            if (measurement.mode === 'distance') {
+                distanceCount++;
+                latestDistance = measurement;
+            } else {
+                otherMeasurements.push(measurement);
+            }
+        }
+        this.observer.set('measure.knownDistanceWarning', distanceCount > 1);
+        this.completedMeasurements = latestDistance ? [...otherMeasurements, latestDistance] : otherMeasurements;
+        this.renderNextFrame();
     }
 
     recalculateSceneSize() {
@@ -555,17 +705,32 @@ class MeasurementController {
     }
 
     updateOverlay(worldToScreen: (point: Vec3) => Vec3) {
-        if (this.points.length === 0 || !this.measureSvgEl) {
+        if (!this.observer.get('measure.enabled')) {
+            this.hideOverlay();
+            return;
+        }
+
+        if ((this.points.length === 0 && this.completedMeasurements.length === 0) || !this.measureSvgEl) {
             this.hideOverlay();
             return;
         }
 
         this.measureSvgEl.setAttribute('viewBox', `0 0 ${this.canvas.clientWidth} ${this.canvas.clientHeight}`);
+        this.renderCompletedMeasurements(worldToScreen);
+
+        if (this.points.length === 0) {
+            this.hideActiveMeasurement();
+            this.measureSvgEl.style.display = 'block';
+            return;
+        }
 
         const mode = this.getMode();
         const screen = this.points.map(p => worldToScreen(p));
+        this.lastScreenPoints = screen;
+        this.ensureMeasureElements(screen.length);
         const visible = screen.map(s => s.z > 0);
         const allVis = visible.every(Boolean);
+        const areaComplete = this.isAreaComplete();
 
         // Crosses for each picked point.
         const crossSize = 7;
@@ -600,7 +765,7 @@ class MeasurementController {
         // Polyline/polygon between points.
         const pointsStr = screen.map(s => `${s.x},${s.y}`).join(' ');
         if (this.measurePolylineEl) {
-            if (mode === 'area' && screen.length >= 2 && screen.length < 4) {
+            if (mode === 'area' && screen.length >= 2 && !areaComplete) {
                 // In-progress area: show polyline.
                 this.measurePolylineEl.setAttribute('points', pointsStr);
                 this.measurePolylineEl.style.display = allVis ? 'block' : 'none';
@@ -612,7 +777,7 @@ class MeasurementController {
             }
         }
         if (this.measurePolygonEl) {
-            if (mode === 'area' && screen.length === 4) {
+            if (mode === 'area' && areaComplete) {
                 this.measurePolygonEl.setAttribute('points', pointsStr);
                 this.measurePolygonEl.style.display = allVis ? 'block' : 'none';
             } else {
@@ -648,6 +813,131 @@ class MeasurementController {
         this.measureSvgEl.style.display = 'block';
     }
 
+    private hideActiveMeasurement() {
+        for (let i = 0; i < this.measureCrosses.length; i++) {
+            this.measureCrosses[i].hx.style.display = 'none';
+            this.measureCrosses[i].vy.style.display = 'none';
+            if (this.measureHandles[i]) this.measureHandles[i].style.display = 'none';
+        }
+        if (this.measurePolylineEl) this.measurePolylineEl.style.display = 'none';
+        if (this.measurePolygonEl) this.measurePolygonEl.style.display = 'none';
+        if (this.measureLabelEl) this.measureLabelEl.style.display = 'none';
+        for (const el of this.measureEdgeLabels) el.style.display = 'none';
+        this.lastScreenPoints = [];
+    }
+
+    private renderCompletedMeasurements(worldToScreen: (point: Vec3) => Vec3) {
+        if (!this.completedMeasureGroupEl || !this.measureOverlay) return;
+
+        this.completedMeasureGroupEl.replaceChildren();
+        for (const el of this.completedMeasureLabels) el.remove();
+        this.completedMeasureLabels = [];
+
+        for (const measurement of this.completedMeasurements) {
+            const screen = measurement.points.map(p => worldToScreen(p));
+            const visible = screen.map(s => s.z > 0);
+            const allVis = visible.every(Boolean);
+            if (!allVis || screen.length < 2) continue;
+
+            if (measurement.mode === 'area' && screen.length >= 3) {
+                const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                polygon.setAttribute('class', 'measure-polygon measure-completed');
+                polygon.setAttribute('points', this.screenPointsToSvg(screen));
+                this.completedMeasureGroupEl.appendChild(polygon);
+            } else {
+                const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                polyline.setAttribute('class', 'measure-line measure-completed');
+                polyline.setAttribute('fill', 'none');
+                polyline.setAttribute('points', this.screenPointsToSvg(screen));
+                this.completedMeasureGroupEl.appendChild(polyline);
+            }
+
+            const crossSize = 6;
+            for (const point of screen) {
+                const hx = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                hx.setAttribute('class', 'measure-cross measure-completed-cross');
+                hx.setAttribute('x1', `${point.x - crossSize}`);
+                hx.setAttribute('y1', `${point.y}`);
+                hx.setAttribute('x2', `${point.x + crossSize}`);
+                hx.setAttribute('y2', `${point.y}`);
+                this.completedMeasureGroupEl.appendChild(hx);
+
+                const vy = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                vy.setAttribute('class', 'measure-cross measure-completed-cross');
+                vy.setAttribute('x1', `${point.x}`);
+                vy.setAttribute('y1', `${point.y - crossSize}`);
+                vy.setAttribute('x2', `${point.x}`);
+                vy.setAttribute('y2', `${point.y + crossSize}`);
+                this.completedMeasureGroupEl.appendChild(vy);
+            }
+
+            if (measurement.mode === 'area') {
+                this.renderStoredEdgeLabels(measurement, screen, visible);
+            }
+
+            const label = this.createCompletedMeasureLabel();
+            const text = this.buildStoredLabel(measurement);
+            if (!text) {
+                label.style.display = 'none';
+                continue;
+            }
+            const center = this.getScreenCentroid(screen);
+            label.textContent = text;
+            label.style.left = `${center.x}px`;
+            label.style.top = `${center.y}px`;
+            label.style.display = 'block';
+        }
+    }
+
+    private renderStoredEdgeLabels(measurement: StoredMeasurement, screen: ScreenPoint[], visible: boolean[]) {
+        if (!this.measureOverlay || measurement.points.length < 2) return;
+        const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
+        const factor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
+        const precision = unit === 'mm' ? 0 : 2;
+        const n = measurement.points.length;
+        for (let i = 0; i < n; i++) {
+            const a = measurement.points[i];
+            const b = measurement.points[(i + 1) % n];
+            const sa = screen[i];
+            const sb = screen[(i + 1) % n];
+            if (!visible[i] || !visible[(i + 1) % n]) continue;
+            const label = this.createCompletedMeasureLabel('measure-edge-label measure-completed-edge-label');
+            label.textContent = `${(this.toMeters(a.distance(b)) * factor).toFixed(precision)} ${unit}`;
+            label.style.left = `${(sa.x + sb.x) / 2}px`;
+            label.style.top = `${(sa.y + sb.y) / 2}px`;
+            label.style.display = 'block';
+        }
+    }
+
+    private createCompletedMeasureLabel(className = 'measure-label measure-completed-label') {
+        const el = document.createElement('div');
+        el.className = className;
+        el.style.display = 'none';
+        this.measureOverlay?.appendChild(el);
+        this.completedMeasureLabels.push(el);
+        return el;
+    }
+
+    private screenPointsToSvg(screen: ScreenPoint[]) {
+        return screen.map(s => `${s.x},${s.y}`).join(' ');
+    }
+
+    private getScreenCentroid(screen: ScreenPoint[]) {
+        let x = 0;
+        let y = 0;
+        for (const point of screen) {
+            x += point.x;
+            y += point.y;
+        }
+        return { x: x / screen.length, y: y / screen.length };
+    }
+
+    private toMeters(sceneUnits: number) {
+        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
+        const scale = Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
+        return sceneUnits * scale;
+    }
+
     private renderEdgeLabels(
         mode: MeasureMode,
         screen: Array<{ x: number; y: number; z: number }>,
@@ -668,9 +958,8 @@ class MeasurementController {
         const precision = unit === 'mm' ? 0 : 2;
 
         const n = this.points.length;
-        // Edges: for 2 or 3 points — open polyline (n-1 segments).
-        // For 4 points — closed polygon (n segments, including points[3]→points[0]).
-        const edgeCount = n === 4 ? 4 : n - 1;
+        const areaComplete = this.isAreaComplete();
+        const edgeCount = areaComplete ? n : n - 1;
 
         for (let i = 0; i < this.measureEdgeLabels.length; i++) {
             const el = this.measureEdgeLabels[i];
@@ -715,6 +1004,29 @@ class MeasurementController {
             const factor2 = unit === 'mm' ? 1e6 : (unit === 'cm' ? 1e4 : 1);
             const precision = unit === 'mm' ? 0 : 2;
             return `${((m2 as number) * factor2).toFixed(precision)} ${unit}²`;
+        }
+        return '';
+    }
+
+    private buildStoredLabel(measurement: StoredMeasurement) {
+        const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
+        if (measurement.mode === 'distance' && measurement.points.length >= 2) {
+            const meters = this.toMeters(measurement.points[0].distance(measurement.points[1]));
+            const factor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
+            const precision = unit === 'mm' ? 0 : 2;
+            return `${(meters * factor).toFixed(precision)} ${unit}`;
+        }
+        if (measurement.mode === 'angle') {
+            const deg = measurement.angle;
+            if (!Number.isFinite(deg as number)) return '';
+            return `${(deg as number).toFixed(1)}°`;
+        }
+        if (measurement.mode === 'area' && measurement.points.length >= 3) {
+            const raw = this.computeArea(measurement.points);
+            const meters2 = this.toMeters(Math.sqrt(raw.area));
+            const factor2 = unit === 'mm' ? 1e6 : (unit === 'cm' ? 1e4 : 1);
+            const precision = unit === 'mm' ? 0 : 2;
+            return `${(meters2 * meters2 * factor2).toFixed(precision)} ${unit}²`;
         }
         return '';
     }

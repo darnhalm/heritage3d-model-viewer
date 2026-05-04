@@ -40,6 +40,8 @@ class SettingsService {
 
     private static readonly SETTINGS_FETCH_TIMEOUT_MS = 30000;
 
+    private static readonly SETTINGS_LOADING_BACKGROUND_TIMEOUT_MS = 2500;
+
     private static readonly SETTINGS_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 
     private static readonly SETTINGS_HEAD_TIMEOUT_MS = 5000;
@@ -237,6 +239,32 @@ class SettingsService {
         }
     }
 
+    private static getSolidBackgroundFromSettings(data: Record<string, unknown>): { background: string; backgroundColor: Rgb } | null {
+        const skybox = data.skybox;
+        if (!skybox || typeof skybox !== 'object' || Array.isArray(skybox)) return null;
+
+        const skyboxData = skybox as Record<string, unknown>;
+        if (skyboxData.background !== 'Solid Color') return null;
+
+        const color = skyboxData.backgroundColor;
+        if (typeof color === 'string') {
+            const rgb = SettingsService.hexToRgb(color);
+            return rgb ? { background: 'Solid Color', backgroundColor: rgb } : null;
+        }
+
+        if (color && typeof color === 'object' && !Array.isArray(color)) {
+            const c = color as { r?: unknown; g?: unknown; b?: unknown };
+            const r = Number(c.r);
+            const g = Number(c.g);
+            const b = Number(c.b);
+            if ([r, g, b].every(Number.isFinite)) {
+                return { background: 'Solid Color', backgroundColor: { r, g, b } };
+            }
+        }
+
+        return null;
+    }
+
     exportViewerSettings() {
         const options = this.observer.json() as Record<string, unknown>;
         const skybox = (options.skybox && typeof options.skybox === 'object') ? { ...(options.skybox as Record<string, unknown>) } : {};
@@ -340,6 +368,7 @@ class SettingsService {
         o.set('measure.areaPlanarity', null);
         o.set('measure.pointCount', 0);
         o.set('measure.knownDistance', 0);
+        o.set('measure.knownDistanceWarning', false);
         o.set('poi.enabled', false);
         o.set('poi.list', '[]');
         this.onMeasurementReset();
@@ -499,6 +528,67 @@ class SettingsService {
 
     private clearSettingsMissCache(cacheKey: string) {
         this.remoteSettingsMissCache.delete(cacheKey);
+    }
+
+    preloadLoadingBackgroundFromSettings(firstModelUrl: string, allFiles?: ModelFile[]): Promise<void> {
+        const firstModelFilename = allFiles?.find(f => (f.filename && this.isModelFilename(f.filename)) || (f.filename && this.isGSplatFilename(f.filename))
+        )?.filename;
+        const baseName = firstModelFilename ? firstModelFilename.replace(/\.[^/.]+$/, '').split('/').pop() || '' : '';
+
+        const fromDroppedFiles = (): Promise<Record<string, unknown> | null> => {
+            if (!allFiles || !baseName) return Promise.resolve(null);
+            const best: { file: ModelFile; version: number } | null = allFiles.reduce(
+                (acc, f) => {
+                    if (!f.filename) return acc;
+                    const v = SettingsService.settingsVersionFromFilename(f.filename, baseName);
+                    if (v < 0) return acc;
+                    if (!acc || v > acc.version) return { file: f, version: v };
+                    return acc;
+                },
+                null as { file: ModelFile; version: number } | null
+            );
+            if (!best) return Promise.resolve(null);
+            return this.fetchJsonWithSizeLimit(best.file.url);
+        };
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), SettingsService.SETTINGS_LOADING_BACKGROUND_TIMEOUT_MS);
+        const candidates = SettingsService.settingsUrlCandidatesForModelUrl(firstModelUrl);
+        const fetchOne = (url: string) => this.fetchJsonWithSizeLimit(url, controller.signal);
+        const sources = [fromDroppedFiles(), ...candidates.map(c => fetchOne(c.url))];
+
+        return new Promise<void>((resolve) => {
+            let pending = sources.length;
+            let resolved = false;
+            const finish = () => {
+                if (resolved) return;
+                resolved = true;
+                clearTimeout(timeoutId);
+                controller.abort();
+                resolve();
+            };
+            setTimeout(finish, SettingsService.SETTINGS_LOADING_BACKGROUND_TIMEOUT_MS);
+
+            sources.forEach((source) => {
+                source
+                .then((result) => {
+                    if (resolved || !result) return;
+                    const background = SettingsService.getSolidBackgroundFromSettings(result);
+                    if (!background) return;
+
+                    this.observer.set('skybox.background', background.background);
+                    this.observer.set('skybox.backgroundColor', background.backgroundColor);
+                    this.observer.set('ui.loadingBackgroundReady', true);
+                    this.setBackgroundColor(background.backgroundColor);
+                    finish();
+                })
+                .catch(() => {})
+                .finally(() => {
+                    pending--;
+                    if (pending <= 0) finish();
+                });
+            });
+        });
     }
 
     tryFetchAndApplySettings(firstModelUrl: string, allFiles?: ModelFile[]): Promise<void> {

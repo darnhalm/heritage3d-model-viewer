@@ -1009,6 +1009,11 @@ body:not(.ui-ready) #panel-left {
     pointer-events: none;
 }
 
+.measure-line.measure-completed {
+    stroke: rgba(120, 255, 255, 0.75);
+    stroke-width: 3;
+}
+
 .measure-polygon {
     stroke: rgba(120, 255, 255, 0.95);
     stroke-width: 3;
@@ -1018,11 +1023,20 @@ body:not(.ui-ready) #panel-left {
     pointer-events: none;
 }
 
+.measure-polygon.measure-completed {
+    stroke: rgba(120, 255, 255, 0.7);
+    fill: rgba(120, 255, 255, 0.1);
+}
+
 .measure-cross {
     stroke: rgba(255, 255, 255, 0.95);
     stroke-width: 4;
     stroke-linecap: round;
     pointer-events: none;
+}
+
+.measure-completed-cross {
+    opacity: 0.75;
 }
 
 .measure-handle {
@@ -1070,6 +1084,11 @@ body:not(.ui-ready) #panel-left {
     pointer-events: none;
 }
 
+.measure-completed-label,
+.measure-completed-edge-label {
+    opacity: 0.82;
+}
+
 .measure-mode-toolbar {
     display: flex;
     flex-direction: row;
@@ -1077,6 +1096,13 @@ body:not(.ui-ready) #panel-left {
     justify-content: center;
     gap: 8px;
     padding: 6px 4px 10px;
+}
+
+.measure-warning {
+    color: #f5c77b;
+    font-size: 12px;
+    line-height: 1.35;
+    padding: 6px 0;
 }
 
 .measure-mode-btn {
@@ -2797,6 +2823,13 @@ input {
             rgba(255, 255, 255, 0.7) 100%
         ) !important;
     }
+}
+
+.load-progress-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
 }
 
 .load-progress-value {
