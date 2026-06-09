@@ -556,10 +556,59 @@ const main = () => {
             const data = event.data;
             if (!data || typeof data !== 'object') return;
 
+            function resolveTime(data: { time?: number; frame?: number; fps?: number }): number | null {
+                if (typeof data.time === 'number') return data.time;
+                if (typeof data.frame === 'number') {
+                    const fps = typeof data.fps === 'number' && data.fps > 0 ? data.fps : 24;
+                    return data.frame / fps;
+                }
+                return null;
+            }
+
+            const getActiveAnimationDuration = () => {
+                let duration = 0;
+                viewer.entities.forEach((e) => {
+                    const d = e.anim?.baseLayer?.activeStateDuration;
+                    if (d) duration = d;
+                });
+                return duration;
+            };
+
+            const setAnimationClip = (clip: unknown) => {
+                if (typeof clip === 'string') {
+                    observer.set('animation.selectedTrack', clip);
+                }
+            };
+
+            const seekAnimationToTime = (time: number) => {
+                const duration = getActiveAnimationDuration();
+                if (duration > 0) {
+                    viewer.setAnimationProgress(time / duration);
+                    return true;
+                }
+                return false;
+            };
+
             switch (data.type) {
                 case 'focus-poi':
                 case 'open-poi': {
                     const id = typeof data.id === 'string' ? data.id : '';
+                    const number = typeof data.number === 'number' ? data.number : null;
+                    // Приоритет — навигация по НОМЕРУ тура (хост знает номер, но не
+                    // внутренний id модели). Номер ищем среди обычных точек (триггеры
+                    // в тур не входят). id — фолбэк, если номер не передан/не найден.
+                    if (number !== null) {
+                        try {
+                            const list = JSON.parse(String(observer.get('poi.list') ?? '[]'));
+                            const entry = Array.isArray(list)
+                                ? list.find((p: { number?: number; trigger?: boolean }) => !p.trigger && p.number === number)
+                                : null;
+                            if (entry?.id) {
+                                viewer.focusPoi(entry.id);
+                                break;
+                            }
+                        } catch { /* ignore */ }
+                    }
                     if (id) {
                         viewer.focusPoi(id);
                     }
@@ -567,6 +616,34 @@ const main = () => {
                 }
                 case 'clear-poi': {
                     viewer.clearFocusedPoi();
+                    break;
+                }
+                case 'focus-system': {
+                    // Реакция зоны-триггера на ноту: ПУЛЬС маркера по системному имени
+                    // (напр. «C#4»), без перелёта камеры — чтобы зона «мигала» в такт игре.
+                    const name = typeof data.systemName === 'string' ? data.systemName : '';
+                    if (name) {
+                        try {
+                            const list = JSON.parse(String(observer.get('poi.list') ?? '[]'));
+                            const entry = Array.isArray(list)
+                                ? list.find((p: { systemName?: string }) => p.systemName === name)
+                                : null;
+                            if (entry?.id) viewer.pulsePoi(entry.id);
+                        } catch { /* ignore */ }
+                    }
+                    break;
+                }
+                case 'set-trigger-note': {
+                    // Хост (наша клавиатура/MIDI) прислал ноту → присваиваем её
+                    // ВЫДЕЛЕННОЙ точке (poi.activeId) и делаем её триггером.
+                    const note = typeof data.note === 'string' ? data.note.trim() : '';
+                    const activeId = String(observer.get('poi.activeId') ?? '');
+                    if (note && activeId) {
+                        viewer.updatePoiSystemName(activeId, note);
+                        viewer.updatePoiTrigger(activeId, true);
+                        // Сообщаем хосту результат (для подсветки/подтверждения).
+                        window.parent?.postMessage({ type: 'trigger-note-set', id: activeId, note }, '*');
+                    }
                     break;
                 }
                 case 'next-poi': {
@@ -577,6 +654,36 @@ const main = () => {
                     viewer.focusPrevPoi();
                     break;
                 }
+                case 'seek-animation': {
+                    setAnimationClip(data.clip);
+                    const time = resolveTime(data);
+                    if (time === null) break;
+                    const wasPlaying = !!observer.get('animation.playing');
+                    if (seekAnimationToTime(time) && wasPlaying) {
+                        viewer.play();
+                    }
+                    break;
+                }
+                case 'play-animation': {
+                    setAnimationClip(data.clip);
+                    const time = resolveTime(data);
+                    if (time !== null) {
+                        seekAnimationToTime(time);
+                    }
+                    viewer.play();
+                    break;
+                }
+                case 'pause-animation': {
+                    viewer.stop();
+                    break;
+                }
+                case 'freeze-animation': {
+                    setAnimationClip(data.clip);
+                    const time = resolveTime(data);
+                    if (time === null) break;
+                    seekAnimationToTime(time);
+                    break;
+                }
                 default:
                     break;
             }
@@ -584,7 +691,7 @@ const main = () => {
 
         observer.on('poi.activeId:set', (activeId: string) => {
             const poiListRaw = observer.get('poi.list');
-            let poiList: Array<{ id: string; number: number; title?: string; description?: string; color?: string }> = [];
+            let poiList: Array<{ id: string; number: number; title?: string; description?: string; color?: string; trigger?: boolean; systemName?: string }> = [];
             try {
                 const parsed = JSON.parse(String(poiListRaw ?? '[]'));
                 poiList = Array.isArray(parsed) ? parsed : [];
@@ -600,13 +707,51 @@ const main = () => {
                     number: poi?.number ?? null,
                     title: poi?.title ?? null,
                     description: poi?.description ?? null,
-                    color: poi?.color ?? null
+                    color: poi?.color ?? null,
+                    trigger: poi?.trigger ?? false,
+                    systemName: poi?.systemName ?? null
                 }, '*');
             } else {
                 window.parent?.postMessage({
                     type: 'poi-cleared'
                 }, '*');
             }
+        });
+
+        // Каждый клик по точке-триггеру (даже повторный по той же) → отдельный
+        // poi-selected{trigger} хосту, чтобы нота играла КАЖДЫЙ раз.
+        observer.on('poi.triggerHit:set', (raw: string) => {
+            try {
+                const hit = JSON.parse(String(raw || '{}'));
+                if (hit && hit.systemName) {
+                    window.parent?.postMessage({
+                        type: 'poi-selected',
+                        id: hit.id,
+                        trigger: true,
+                        systemName: hit.systemName
+                    }, '*');
+                }
+            } catch { /* ignore */ }
+        });
+
+        observer.on('animation.progress:set', (progress: number) => {
+            if (viewer.suppressAnimationProgressUpdate) return;
+            let duration = 0;
+            viewer.entities.forEach((e) => {
+                const d = e.anim?.baseLayer?.activeStateDuration;
+                if (d) duration = d;
+            });
+            const clip = observer.get('animation.selectedTrack') ?? null;
+            const fps = 24;
+            window.parent?.postMessage({
+                type: 'animation-time',
+                clip,
+                time: progress * duration,
+                frame: Math.round(progress * duration * fps),
+                fps,
+                duration,
+                progress
+            }, '*');
         });
 
         // get list of files, decode them

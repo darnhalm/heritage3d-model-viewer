@@ -1,0 +1,3331 @@
+openapi: 3.1.0
+info:
+  title: API портала 3D-наследие
+  version: 0.1.0
+  summary: Контракты реестра, манифестов, медиафайлов, плееров и iframe-встройки для портала 3D-наследие.
+  description: 'Черновой контракт API для портала 3D-культурного наследия.
+
+
+    HTTP API описывает постоянные идентификаторы культурных объектов, метаданные с ориентацией на CIDOC CRM,
+
+    цифровые двойники, медиафайлы, возможности плееров и манифесты для просмотра.
+
+    Плееры выбираются из реестра разрешенных плееров портала. Генерация встройки принимает `playerId`,
+
+    а не произвольный URL плеера.
+
+
+    Логика iframe-встройки и управления viewer намеренно похожа на распространенные 3D-платформы вроде
+
+    Sketchfab, но модель портала шире: основной записью является культурный объект и его версионированные
+
+    цифровые двойники. API поддерживает метаданные по CIDOC CRM, внешние идентификаторы наследия,
+
+    хранилище медиа, несколько разрешенных плееров и политики доступа для черновиков, объектов по паролю,
+
+    ограниченных и публичных публикаций.
+
+
+    Браузерный `window.postMessage` не является HTTP-транспортом. Здесь он описан как набор переиспользуемых
+
+    схем и примеров, чтобы интеграторы видели единый контракт в Swagger UI. В промышленной версии портал
+
+    может дополнительно публиковать эти схемы через `/api/v1/player-messaging/protocol`.
+
+    '
+  contact:
+    name: Heritage3D API working draft
+  license:
+    name: MIT
+servers:
+- url: https://heritage3d.example.ru
+  description: Промышленный портал, пример
+- url: http://localhost:3000
+  description: Локальная разработка
+tags:
+- name: Доступ
+  description: Роли, права и политики команд плеера.
+- name: Объекты
+  description: Реестр постоянных культурных объектов.
+- name: Цифровые двойники
+  description: Версионированные цифровые представления культурных объектов.
+- name: Управление моделями
+  description: Создание объектов, загрузка файлов, регистрация assets и отправка на модерацию.
+- name: Каталог и поиск
+  description: Публичный каталог, поиск и справочники.
+- name: Манифесты
+  description: Манифесты для плееров, связывающие объект с media assets.
+- name: Медиафайлы
+  description: Файлы и производные данные в хранилище портала, музея, партнера, CDN или архива.
+- name: Плееры
+  description: Реестр плееров и согласование возможностей.
+- name: Встройка
+  description: Серверная генерация iframe URL и параметров встройки.
+- name: Сообщения плеера
+  description: Схемы и примеры обмена сообщениями с iframe через `window.postMessage`.
+paths:
+  /api/v1/access-control/model:
+    get:
+      tags:
+      - Доступ
+      summary: Получить модель доступа портала.
+      description: 'Описывает ролевую модель портала. Фактическая проверка прав выполняется backend-ом,
+
+        а этот endpoint делает публичный контракт понятным для интеграторов и администраторов.
+
+        '
+      operationId: getAccessControlModel
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      responses:
+        '200':
+          description: Ролевая модель и права доступа.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessControlModel'
+              examples:
+                model:
+                  $ref: '#/components/examples/AccessControlModel'
+  /api/v1/objects/{objectId}:
+    get:
+      tags:
+      - Объекты
+      summary: Получить культурный объект по постоянному H3D-идентификатору.
+      operationId: getCulturalObject
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - objects:read:published
+      - objects:read:restricted
+      parameters:
+      - $ref: '#/components/parameters/ObjectId'
+      responses:
+        '200':
+          description: Метаданные культурного объекта.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CulturalObject'
+              examples:
+                okn:
+                  $ref: '#/components/examples/CulturalObjectOkn'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - Управление моделями
+      summary: Обновить метаданные культурного объекта.
+      operationId: updateCulturalObject
+      security:
+      - bearerAuth: []
+      x-roles:
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      x-permissions:
+      - objects:update:ownDraft
+      - objects:update:institution
+      - objects:update:any
+      parameters:
+      - $ref: '#/components/parameters/ObjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCulturalObjectRequest'
+      responses:
+        '200':
+          description: Обновленный культурный объект.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CulturalObject'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/objects:
+    get:
+      tags:
+      - Каталог и поиск
+      summary: Получить список культурных объектов.
+      operationId: listCulturalObjects
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - objects:read:published
+      - objects:read:restricted
+      parameters:
+      - name: q
+        in: query
+        required: false
+        description: Поисковая строка.
+        schema:
+          type: string
+      - name: type
+        in: query
+        required: false
+        description: Тип культурного объекта.
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        description: Статус связанного цифрового двойника. Для публичного каталога обычно используется `published`.
+        schema:
+          type: string
+          enum:
+          - draft
+          - submitted
+          - verified
+          - published
+          - archived
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 20
+          minimum: 1
+          maximum: 100
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          default: 0
+          minimum: 0
+      responses:
+        '200':
+          description: Список культурных объектов.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CulturalObjectList'
+    post:
+      tags:
+      - Управление моделями
+      summary: Создать культурный объект.
+      operationId: createCulturalObject
+      security:
+      - bearerAuth: []
+      x-roles:
+      - contributor
+      - institution_admin
+      - admin
+      x-permissions:
+      - objects:create:draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCulturalObjectRequest'
+      responses:
+        '201':
+          description: Созданный культурный объект.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CulturalObject'
+  /api/v1/objects/{objectId}/twins:
+    get:
+      tags:
+      - Цифровые двойники
+      summary: Получить список цифровых двойников культурного объекта.
+      operationId: listDigitalTwinsForObject
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - twins:read:published
+      - twins:read:restricted
+      parameters:
+      - $ref: '#/components/parameters/ObjectId'
+      responses:
+        '200':
+          description: Цифровые двойники объекта.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - objectId
+                - items
+                properties:
+                  objectId:
+                    $ref: '#/components/schemas/H3DId'
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DigitalTwin'
+    post:
+      tags:
+      - Управление моделями
+      summary: Создать черновик цифрового двойника для культурного объекта.
+      operationId: createDigitalTwin
+      security:
+      - bearerAuth: []
+      x-roles:
+      - contributor
+      - institution_admin
+      - admin
+      x-permissions:
+      - twins:create
+      parameters:
+      - $ref: '#/components/parameters/ObjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDigitalTwinRequest'
+      responses:
+        '201':
+          description: Созданный цифровой двойник в статусе draft.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DigitalTwin'
+  /api/v1/twins/{twinId}:
+    get:
+      tags:
+      - Цифровые двойники
+      summary: Получить цифровой двойник по постоянному H3D-идентификатору.
+      operationId: getDigitalTwin
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - twins:read:published
+      - twins:read:restricted
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      responses:
+        '200':
+          description: Метаданные цифрового двойника.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DigitalTwin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - Управление моделями
+      summary: Обновить цифровой двойник.
+      operationId: updateDigitalTwin
+      security:
+      - bearerAuth: []
+      x-roles:
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      x-permissions:
+      - twins:update:ownDraft
+      - twins:update:institution
+      - twins:update:any
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDigitalTwinRequest'
+      responses:
+        '200':
+          description: Обновленный цифровой двойник.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DigitalTwin'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/twins/{twinId}/assets/upload-url:
+    post:
+      tags:
+      - Управление моделями
+      summary: Получить временную ссылку для загрузки файла.
+      description: 'Backend проверяет пользователя, роль, права на twinId, статус черновика, размер, формат и квоты.
+
+        После успешной проверки возвращается короткоживущий uploadUrl для прямой загрузки в media-хранилище
+
+        или Геоскан Облако.
+
+        '
+      operationId: createAssetUploadUrl
+      security:
+      - bearerAuth: []
+      x-roles:
+      - contributor
+      - institution_admin
+      - admin
+      x-permissions:
+      - assets:create
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUploadUrlRequest'
+      responses:
+        '201':
+          description: Временная ссылка для загрузки файла.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+  /api/v1/twins/{twinId}/assets:
+    post:
+      tags:
+      - Управление моделями
+      summary: Зарегистрировать загруженный файл как MediaAsset.
+      description: 'Вызывается после фактической загрузки файла в storage. Backend повторно проверяет assetDraftId,
+
+        принадлежность пользователю/twinId, размер, checksum, формат и наличие файла.
+
+        '
+      operationId: registerMediaAsset
+      security:
+      - bearerAuth: []
+      x-roles:
+      - contributor
+      - institution_admin
+      - admin
+      x-permissions:
+      - assets:create
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterMediaAssetRequest'
+      responses:
+        '201':
+          description: Зарегистрированный MediaAsset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
+  /api/v1/twins/{twinId}/submit:
+    post:
+      tags:
+      - Управление моделями
+      summary: Отправить цифровой двойник на модерацию.
+      operationId: submitDigitalTwinForModeration
+      security:
+      - bearerAuth: []
+      x-roles:
+      - contributor
+      - institution_admin
+      - admin
+      x-permissions:
+      - moderation:submit
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      responses:
+        '200':
+          description: Цифровой двойник переведен в статус submitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DigitalTwin'
+  /api/v1/twins/{twinId}/processing-status:
+    get:
+      tags:
+      - Управление моделями
+      summary: Получить статус обработки или публикации цифрового двойника.
+      operationId: getDigitalTwinProcessingStatus
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      x-roles:
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - twins:processingStatus:read
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      responses:
+        '200':
+          description: Статус обработки.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessingStatus'
+  /api/v1/twins/{twinId}/preview:
+    get:
+      tags:
+      - Управление моделями
+      summary: Получить превью цифрового двойника.
+      description: 'Возвращает thumbnail/poster/screenshot для карточек каталога и страницы объекта.
+
+        Каталог должен использовать preview, а не загружать тяжелые модели или manifest для каждой карточки.
+
+        '
+      operationId: getDigitalTwinPreview
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - twins:preview:read
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      - name: size
+        in: query
+        required: false
+        description: Размер превью.
+        schema:
+          type: string
+          enum:
+          - small
+          - medium
+          - large
+          - poster
+          default: medium
+      responses:
+        '200':
+          description: Превью цифрового двойника.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewAsset'
+    post:
+      tags:
+      - Управление моделями
+      summary: Создать или обновить превью цифрового двойника.
+      description: 'Используется после загрузки модели или по явному запросу, чтобы создать screenshot/poster/thumbnail.
+
+        Генерация может выполняться плеером, серверной обработкой или внешним облаком.
+
+        '
+      operationId: createDigitalTwinPreview
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      x-roles:
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - twins:preview:create
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePreviewRequest'
+      responses:
+        '202':
+          description: Генерация превью поставлена в очередь или выполнена.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewAsset'
+  /api/v1/twins/{twinId}/manifest:
+    get:
+      tags:
+      - Манифесты
+      summary: Получить манифест цифрового двойника для плеера.
+      description: 'Манифест — основной контракт, который используют iframe-плееры. Он содержит достаточно данных,
+
+        чтобы открыть модель, проверить целостность файлов, показать название/права и выбрать совместимый плеер.
+
+        '
+      operationId: getDigitalTwinManifest
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - manifests:read:published
+      - manifests:read:restricted
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      - name: profile
+        in: query
+        description: Опциональный профиль ответа для конкретного сценария интеграции.
+        schema:
+          type: string
+          enum:
+          - default
+          - public
+          - archival
+          - player
+          default: default
+      responses:
+        '200':
+          description: H3D-манифест.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/H3DManifest'
+              examples:
+                publicGlb:
+                  $ref: '#/components/examples/H3DManifestPublicGlb'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/assets/{assetId}:
+    get:
+      tags:
+      - Медиафайлы
+      summary: Получить метаданные медиафайла и место хранения.
+      operationId: getMediaAsset
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - assets:read:public
+      - assets:read:restricted
+      - assets:read:internal
+      parameters:
+      - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Метаданные медиафайла.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MediaAsset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/assets/{assetId}/download:
+    get:
+      tags:
+      - Медиафайлы
+      summary: Получить временную ссылку для скачивания asset.
+      description: 'Скачивание разрешается только если download policy asset и права пользователя это допускают.
+
+        Для закрытых файлов возвращается короткоживущий signed URL.
+
+        '
+      operationId: getMediaAssetDownloadUrl
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - assets:download:public
+      - assets:download:restricted
+      parameters:
+      - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Временная ссылка для скачивания.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadUrlResponse'
+        '403':
+          description: Скачивание запрещено политикой доступа.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/search:
+    get:
+      tags:
+      - Каталог и поиск
+      summary: Поиск по опубликованным объектам и цифровым двойникам.
+      operationId: searchPortal
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - search:public
+      - search:restricted
+      parameters:
+      - name: q
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: downloadable
+        in: query
+        required: false
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: Результаты поиска.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /api/v1/dictionaries/object-types:
+    get:
+      tags:
+      - Каталог и поиск
+      summary: Получить справочник типов культурных объектов.
+      operationId: listObjectTypes
+      security:
+      - {}
+      responses:
+        '200':
+          description: Типы культурных объектов.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryResponse'
+  /api/v1/dictionaries/licenses:
+    get:
+      tags:
+      - Каталог и поиск
+      summary: Получить справочник лицензий и правовых режимов.
+      operationId: listLicenses
+      security:
+      - {}
+      responses:
+        '200':
+          description: Лицензии и правовые режимы.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DictionaryResponse'
+  /api/v1/players:
+    get:
+      tags:
+      - Плееры
+      summary: Получить список зарегистрированных и разрешенных плееров.
+      operationId: listPlayers
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - players:read
+      responses:
+        '200':
+          description: Зарегистрированные плееры.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Player'
+  /api/v1/players/{playerId}/capabilities:
+    get:
+      tags:
+      - Плееры
+      summary: Получить возможности плеера.
+      operationId: getPlayerCapabilities
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - players:read
+      parameters:
+      - name: playerId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: h3d-gltf-viewer
+      responses:
+        '200':
+          description: Возможности плеера.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerCapabilities'
+  /api/v1/players/{playerId}/policy:
+    get:
+      tags:
+      - Плееры
+      summary: Получить allowlist-политику и правила встройки плеера.
+      description: 'Описывает, может ли портал генерировать iframe URL для этого плеера.
+
+        Портал не должен принимать произвольные viewer URL от клиентов.
+
+        '
+      operationId: getPlayerEmbedPolicy
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - players:read
+      parameters:
+      - name: playerId
+        in: path
+        required: true
+        schema:
+          type: string
+        example: h3d-gltf-viewer
+      responses:
+        '200':
+          description: Allowlist-политика плеера.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerEmbedPolicy'
+  /api/v1/viewer-url:
+    get:
+      tags:
+      - Плееры
+      summary: Сформировать URL viewer для встройки цифрового двойника.
+      operationId: resolveViewerUrl
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - embeds:create:public
+      - embeds:create:restricted
+      parameters:
+      - name: twinId
+        in: query
+        required: true
+        schema:
+          $ref: '#/components/schemas/H3DId'
+        example: twin:01JTWINABCDEF1234567890
+      - name: playerId
+        in: query
+        required: false
+        schema:
+          type: string
+        example: h3d-gltf-viewer
+      responses:
+        '200':
+          description: URL viewer для встройки и выбранный плеер.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - playerId
+                - iframeUrl
+                - manifestUrl
+                properties:
+                  playerId:
+                    type: string
+                  iframeUrl:
+                    type: string
+                    format: uri
+                  manifestUrl:
+                    type: string
+                    format: uri
+  /api/v1/embed-presets:
+    get:
+      tags:
+      - Встройка
+      summary: Получить поддерживаемые пресеты встройки и их UI-флаги по умолчанию.
+      operationId: listEmbedPresets
+      security:
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - embeds:presets:read
+      responses:
+        '200':
+          description: Пресеты встройки.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EmbedPreset'
+              examples:
+                presets:
+                  value:
+                    items:
+                    - name: full
+                      description: Полный embed-интерфейс с левой панелью и основными инструментами.
+                      defaults:
+                        panel: true
+                        poi: true
+                        tour: true
+                        measure: true
+                        info: true
+                        modelInfo: true
+                        controls: true
+                        fullscreen: true
+                        fit: true
+                        reset: true
+                    - name: compact
+                      description: Компактная публикационная встройка.
+                      defaults:
+                        panel: false
+                        poi: true
+                        tour: true
+                        measure: false
+                        info: true
+                        modelInfo: false
+                        controls: true
+                        fullscreen: true
+                        fit: true
+                        reset: true
+                    - name: minimal
+                      description: Минимальная встройка с почти полностью скрытым UI.
+                      defaults:
+                        panel: false
+                        poi: true
+                        tour: true
+                        measure: false
+                        info: false
+                        modelInfo: false
+                        controls: false
+                        fullscreen: true
+                        fit: false
+                        reset: true
+  /api/v1/twins/{twinId}/embed:
+    post:
+      tags:
+      - Встройка
+      summary: Сформировать iframe-встройку для цифрового двойника.
+      description: 'Converts structured embed options into the current viewer query parameters.
+
+        This keeps public pages, museum systems, and admin panels from hand-building iframe URLs.
+
+        '
+      operationId: createTwinEmbed
+      security:
+      - bearerAuth: []
+      - apiKeyAuth: []
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - embeds:create:public
+      - embeds:create:restricted
+      parameters:
+      - $ref: '#/components/parameters/TwinId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmbedRequest'
+            examples:
+              compact:
+                $ref: '#/components/examples/CreateEmbedRequestCompact'
+      responses:
+        '200':
+          description: Сформированный iframe URL и HTML-код встройки.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmbedUrlResponse'
+              examples:
+                compact:
+                  $ref: '#/components/examples/EmbedUrlResponseCompact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/player-messaging/protocol:
+    get:
+      tags:
+      - Сообщения плеера
+      summary: Получить описание браузерного протокола postMessage.
+      description: 'Документационный endpoint для протокола сообщений iframe. Сами сообщения передаются
+
+        в браузере через `window.postMessage`, а не через этот HTTP endpoint.
+
+        '
+      operationId: getPlayerMessagingProtocol
+      security:
+      - {}
+      x-roles:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+      x-permissions:
+      - playerMessaging:protocol:read
+      responses:
+        '200':
+          description: Поддерживаемый протокол сообщений, команды, события и capabilities.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlayerMessagingProtocol'
+              examples:
+                protocol:
+                  $ref: '#/components/examples/PlayerMessagingProtocol'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT пользователя или сервиса. Токен должен содержать роль, учреждение, субъект и права.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: 'Сервисный ключ для доверенных интеграций: музейные АИС, синхронизация реестров, мониторинг хранилищ.'
+  parameters:
+    ObjectId:
+      name: objectId
+      in: path
+      required: true
+      description: Постоянный H3D-идентификатор культурного объекта.
+      schema:
+        $ref: '#/components/schemas/H3DId'
+      example: h3dru:object:01JOBJABCDEF1234567890
+    TwinId:
+      name: twinId
+      in: path
+      required: true
+      description: Постоянный H3D-идентификатор цифрового двойника.
+      schema:
+        $ref: '#/components/schemas/H3DId'
+      example: twin:01JTWINABCDEF1234567890
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      description: Постоянный H3D-идентификатор медиафайла.
+      schema:
+        $ref: '#/components/schemas/H3DId'
+      example: h3dru:asset:01JASSETABCDEF1234567890
+  responses:
+    NotFound:
+      description: Запрошенный ресурс не найден.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  schemas:
+    H3DId:
+      type: string
+      description: Постоянный идентификатор портала. Внешние идентификаторы хранятся отдельно.
+      pattern: ^h3dru:(object|twin|asset|repr|manifest|organization|player):[A-Za-z0-9._:-]+$
+      examples:
+      - h3dru:object:01JOBJABCDEF1234567890
+      - twin:01JTWINABCDEF1234567890
+    ApiError:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+          example: not_found
+        message:
+          type: string
+          example: Resource not found.
+        details:
+          type: object
+          additionalProperties: true
+    PortalRole:
+      type: string
+      enum:
+      - anonymous
+      - user
+      - contributor
+      - institution_admin
+      - moderator
+      - admin
+      - system
+    PermissionName:
+      type: string
+      examples:
+      - objects:read:published
+      - twins:create
+      - moderation:publish
+      - playerCommands:animation
+    RoleDefinition:
+      type: object
+      required:
+      - role
+      - description
+      - permissions
+      properties:
+        role:
+          $ref: '#/components/schemas/PortalRole'
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionName'
+    EndpointAccessRule:
+      type: object
+      required:
+      - operationId
+      - roles
+      - permissions
+      properties:
+        operationId:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalRole'
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionName'
+    PlayerCommandAccessRule:
+      type: object
+      required:
+      - command
+      - roles
+      - capability
+      properties:
+        command:
+          type: string
+          example: poi.focus
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortalRole'
+        capability:
+          $ref: '#/components/schemas/PlayerCapabilityName'
+        permission:
+          $ref: '#/components/schemas/PermissionName'
+    AccessControlModel:
+      type: object
+      required:
+      - roles
+      - endpointRules
+      - playerCommandRules
+      properties:
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleDefinition'
+        endpointRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/EndpointAccessRule'
+        playerCommandRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerCommandAccessRule'
+        notes:
+          type: array
+          items:
+            type: string
+    ExternalIdentifier:
+      type: object
+      required:
+      - system
+      - value
+      description: Идентификатор из ЕГРОКН, Госкаталога, музейной АИС или другой внешней системы.
+      properties:
+        system:
+          type: string
+          enum:
+          - EGROKN
+          - GOSKATALOG
+          - MUSEUM_AIS
+          - INSTITUTIONAL_CATALOGUE
+          - OTHER
+        value:
+          type: string
+        institutionId:
+          type:
+          - string
+          - 'null'
+        url:
+          type:
+          - string
+          - 'null'
+          format: uri
+        crmClass:
+          type: string
+          description: Класс CIDOC CRM для семантического экспорта.
+          example: E42 Identifier
+    Relation:
+      type: object
+      required:
+      - type
+      - targetId
+      properties:
+        type:
+          type: string
+          enum:
+          - sameAs
+          - isPartOf
+          - hasPart
+          - documents
+          - depicts
+          - wasDerivedFrom
+          - replaces
+          - relatedTo
+        targetId:
+          type: string
+        crmProperty:
+          type:
+          - string
+          - 'null'
+          example: P46 is composed of
+    RightsStatement:
+      type: object
+      required:
+      - access
+      - rightsHolder
+      properties:
+        access:
+          type: string
+          enum:
+          - public
+          - restricted
+          - internal
+          - embargoed
+        license:
+          type:
+          - string
+          - 'null'
+          example: CC BY-NC 4.0
+        rightsHolder:
+          type: string
+        usageTerms:
+          type:
+          - string
+          - 'null'
+    CulturalObject:
+      type: object
+      required:
+      - id
+      - type
+      - title
+      - identifiers
+      properties:
+        id:
+          $ref: '#/components/schemas/H3DId'
+        type:
+          type: string
+          enum:
+          - heritage_site
+          - museum_item
+          - monument
+          - building
+          - collection
+          - fragment
+          - archaeological_site
+          - other
+        crmClass:
+          type: string
+          description: Рекомендуемый класс CIDOC CRM.
+          enum:
+          - E22 Human-Made Object
+          - E24 Physical Human-Made Thing
+          - E27 Site
+          - E78 Curated Holding
+          - E19 Physical Object
+        profile:
+          type: string
+          description: Прикладной профиль портала для полей конкретного типа объекта.
+          example: h3d-profile:okn:v1
+        title:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        identifiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalIdentifier'
+        location:
+          $ref: '#/components/schemas/Place'
+        institution:
+          $ref: '#/components/schemas/Actor'
+        rights:
+          $ref: '#/components/schemas/RightsStatement'
+        relations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Relation'
+        metadata:
+          type: object
+          description: Типовые метаданные, желательно согласованные с опубликованным H3D-профилем.
+          additionalProperties: true
+        thumbnailUrl:
+          type:
+          - string
+          - 'null'
+          format: uri
+          description: Превью для карточки каталога. Должно быть легким изображением, не manifest и не 3D-файлом.
+    CulturalObjectList:
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CulturalObject'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+    CreateCulturalObjectRequest:
+      type: object
+      required:
+      - type
+      - title
+      properties:
+        type:
+          type: string
+          enum:
+          - heritage_site
+          - museum_item
+          - monument
+          - building
+          - collection
+          - fragment
+          - archaeological_site
+          - other
+        title:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        identifiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalIdentifier'
+        institutionId:
+          type:
+          - string
+          - 'null'
+        metadata:
+          type: object
+          additionalProperties: true
+    UpdateCulturalObjectRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        identifiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalIdentifier'
+        metadata:
+          type: object
+          additionalProperties: true
+    Place:
+      type: object
+      properties:
+        crmClass:
+          type: string
+          example: E53 Place
+        address:
+          type:
+          - string
+          - 'null'
+        coordinates:
+          type:
+          - object
+          - 'null'
+          required:
+          - lat
+          - lon
+          properties:
+            lat:
+              type: number
+              format: double
+            lon:
+              type: number
+              format: double
+    Actor:
+      type: object
+      required:
+      - name
+      properties:
+        id:
+          type:
+          - string
+          - 'null'
+        crmClass:
+          type: string
+          enum:
+          - E39 Actor
+          - E40 Legal Body
+          - E21 Person
+          default: E39 Actor
+        name:
+          type: string
+    DigitalTwin:
+      type: object
+      required:
+      - id
+      - objectId
+      - version
+      - status
+      - captureMethod
+      properties:
+        id:
+          $ref: '#/components/schemas/H3DId'
+        objectId:
+          $ref: '#/components/schemas/H3DId'
+        crmClass:
+          type: string
+          description: Рекомендуемый класс CIDOC CRM для цифрового двойника как информационного объекта.
+          enum:
+          - E73 Information Object
+          - E36 Visual Item
+          default: E73 Information Object
+        version:
+          type: string
+          example: '1.0'
+        status:
+          type: string
+          enum:
+          - draft
+          - submitted
+          - verified
+          - published
+          - archived
+        captureMethod:
+          type: string
+          enum:
+          - photogrammetry
+          - laser_scan
+          - structured_light
+          - manual_reconstruction
+          - hybrid
+          - unknown
+        createdAt:
+          type: string
+          format: date-time
+        verifiedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        contributors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Actor'
+        quality:
+          $ref: '#/components/schemas/QualityProfile'
+        assetIds:
+          type: array
+          items:
+            $ref: '#/components/schemas/H3DId'
+        preview:
+          $ref: '#/components/schemas/PreviewAsset'
+    CreateDigitalTwinRequest:
+      type: object
+      required:
+      - captureMethod
+      properties:
+        version:
+          type: string
+          default: '1.0'
+        captureMethod:
+          type: string
+          enum:
+          - photogrammetry
+          - laser_scan
+          - structured_light
+          - manual_reconstruction
+          - hybrid
+          - unknown
+        capturedAt:
+          type:
+          - string
+          - 'null'
+          format: date
+        contributors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Actor'
+        quality:
+          $ref: '#/components/schemas/QualityProfile'
+        geoscanCloudProjectUuid:
+          type:
+          - string
+          - 'null'
+        geoscanCloudDatasetUuid:
+          type:
+          - string
+          - 'null'
+    UpdateDigitalTwinRequest:
+      type: object
+      properties:
+        version:
+          type: string
+        captureMethod:
+          type: string
+          enum:
+          - photogrammetry
+          - laser_scan
+          - structured_light
+          - manual_reconstruction
+          - hybrid
+          - unknown
+        quality:
+          $ref: '#/components/schemas/QualityProfile'
+        access:
+          $ref: '#/components/schemas/AccessPolicy'
+        geoscanCloudProjectUuid:
+          type:
+          - string
+          - 'null'
+        geoscanCloudDatasetUuid:
+          type:
+          - string
+          - 'null'
+    QualityProfile:
+      type: object
+      properties:
+        geometricAccuracyMm:
+          type:
+          - number
+          - 'null'
+        texelDensityPxPerCm:
+          type:
+          - number
+          - 'null'
+        colorCalibration:
+          type: string
+          enum:
+          - none
+          - colorchecker
+          - custom_target
+          - unknown
+        scaleVerified:
+          type: boolean
+        gpsVerified:
+          type: boolean
+        notes:
+          type:
+          - string
+          - 'null'
+    MediaAsset:
+      type: object
+      required:
+      - id
+      - twinId
+      - kind
+      - format
+      - storage
+      - checksum
+      - access
+      properties:
+        id:
+          $ref: '#/components/schemas/H3DId'
+        twinId:
+          $ref: '#/components/schemas/H3DId'
+        crmClass:
+          type: string
+          default: E73 Information Object
+        kind:
+          type: string
+          enum:
+          - web_model
+          - source_model
+          - point_cloud
+          - texture
+          - panorama
+          - image_set
+          - video
+          - archive_package
+          - annotation_layer
+        format:
+          type: string
+          enum:
+          - glb
+          - gltf
+          - obj
+          - ply
+          - e57
+          - laz
+          - las
+          - jpg
+          - png
+          - exr
+          - hdr
+          - mp4
+          - tiles3d
+          - zip
+          - json
+          - other
+        storage:
+          $ref: '#/components/schemas/StorageLocation'
+        checksum:
+          type: string
+          description: Контрольная сумма с префиксом алгоритма.
+          example: sha256:8f14e45fceea167a5a36dedd4bea2543
+        sizeBytes:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        access:
+          type: string
+          enum:
+          - public
+          - signed_url
+          - restricted
+          - internal
+        derivatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/H3DId'
+    PreviewAsset:
+      type: object
+      required:
+      - url
+      - kind
+      properties:
+        id:
+          $ref: '#/components/schemas/H3DId'
+        kind:
+          type: string
+          enum:
+          - thumbnail
+          - poster
+          - screenshot
+        url:
+          type: string
+          format: uri
+        width:
+          type:
+          - integer
+          - 'null'
+        height:
+          type:
+          - integer
+          - 'null'
+        format:
+          type:
+          - string
+          - 'null'
+          enum:
+          - jpg
+          - png
+          - webp
+        generatedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    CreatePreviewRequest:
+      type: object
+      properties:
+        source:
+          type: string
+          enum:
+          - auto
+          - player_screenshot
+          - uploaded_image
+          - external_provider
+          default: auto
+        size:
+          type: string
+          enum:
+          - small
+          - medium
+          - large
+          - poster
+          default: medium
+        camera:
+          type:
+          - object
+          - 'null'
+          description: Опциональные параметры камеры для screenshot из 3D-плеера.
+          additionalProperties: true
+    AccessPolicy:
+      type: object
+      required:
+      - mode
+      properties:
+        mode:
+          type: string
+          enum:
+          - public
+          - unlisted
+          - password
+          - restricted
+          - internal
+          - embargoed
+        passwordRequired:
+          type: boolean
+          default: false
+        allowedRoleIds:
+          type: array
+          items:
+            type: string
+        embargoUntil:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    DownloadPolicy:
+      type: object
+      required:
+      - enabled
+      - policy
+      properties:
+        enabled:
+          type: boolean
+        policy:
+          type: string
+          enum:
+          - public
+          - authenticated
+          - institution
+          - request_access
+          - disabled
+        formats:
+          type: array
+          items:
+            type: string
+        licenseRequired:
+          type: boolean
+          default: true
+    CreateUploadUrlRequest:
+      type: object
+      required:
+      - fileName
+      - contentType
+      - sizeBytes
+      - kind
+      - format
+      properties:
+        fileName:
+          type: string
+          example: model.glb
+        contentType:
+          type: string
+          example: model/gltf-binary
+        sizeBytes:
+          type: integer
+          format: int64
+        kind:
+          type: string
+          enum:
+          - web_model
+          - source_model
+          - point_cloud
+          - texture
+          - panorama
+          - image_set
+          - video
+          - archive_package
+          - annotation_layer
+        format:
+          type: string
+          enum:
+          - glb
+          - gltf
+          - obj
+          - ply
+          - e57
+          - laz
+          - las
+          - jpg
+          - png
+          - exr
+          - hdr
+          - mp4
+          - tiles3d
+          - zip
+          - json
+          - other
+        checksum:
+          type:
+          - string
+          - 'null'
+        storageProvider:
+          type: string
+          enum:
+          - portal
+          - geoscan_cloud
+          default: portal
+    UploadUrlResponse:
+      type: object
+      required:
+      - assetDraftId
+      - uploadUrl
+      - method
+      - expiresAt
+      properties:
+        assetDraftId:
+          $ref: '#/components/schemas/H3DId'
+        uploadUrl:
+          type: string
+          format: uri
+        method:
+          type: string
+          enum:
+          - PUT
+          - POST
+        expiresAt:
+          type: string
+          format: date-time
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        maxSizeBytes:
+          type:
+          - integer
+          - 'null'
+          format: int64
+    RegisterMediaAssetRequest:
+      type: object
+      required:
+      - assetDraftId
+      - fileName
+      - kind
+      - format
+      - checksum
+      properties:
+        assetDraftId:
+          $ref: '#/components/schemas/H3DId'
+        fileName:
+          type: string
+        kind:
+          type: string
+          enum:
+          - web_model
+          - source_model
+          - point_cloud
+          - texture
+          - panorama
+          - image_set
+          - video
+          - archive_package
+          - annotation_layer
+        format:
+          type: string
+          enum:
+          - glb
+          - gltf
+          - obj
+          - ply
+          - e57
+          - laz
+          - las
+          - jpg
+          - png
+          - exr
+          - hdr
+          - mp4
+          - tiles3d
+          - zip
+          - json
+          - other
+        checksum:
+          type: string
+        download:
+          $ref: '#/components/schemas/DownloadPolicy'
+    ProcessingStatus:
+      type: object
+      required:
+      - twinId
+      - status
+      properties:
+        twinId:
+          $ref: '#/components/schemas/H3DId'
+        status:
+          type: string
+          enum:
+          - queued
+          - uploading
+          - uploaded
+          - processing
+          - validating
+          - ready
+          - failed
+          - published
+        progress:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
+        message:
+          type:
+          - string
+          - 'null'
+        updatedAt:
+          type: string
+          format: date-time
+    DownloadUrlResponse:
+      type: object
+      required:
+      - assetId
+      - downloadUrl
+      - expiresAt
+      - checksum
+      properties:
+        assetId:
+          $ref: '#/components/schemas/H3DId'
+        downloadUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+        checksum:
+          type: string
+        license:
+          type:
+          - string
+          - 'null'
+    SearchResponse:
+      type: object
+      required:
+      - items
+      - total
+      - limit
+      - offset
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required:
+            - type
+            - id
+            - title
+            properties:
+              type:
+                type: string
+                enum:
+                - object
+                - twin
+                - asset
+              id:
+                type: string
+              title:
+                type: string
+              snippet:
+                type:
+                - string
+                - 'null'
+        total:
+          type: integer
+        limit:
+          type: integer
+          default: 20
+        offset:
+          type: integer
+          default: 0
+    DictionaryResponse:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required:
+            - id
+            - label
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              description:
+                type:
+                - string
+                - 'null'
+    StorageLocation:
+      type: object
+      required:
+      - provider
+      - url
+      properties:
+        provider:
+          type: string
+          enum:
+          - portal
+          - museum_server
+          - partner_storage
+          - s3_compatible
+          - cdn
+          - archive
+          - other
+        serverId:
+          type:
+          - string
+          - 'null'
+        url:
+          type: string
+          format: uri
+        accessUrlExpiresAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    H3DManifest:
+      type: object
+      required:
+      - manifestVersion
+      - object
+      - twin
+      - assets
+      - viewer
+      properties:
+        manifestVersion:
+          type: string
+          example: '1.0'
+        object:
+          $ref: '#/components/schemas/CulturalObjectSummary'
+        twin:
+          $ref: '#/components/schemas/DigitalTwinSummary'
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManifestAsset'
+        annotations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Annotation'
+        rights:
+          $ref: '#/components/schemas/RightsStatement'
+        viewer:
+          $ref: '#/components/schemas/ViewerHint'
+        viewerPolicy:
+          $ref: '#/components/schemas/ViewerPolicy'
+    CulturalObjectSummary:
+      type: object
+      required:
+      - id
+      - type
+      - title
+      properties:
+        id:
+          $ref: '#/components/schemas/H3DId'
+        type:
+          type: string
+        crmClass:
+          type: string
+        title:
+          type: string
+        identifiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExternalIdentifier'
+    DigitalTwinSummary:
+      type: object
+      required:
+      - id
+      - version
+      - status
+      properties:
+        id:
+          $ref: '#/components/schemas/H3DId'
+        version:
+          type: string
+        status:
+          type: string
+        quality:
+          $ref: '#/components/schemas/QualityProfile'
+    ManifestAsset:
+      type: object
+      required:
+      - id
+      - role
+      - format
+      - url
+      - checksum
+      properties:
+        id:
+          $ref: '#/components/schemas/H3DId'
+        role:
+          type: string
+          enum:
+          - primary
+          - web_preview
+          - source
+          - texture
+          - thumbnail
+          - annotation_layer
+        format:
+          type: string
+        url:
+          type: string
+          format: uri
+        checksum:
+          type: string
+        access:
+          type: string
+          enum:
+          - public
+          - signed_url
+          - restricted
+          - internal
+    Annotation:
+      type: object
+      required:
+      - id
+      - type
+      - title
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+          - poi
+          - measurement
+          - note
+          - hotspot
+        title:
+          type: string
+        description:
+          type:
+          - string
+          - 'null'
+        target:
+          type: object
+          additionalProperties: true
+    ViewerHint:
+      type: object
+      required:
+      - preferredPlayer
+      - capabilities
+      properties:
+        preferredPlayer:
+          type: string
+          example: h3d-gltf-viewer
+        fallbackПлееры:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerCapabilityName'
+    ViewerPolicy:
+      type: object
+      description: Политика времени выполнения, вычисленная по роли, правам объекта, настройкам встройки и возможностям плеера.
+      required:
+      - allowedOrigins
+      - commands
+      properties:
+        allowedOrigins:
+          type: array
+          description: Origins, от которых принимаются входящие postMessage-команды.
+          items:
+            type: string
+          example:
+          - https://heritage3d.example.ru
+        targetOrigin:
+          type: string
+          description: Origin, который плеер использует для отправки событий родительскому окну.
+          example: https://heritage3d.example.ru
+        commands:
+          type: object
+          description: Карта разрешений по командам postMessage.
+          additionalProperties:
+            type: boolean
+          example:
+            player.loadManifest: true
+            poi.focus: true
+            poi.clear: true
+            animation.seek: true
+            annotation.create: false
+            asset.download: false
+        ui:
+          $ref: '#/components/schemas/EmbedUiFlags'
+        expiresAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    Player:
+      type: object
+      required:
+      - id
+      - name
+      - baseUrl
+      - status
+      - trustLevel
+      - allowedOrigins
+      - capabilities
+      - supportedFormats
+      properties:
+        id:
+          type: string
+          example: h3d-gltf-viewer
+        name:
+          type: string
+          example: Heritage3D GLTF Viewer
+        baseUrl:
+          type: string
+          format: uri
+        status:
+          type: string
+          enum:
+          - active
+          - disabled
+          - testing
+          description: Для генерации iframe URL могут использоваться только плееры со статусом `active`.
+        trustLevel:
+          $ref: '#/components/schemas/PlayerTrustLevel'
+        allowedOrigins:
+          type: array
+          description: Разрешенные browser origins для iframe, CORS и проверок postMessage.
+          items:
+            type: string
+          example:
+          - https://player-a.example.ru
+        allowedFrameAncestors:
+          type: array
+          description: Origins портала или партнеров, которым разрешено встраивать этот плеер.
+          items:
+            type: string
+          example:
+          - https://heritage3d.example.ru
+        health:
+          type: string
+          enum:
+          - healthy
+          - degraded
+          - offline
+          - unknown
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerCapabilityName'
+        supportedFormats:
+          type: array
+          items:
+            type: string
+          example:
+          - glb
+          - gltf
+        postMessageProtocol:
+          type: string
+          example: h3d.player/1.0
+    PlayerTrustLevel:
+      type: string
+      enum:
+      - first_party
+      - trusted_partner
+      - public_viewer
+      description: '`first_party` is operated by the portal. `trusted_partner` is an approved institution or partner.
+
+        `public_viewer` can receive only public manifests/assets.
+
+        '
+    PlayerEmbedPolicy:
+      type: object
+      required:
+      - playerId
+      - status
+      - trustLevel
+      - baseUrl
+      - allowedOrigins
+      - supportedFormats
+      - capabilities
+      - tokenRequired
+      properties:
+        playerId:
+          type: string
+        status:
+          type: string
+          enum:
+          - active
+          - disabled
+          - testing
+        trustLevel:
+          $ref: '#/components/schemas/PlayerTrustLevel'
+        baseUrl:
+          type: string
+          format: uri
+        allowedOrigins:
+          type: array
+          items:
+            type: string
+        allowedFrameAncestors:
+          type: array
+          items:
+            type: string
+        supportedFormats:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerCapabilityName'
+        tokenRequired:
+          type: boolean
+          description: true только если плееру нужен временный доступ к закрытым manifest/media URL.
+        securityNotes:
+          type: array
+          items:
+            type: string
+    EmbedPresetName:
+      type: string
+      enum:
+      - full
+      - compact
+      - minimal
+    EmbedPreset:
+      type: object
+      required:
+      - name
+      - description
+      - defaults
+      properties:
+        name:
+          $ref: '#/components/schemas/EmbedPresetName'
+        description:
+          type: string
+        defaults:
+          $ref: '#/components/schemas/EmbedUiFlags'
+    EmbedUiFlags:
+      type: object
+      description: 'UI flags currently supported by the viewer query string.
+
+        Boolean values are encoded as `1` or `0` in generated iframe URLs.
+
+        '
+      properties:
+        panel:
+          type: boolean
+          description: Показывать левую панель в режиме встройки.
+        poi:
+          type: boolean
+          description: Включить отображение POI и навигацию по ним.
+        tour:
+          type: boolean
+          description: Показывать верхнюю панель тура по POI.
+        measure:
+          type: boolean
+          description: Включить интерфейс измерений.
+        info:
+          type: boolean
+          description: Показывать кнопку/панель информации.
+        modelInfo:
+          type: boolean
+          description: Показывать метаданные модели внутри панели информации.
+        controls:
+          type: boolean
+          description: Показывать подсказки по управлению.
+        fullscreen:
+          type: boolean
+          description: Показывать кнопку полноэкранного режима.
+        fit:
+          type: boolean
+          description: Показывать кнопку вписать в кадр.
+        reset:
+          type: boolean
+          description: Показывать кнопку сброса камеры.
+    CreateEmbedRequest:
+      type: object
+      properties:
+        playerId:
+          type: string
+          description: Опциональный предпочитаемый плеер из allowlist портала. Произвольные URL плеера не принимаются.
+          example: h3d-gltf-viewer
+        tokenMode:
+          type: string
+          enum:
+          - none
+          - signed_embed_token
+          - signed_asset_urls
+          default: none
+          description: Режим токена, выбранный порталом. Для публичных встраиваний обычно используется `none`.
+        manifestUrl:
+          type: string
+          format: uri
+          description: Опциональный явный manifest URL. Если не указан, портал использует `/api/v1/twins/{twinId}/manifest`.
+        assetUrl:
+          type: string
+          format: uri
+          description: Опциональный прямой GLB/GLTF URL для legacy-плееров, использующих `load`.
+        preset:
+          $ref: '#/components/schemas/EmbedPresetName'
+        language:
+          type: string
+          enum:
+          - ru
+          - en
+          - zh
+          default: ru
+        autoplay:
+          type: boolean
+          default: true
+        ui:
+          $ref: '#/components/schemas/EmbedUiFlags'
+        width:
+          type: integer
+          minimum: 320
+          default: 960
+        height:
+          type: integer
+          minimum: 240
+          default: 640
+        title:
+          type: string
+          default: 3D Viewer
+        allow:
+          type: array
+          description: Разрешения iframe в атрибуте allow.
+          items:
+            type: string
+          default:
+          - autoplay
+          - fullscreen
+          - xr-spatial-tracking
+          - web-share
+        referrerPolicy:
+          type: string
+          enum:
+          - no-referrer
+          - no-referrer-when-downgrade
+          - origin
+          - origin-when-cross-origin
+          - same-origin
+          - strict-origin
+          - strict-origin-when-cross-origin
+          - unsafe-url
+          default: strict-origin-when-cross-origin
+    EmbedUrlResponse:
+      type: object
+      required:
+      - twinId
+      - playerId
+      - manifestUrl
+      - iframeUrl
+      - iframeHtml
+      - options
+      - playerPolicy
+      properties:
+        twinId:
+          $ref: '#/components/schemas/H3DId'
+        playerId:
+          type: string
+        manifestUrl:
+          type: string
+          format: uri
+        iframeUrl:
+          type: string
+          format: uri
+          description: Viewer URL со сформированными query-параметрами.
+        iframeHtml:
+          type: string
+          description: Готовый HTML-код iframe.
+        options:
+          $ref: '#/components/schemas/CreateEmbedRequest'
+        playerPolicy:
+          $ref: '#/components/schemas/PlayerEmbedPolicy'
+        embedToken:
+          type:
+          - string
+          - 'null'
+          description: Опциональный короткоживущий токен. Для публичной встройки без закрытых данных не передается.
+        expiresAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        query:
+          type: object
+          description: Точные query-параметры, из которых собран iframe URL.
+          additionalProperties:
+            type: string
+    PlayerCapabilities:
+      type: object
+      required:
+      - playerId
+      - protocolVersion
+      - capabilities
+      - supportedFormats
+      properties:
+        playerId:
+          type: string
+        protocolVersion:
+          type: string
+          example: '1.0'
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerCapabilityName'
+        supportedFormats:
+          type: array
+          items:
+            type: string
+    PlayerCapabilityName:
+      type: string
+      enum:
+      - camera
+      - poi.read
+      - poi.navigate
+      - annotations.read
+      - annotations.write
+      - measurements
+      - animation
+      - selection
+      - screenshots
+      - fullscreen
+      - theme
+      - language
+    PlayerMessagingProtocol:
+      type: object
+      required:
+      - protocol
+      - version
+      - commands
+      - events
+      - legacy
+      properties:
+        protocol:
+          type: string
+          const: h3d.player
+        version:
+          type: string
+          example: '1.0'
+        commands:
+          type: array
+          items:
+            type: string
+          example:
+          - player.loadManifest
+          - poi.focus
+          - poi.clear
+          - poi.next
+          - poi.previous
+          - animation.seek
+          - animation.play
+          - animation.pause
+        events:
+          type: array
+          items:
+            type: string
+          example:
+          - player.ready
+          - player.loaded
+          - player.error
+          - poi.selected
+          - poi.cleared
+          - animation.time
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlayerCapabilityName'
+        legacy:
+          type: object
+          description: Текущие сообщения model-viewer, поддерживаемые без обертки `h3d.player`.
+          properties:
+            commands:
+              type: array
+              items:
+                type: string
+              example:
+              - focus-poi
+              - open-poi
+              - clear-poi
+              - next-poi
+              - prev-poi
+              - seek-animation
+              - play-animation
+              - pause-animation
+              - freeze-animation
+            events:
+              type: array
+              items:
+                type: string
+              example:
+              - poi-selected
+              - poi-cleared
+              - animation-time
+    PostMessageEnvelope:
+      type: object
+      required:
+      - protocol
+      - version
+      - type
+      - id
+      - name
+      - payload
+      description: Предлагаемая стандартная обертка для будущих сообщений iframe-плееров.
+      properties:
+        protocol:
+          type: string
+          const: h3d.player
+        version:
+          type: string
+          example: '1.0'
+        type:
+          type: string
+          enum:
+          - command
+          - event
+          - request
+          - response
+          - error
+        id:
+          type: string
+          description: Correlation ID, сформированный клиентом.
+          example: msg-001
+        name:
+          type: string
+          example: poi.focus
+        payload:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type:
+          - string
+          - 'null'
+          format: date-time
+    PlayerLoadManifestCommand:
+      allOf:
+      - $ref: '#/components/schemas/PostMessageEnvelope'
+      - type: object
+        properties:
+          type:
+            const: command
+          name:
+            const: player.loadManifest
+          payload:
+            type: object
+            required:
+            - manifestUrl
+            properties:
+              manifestUrl:
+                type: string
+                format: uri
+    PoiFocusCommand:
+      allOf:
+      - $ref: '#/components/schemas/PostMessageEnvelope'
+      - type: object
+        properties:
+          type:
+            const: command
+          name:
+            const: poi.focus
+          payload:
+            type: object
+            required:
+            - id
+            properties:
+              id:
+                type: string
+    AnimationSeekCommand:
+      allOf:
+      - $ref: '#/components/schemas/PostMessageEnvelope'
+      - type: object
+        properties:
+          type:
+            const: command
+          name:
+            const: animation.seek
+          payload:
+            type: object
+            properties:
+              clip:
+                type:
+                - string
+                - 'null'
+              time:
+                type:
+                - number
+                - 'null'
+              frame:
+                type:
+                - number
+                - 'null'
+              fps:
+                type: number
+                default: 24
+    PlayerReadyEvent:
+      allOf:
+      - $ref: '#/components/schemas/PostMessageEnvelope'
+      - type: object
+        properties:
+          type:
+            const: event
+          name:
+            const: player.ready
+          payload:
+            type: object
+            required:
+            - playerId
+            - protocolVersion
+            - capabilities
+            properties:
+              playerId:
+                type: string
+              protocolVersion:
+                type: string
+              capabilities:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlayerCapabilityName'
+    PoiSelectedEvent:
+      allOf:
+      - $ref: '#/components/schemas/PostMessageEnvelope'
+      - type: object
+        properties:
+          type:
+            const: event
+          name:
+            const: poi.selected
+          payload:
+            $ref: '#/components/schemas/PoiPayload'
+    PoiPayload:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+        number:
+          type:
+          - integer
+          - 'null'
+        title:
+          type:
+          - string
+          - 'null'
+        description:
+          type:
+          - string
+          - 'null'
+        color:
+          type:
+          - string
+          - 'null'
+          example: '#000000'
+    AnimationTimeEvent:
+      allOf:
+      - $ref: '#/components/schemas/PostMessageEnvelope'
+      - type: object
+        properties:
+          type:
+            const: event
+          name:
+            const: animation.time
+          payload:
+            type: object
+            required:
+            - time
+            - frame
+            - fps
+            - duration
+            - progress
+            properties:
+              clip:
+                type:
+                - string
+                - 'null'
+              time:
+                type: number
+              frame:
+                type: integer
+              fps:
+                type: number
+              duration:
+                type: number
+              progress:
+                type: number
+    LegacyFocusPoiCommand:
+      type: object
+      required:
+      - type
+      - id
+      description: Текущая команда model-viewer, принимаемая без стандартной обертки.
+      properties:
+        type:
+          type: string
+          enum:
+          - focus-poi
+          - open-poi
+        id:
+          type: string
+          example: poi-1
+    LegacyAnimationCommand:
+      type: object
+      required:
+      - type
+      description: Текущая animation-команда model-viewer, принимаемая без стандартной обертки.
+      properties:
+        type:
+          type: string
+          enum:
+          - seek-animation
+          - play-animation
+          - pause-animation
+          - freeze-animation
+        clip:
+          type:
+          - string
+          - 'null'
+        time:
+          type:
+          - number
+          - 'null'
+        frame:
+          type:
+          - integer
+          - 'null'
+        fps:
+          type: number
+          default: 24
+  examples:
+    CulturalObjectOkn:
+      summary: Культурный объект, связанный с ЕГРОКН.
+      value:
+        id: h3dru:object:01JOBJABCDEF1234567890
+        type: heritage_site
+        crmClass: E27 Site
+        profile: h3d-profile:okn:v1
+        title: Усадебный дом
+        identifiers:
+        - system: EGROKN
+          value: '771410123450005'
+          url: https://example.ru/egrokn/771410123450005
+          crmClass: E42 Identifier
+        location:
+          crmClass: E53 Place
+          address: Москва, примерная улица, 1
+          coordinates:
+            lat: 55.7558
+            lon: 37.6173
+        institution:
+          crmClass: E40 Legal Body
+          name: Музей-партнер
+        rights:
+          access: public
+          license: CC BY-NC 4.0
+          rightsHolder: Музей-партнер
+        relations: []
+        metadata:
+          protectionStatus: object_of_cultural_heritage
+    H3DManifestPublicGlb:
+      summary: Публичный GLB-манифест для iframe-плеера.
+      value:
+        manifestVersion: '1.0'
+        object:
+          id: h3dru:object:01JOBJABCDEF1234567890
+          type: heritage_site
+          crmClass: E27 Site
+          title: Усадебный дом
+          identifiers:
+          - system: EGROKN
+            value: '771410123450005'
+        twin:
+          id: twin:01JTWINABCDEF1234567890
+          version: '1.0'
+          status: published
+          quality:
+            geometricAccuracyMm: 2.5
+            texelDensityPxPerCm: 24
+            colorCalibration: colorchecker
+            scaleVerified: true
+            gpsVerified: true
+        assets:
+        - id: h3dru:asset:01JASSETABCDEF1234567890
+          role: web_preview
+          format: glb
+          url: https://museum.example.ru/media/771410123450005/model.glb
+          checksum: sha256:8f14e45fceea167a5a36dedd4bea2543
+          access: public
+        annotations: []
+        rights:
+          access: public
+          license: CC BY-NC 4.0
+          rightsHolder: Музей-партнер
+        viewer:
+          preferredPlayer: h3d-gltf-viewer
+          fallbackПлееры:
+          - basic-gltf-viewer
+          capabilities:
+          - camera
+          - poi.read
+          - poi.navigate
+          - animation
+          - fullscreen
+        viewerPolicy:
+          allowedOrigins:
+          - https://heritage3d.example.ru
+          targetOrigin: https://heritage3d.example.ru
+          commands:
+            player.loadManifest: true
+            camera.reset: true
+            camera.fit: true
+            poi.focus: true
+            poi.clear: true
+            poi.next: true
+            poi.previous: true
+            animation.seek: true
+            animation.play: true
+            animation.pause: true
+            annotation.create: false
+            asset.download: false
+          ui:
+            panel: false
+            poi: true
+            tour: true
+            measure: false
+            info: true
+            modelInfo: false
+            controls: true
+            fullscreen: true
+            fit: true
+            reset: true
+    CreateEmbedRequestCompact:
+      summary: Запрос на генерацию компактной iframe-встройки.
+      value:
+        playerId: h3d-gltf-viewer
+        preset: compact
+        language: ru
+        autoplay: false
+        ui:
+          panel: false
+          poi: true
+          tour: true
+          measure: false
+          info: true
+          modelInfo: false
+          controls: true
+          fullscreen: true
+          fit: true
+          reset: true
+        width: 960
+        height: 640
+        title: 3D Viewer
+    EmbedUrlResponseCompact:
+      summary: Сформированная компактная iframe-встройка.
+      value:
+        twinId: twin:01JTWINABCDEF1234567890
+        playerId: h3d-gltf-viewer
+        manifestUrl: https://heritage3d.example.ru/api/v1/twins/h3d:twin:01JH3D8Y0D9V8W2K8A6DF/manifest
+        iframeUrl: https://player.example.ru/viewer/?manifest=https%3A%2F%2Fheritage3d.example.ru%2Fapi%2Fv1%2Ftwins%2Fh3d%3Atwin%3A01JH3D8Y0D9V8W2K8A6DF%2Fmanifest&embed=1&ui=compact&autoplay=0&panel=0&poi=1&tour=1&measure=0&info=1&modelInfo=0&controls=1&fullscreen=1&fit=1&reset=1&lang=ru
+        iframeHtml: <iframe title="3D Viewer" src="https://player.example.ru/viewer/?manifest=https%3A%2F%2Fheritage3d.example.ru%2Fapi%2Fv1%2Ftwins%2Fh3d%3Atwin%3A01JH3D8Y0D9V8W2K8A6DF%2Fmanifest&embed=1&ui=compact&autoplay=0&panel=0&poi=1&tour=1&measure=0&info=1&modelInfo=0&controls=1&fullscreen=1&fit=1&reset=1&lang=ru"
+          width="960" height="640" style="border:0" allow="autoplay; fullscreen; xr-spatial-tracking; web-share" allowfullscreen
+          referrerpolicy="strict-origin-when-cross-origin"></iframe>
+        playerPolicy:
+          playerId: h3d-gltf-viewer
+          status: active
+          trustLevel: first_party
+          baseUrl: https://player.example.ru/viewer/
+          allowedOrigins:
+          - https://player.example.ru
+          allowedFrameAncestors:
+          - https://heritage3d.example.ru
+          supportedFormats:
+          - glb
+          - gltf
+          capabilities:
+          - camera
+          - poi.navigate
+          - animation
+          - fullscreen
+          tokenRequired: false
+          securityNotes:
+          - Портал генерирует iframe URL только для разрешенных значений playerId.
+          - Публичный manifest и публичные media не требуют токена плеера.
+          - Закрытые assets должны использовать короткоживущие signed URLs.
+        embedToken: null
+        expiresAt: null
+        options:
+          playerId: h3d-gltf-viewer
+          tokenMode: none
+          preset: compact
+          language: ru
+          autoplay: false
+          ui:
+            panel: false
+            poi: true
+            tour: true
+            measure: false
+            info: true
+            modelInfo: false
+            controls: true
+            fullscreen: true
+            fit: true
+            reset: true
+          width: 960
+          height: 640
+          title: 3D Viewer
+        query:
+          manifest: https://heritage3d.example.ru/api/v1/twins/h3d:twin:01JH3D8Y0D9V8W2K8A6DF/manifest
+          embed: '1'
+          ui: compact
+          autoplay: '0'
+          panel: '0'
+          poi: '1'
+          tour: '1'
+          measure: '0'
+          info: '1'
+          modelInfo: '0'
+          controls: '1'
+          fullscreen: '1'
+          fit: '1'
+          reset: '1'
+          lang: ru
+    PlayerMessagingProtocol:
+      summary: Браузерный протокол сообщений iframe.
+      value:
+        protocol: h3d.player
+        version: '1.0'
+        commands:
+        - player.loadManifest
+        - poi.focus
+        - poi.clear
+        - poi.next
+        - poi.previous
+        - animation.seek
+        - animation.play
+        - animation.pause
+        events:
+        - player.ready
+        - player.loaded
+        - player.error
+        - poi.selected
+        - poi.cleared
+        - animation.time
+        capabilities:
+        - camera
+        - poi.read
+        - poi.navigate
+        - animation
+        - fullscreen
+        legacy:
+          commands:
+          - focus-poi
+          - open-poi
+          - clear-poi
+          - next-poi
+          - prev-poi
+          - seek-animation
+          - play-animation
+          - pause-animation
+          - freeze-animation
+          events:
+          - poi-selected
+          - poi-cleared
+          - animation-time
+    AccessControlModel:
+      summary: Ролевая модель портала и права доступа.
+      value:
+        roles:
+        - role: anonymous
+          description: Публичный просмотр опубликованных объектов и manifest для публичных assets.
+          permissions:
+          - objects:read:published
+          - twins:read:published
+          - manifests:read:published
+          - assets:read:public
+          - embeds:create:public
+          - playerMessaging:protocol:read
+        - role: user
+          description: Авторизованный пользователь, личные подборки и расширенные публичные сценарии.
+          permissions:
+          - objects:read:published
+          - twins:read:published
+          - manifests:read:published
+          - assets:read:public
+          - embeds:create:public
+          - measurements:create
+        - role: contributor
+          description: Автор или организация, загружающая материалы и управляющая своими черновиками.
+          permissions:
+          - objects:create:draft
+          - objects:update:ownDraft
+          - twins:create
+          - twins:update:ownDraft
+          - assets:create
+          - moderation:submit
+        - role: institution_admin
+          description: Администратор учреждения, управляющий объектами и авторами своей организации.
+          permissions:
+          - objects:update:institution
+          - twins:update:institution
+          - users:manage:institution
+          - assets:read:restricted
+        - role: moderator
+          description: Проверка качества, прав, метаданных, публикация и отклонение материалов.
+          permissions:
+          - moderation:review
+          - moderation:approve
+          - moderation:reject
+          - moderation:publish
+          - assets:read:restricted
+        - role: admin
+          description: Полное управление порталом, плеерами, хранилищами, справочниками и пользователями.
+          permissions:
+          - '*'
+        - role: system
+          description: Машинный доступ для музейных АИС, реестров, синхронизаций и мониторинга.
+          permissions:
+          - integrations:sync
+          - assets:healthcheck
+          - objects:read:restricted
+          - twins:read:restricted
+        endpointRules:
+        - operationId: getCulturalObject
+          roles:
+          - anonymous
+          - user
+          - contributor
+          - institution_admin
+          - moderator
+          - admin
+          - system
+          permissions:
+          - objects:read:published
+          - objects:read:restricted
+        - operationId: getDigitalTwinManifest
+          roles:
+          - anonymous
+          - user
+          - contributor
+          - institution_admin
+          - moderator
+          - admin
+          - system
+          permissions:
+          - manifests:read:published
+          - manifests:read:restricted
+        - operationId: createTwinEmbed
+          roles:
+          - anonymous
+          - user
+          - contributor
+          - institution_admin
+          - moderator
+          - admin
+          - system
+          permissions:
+          - embeds:create:public
+          - embeds:create:restricted
+        playerCommandRules:
+        - command: player.loadManifest
+          roles:
+          - anonymous
+          - user
+          - contributor
+          - institution_admin
+          - moderator
+          - admin
+          - system
+          capability: camera
+          permission: playerCommands:loadManifest
+        - command: poi.focus
+          roles:
+          - anonymous
+          - user
+          - contributor
+          - institution_admin
+          - moderator
+          - admin
+          - system
+          capability: poi.navigate
+          permission: playerCommands:poiNavigate
+        - command: animation.seek
+          roles:
+          - anonymous
+          - user
+          - contributor
+          - institution_admin
+          - moderator
+          - admin
+          - system
+          capability: animation
+          permission: playerCommands:animation
+        - command: annotation.create
+          roles:
+          - contributor
+          - institution_admin
+          - moderator
+          - admin
+          capability: annotations.write
+          permission: playerCommands:annotationWrite
+        - command: asset.download
+          roles:
+          - contributor
+          - institution_admin
+          - moderator
+          - admin
+          - system
+          capability: screenshots
+          permission: assets:download
+        notes:
+        - Роли не зашиваются в плеер; плеер получает вычисленную viewerPolicy в manifest или embed API.
+        - Backend применяет RBAC/ABAC по роли, учреждению, правам объекта, статусу публикации и access-политике asset.
+        - postMessage команды фильтруются по allowedOrigins и viewerPolicy.commands.

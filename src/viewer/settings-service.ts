@@ -265,7 +265,8 @@ class SettingsService {
         return null;
     }
 
-    exportViewerSettings() {
+    // Собирает объект настроек (без скачивания) — для экспорта на хост через postMessage.
+    getSettingsData(): Record<string, unknown> {
         const options = this.observer.json() as Record<string, unknown>;
         const skybox = (options.skybox && typeof options.skybox === 'object') ? { ...(options.skybox as Record<string, unknown>) } : {};
         const light = (options.light && typeof options.light === 'object') ? { ...(options.light as Record<string, unknown>) } : {};
@@ -308,6 +309,11 @@ class SettingsService {
             (data.camera as Record<string, unknown>).position = [p.x, p.y, p.z];
             (data.camera as Record<string, unknown>).focus = [f.x, f.y, f.z];
         }
+        return data;
+    }
+
+    exportViewerSettings() {
+        const data = this.getSettingsData();
         const json = JSON.stringify(data, null, 2);
         const blob = new Blob([json], { type: 'application/json' });
         const url = URL.createObjectURL(blob);

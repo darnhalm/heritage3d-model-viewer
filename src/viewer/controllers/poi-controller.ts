@@ -18,6 +18,9 @@ type PoiEntry = {
     color?: string;
     duration?: number;
     holdTime?: number;
+    // Точка-триггер: без анимации/туров; systemName — системное имя (напр. нота "C#4").
+    trigger?: boolean;
+    systemName?: string;
     camera?: {
         position: [number, number, number];
         focus: [number, number, number];
@@ -246,9 +249,15 @@ class PoiController {
     }
 
     private setPoiList(list: PoiEntry[]) {
-        const raw = JSON.stringify(list);
+        // Тур нумеруется ТОЛЬКО по обычным точкам. Триггеры — отдельный тип
+        // (звукоизвлечение), в нумерацию/последовательность тура не входят.
+        let tourN = 0;
+        const renumbered = list.map((poi) => (
+            poi.trigger ? { ...poi, number: 0 } : { ...poi, number: ++tourN }
+        ));
+        const raw = JSON.stringify(renumbered);
         this.poiListCacheRaw = raw;
-        this.poiListCache = list;
+        this.poiListCache = renumbered;
         this.observer.set('poi.list', raw);
         this.renderNextFrame();
     }
@@ -450,6 +459,23 @@ class PoiController {
         this.setPoiList(updated);
     }
 
+    updatePoiTrigger(id: string, trigger: boolean) {
+        const updated = this.getPoiList().map((poi) => {
+            if (poi.id !== id) return poi;
+            return { ...poi, trigger: !!trigger };
+        });
+        this.setPoiList(updated);
+    }
+
+    updatePoiSystemName(id: string, systemName: string) {
+        const value = String(systemName ?? '').slice(0, 64).trim();
+        const updated = this.getPoiList().map((poi) => {
+            if (poi.id !== id) return poi;
+            return { ...poi, systemName: value };
+        });
+        this.setPoiList(updated);
+    }
+
     capturePoiCameraView(id: string) {
         const cameraView = this.getCameraView();
         if (!cameraView) {
@@ -498,7 +524,8 @@ class PoiController {
     }
 
     focusNextPoi() {
-        const list = this.getPoiList();
+        // Туры/навигация пропускают точки-триггеры (они только для звукоизвлечения).
+        const list = this.getPoiList().filter(poi => !poi.trigger);
         if (list.length === 0) return;
         const activeId = String(this.observer.get('poi.activeId') ?? '');
         const activeIndex = list.findIndex(poi => poi.id === activeId);
@@ -507,7 +534,7 @@ class PoiController {
     }
 
     focusPrevPoi() {
-        const list = this.getPoiList();
+        const list = this.getPoiList().filter(poi => !poi.trigger);
         if (list.length === 0) return;
         const activeId = String(this.observer.get('poi.activeId') ?? '');
         const activeIndex = list.findIndex(poi => poi.id === activeId);
@@ -546,6 +573,13 @@ class PoiController {
     pulsePoi(id: string) {
         this.pulsePoiId = id;
         this.pulseUntil = Date.now() + 650;
+        // Принудительно перезапускаем CSS-анимацию (иначе повторный пульс не виден).
+        const marker = this.markerEls.get(id);
+        if (marker) {
+            marker.classList.remove('poi-marker-pulse');
+            void marker.offsetWidth; // reflow
+            marker.classList.add('poi-marker-pulse');
+        }
         this.renderNextFrame();
     }
 
@@ -595,12 +629,29 @@ class PoiController {
                 marker.addEventListener('click', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
-                    this.focusPoi(poi.id);
+                    const cur = this.getPoiList().find(x => x.id === poi.id);
+                    if (cur?.trigger) {
+                        // Каждый клик по триггеру — отдельный «хит» (нота играется КАЖДЫЙ
+                        // раз, даже повторно), мимо дедупликации по activeId.
+                        this.observer.set('poi.triggerHit', JSON.stringify({
+                            id: cur.id, systemName: cur.systemName ?? '', ts: Date.now()
+                        }));
+                        this.pulsePoi(cur.id);
+                    } else {
+                        this.focusPoi(poi.id);
+                    }
                 });
                 this.overlay?.appendChild(marker);
                 this.markerEls.set(poi.id, marker);
             }
-            marker.textContent = String(poi.number);
+            // Триггер-точки показывают короткое имя (его интерпретирует хост —
+            // в нашем случае это нота), обычные точки — номер.
+            const hasShortName = !!(poi.trigger && poi.systemName);
+            // Обычные точки — номер тура; триггеры — короткое имя (ноту), без номера.
+            marker.textContent = hasShortName
+                ? String(poi.systemName)
+                : (poi.trigger ? '♪' : String(poi.number));
+            marker.classList.toggle('poi-marker-trigger', !!poi.trigger);
             marker.style.cursor = editEnabled ? 'grab' : 'default';
             marker.style.backgroundColor = poi.color || '#111111';
             marker.classList.toggle('poi-marker-pulse', pulseActive && (!this.pulsePoiId || this.pulsePoiId === poi.id));

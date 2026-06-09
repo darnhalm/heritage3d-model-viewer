@@ -429,6 +429,22 @@ class Viewer {
 
     pngExporter: PngExporter = null;
 
+    // Последняя загруженная модель (для экспорта байтов на хост через мост).
+    lastModelFile: File = null;
+
+    // Если true — родные кнопки экспорта шлют данные на хост, а не скачивают файл.
+    saveToParent = false;
+
+    // Утилита: PNG-байты → base64 (для отправки на хост).
+    static bytesToBase64(bytes: Uint8Array): string {
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk) as unknown as number[]);
+        }
+        return btoa(binary);
+    }
+
     prevCameraMat: Mat4;
 
     camera: Entity;
@@ -727,6 +743,61 @@ class Viewer {
                 this.loadFiles(files, resetScene);
             });
         }
+
+        // ── Мост экспорта на хост-страницу (etnophonica «Сохранить в проект») ──
+        // saveToParent=1 — родные кнопки «экспорт настроек» и «обложка» вместо
+        // скачивания шлют данные на родительскую страницу (она сохраняет в проект).
+        this.saveToParent = new URL(window.location.href).searchParams.get('saveToParent') === '1';
+        // Принимает postMessage и отдаёт текущие настройки и/или обложку.
+        const bytesToBase64 = (bytes: Uint8Array): string => {
+            let binary = '';
+            const chunk = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunk) {
+                binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk) as unknown as number[]);
+            }
+            return btoa(binary);
+        };
+        window.addEventListener('message', async (e: MessageEvent) => {
+            const d = e.data;
+            if (!d || typeof d !== 'object') return;
+            const reply = (msg: Record<string, unknown>) => {
+                try {
+                    (e.source as Window | null)?.postMessage({ ...msg, requestId: d.requestId }, '*');
+                } catch { /* cross-origin */ }
+            };
+            // Достаёт байты последней загруженной модели (если есть).
+            const getModelExport = async (): Promise<{ glb: string; filename: string } | null> => {
+                const mf = this.lastModelFile;
+                if (!mf || !mf.url) return null;
+                try {
+                    const res = await fetch(mf.url);
+                    const buf = new Uint8Array(await res.arrayBuffer());
+                    return { glb: bytesToBase64(buf), filename: mf.filename ?? 'model.glb' };
+                } catch {
+                    return null;
+                }
+            };
+            try {
+                if (d.type === 'export-settings') {
+                    reply({ type: 'export-settings-result', settings: this.settingsService.getSettingsData() });
+                } else if (d.type === 'export-cover') {
+                    const png = await this.captureCoverImage();
+                    reply({ type: 'export-cover-result', cover: png ? bytesToBase64(png) : null });
+                } else if (d.type === 'export-project') {
+                    const settings = this.settingsService.getSettingsData();
+                    const png = await this.captureCoverImage();
+                    const model = d.includeModel ? await getModelExport() : null;
+                    reply({
+                        type: 'export-project-result',
+                        settings,
+                        cover: png ? bytesToBase64(png) : null,
+                        model
+                    });
+                }
+            } catch (err) {
+                reply({ type: 'export-error', message: String(err) });
+            }
+        });
 
         // observe canvas size changes
         new ResizeObserver(() => {
@@ -1563,6 +1634,14 @@ class Viewer {
         this.poiController?.updatePoiHoldTime(id, holdTime);
     }
 
+    updatePoiTrigger(id: string, trigger: boolean) {
+        this.poiController?.updatePoiTrigger(id, trigger);
+    }
+
+    updatePoiSystemName(id: string, systemName: string) {
+        this.poiController?.updatePoiSystemName(id, systemName);
+    }
+
     capturePoiCameraView(id: string) {
         this.poiController?.capturePoiCameraView(id);
         this.poiController?.pulsePoi(id);
@@ -1595,6 +1674,11 @@ class Viewer {
 
     pulsePois() {
         this.poiController?.pulseMarkers();
+    }
+
+    /** Пульснуть конкретный маркер (напр. реакция зоны-триггера на ноту). */
+    pulsePoi(id: string) {
+        this.poiController?.pulsePoi(id);
     }
 
     clearPois() {
@@ -2949,83 +3033,104 @@ class Viewer {
         });
     }
 
+    // Снимает квадратную обложку и возвращает PNG-байты (без скачивания).
+    captureCoverImage(): Promise<Uint8Array | null> {
+        return new Promise((resolve) => {
+            const COVER_SIZE = 1024;
+            const device = this.app.graphicsDevice;
+
+            if (!this.pngExporter) {
+                this.pngExporter = new PngExporter();
+            }
+
+            const savedPosition = this.cameraControls.getPosition().clone();
+            const savedFocus = this.cameraControls.getFocus().clone();
+            const savedRenderTarget = this.camera.camera.renderTarget;
+            const savedMultiframe = this.multiframe?.enabled ?? false;
+
+            if (this.multiframe) this.multiframe.enabled = false;
+
+            this.isCapturingCoverImage = true;
+
+            const createTexture = (w: number, h: number) => new Texture(device, {
+                name: 'cover-rt-texture',
+                width: w,
+                height: h,
+                format: PIXELFORMAT_RGBA8,
+                mipmaps: false,
+                minFilter: FILTER_NEAREST,
+                magFilter: FILTER_NEAREST,
+                addressU: ADDRESS_CLAMP_TO_EDGE,
+                addressV: ADDRESS_CLAMP_TO_EDGE
+            });
+
+            const colorBuffer = createTexture(COVER_SIZE, COVER_SIZE);
+            const depthBuffer = new Texture(device, {
+                name: 'cover-rt-depth',
+                width: COVER_SIZE,
+                height: COVER_SIZE,
+                format: PIXELFORMAT_DEPTH,
+                mipmaps: false
+            });
+
+            const squareRT = new RenderTarget({
+                name: 'viewer-cover-rt',
+                colorBuffer,
+                depthBuffer,
+                flipY: false,
+                samples: 1,
+                autoResolve: false
+            });
+
+            this.camera.camera.renderTarget = squareRT;
+            this.focus(false, 1);
+
+            this.renderNextFrame();
+            this.app.once('postrender', () => {
+                const texture = this.camera.camera.renderTarget?.colorBuffer;
+                if (!texture || texture.width !== COVER_SIZE || texture.height !== COVER_SIZE) {
+                    this.cleanupCoverCapture(squareRT, savedRenderTarget, savedFocus, savedPosition, savedMultiframe);
+                    resolve(null);
+                    return;
+                }
+                texture.read(0, 0, COVER_SIZE, COVER_SIZE).then((typedArray: Uint32Array) => {
+                    return this.pngExporter.encode(
+                        new Uint32Array(typedArray.buffer.slice(0)),
+                        COVER_SIZE,
+                        COVER_SIZE
+                    );
+                }).then((png: Uint8Array) => {
+                    resolve(png);
+                }).catch((err: unknown) => {
+                    console.error('Failed to capture cover image:', err);
+                    resolve(null);
+                }).finally(() => {
+                    this.cleanupCoverCapture(squareRT, savedRenderTarget, savedFocus, savedPosition, savedMultiframe);
+                });
+            });
+        });
+    }
+
     downloadCoverImageScreenshot() {
-        const COVER_SIZE = 1024;
-        const device = this.app.graphicsDevice;
-
-        if (!this.pngExporter) {
-            this.pngExporter = new PngExporter();
-        }
-
         const filenames = this.observer.get('scene.filenames') as string[];
         let baseName = 'model-viewer';
         if (filenames && filenames.length > 0) {
             const stripped = filenames[0].replace(/\.[^/.]+$/, '');
             if (stripped) baseName = stripped;
         }
-        const filename = `${baseName}-cover.png`;
-
-        const savedPosition = this.cameraControls.getPosition().clone();
-        const savedFocus = this.cameraControls.getFocus().clone();
-        const savedRenderTarget = this.camera.camera.renderTarget;
-        const savedMultiframe = this.multiframe?.enabled ?? false;
-
-        if (this.multiframe) this.multiframe.enabled = false;
-
-        this.isCapturingCoverImage = true;
-
-        const createTexture = (w: number, h: number) => new Texture(device, {
-            name: 'cover-rt-texture',
-            width: w,
-            height: h,
-            format: PIXELFORMAT_RGBA8,
-            mipmaps: false,
-            minFilter: FILTER_NEAREST,
-            magFilter: FILTER_NEAREST,
-            addressU: ADDRESS_CLAMP_TO_EDGE,
-            addressV: ADDRESS_CLAMP_TO_EDGE
-        });
-
-        const colorBuffer = createTexture(COVER_SIZE, COVER_SIZE);
-        const depthBuffer = new Texture(device, {
-            name: 'cover-rt-depth',
-            width: COVER_SIZE,
-            height: COVER_SIZE,
-            format: PIXELFORMAT_DEPTH,
-            mipmaps: false
-        });
-
-        const squareRT = new RenderTarget({
-            name: 'viewer-cover-rt',
-            colorBuffer,
-            depthBuffer,
-            flipY: false,
-            samples: 1,
-            autoResolve: false
-        });
-
-        this.camera.camera.renderTarget = squareRT;
-        this.focus(false, 1);
-
-        this.renderNextFrame();
-        this.app.once('postrender', () => {
-            const texture = this.camera.camera.renderTarget?.colorBuffer;
-            if (!texture || texture.width !== COVER_SIZE || texture.height !== COVER_SIZE) {
-                this.cleanupCoverCapture(squareRT, savedRenderTarget, savedFocus, savedPosition, savedMultiframe);
+        this.captureCoverImage().then((png) => {
+            if (!png) return;
+            if (this.saveToParent) {
+                window.parent?.postMessage({
+                    type: 'export-cover-result',
+                    cover: Viewer.bytesToBase64(png),
+                    auto: true
+                }, '*');
                 return;
             }
-            texture.read(0, 0, COVER_SIZE, COVER_SIZE).then((typedArray: Uint32Array) => {
-                this.pngExporter.export(
-                    filename,
-                    new Uint32Array(typedArray.buffer.slice(0)),
-                    COVER_SIZE,
-                    COVER_SIZE
-                );
-            }).catch((err: unknown) => {
-                console.error('Failed to capture cover image:', err);
-            }).finally(() => {
-                this.cleanupCoverCapture(squareRT, savedRenderTarget, savedFocus, savedPosition, savedMultiframe);
-            });
+            if (this.pngExporter) {
+                this.pngExporter._downloadFile(`${baseName}-cover.png`, png);
+            }
         });
     }
 
@@ -3042,6 +3147,14 @@ class Viewer {
 
     /** Export current viewer settings (camera, skybox, light, etc.) to a JSON file. */
     exportViewerSettings() {
+        if (this.saveToParent) {
+            window.parent?.postMessage({
+                type: 'export-settings-result',
+                settings: this.settingsService.getSettingsData(),
+                auto: true
+            }, '*');
+            return;
+        }
         this.settingsService.exportViewerSettings();
     }
 
@@ -3640,6 +3753,9 @@ class Viewer {
 
             const loadTimestamp = Date.now();
             const modelFiles = files.filter(f => this.isModelFilename(f.filename) || this.isGSplatFilename(f.filename));
+
+            // Запоминаем основную модель — мост сможет отдать её байты на хост.
+            if (modelFiles[0]) this.lastModelFile = modelFiles[0];
 
             this.resetViewerSettingsToDefaults();
             this.observer.set('ui.spinner', true);

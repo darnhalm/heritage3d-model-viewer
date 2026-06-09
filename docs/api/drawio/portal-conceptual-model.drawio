@@ -1,0 +1,145 @@
+<mxfile host="app.diagrams.net" modified="2026-05-18T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="portal-conceptual-model" name="Portal Conceptual Model">
+<mxGraphModel dx="2200" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2280" pageHeight="1520" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="title" value="Концептуальная модель портала Heritage3D&#xa;&#xa;Схема показывает не endpoint’ы, а основные сущности: кто входит в систему, кто владеет H3DID, где хранятся описания, как цифровые представления связаны с файлами и почему медиахранилище содержит только технические объекты." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#111827;strokeColor=#111827;fontColor=#FFFFFF;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="30" width="2200" height="120" as="geometry" />
+    </mxCell>
+    <mxCell id="auth-band" value="Авторизация и управление доступом" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#0284C7;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="190" width="2200" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="portal-band" value="Портал Heritage3D: смысл, права, публикация, каталог" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="500" width="1420" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="storage-band" value="Медиахранилище и плееры: файлы, обработка, просмотр" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#D97706;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="500" width="720" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="geoscan-login" value="Geoscan Login&#xa;&#xa;Единый вход и учетная запись.&#xa;Отвечает на вопрос:&#xa;«кто пользователь?»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="70" y="280" width="330" height="150" as="geometry" />
+    </mxCell>
+    <mxCell id="user" value="Пользователь&#xa;&#xa;userId&#xa;geoscanUserId&#xa;профиль портала" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="480" y="280" width="300" height="150" as="geometry" />
+    </mxCell>
+    <mxCell id="membership" value="Членство и роли&#xa;&#xa;organization_admin&#xa;editor&#xa;moderator&#xa;workgroup_member&#xa;viewer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="870" y="280" width="360" height="150" as="geometry" />
+    </mxCell>
+    <mxCell id="permissions" value="Политики доступа&#xa;&#xa;создать объект&#xa;загрузить модель&#xa;редактировать metadata&#xa;опубликовать&#xa;скачать исходники" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDE9FE;strokeColor=#7C3AED;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1320" y="280" width="400" height="150" as="geometry" />
+    </mxCell>
+    <mxCell id="organization" value="Организация / музей&#xa;&#xa;organizationId&#xa;владелец H3DID&#xa;профиль музея&#xa;avatar / cover" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBF7D0;strokeColor=#16A34A;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="70" y="610" width="360" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="workgroups" value="Рабочие группы&#xa;&#xa;workgroupId&#xa;команды внутри музея&#xa;оцифровка&#xa;описание&#xa;модерация" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF9C3;strokeColor=#CA8A04;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="70" y="830" width="360" height="150" as="geometry" />
+    </mxCell>
+    <mxCell id="h3did" value="Культурный объект&#xa;&#xa;H3DID / h3druObjectId&#xa;главный сквозной ID&#xa;статус: draft / review / published&#xa;visibility" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D9F99D;strokeColor=#65A30D;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="540" y="610" width="410" height="170" as="geometry" />
+    </mxCell>
+    <mxCell id="metadata" value="Метаданные объекта&#xa;&#xa;Dublin Core&#xa;CIDOC CRM&#xa;externalIds:&#xa;КАМИС, Госкаталог,&#xa;ЕГРОКН, Geoscan UUID" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CCFBF1;strokeColor=#0F766E;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="540" y="840" width="410" height="170" as="geometry" />
+    </mxCell>
+    <mxCell id="collections" value="Коллекции / каталоги&#xa;&#xa;collectionId&#xa;parentCollectionId&#xa;объекты музея&#xa;миниатюра коллекции" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE7F3;strokeColor=#DB2777;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1040" y="610" width="360" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="articles" value="Статьи&#xa;&#xa;articleId&#xa;текстовая публикация&#xa;подборка моделей&#xa;порядок, подписи,&#xa;camera / POI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FCE7F3;strokeColor=#DB2777;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1040" y="840" width="360" height="170" as="geometry" />
+    </mxCell>
+    <mxCell id="twins" value="Цифровые представления&#xa;&#xa;twinId&#xa;PlayCanvas 3D&#xa;Geoscan Cloud&#xa;gigapixel 2D&#xa;point cloud" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#0284C7;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="540" y="1080" width="410" height="170" as="geometry" />
+    </mxCell>
+    <mxCell id="site-assets" value="Ассеты сайта&#xa;&#xa;h3druAssetId&#xa;тип asset&#xa;статус публикации&#xa;можно ли скачать&#xa;связь со storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#0284C7;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1040" y="1080" width="360" height="170" as="geometry" />
+    </mxCell>
+    <mxCell id="catalog" value="Публичный каталог&#xa;&#xa;страницы музеев&#xa;страницы коллекций&#xa;страницы объектов&#xa;статьи&#xa;поиск и фильтры" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#94A3B8;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="70" y="1080" width="360" height="170" as="geometry" />
+    </mxCell>
+    <mxCell id="storage-api" value="Storage/player API&#xa;&#xa;upload&#xa;status&#xa;preview&#xa;manifest&#xa;embed&#xa;download&#xa;webhooks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FED7AA;strokeColor=#EA580C;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1560" y="610" width="320" height="190" as="geometry" />
+    </mxCell>
+    <mxCell id="storage-asset" value="Технический asset&#xa;&#xa;storageAssetId&#xa;fileName&#xa;format&#xa;size&#xa;checksum&#xa;processingStatus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#D97706;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1910" y="610" width="300" height="190" as="geometry" />
+    </mxCell>
+    <mxCell id="s3" value="S3 / object storage&#xa;&#xa;исходники&#xa;оптимизированные модели&#xa;текстуры&#xa;gigapixel tiles&#xa;preview&#xa;manifest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#D97706;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1910" y="880" width="300" height="190" as="geometry" />
+    </mxCell>
+    <mxCell id="viewer" value="Плееры / viewer iframe&#xa;&#xa;PlayCanvas&#xa;Geoscan Cloud&#xa;gigapixel viewer&#xa;postMessage события" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FED7AA;strokeColor=#EA580C;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1560" y="880" width="320" height="190" as="geometry" />
+    </mxCell>
+    <mxCell id="principle" value="Принцип разделения&#xa;&#xa;Сайт хранит описание, права, публикацию, роли и связи.&#xa;Медиахранилище хранит только файлы и техническое состояние.&#xa;API связывает эти слои и проверяет доступ." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#64748B;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="540" y="1320" width="1360" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="e-login-user" value="подтверждает личность" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2563EB;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="geoscan-login" target="user">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-user-membership" value="имеет членство" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7C3AED;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="user" target="membership">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-membership-org" value="роль внутри организации" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7C3AED;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="membership" target="organization">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-membership-permissions" value="задает права" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7C3AED;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="membership" target="permissions">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-permissions-h3did" value="разрешает действия" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7C3AED;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="permissions" target="h3did">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-org-h3did" value="владеет объектами" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#16A34A;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="organization" target="h3did">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-org-workgroups" value="создает команды" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#CA8A04;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="organization" target="workgroups">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-workgroups-h3did" value="ведут работу" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#CA8A04;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="workgroups" target="h3did">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-h3did-metadata" value="описан через" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0F766E;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="h3did" target="metadata">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-h3did-collections" value="входит в" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#DB2777;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="h3did" target="collections">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-collections-articles" value="может использоваться в" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#DB2777;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="collections" target="articles">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-articles-h3did" value="подборка объектов" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#DB2777;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="articles" target="h3did">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-h3did-twins" value="имеет представления" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284C7;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="h3did" target="twins">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-twins-assets" value="использует ассеты" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284C7;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="twins" target="site-assets">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-catalog-org" value="показывает музей" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#64748B;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="catalog" target="organization">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-catalog-h3did" value="показывает объект" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#64748B;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="catalog" target="h3did">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-catalog-collections" value="показывает коллекции" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#64748B;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="catalog" target="collections">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-catalog-articles" value="показывает статьи" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#64748B;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="catalog" target="articles">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-assets-storage-api" value="сайт вызывает API" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#EA580C;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="site-assets" target="storage-api">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-storage-api-storage-asset" value="создает / читает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#EA580C;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="storage-api" target="storage-asset">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-storage-asset-s3" value="физические файлы" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#D97706;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="storage-asset" target="s3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-storage-api-viewer" value="embed / manifest" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#EA580C;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="storage-api" target="viewer">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e-viewer-catalog" value="iframe на странице" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#EA580C;strokeWidth=2;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;labelBackgroundColor=#FFFFFF;" edge="1" parent="1" source="viewer" target="catalog">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>
+  </diagram>
+</mxfile>

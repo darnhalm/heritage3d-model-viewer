@@ -1,0 +1,655 @@
+<mxfile host="app.diagrams.net" modified="2026-05-18T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="page-api-mindmap" name="Page API Mindmap">
+<mxGraphModel dx="2400" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2480" pageHeight="7670" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="title" value="Страницы Heritage3D и вызовы API&#xa;&#xa;Слева страницы макета. В центре API сайта. Справа API storage/player и события iframe. Стрелки показывают, какие команды нужны для конкретного сценария." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#111827;strokeColor=#111827;fontColor=#FFFFFF;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="30" width="2380" height="120" as="geometry" />
+    </mxCell>
+    <mxCell id="legend-get" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="175" width="110" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="legend-post" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="170" y="175" width="110" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="legend-put" value="PUT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#F59E0B;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="300" y="175" width="110" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="legend-patch" value="PATCH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A78BFA;strokeColor=#A78BFA;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="430" y="175" width="110" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="legend-delete" value="DELETE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2645A;strokeColor=#F2645A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="560" y="175" width="110" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="legend-event" value="EVENT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CBD5E1;strokeColor=#CBD5E1;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="690" y="175" width="110" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="header-pages" value="Страницы макета" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F2FE;strokeColor=#0284C7;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="245" width="360" height="70" as="geometry" />
+    </mxCell>
+    <mxCell id="header-site" value="API сайта&#xa;H3DID, карточки, metadata, коллекции, статьи, права" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DCFCE7;strokeColor=#16A34A;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="470" y="245" width="850" height="70" as="geometry" />
+    </mxCell>
+    <mxCell id="header-player" value="API storage/player&#xa;upload, preview, embed, POI, download, postMessage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FEF3C7;strokeColor=#D97706;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1520" y="245" width="900" height="70" as="geometry" />
+    </mxCell>
+    <mxCell id="group-bg-0" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;arcSize=8" vertex="1" parent="1">
+      <mxGeometry x="25" y="330" width="2410" height="650" as="geometry" />
+    </mxCell>
+    <mxCell id="page-0" value="Создание музея&#xa;&#xa;Страница создания музея" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="350" width="360" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="site-0-0" value="&#xa;&#xa;/site/v1/organizations&#xa;Создать организацию / музей." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="350" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-0-0-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="362" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-0-1" value="&#xa;&#xa;/site/v1/organizations/{organizationId}/avatar&#xa;Загрузить или назначить логотип." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211A0F;strokeColor=#B45309;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="490" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-0-1-badge" value="PUT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#F59E0B;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="502" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-0-2" value="&#xa;&#xa;/site/v1/organizations/{organizationId}/cover&#xa;Загрузить или назначить обложку." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211A0F;strokeColor=#B45309;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="630" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-0-2-badge" value="PUT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#F59E0B;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="642" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-0-3" value="&#xa;&#xa;/site/v1/organizations/{organizationId}/members&#xa;Добавить участников и роли." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="770" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-0-3-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="782" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-0-0" value="&#xa;&#xa;/storage/v1/uploads&#xa;Загрузка avatar/cover как технических файлов." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="350" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-0-0-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="362" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="group-bg-1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;arcSize=8" vertex="1" parent="1">
+      <mxGeometry x="25" y="1025" width="2410" height="930" as="geometry" />
+    </mxCell>
+    <mxCell id="page-1" value="Страница музея&#xa;&#xa;Публичная страница музея" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="1045" width="360" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-0" value="&#xa;&#xa;/site/v1/organizations/{organizationId}&#xa;Карточка музея." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="1045" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-0-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="1057" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-1" value="&#xa;&#xa;/site/v1/organizations/{organizationId}/avatar&#xa;Логотип музея." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="1185" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-1-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="1197" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-2" value="&#xa;&#xa;/site/v1/organizations/{organizationId}/cover&#xa;Обложка музея." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="1325" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-2-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="1337" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-3" value="&#xa;&#xa;/site/v1/organizations/{organizationId}/collections&#xa;Коллекции музея." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="1465" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-3-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="1477" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-4" value="&#xa;&#xa;/site/v1/catalog/search/objects?organizationId=...&#xa;Объекты музея." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="1605" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-4-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="1617" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-5" value="&#xa;&#xa;/site/v1/me/favorites/organizations/{organizationId}&#xa;Добавить музей в избранное." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="1745" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-1-5-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="1757" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-1-0" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/preview&#xa;Preview объектов и обложек." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="1045" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-1-0-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="1057" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="group-bg-2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;arcSize=8" vertex="1" parent="1">
+      <mxGeometry x="25" y="2000" width="2410" height="790" as="geometry" />
+    </mxCell>
+    <mxCell id="page-2" value="Создание каталога / коллекции&#xa;&#xa;Страница создания каталога" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="2020" width="360" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-0" value="&#xa;&#xa;/site/v1/organizations/{organizationId}/collections&#xa;Создать коллекцию или подколлекцию." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="2020" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-0-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="2032" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-1" value="&#xa;&#xa;/site/v1/collections/{collectionId}/parent&#xa;Задать родительскую коллекцию." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1B1626;strokeColor=#7C3AED;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="2160" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-1-badge" value="PATCH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A78BFA;strokeColor=#A78BFA;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="2172" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-2" value="&#xa;&#xa;/site/v1/collections/{collectionId}/objects&#xa;Добавить объекты в коллекцию." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="2300" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-2-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="2312" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-3" value="&#xa;&#xa;/site/v1/collections/{collectionId}/thumbnail&#xa;Назначить миниатюру коллекции." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211A0F;strokeColor=#B45309;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="2440" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-3-badge" value="PUT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#F59E0B;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="2452" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-4" value="&#xa;&#xa;/site/v1/collections/{collectionId}/thumbnail/generate&#xa;Сгенерировать авто-миниатюру." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="2580" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-2-4-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="2592" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-2-0" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/preview&#xa;Взять preview объектов для обложки." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="2020" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-2-0-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="2032" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="group-bg-3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;arcSize=8" vertex="1" parent="1">
+      <mxGeometry x="25" y="2835" width="2410" height="790" as="geometry" />
+    </mxCell>
+    <mxCell id="page-3" value="Страница каталога / коллекции&#xa;&#xa;Публичная страница коллекции" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="2855" width="360" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-0" value="&#xa;&#xa;/site/v1/catalog/collections/{collectionSlugOrId}&#xa;Публичная карточка коллекции." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="2855" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-0-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="2867" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-1" value="&#xa;&#xa;/site/v1/collections/{collectionId}/objects&#xa;Список объектов коллекции." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="2995" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-1-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="3007" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-2" value="&#xa;&#xa;/site/v1/collections/{collectionId}/thumbnail&#xa;Миниатюра коллекции." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="3135" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-2-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="3147" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-3" value="&#xa;&#xa;/site/v1/catalog/facets&#xa;Фильтры и фасеты." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="3275" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-3-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="3287" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-4" value="&#xa;&#xa;/site/v1/me/favorites/collections/{collectionId}&#xa;Добавить коллекцию в избранное." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="3415" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-3-4-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="3427" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-3-0" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/preview&#xa;Preview объектов коллекции." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="2855" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-3-0-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="2867" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="group-bg-4" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;arcSize=8" vertex="1" parent="1">
+      <mxGeometry x="25" y="3670" width="2410" height="1350" as="geometry" />
+    </mxCell>
+    <mxCell id="page-4" value="Добавление / редактирование модели&#xa;&#xa;Страница добавления и редактирования модели" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="3690" width="360" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-0" value="&#xa;&#xa;/site/v1/objects&#xa;Создать H3DID / культурный объект." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="3690" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-0-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="3702" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-1" value="&#xa;&#xa;/site/v1/objects/{h3druObjectId}&#xa;Обновить карточку объекта." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1B1626;strokeColor=#7C3AED;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="3830" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-1-badge" value="PATCH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A78BFA;strokeColor=#A78BFA;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="3842" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-2" value="&#xa;&#xa;/site/v1/objects/{h3druObjectId}/metadata/dublin-core&#xa;Сохранить Dublin Core." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211A0F;strokeColor=#B45309;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="3970" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-2-badge" value="PUT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#F59E0B;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="3982" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-3" value="&#xa;&#xa;/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm&#xa;Сохранить CIDOC CRM." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211A0F;strokeColor=#B45309;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="4110" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-3-badge" value="PUT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#F59E0B;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="4122" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-4" value="&#xa;&#xa;/site/v1/objects/{h3druObjectId}/twins&#xa;Создать цифровое представление." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="4250" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-4-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="4262" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-5" value="&#xa;&#xa;/site/v1/twins/{twinId}/assets&#xa;Создать asset и начать загрузку." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="4390" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-5-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="4402" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-6" value="&#xa;&#xa;/site/v1/assets/{h3druAssetId}/processing-status&#xa;Проверить обработку." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="4530" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-6-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="4542" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-7" value="&#xa;&#xa;/site/v1/assets/{h3druAssetId}/poi&#xa;Сохранить точки интереса." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211A0F;strokeColor=#B45309;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="4670" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-7-badge" value="PUT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#F59E0B;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="4682" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-8" value="&#xa;&#xa;/site/v1/objects/{h3druObjectId}/submit&#xa;Отправить на модерацию." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="4810" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-4-8-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="4822" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-0" value="&#xa;&#xa;/storage/v1/uploads&#xa;Получить uploadUrl." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="3690" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-0-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="3702" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-1" value="&#xa;&#xa;/storage/v1/uploads/{uploadId}/complete&#xa;Завершить загрузку." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="3830" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-1-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="3842" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-2" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/status&#xa;Статус processing." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="3970" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-2-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="3982" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-3" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/preview&#xa;Генерация preview." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="4110" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-3-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="4122" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-4" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/poi&#xa;Сохранить POI." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211A0F;strokeColor=#B45309;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="4250" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-4-4-badge" value="PUT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#F59E0B;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="4262" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="group-bg-5" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;arcSize=8" vertex="1" parent="1">
+      <mxGeometry x="25" y="5065" width="2410" height="790" as="geometry" />
+    </mxCell>
+    <mxCell id="page-5" value="Просмотр модели&#xa;&#xa;Публичная страница модели" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="5085" width="360" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-0" value="&#xa;&#xa;/site/v1/catalog/objects/{slugOrH3DID}&#xa;Публичная карточка модели." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="5085" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-0-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="5097" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-1" value="&#xa;&#xa;/site/v1/objects/{h3druObjectId}/embed&#xa;Получить embed для viewer." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="5225" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-1-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="5237" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-2" value="&#xa;&#xa;/site/v1/assets/{h3druAssetId}/poi&#xa;Получить POI через сайт." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="5365" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-2-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="5377" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-3" value="&#xa;&#xa;/site/v1/assets/{h3druAssetId}/download&#xa;Получить ссылку скачивания, если разрешено." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="5505" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-3-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="5517" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-4" value="&#xa;&#xa;/site/v1/me/favorites/objects/{h3druObjectId}&#xa;Добавить модель в избранное." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="5645" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-5-4-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="5657" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-0" value="&#xa;&#xa;/storage/v1/embed&#xa;Сформировать iframeUrl / iframeHtml." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="5085" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-0-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="5097" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-1" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/preview&#xa;Poster / screenshot." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="5225" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-1-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="5237" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-2" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/poi&#xa;Точки интереса." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="5365" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-2-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="5377" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-3" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/download-url&#xa;Signed download URL." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="5505" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-3-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="5517" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-4" value="&#xa;&#xa;window.postMessage&#xa;viewer.ready / poiClick / cameraChange / error." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#172033;strokeColor=#64748B;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="5645" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-5-4-badge" value="EVENT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CBD5E1;strokeColor=#CBD5E1;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="5657" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="group-bg-6" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;arcSize=8" vertex="1" parent="1">
+      <mxGeometry x="25" y="5900" width="2410" height="930" as="geometry" />
+    </mxCell>
+    <mxCell id="page-6" value="Создание статьи&#xa;&#xa;Страница создания статьи" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="5920" width="360" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-0" value="&#xa;&#xa;/site/v1/articles&#xa;Создать черновик статьи." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="5920" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-0-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="5932" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-1" value="&#xa;&#xa;/site/v1/articles/{articleId}&#xa;Редактировать текст и блоки." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1B1626;strokeColor=#7C3AED;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="6060" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-1-badge" value="PATCH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A78BFA;strokeColor=#A78BFA;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="6072" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-2" value="&#xa;&#xa;/site/v1/articles/{articleId}/objects&#xa;Добавить модель в статью." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="6200" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-2-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="6212" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-3" value="&#xa;&#xa;/site/v1/articles/{articleId}/objects/{h3druObjectId}&#xa;Настроить подпись, порядок, twinId, camera/poi." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1B1626;strokeColor=#7C3AED;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="6340" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-3-badge" value="PATCH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#A78BFA;strokeColor=#A78BFA;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="6352" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-4" value="&#xa;&#xa;/site/v1/articles/{articleId}/cover&#xa;Назначить обложку статьи." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#211A0F;strokeColor=#B45309;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="6480" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-4-badge" value="PUT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F59E0B;strokeColor=#F59E0B;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="6492" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-5" value="&#xa;&#xa;/site/v1/articles/{articleId}/submit&#xa;Отправить статью на модерацию." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="6620" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-6-5-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="6632" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-6-0" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/preview&#xa;Preview моделей для редактора." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="5920" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-6-0-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="5932" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-6-1" value="&#xa;&#xa;/storage/v1/embed&#xa;Предпросмотр встроенных моделей." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="6060" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-6-1-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="6072" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="group-bg-7" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#CBD5E1;arcSize=8" vertex="1" parent="1">
+      <mxGeometry x="25" y="6875" width="2410" height="650" as="geometry" />
+    </mxCell>
+    <mxCell id="page-7" value="Страница статьи&#xa;&#xa;Публичная статья с подборкой моделей" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DBEAFE;strokeColor=#2563EB;fontColor=#0F172A;fontStyle=1;arcSize=8;spacing=12;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="6895" width="360" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="site-7-0" value="&#xa;&#xa;/site/v1/catalog/articles/{slugOrArticleId}&#xa;Публичная статья." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="6895" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-7-0-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="6907" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-7-1" value="&#xa;&#xa;/site/v1/objects/{h3druObjectId}/embed&#xa;Embed для каждой модели в статье." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="7035" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-7-1-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="7047" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-7-2" value="&#xa;&#xa;/site/v1/assets/{h3druAssetId}/poi&#xa;POI для модели в статье." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="7175" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-7-2-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="7187" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="site-7-3" value="&#xa;&#xa;/site/v1/catalog/articles&#xa;Список опубликованных статей." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="470" y="7315" width="850" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="site-7-3-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="482" y="7327" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-7-0" value="&#xa;&#xa;/storage/v1/embed&#xa;iframe для каждой вставленной модели." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0F1F1A;strokeColor=#047A50;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="6895" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-7-0-badge" value="POST" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#08BF7A;strokeColor=#08BF7A;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="6907" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-7-1" value="&#xa;&#xa;/storage/v1/assets/{storageAssetId}/preview&#xa;Preview/обложки моделей." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#101820;strokeColor=#2F6FB4;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="7035" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-7-1-badge" value="GET" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#55A2FF;strokeColor=#55A2FF;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="7047" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="player-7-2" value="&#xa;&#xa;window.postMessage&#xa;Управление viewer внутри статьи." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#172033;strokeColor=#64748B;fontColor=#F8FAFC;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1520" y="7175" width="900" height="118" as="geometry" />
+    </mxCell>
+    <mxCell id="player-7-2-badge" value="EVENT" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CBD5E1;strokeColor=#CBD5E1;fontColor=#05070A;fontStyle=1;fontSize=15;arcSize=8;align=center;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="1532" y="7187" width="96" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-0-0" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-0" target="site-0-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-0-1" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F59E0B;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-0" target="site-0-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-0-2" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F59E0B;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-0" target="site-0-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-0-3" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-0" target="site-0-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-0-0" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-0-0" target="player-0-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-1-0" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-1" target="site-1-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-1-1" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-1" target="site-1-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-1-2" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-1" target="site-1-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-1-3" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-1" target="site-1-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-1-4" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-1" target="site-1-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-1-5" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-1" target="site-1-5">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-1-0" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-1-0" target="player-1-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-2-0" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-2" target="site-2-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-2-1" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#A78BFA;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-2" target="site-2-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-2-2" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-2" target="site-2-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-2-3" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F59E0B;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-2" target="site-2-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-2-4" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-2" target="site-2-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-2-0" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-2-0" target="player-2-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-3-0" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-3" target="site-3-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-3-1" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-3" target="site-3-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-3-2" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-3" target="site-3-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-3-3" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-3" target="site-3-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-3-4" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-3" target="site-3-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-3-0" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-3-0" target="player-3-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-4-0" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-4" target="site-4-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-4-1" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#A78BFA;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-4" target="site-4-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-4-2" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F59E0B;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-4" target="site-4-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-4-3" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F59E0B;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-4" target="site-4-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-4-4" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-4" target="site-4-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-4-5" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-4" target="site-4-5">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-4-6" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-4" target="site-4-6">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-4-7" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F59E0B;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-4" target="site-4-7">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-4-8" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-4" target="site-4-8">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-4-0" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-4-0" target="player-4-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-4-1" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-4-1" target="player-4-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-4-2" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-4-2" target="player-4-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-4-3" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-4-3" target="player-4-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-4-4" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F59E0B;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-4-4" target="player-4-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-5-0" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-5" target="site-5-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-5-1" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-5" target="site-5-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-5-2" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-5" target="site-5-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-5-3" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-5" target="site-5-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-5-4" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-5" target="site-5-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-5-0" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-5-0" target="player-5-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-5-1" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-5-1" target="player-5-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-5-2" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-5-2" target="player-5-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-5-3" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-5-3" target="player-5-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-5-4" value="iframe события" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#CBD5E1;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-5-4" target="player-5-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-6-0" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-6" target="site-6-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-6-1" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#A78BFA;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-6" target="site-6-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-6-2" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-6" target="site-6-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-6-3" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#A78BFA;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-6" target="site-6-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-6-4" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#F59E0B;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-6" target="site-6-4">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-6-5" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-6" target="site-6-5">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-6-0" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-6-0" target="player-6-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-6-1" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-6-1" target="player-6-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-7-0" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-7" target="site-7-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-7-1" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-7" target="site-7-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-7-2" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-7" target="site-7-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-page-site-7-3" value="вызывает" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="page-7" target="site-7-3">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-7-0" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#08BF7A;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-7-0" target="player-7-0">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-7-1" value="сайт -&gt; storage/player" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#55A2FF;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-7-1" target="player-7-1">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-site-player-7-2" value="iframe события" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#CBD5E1;strokeWidth=2;endArrow=block;endFill=1;fontSize=11;fontColor=#334155;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="site-7-2" target="player-7-2">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>
+  </diagram>
+</mxfile>

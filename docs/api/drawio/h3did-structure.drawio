@@ -1,0 +1,121 @@
+<mxfile host="app.diagrams.net" modified="2026-05-17T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="h3did-structure" name="H3DID Structure">
+<mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1640" pageHeight="1980" math="0" shadow="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="title" value="Структура H3DID, организаций, коллекций и цифровых двойников&#xa;&#xa;Главная идея: H3DID принадлежит организации-владельцу. Рабочая группа отвечает за процесс. Коллекции группируют объекты. Файлы живут отдельно в storage." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#111827;strokeColor=#111827;fontColor=#ffffff;fontStyle=1;fontSize=20;arcSize=8;spacing=16;align=left;verticalAlign=middle" vertex="1" parent="1">
+      <mxGeometry x="40" y="30" width="1540" height="130" as="geometry" />
+    </mxCell>
+    <mxCell id="identity-band" value="1. Идентификация и владелец" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=15;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="210" width="1540" height="52" as="geometry" />
+    </mxCell>
+    <mxCell id="h3did" value="H3DID / сквозная идентификация&#xa;&#xa;Единый namespace Heritage3D.&#xa;Не хранит сам файл и не заменяет карточку.&#xa;Связывает объект, двойники, ассеты и внешние ID." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#0f172a;fontSize=15;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="300" width="430" height="170" as="geometry" />
+    </mxCell>
+    <mxCell id="organization" value="Организация / музей&#xa;&#xa;organizationId&#xa;Владелец H3DID и культурных объектов.&#xa;Юридически стабильный владелец данных." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=15;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="560" y="300" width="430" height="170" as="geometry" />
+    </mxCell>
+    <mxCell id="external-login" value="Geoscan Login&#xa;&#xa;userId приходит из внешней системы входа.&#xa;Регистрация и пароль не реализуются внутри H3DRU." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#0f172a;fontSize=14;fontStyle=0;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1080" y="300" width="430" height="170" as="geometry" />
+    </mxCell>
+    <mxCell id="access-band" value="2. Доступ внутри организации" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#0f172a;fontSize=15;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="520" width="1540" height="52" as="geometry" />
+    </mxCell>
+    <mxCell id="workgroup" value="Рабочая группа&#xa;&#xa;workgroupId&#xa;Команда внутри организации.&#xa;Может меняться без смены владельца H3DID." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef9c3;strokeColor=#ca8a04;fontColor=#0f172a;fontSize=14;fontStyle=0;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="620" width="430" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="membership" value="Участие пользователя&#xa;&#xa;userId + organizationId + role&#xa;или userId + workgroupId + role.&#xa;Роли: admin, editor, moderator, viewer." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffedd5;strokeColor=#f97316;fontColor=#0f172a;fontSize=14;fontStyle=0;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="560" y="620" width="430" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="permissions" value="Проверка прав&#xa;&#xa;object:create&#xa;asset:upload&#xa;metadata:edit&#xa;moderation:approve&#xa;asset:download&#xa;asset:delete" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;fontColor=#0f172a;fontSize=14;fontStyle=0;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1080" y="620" width="430" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="collections-band" value="3. Коллекции и объекты" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=15;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="840" width="1540" height="52" as="geometry" />
+    </mxCell>
+    <mxCell id="collection-root" value="Коллекция верхнего уровня&#xa;&#xa;collectionId&#xa;parentCollectionId = null&#xa;Например: Скульптура, Архитектура, Археология." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#8b5cf6;fontColor=#0f172a;fontSize=14;fontStyle=0;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="940" width="430" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="collection-child" value="Подколлекция&#xa;&#xa;collectionId&#xa;parentCollectionId = collectionId родителя&#xa;Обычная модель дерева, не дублирование." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#8b5cf6;fontColor=#0f172a;fontSize=14;fontStyle=0;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="560" y="940" width="430" height="160" as="geometry" />
+    </mxCell>
+    <mxCell id="object" value="Культурный объект&#xa;&#xa;h3druObjectId / H3DID&#xa;ownerOrganizationId&#xa;assignedWorkgroupId&#xa;collectionIds[]&#xa;status: draft / review / published" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=15;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1080" y="920" width="430" height="210" as="geometry" />
+    </mxCell>
+    <mxCell id="metadata" value="Метаданные объекта&#xa;&#xa;CIDOC CRM / Dublin Core&#xa;КАМИС / Госкаталог / ЕГРОКН&#xa;externalIds[]&#xa;profile: okn / museum-object / gigapixel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#64748b;fontColor=#0f172a;fontSize=14;fontStyle=0;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1080" y="1180" width="430" height="180" as="geometry" />
+    </mxCell>
+    <mxCell id="digital-band" value="4. Цифровое представление и файлы" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=15;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="1420" width="1540" height="52" as="geometry" />
+    </mxCell>
+    <mxCell id="twin" value="Цифровой двойник&#xa;&#xa;twinId&#xa;Тип: playcanvas_3d, geoscan_cloud, gigapixel_2d, point_cloud, panorama.&#xa;Один объект может иметь несколько двойников." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=15;fontStyle=1;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="1520" width="430" height="190" as="geometry" />
+    </mxCell>
+    <mxCell id="site-asset" value="Ассет сайта&#xa;&#xa;h3druAssetId&#xa;Запись файла в портале.&#xa;Хранит связь с объектом, двойником, правами и storageAssetId." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccfbf1;strokeColor=#0d9488;fontColor=#0f172a;fontSize=14;fontStyle=0;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="560" y="1520" width="430" height="190" as="geometry" />
+    </mxCell>
+    <mxCell id="storage-asset" value="Storage asset&#xa;&#xa;storageAssetId&#xa;Технический файл на сервере хранения.&#xa;S3 / archive / preview / signedUrl / processing status." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d1fae5;strokeColor=#059669;fontColor=#0f172a;fontSize=14;fontStyle=0;arcSize=8;spacing=14;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="1080" y="1520" width="430" height="190" as="geometry" />
+    </mxCell>
+    <mxCell id="rule" value="Правило разделения&#xa;&#xa;API сайта работает с H3DID, организациями, коллекциями, правами и карточками.&#xa;API storage/player работает с storageAssetId, файлами, preview, embed, POI и download." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#cbd5e1;fontColor=#334155;fontSize=13;arcSize=8;spacing=12;align=left;verticalAlign=top" vertex="1" parent="1">
+      <mxGeometry x="40" y="1780" width="1470" height="110" as="geometry" />
+    </mxCell>
+    <mxCell id="e1" value="владелец namespace / ID" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2563eb;strokeWidth=2;endArrow=block;endFill=1;fontColor=#2563eb;fontStyle=1;" edge="1" parent="1" source="h3did" target="organization">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e2" value="userId" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d97706;strokeWidth=2;endArrow=block;endFill=1;fontColor=#d97706;fontStyle=1;" edge="1" parent="1" source="external-login" target="membership">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e3" value="создает группы" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#16a34a;strokeWidth=2;endArrow=block;endFill=1;fontColor=#16a34a;fontStyle=1;" edge="1" parent="1" source="organization" target="workgroup">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e4" value="участники организации" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#16a34a;strokeWidth=2;endArrow=block;endFill=1;fontColor=#16a34a;fontStyle=1;" edge="1" parent="1" source="organization" target="membership">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e5" value="участники группы" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ca8a04;strokeWidth=2;endArrow=block;endFill=1;fontColor=#ca8a04;fontStyle=1;" edge="1" parent="1" source="workgroup" target="membership">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e6" value="роль -&gt; права" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#ef4444;strokeWidth=2;endArrow=block;endFill=1;fontColor=#ef4444;fontStyle=1;" edge="1" parent="1" source="membership" target="permissions">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e7" value="владеет коллекциями" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#16a34a;strokeWidth=2;endArrow=block;endFill=1;fontColor=#16a34a;fontStyle=1;" edge="1" parent="1" source="organization" target="collection-root">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e8" value="parentCollectionId" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=2;endArrow=block;endFill=1;fontColor=#7c3aed;fontStyle=1;" edge="1" parent="1" source="collection-root" target="collection-child">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e9" value="объекты коллекции" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=2;endArrow=block;endFill=1;fontColor=#7c3aed;fontStyle=1;" edge="1" parent="1" source="collection-root" target="object">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e10" value="объекты подколлекции" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#7c3aed;strokeWidth=2;endArrow=block;endFill=1;fontColor=#7c3aed;fontStyle=1;" edge="1" parent="1" source="collection-child" target="object">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e11" value="ownerOrganizationId" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#16a34a;strokeWidth=2;endArrow=block;endFill=1;fontColor=#16a34a;fontStyle=1;" edge="1" parent="1" source="organization" target="object">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e12" value="assignedWorkgroupId" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;dashPattern=8 4;strokeColor=#ca8a04;strokeWidth=2;endArrow=block;endFill=1;fontColor=#ca8a04;fontStyle=1;" edge="1" parent="1" source="workgroup" target="object">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e13" value="можно редактировать / модерировать" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;dashPattern=8 4;strokeColor=#ef4444;strokeWidth=2;endArrow=block;endFill=1;fontColor=#ef4444;fontStyle=1;" edge="1" parent="1" source="permissions" target="object">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e14" value="описание и externalIds" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#64748b;strokeWidth=2;endArrow=block;endFill=1;fontColor=#64748b;fontStyle=1;" edge="1" parent="1" source="object" target="metadata">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e15" value="h3druObjectId" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#2563eb;strokeWidth=2;endArrow=block;endFill=1;fontColor=#2563eb;fontStyle=1;" edge="1" parent="1" source="h3did" target="object">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e16" value="имеет цифровые двойники" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0284c7;strokeWidth=2;endArrow=block;endFill=1;fontColor=#0284c7;fontStyle=1;" edge="1" parent="1" source="object" target="twin">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e17" value="имеет ассеты" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#0d9488;strokeWidth=2;endArrow=block;endFill=1;fontColor=#0d9488;fontStyle=1;" edge="1" parent="1" source="twin" target="site-asset">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="e18" value="storageAssetId" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#059669;strokeWidth=2;endArrow=block;endFill=1;fontColor=#059669;fontStyle=1;" edge="1" parent="1" source="site-asset" target="storage-asset">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>
+  </diagram>
+</mxfile>

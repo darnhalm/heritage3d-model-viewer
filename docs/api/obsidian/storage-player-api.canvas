@@ -1,0 +1,661 @@
+{
+  "nodes": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 0,
+      "y": -520,
+      "width": 980,
+      "height": 260,
+      "color": "#111827",
+      "text": "# API сервера хранения и плееров\n\nИсточник: `storage-player-openapi.yaml`\n\nТехнический контракт для загрузки, хранения, обработки, выдачи файлов, превью, скачивания и embed.\n\nВажно: это API только для сервера хранения/плееров. Портальные карточки, CIDOC CRM, Dublin Core, КАМИС, Госкаталог и ЕГРОКН сюда не входят."
+    },
+    {
+      "id": "legend",
+      "type": "text",
+      "x": 1040,
+      "y": -520,
+      "width": 620,
+      "height": 260,
+      "color": "#f8fafc",
+      "text": "# Цвет методов\n\n- GET - синий, получение данных\n- POST - зеленый, создание/запуск операции\n- PUT - оранжевый, сохранение целиком\n- DELETE - красный, удаление\n\nЦветные маленькие карточки рядом с endpoint играют роль Swagger-бейджа метода."
+    },
+    {
+      "id": "group-upload",
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 560,
+      "height": 82,
+      "color": "#dbeafe",
+      "text": "# Upload\n\nПолучение upload URL и подтверждение загрузки."
+    },
+    {
+      "id": "endpoint-upload-1",
+      "type": "text",
+      "x": 0,
+      "y": 112,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/uploads\n\nПолучить временную ссылку для загрузки файла.\n\noperationId: `createUploadUrl`\nauth: `serviceBearerAuth`\nparameters: нет\nrequest: CreateUploadRequest (required)\n\nresponses:\n201: Временная ссылка для прямой загрузки. -> UploadUrlResponse\n403: \n413: \n415: "
+    },
+    {
+      "id": "method-upload-1",
+      "type": "text",
+      "x": 12,
+      "y": 124,
+      "width": 168,
+      "height": 58,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "endpoint-upload-2",
+      "type": "text",
+      "x": 0,
+      "y": 362,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/uploads/{uploadId}/complete\n\nПодтвердить завершение загрузки.\n\noperationId: `completeUpload`\nauth: `serviceBearerAuth`\nparameters: UploadId\nrequest: CompleteUploadRequest (required)\n\nresponses:\n201: Файл зарегистрирован как storage asset. -> StorageAsset\n404: \n409: "
+    },
+    {
+      "id": "method-upload-2",
+      "type": "text",
+      "x": 12,
+      "y": 374,
+      "width": 168,
+      "height": 58,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "group-assets",
+      "type": "text",
+      "x": 640,
+      "y": 0,
+      "width": 560,
+      "height": 82,
+      "color": "#dcfce7",
+      "text": "# Assets\n\nТехнические данные файлов, URL выдачи, архивирование и удаление."
+    },
+    {
+      "id": "endpoint-assets-1",
+      "type": "text",
+      "x": 640,
+      "y": 112,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}\n\nПолучить техническую карточку файла.\n\noperationId: `getStorageAsset`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: нет\n\nresponses:\n200: Технические данные файла. -> StorageAsset\n404: "
+    },
+    {
+      "id": "method-assets-1",
+      "type": "text",
+      "x": 652,
+      "y": 124,
+      "width": 168,
+      "height": 58,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "endpoint-assets-2",
+      "type": "text",
+      "x": 640,
+      "y": 362,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}\n\nУдалить файл или пометить его на удаление.\n\noperationId: `deleteStorageAsset`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: нет\n\nresponses:\n202: Удаление принято в обработку. -> StorageOperation\n404: "
+    },
+    {
+      "id": "method-assets-2",
+      "type": "text",
+      "x": 652,
+      "y": 374,
+      "width": 168,
+      "height": 58,
+      "color": "#f2645a",
+      "text": "# DELETE"
+    },
+    {
+      "id": "endpoint-assets-3",
+      "type": "text",
+      "x": 640,
+      "y": 612,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}/file-url\n\nПолучить URL файла для просмотра.\n\noperationId: `getFileUrl`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: нет\n\nresponses:\n200: URL файла или signed URL. -> FileUrlResponse\n404: "
+    },
+    {
+      "id": "method-assets-3",
+      "type": "text",
+      "x": 652,
+      "y": 624,
+      "width": 168,
+      "height": 58,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "endpoint-assets-4",
+      "type": "text",
+      "x": 640,
+      "y": 862,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}/archive\n\nПереместить файл в архивный класс хранения.\n\noperationId: `archiveStorageAsset`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: нет\n\nresponses:\n202: Архивация принята в обработку. -> StorageOperation\n404: "
+    },
+    {
+      "id": "method-assets-4",
+      "type": "text",
+      "x": 652,
+      "y": 874,
+      "width": 168,
+      "height": 58,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "endpoint-assets-5",
+      "type": "text",
+      "x": 640,
+      "y": 1112,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}/restore\n\nВосстановить файл из архивного класса хранения.\n\noperationId: `restoreStorageAsset`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: RestoreArchiveRequest\n\nresponses:\n202: Восстановление принято в обработку. -> StorageOperation\n404: "
+    },
+    {
+      "id": "method-assets-5",
+      "type": "text",
+      "x": 652,
+      "y": 1124,
+      "width": 168,
+      "height": 58,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "group-processing",
+      "type": "text",
+      "x": 1280,
+      "y": 0,
+      "width": 560,
+      "height": 82,
+      "color": "#fef3c7",
+      "text": "# Processing\n\nСтатусы обработки и производные файлы."
+    },
+    {
+      "id": "endpoint-processing-1",
+      "type": "text",
+      "x": 1280,
+      "y": 112,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}/status\n\nПолучить статус загрузки/обработки файла.\n\noperationId: `getAssetProcessingStatus`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: нет\n\nresponses:\n200: Статус обработки. -> ProcessingStatus\n404: "
+    },
+    {
+      "id": "method-processing-1",
+      "type": "text",
+      "x": 1292,
+      "y": 124,
+      "width": 168,
+      "height": 58,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "group-preview",
+      "type": "text",
+      "x": 1920,
+      "y": 0,
+      "width": 560,
+      "height": 82,
+      "color": "#ede9fe",
+      "text": "# Preview\n\nThumbnail/poster/screenshot для каталога и карточки."
+    },
+    {
+      "id": "endpoint-preview-1",
+      "type": "text",
+      "x": 1920,
+      "y": 112,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}/preview\n\nПолучить превью файла.\n\noperationId: `getAssetPreview`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId, size (query)\nrequest: нет\n\nresponses:\n200: Preview/thumbnail/poster. -> PreviewAsset\n404: "
+    },
+    {
+      "id": "method-preview-1",
+      "type": "text",
+      "x": 1932,
+      "y": 124,
+      "width": 168,
+      "height": 58,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "endpoint-preview-2",
+      "type": "text",
+      "x": 1920,
+      "y": 362,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}/preview\n\nСоздать или обновить превью файла.\n\noperationId: `createAssetPreview`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: CreatePreviewRequest\n\nresponses:\n202: Генерация превью поставлена в очередь. -> StorageOperation\n404: "
+    },
+    {
+      "id": "method-preview-2",
+      "type": "text",
+      "x": 1932,
+      "y": 374,
+      "width": 168,
+      "height": 58,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "group-poi",
+      "type": "text",
+      "x": 1920,
+      "y": 688,
+      "width": 560,
+      "height": 82,
+      "color": "#fee2e2",
+      "text": "# POI\n\nТочки интереса PlayCanvas-плеера как технический JSON рядом с файлом."
+    },
+    {
+      "id": "endpoint-poi-1",
+      "type": "text",
+      "x": 1920,
+      "y": 800,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}/poi\n\nПолучить точки интереса для PlayCanvas-плеера.\nВозвращает технический список POI в формате текущего PlayCanvas viewer.\nЭто не музейные метаданные и не CIDOC CRM, а сохраненное состояние точек на модели.\n\n\noperationId: `getAssetPoiList`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: нет\n\nresponses:\n200: Список точек интереса. -> PoiListResponse\n404: "
+    },
+    {
+      "id": "method-poi-1",
+      "type": "text",
+      "x": 1932,
+      "y": 812,
+      "width": 168,
+      "height": 58,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "endpoint-poi-2",
+      "type": "text",
+      "x": 1920,
+      "y": 1050,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}/poi\n\nСохранить точки интереса для PlayCanvas-плеера.\nСохраняет весь список POI целиком. Для MVP этого достаточно: viewer или портал\nредактирует точки локально, затем отправляет актуальный список на сервер хранения.\n\n\noperationId: `updateAssetPoiList`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: UpdatePoiListRequest (required)\n\nresponses:\n200: Список POI сохранен. -> PoiListResponse\n404: "
+    },
+    {
+      "id": "method-poi-2",
+      "type": "text",
+      "x": 1932,
+      "y": 1062,
+      "width": 168,
+      "height": 58,
+      "color": "#f59e0b",
+      "text": "# PUT"
+    },
+    {
+      "id": "group-download",
+      "type": "text",
+      "x": 1920,
+      "y": 1376,
+      "width": 560,
+      "height": 82,
+      "color": "#cffafe",
+      "text": "# Download\n\nВременные ссылки для скачивания."
+    },
+    {
+      "id": "endpoint-download-1",
+      "type": "text",
+      "x": 1920,
+      "y": 1488,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/assets/{storageAssetId}/download-url\n\nПолучить временную ссылку для скачивания.\n\noperationId: `getDownloadUrl`\nauth: `serviceBearerAuth`\nparameters: StorageAssetId\nrequest: нет\n\nresponses:\n200: Временная ссылка для скачивания. -> DownloadUrlResponse\n403: \n404: "
+    },
+    {
+      "id": "method-download-1",
+      "type": "text",
+      "x": 1932,
+      "y": 1500,
+      "width": 168,
+      "height": 58,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "group-embed",
+      "type": "text",
+      "x": 2560,
+      "y": 0,
+      "width": 560,
+      "height": 82,
+      "color": "#e0e7ff",
+      "text": "# Embed\n\nВстройка плеера и внешний embed облачной платформы."
+    },
+    {
+      "id": "endpoint-embed-1",
+      "type": "text",
+      "x": 2560,
+      "y": 112,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/embed\n\nПолучить embed для файла или облачного проекта.\n\noperationId: `createStorageEmbed`\nauth: `serviceBearerAuth`\nparameters: нет\nrequest: CreateStorageEmbedRequest (required)\n\nresponses:\n200: iframe URL/HTML или внешний embed облачной платформы. -> StorageEmbedResponse\n404: "
+    },
+    {
+      "id": "method-embed-1",
+      "type": "text",
+      "x": 2572,
+      "y": 124,
+      "width": 168,
+      "height": 58,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "group-webhooks",
+      "type": "text",
+      "x": 2560,
+      "y": 438,
+      "width": 560,
+      "height": 82,
+      "color": "#f1f5f9",
+      "text": "# Webhooks\n\nУведомления сервера хранения в сторону портала."
+    },
+    {
+      "id": "endpoint-webhooks-1",
+      "type": "text",
+      "x": 2560,
+      "y": 550,
+      "width": 560,
+      "height": 220,
+      "color": "#111827",
+      "text": "\n\n\n# /storage/v1/webhooks/asset-status\n\nWebhook о статусе файла в сторону портала.\n\noperationId: `receiveAssetStatusWebhook`\nauth: `webhookSignature`\nparameters: нет\nrequest: AssetStatusWebhook (required)\n\nresponses:\n202: Webhook принят."
+    },
+    {
+      "id": "method-webhooks-1",
+      "type": "text",
+      "x": 2572,
+      "y": 562,
+      "width": 168,
+      "height": 58,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "embed-options",
+      "type": "text",
+      "x": 0,
+      "y": 1500,
+      "width": 620,
+      "height": 580,
+      "color": "#e0e7ff",
+      "text": "# Embed параметры PlayCanvas\n\n`POST /storage/v1/embed` собирает `iframeUrl` и `iframeHtml`.\n\n- `load` / `assetUrl` - URL файла модели\n- `embed=1` - iframe-режим\n- `ui=full|compact|minimal` - пресет интерфейса\n- `lang=ru|en|zh` - язык\n- `autoplay=0|1` - автозапуск\n- `panel=0|1` - боковая панель\n- `poi=0|1` - точки интереса\n- `tour=0|1` - навигация по точкам\n- `measure=0|1` - измерения\n- `info=0|1` - информационные элементы\n- `modelInfo=0|1` - техническая информация\n- `controls=0|1` - кнопки управления\n- `fullscreen=0|1` - полноэкранный режим\n- `fit=0|1` - вписать модель\n- `reset=0|1` - сброс камеры\n- `cameraPosition=x,y,z` - позиция камеры\n- `cameraFocus=x,y,z` - точка фокуса"
+    },
+    {
+      "id": "postmessage-api",
+      "type": "text",
+      "x": 680,
+      "y": 1500,
+      "width": 620,
+      "height": 580,
+      "color": "#fef3c7",
+      "text": "# window.postMessage API\n\nКоманды от страницы сайта во viewer:\n\n- `focus-poi` - перейти к POI по `id`\n- `open-poi` - открыть POI, сейчас как `focus-poi`\n- `clear-poi` - снять активную точку\n- `next-poi` - следующая точка\n- `prev-poi` - предыдущая точка\n- `seek-animation` - перейти к времени/кадру\n- `play-animation` - запустить анимацию\n- `pause-animation` - остановить анимацию\n- `freeze-animation` - зафиксировать кадр\n\nСобытия от viewer:\n\n- `poi-selected`\n- `poi-cleared`\n- `animation-time`"
+    },
+    {
+      "id": "enums-statuses",
+      "type": "text",
+      "x": 1360,
+      "y": 1500,
+      "width": 620,
+      "height": 580,
+      "color": "#dcfce7",
+      "text": "# Enums и статусы\n\nAssetKind: web_model, source_model, point_cloud, texture, panorama, image_set, gigapixel_image, archive_package\n\nAssetFormat: glb, gltf, obj, ply, e57, laz, las, jpg, png, webp, iiif, dzi, tile_pyramid, geoscan_cloud_project, geoscan_cloud_embed, zip, json, other\n\nPlayerType: playcanvas_3d, geoscan_cloud, gigapixel_2d\n\nStorageClass: hot, private, archive, glacier\n\nStorageAssetStatus: upload_requested, uploaded, queued, processing, validating, ready, failed, archived, restore_requested, restoring, deleted"
+    },
+    {
+      "id": "security-scope",
+      "type": "text",
+      "x": 2040,
+      "y": 1500,
+      "width": 620,
+      "height": 580,
+      "color": "#fee2e2",
+      "text": "# Security и границы API\n\nHTTP API защищен сервисным токеном портала:\n\n- `serviceBearerAuth` - Bearer JWT между порталом и сервером хранения\n- `webhookSignature` - подпись webhook через `X-H3D-Signature`\n\nЧто не входит в этот API:\n\n- карточка культурного объекта\n- CIDOC CRM\n- Dublin Core\n- КАМИС / Госкаталог / ЕГРОКН\n- каталог сайта\n- портальная модерация\n- пользовательские роли портала\n- выбор активного цифрового двойника"
+    },
+    {
+      "id": "schema-CreateUploadRequest",
+      "type": "text",
+      "x": 0,
+      "y": 2160,
+      "width": 620,
+      "height": 420,
+      "color": "#f8fafc",
+      "text": "# CreateUploadRequest\n\nrequired: twinId, h3druAssetId, organizationId, fileName, contentType, sizeBytes, kind, format\n\n- twinId*: string\n- h3druAssetId*: string\n- organizationId*: string\n- fileName*: string\n- contentType*: string\n- sizeBytes*: integer\n- kind*: AssetKind\n- format*: AssetFormat\n- checksum: string | null\n- storageClass: StorageClass"
+    },
+    {
+      "id": "schema-UploadUrlResponse",
+      "type": "text",
+      "x": 680,
+      "y": 2160,
+      "width": 620,
+      "height": 360,
+      "color": "#f8fafc",
+      "text": "# UploadUrlResponse\n\nrequired: uploadId, uploadUrl, method, expiresAt, storageKey\n\n- uploadId*: string\n- uploadUrl*: string\n- method*: string [PUT, POST]\n- expiresAt*: string\n- storageKey*: string\n- requiredHeaders: object"
+    },
+    {
+      "id": "schema-CompleteUploadRequest",
+      "type": "text",
+      "x": 1360,
+      "y": 2160,
+      "width": 620,
+      "height": 360,
+      "color": "#f8fafc",
+      "text": "# CompleteUploadRequest\n\nrequired: h3druAssetId, checksum, sizeBytes\n\n- h3druAssetId*: string\n- checksum*: string\n- sizeBytes*: integer"
+    },
+    {
+      "id": "schema-StorageAsset",
+      "type": "text",
+      "x": 0,
+      "y": 2720,
+      "width": 620,
+      "height": 520,
+      "color": "#f8fafc",
+      "text": "# StorageAsset\n\nrequired: storageAssetId, h3druAssetId, twinId, storageKey, kind, format, status, checksum\n\n- storageAssetId*: string\n- h3druAssetId*: string\n- twinId*: string\n- organizationId: string\n- storageKey*: string\n- kind*: AssetKind\n- format*: AssetFormat\n- contentType: string\n- sizeBytes: integer\n- checksum*: string\n- status*: StorageAssetStatus\n- storageClass: StorageClass\n- fileUrl: string | null\n- preview: PreviewAsset | null\n- derivatives: DerivativeAsset[]"
+    },
+    {
+      "id": "schema-FileUrlResponse",
+      "type": "text",
+      "x": 680,
+      "y": 2720,
+      "width": 620,
+      "height": 360,
+      "color": "#f8fafc",
+      "text": "# FileUrlResponse\n\nrequired: url, expiresAt\n\n- url*: string\n- expiresAt*: string | null\n- contentType: string\n- checksum: string"
+    },
+    {
+      "id": "schema-PreviewAsset",
+      "type": "text",
+      "x": 1360,
+      "y": 2720,
+      "width": 620,
+      "height": 360,
+      "color": "#f8fafc",
+      "text": "# PreviewAsset\n\nrequired: url, kind\n\n- kind*: string [thumbnail, poster, screenshot]\n- url*: string\n- width: integer | null\n- height: integer | null\n- format: string [jpg, png, webp]"
+    },
+    {
+      "id": "schema-PoiItem",
+      "type": "text",
+      "x": 0,
+      "y": 3280,
+      "width": 620,
+      "height": 420,
+      "color": "#f8fafc",
+      "text": "# PoiItem\n\nrequired: id, number, position, normal\n\n- id*: string\n- number*: integer\n- title: string\n- description: string\n- color: string\n- duration: number - Время перелета камеры к точке, секунды.\n- holdTime: number - Время удержания точки в сценарии просмотра, секунды.\n- camera: PoiCameraView | null\n- position*: Vec3\n- normal*: Vec3"
+    },
+    {
+      "id": "schema-CreateStorageEmbedRequest",
+      "type": "text",
+      "x": 680,
+      "y": 3280,
+      "width": 620,
+      "height": 420,
+      "color": "#f8fafc",
+      "text": "# CreateStorageEmbedRequest\n\nrequired: storageAssetId, playerType\n\n- storageAssetId*: string\n- playerType*: PlayerType\n- lang: string [ru, en, zh]\n- preset: string [full, compact, minimal] - Пресет UI viewer. В query параметрах PlayCanvas соответствует `ui`.\n- autoplay: boolean - Автоматически запускать просмотр после загрузки iframe.\n- ui: EmbedUiOptions\n- camera: EmbedCameraOptions\n- width: integer\n- height: integer\n- title: string"
+    },
+    {
+      "id": "schema-StorageEmbedResponse",
+      "type": "text",
+      "x": 1360,
+      "y": 3280,
+      "width": 620,
+      "height": 360,
+      "color": "#f8fafc",
+      "text": "# StorageEmbedResponse\n\nrequired: playerType, iframeUrl, iframeHtml, embedSource, query\n\n- playerType*: PlayerType\n- embedSource*: string [storage_generated, external_provider]\n- iframeUrl*: string\n- iframeHtml*: string\n- externalEmbedUrl: string | null\n- query*: object - Нормализованные query-параметры, из которых собран iframeUrl."
+    },
+    {
+      "id": "schema-AssetStatusWebhook",
+      "type": "text",
+      "x": 0,
+      "y": 3840,
+      "width": 620,
+      "height": 364,
+      "color": "#f8fafc",
+      "text": "# AssetStatusWebhook\n\nrequired: storageAssetId, h3druAssetId, twinId, status\n\n- storageAssetId*: string\n- h3druAssetId*: string\n- twinId*: string\n- status*: StorageAssetStatus\n- fileUrl: string | null\n- previewUrl: string | null\n- derivatives: DerivativeAsset[]\n- message: string | null"
+    },
+    {
+      "id": "schema-StorageError",
+      "type": "text",
+      "x": 680,
+      "y": 3840,
+      "width": 620,
+      "height": 360,
+      "color": "#f8fafc",
+      "text": "# StorageError\n\nrequired: code, message\n\n- code*: string\n- message*: string\n- details: object"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-group-1",
+      "fromNode": "group-upload",
+      "toNode": "endpoint-upload-1",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-group-2",
+      "fromNode": "group-assets",
+      "toNode": "endpoint-assets-1",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-group-3",
+      "fromNode": "group-processing",
+      "toNode": "endpoint-processing-1",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-group-4",
+      "fromNode": "group-preview",
+      "toNode": "endpoint-preview-1",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-group-5",
+      "fromNode": "group-poi",
+      "toNode": "endpoint-poi-1",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-group-6",
+      "fromNode": "group-download",
+      "toNode": "endpoint-download-1",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-group-7",
+      "fromNode": "group-embed",
+      "toNode": "endpoint-embed-1",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-group-8",
+      "fromNode": "group-webhooks",
+      "toNode": "endpoint-webhooks-1",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "edge-flow-9",
+      "fromNode": "group-upload",
+      "toNode": "group-assets",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "edge-flow-10",
+      "fromNode": "group-assets",
+      "toNode": "group-processing",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "edge-flow-11",
+      "fromNode": "group-processing",
+      "toNode": "group-preview",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "edge-flow-12",
+      "fromNode": "group-assets",
+      "toNode": "group-poi",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "edge-flow-13",
+      "fromNode": "group-assets",
+      "toNode": "group-download",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "edge-flow-14",
+      "fromNode": "group-processing",
+      "toNode": "group-embed",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "edge-flow-15",
+      "fromNode": "group-processing",
+      "toNode": "group-webhooks",
+      "fromSide": "right",
+      "toSide": "left"
+    }
+  ]
+}

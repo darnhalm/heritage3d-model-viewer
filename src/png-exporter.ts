@@ -107,14 +107,19 @@ class PngExporter {
         window.URL.revokeObjectURL(url);
     }
 
-    async export(filename: string, words: Uint32Array, width: number, height: number) {
+    // encode pixels to PNG bytes (no download)
+    async encode(words: Uint32Array, width: number, height: number): Promise<Uint8Array> {
         this.worker.postMessage({
             type: 'encode',
             words: words,
             width: width,
             height: height
         }, [words.buffer]);
-        this._downloadFile(filename, await new Promise(this.receiveCallback));
+        return await new Promise(this.receiveCallback);
+    }
+
+    async export(filename: string, words: Uint32Array, width: number, height: number) {
+        this._downloadFile(filename, await this.encode(words, width, height));
     }
 }
 

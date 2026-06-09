@@ -1,0 +1,288 @@
+{
+  "nodes": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 520,
+      "y": -420,
+      "width": 1080,
+      "height": 170,
+      "color": "#111827",
+      "text": "# Обмен портала и сервера хранения\n\nСлева портал 3D-наследие: H3DID, карточки объектов, CIDOC/Dublin, права, каталог. Справа сервер хранения/плееров: файлы, processing, preview, POI, embed, download. Между ними только технические команды обмена."
+    },
+    {
+      "id": "site-zone",
+      "type": "text",
+      "x": -760,
+      "y": -160,
+      "width": 980,
+      "height": 980,
+      "color": "#eef2ff",
+      "text": "# Сайт / портал 3D-наследие\n\nИсточник истины по культурному объекту.\n\nГлавный сквозной идентификатор:\n`h3druObjectId` / `H3DID`\n\nПортал хранит:\n- карточку культурного объекта;\n- тип объекта: ОКН, музейный предмет, археология, 2D-скан, 3D-модель;\n- CIDOC CRM / Dublin Core профиль;\n- externalIds: ЕГРОКН, Госкаталог, КАМИС, Геоскан Cloud UUID;\n- права, владельца, организацию;\n- статус публикации: draft / published / archived;\n- связи цифровых двойников;\n- выбор активного viewer;\n- публичную страницу каталога."
+    },
+    {
+      "id": "portal-object",
+      "type": "text",
+      "x": -700,
+      "y": 30,
+      "width": 390,
+      "height": 250,
+      "color": "#ffffff",
+      "text": "# Cultural Object\n\n`h3druObjectId`\n\nПример:\n`h3dru:object:01JOBJ...`\n\nЭто главный ID объекта культуры на сайте."
+    },
+    {
+      "id": "portal-twin",
+      "type": "text",
+      "x": -260,
+      "y": 30,
+      "width": 390,
+      "height": 250,
+      "color": "#ffffff",
+      "text": "# Digital Twin\n\n`twinId`\n\nОдин объект может иметь несколько цифровых двойников:\n- 3D модель;\n- point cloud;\n- gigapixel 2D;\n- панорама;\n- версия после обработки."
+    },
+    {
+      "id": "portal-asset",
+      "type": "text",
+      "x": -700,
+      "y": 330,
+      "width": 390,
+      "height": 250,
+      "color": "#ffffff",
+      "text": "# Portal Asset\n\n`h3druAssetId`\n\nБизнес-запись файла на сайте.\n\nСвязывает файл с объектом, двойником, правами, автором, статусом публикации."
+    },
+    {
+      "id": "portal-page",
+      "type": "text",
+      "x": -260,
+      "y": 330,
+      "width": 390,
+      "height": 250,
+      "color": "#ffffff",
+      "text": "# Catalog Page\n\nСтраница сайта собирается из данных портала:\n- название;\n- описание;\n- статус;\n- права;\n- превью;\n- embed iframe;\n- ссылки на связанные материалы."
+    },
+    {
+      "id": "exchange-zone",
+      "type": "text",
+      "x": 340,
+      "y": -160,
+      "width": 720,
+      "height": 980,
+      "color": "#f8fafc",
+      "text": "# Команды обмена\n\nСайт обращается к серверу хранения сервисным токеном.\n\nСервер хранения не принимает решения по культурной карточке, публикации и CIDOC. Он возвращает технические данные по файлам."
+    },
+    {
+      "id": "cmd-upload",
+      "type": "text",
+      "x": 410,
+      "y": 20,
+      "width": 580,
+      "height": 120,
+      "color": "#dcfce7",
+      "text": "# 1. Загрузка\n\n`POST /storage/v1/uploads`\n`POST /storage/v1/uploads/{uploadId}/complete`\n\nПортал передает `twinId`, `h3druAssetId`, имя файла, тип, размер."
+    },
+    {
+      "id": "cmd-status",
+      "type": "text",
+      "x": 410,
+      "y": 170,
+      "width": 580,
+      "height": 120,
+      "color": "#fef3c7",
+      "text": "# 2. Обработка\n\n`GET /storage/v1/assets/{storageAssetId}/status`\n`POST /storage/v1/webhooks/asset-status`\n\nПортал получает progress/status или webhook от сервера."
+    },
+    {
+      "id": "cmd-preview",
+      "type": "text",
+      "x": 410,
+      "y": 320,
+      "width": 580,
+      "height": 120,
+      "color": "#ede9fe",
+      "text": "# 3. Превью\n\n`GET /storage/v1/assets/{storageAssetId}/preview`\n`POST /storage/v1/assets/{storageAssetId}/preview`\n\nСайт использует preview в каталоге и карточке."
+    },
+    {
+      "id": "cmd-poi",
+      "type": "text",
+      "x": 410,
+      "y": 470,
+      "width": 580,
+      "height": 120,
+      "color": "#fee2e2",
+      "text": "# 4. POI\n\n`GET /storage/v1/assets/{storageAssetId}/poi`\n`PUT /storage/v1/assets/{storageAssetId}/poi`\n\nТехнические точки интереса PlayCanvas viewer."
+    },
+    {
+      "id": "cmd-embed",
+      "type": "text",
+      "x": 410,
+      "y": 620,
+      "width": 580,
+      "height": 120,
+      "color": "#dbeafe",
+      "text": "# 5. Embed / Download\n\n`POST /storage/v1/embed`\n`GET /storage/v1/assets/{storageAssetId}/download-url`\n\nСервер возвращает iframe и временные ссылки."
+    },
+    {
+      "id": "storage-zone",
+      "type": "text",
+      "x": 1180,
+      "y": -160,
+      "width": 980,
+      "height": 980,
+      "color": "#ecfeff",
+      "text": "# Сервер хранения / плееров\n\nИсточник истины по файлам и технической выдаче.\n\nГлавный технический идентификатор:\n`storageAssetId`\n\nСервер хранит:\n- оригинальный файл;\n- `storageKey` в S3/хранилище;\n- производные файлы;\n- статус обработки;\n- preview/poster/screenshot;\n- POI JSON для PlayCanvas;\n- временные signed URLs;\n- iframe/embed для viewer;\n- внешний embed Геоскан Cloud при необходимости."
+    },
+    {
+      "id": "storage-asset",
+      "type": "text",
+      "x": 1240,
+      "y": 30,
+      "width": 390,
+      "height": 250,
+      "color": "#ffffff",
+      "text": "# Storage Asset\n\n`storageAssetId`\n\nТехническая запись файла.\n\nСодержит связь назад:\n`h3druAssetId`\n`twinId`"
+    },
+    {
+      "id": "storage-file",
+      "type": "text",
+      "x": 1680,
+      "y": 30,
+      "width": 390,
+      "height": 250,
+      "color": "#ffffff",
+      "text": "# File Storage\n\n`storageKey`\n\nS3 / object storage:\n- original;\n- derivatives;\n- archive/glacier;\n- signed URLs."
+    },
+    {
+      "id": "storage-player",
+      "type": "text",
+      "x": 1240,
+      "y": 330,
+      "width": 390,
+      "height": 250,
+      "color": "#ffffff",
+      "text": "# Player Layer\n\n`playerType`\n\n- `playcanvas_3d`\n- `geoscan_cloud`\n- `gigapixel_2d`\n\nВозвращает iframe/embed."
+    },
+    {
+      "id": "storage-technical",
+      "type": "text",
+      "x": 1680,
+      "y": 330,
+      "width": 390,
+      "height": 250,
+      "color": "#ffffff",
+      "text": "# Technical Data\n\n- processing status;\n- preview/poster;\n- POI JSON;\n- download URL;\n- file URL;\n- asset-status webhook."
+    },
+    {
+      "id": "id-mapping",
+      "type": "text",
+      "x": 520,
+      "y": 910,
+      "width": 1040,
+      "height": 260,
+      "color": "#fff7ed",
+      "text": "# ID mapping\n\n`h3druObjectId` / `H3DID` — главный ID культурного объекта на сайте.\n\n`twinId` — ID цифрового двойника внутри портала.\n\n`h3druAssetId` — ID ассета/медиа на стороне портала.\n\n`storageAssetId` — технический ID файла на сервере хранения.\n\nПортал хранит связь: `h3druAssetId -> storageAssetId`. Сервер хранения хранит обратную ссылку: `storageAssetId -> h3druAssetId`."
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-object-twin",
+      "fromNode": "portal-object",
+      "fromSide": "right",
+      "toNode": "portal-twin",
+      "toSide": "left"
+    },
+    {
+      "id": "e-object-asset",
+      "fromNode": "portal-object",
+      "fromSide": "bottom",
+      "toNode": "portal-asset",
+      "toSide": "top"
+    },
+    {
+      "id": "e-twin-asset",
+      "fromNode": "portal-twin",
+      "fromSide": "bottom",
+      "toNode": "portal-asset",
+      "toSide": "right"
+    },
+    {
+      "id": "e-asset-page",
+      "fromNode": "portal-asset",
+      "fromSide": "right",
+      "toNode": "portal-page",
+      "toSide": "left"
+    },
+    {
+      "id": "e-upload-storage",
+      "fromNode": "portal-asset",
+      "fromSide": "right",
+      "toNode": "cmd-upload",
+      "toSide": "left",
+      "label": "создать upload"
+    },
+    {
+      "id": "e-upload-result",
+      "fromNode": "cmd-upload",
+      "fromSide": "right",
+      "toNode": "storage-asset",
+      "toSide": "left",
+      "label": "storageAssetId"
+    },
+    {
+      "id": "e-storage-file",
+      "fromNode": "storage-asset",
+      "fromSide": "right",
+      "toNode": "storage-file",
+      "toSide": "left"
+    },
+    {
+      "id": "e-status",
+      "fromNode": "storage-technical",
+      "fromSide": "left",
+      "toNode": "cmd-status",
+      "toSide": "right",
+      "label": "status/webhook"
+    },
+    {
+      "id": "e-preview",
+      "fromNode": "cmd-preview",
+      "fromSide": "right",
+      "toNode": "storage-technical",
+      "toSide": "left"
+    },
+    {
+      "id": "e-poi",
+      "fromNode": "cmd-poi",
+      "fromSide": "right",
+      "toNode": "storage-technical",
+      "toSide": "left"
+    },
+    {
+      "id": "e-embed-player",
+      "fromNode": "cmd-embed",
+      "fromSide": "right",
+      "toNode": "storage-player",
+      "toSide": "left"
+    },
+    {
+      "id": "e-player-page",
+      "fromNode": "storage-player",
+      "fromSide": "left",
+      "toNode": "portal-page",
+      "toSide": "right",
+      "label": "iframe"
+    },
+    {
+      "id": "e-mapping-portal",
+      "fromNode": "id-mapping",
+      "fromSide": "left",
+      "toNode": "portal-asset",
+      "toSide": "bottom"
+    },
+    {
+      "id": "e-mapping-storage",
+      "fromNode": "id-mapping",
+      "fromSide": "right",
+      "toNode": "storage-asset",
+      "toSide": "bottom"
+    }
+  ]
+}

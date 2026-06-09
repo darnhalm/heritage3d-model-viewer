@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenAPI Endpoint Map for Miro</title>
+    <script src="https://miro.com/app/static/sdk/v2/miro.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="hero">
+        <h1>OpenAPI Endpoint Map</h1>
+        <p>Визуализирует Swagger/OpenAPI endpoints на доске Miro по группам tags.</p>
+      </section>
+
+      <label class="field">
+        <span>URL OpenAPI YAML/JSON</span>
+        <input id="spec-url" type="url" value="http://127.0.0.1:8088/storage-player-openapi.yaml" />
+      </label>
+
+      <div class="row">
+        <button id="load-url" type="button">Загрузить URL</button>
+        <button id="draw" type="button" class="primary">Разложить на доске</button>
+      </div>
+
+      <label class="field">
+        <span>Или вставь YAML/JSON вручную</span>
+        <textarea id="spec-text" spellcheck="false" placeholder="openapi: 3.1.0&#10;info: ..."></textarea>
+      </label>
+
+      <section class="options">
+        <label><input id="draw-connectors" type="checkbox" checked /> Соединить блоки линиями</label>
+        <label><input id="draw-schemas" type="checkbox" /> Добавить блок schemas</label>
+      </section>
+
+      <pre id="status">Готово к работе.</pre>
+    </main>
+
+    <script src="./src/app.js"></script>
+  </body>
+</html>

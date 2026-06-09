@@ -1,0 +1,1240 @@
+openapi: 3.1.0
+info:
+  title: API сервера хранения и плееров 3D-наследие
+  version: 0.1.0
+  summary: Технический контракт для загрузки, хранения, обработки, выдачи файлов, превью, скачивания и embed.
+  description: |
+    Эта спецификация описывает только взаимодействие портала 3D-наследие с сервером хранения,
+    облачной платформой и плеерами. Здесь нет карточки культурного объекта, CIDOC CRM,
+    Dublin Core, КАМИС, Госкаталога, ЕГРОКН и портальной модерации.
+
+    Сервер хранения работает с файлами и техническими идентификаторами:
+    `h3druAssetId`, `twinId`, `storageAssetId`, `storageKey`.
+
+    Портал остается источником истины по культурным объектам, правам, метаданным и manifest.
+servers:
+  - url: https://storage.heritage3d.example.ru
+    description: Сервер хранения, пример
+  - url: http://127.0.0.1:8088
+    description: Локальная документация
+tags:
+  - name: Upload
+    description: Получение upload URL и подтверждение загрузки.
+  - name: Assets
+    description: Технические данные файлов, URL выдачи, архивирование и удаление.
+  - name: Preview
+    description: Thumbnail/poster/screenshot для каталога и карточки.
+  - name: POI
+    description: Точки интереса PlayCanvas-плеера как технический JSON рядом с файлом.
+  - name: Processing
+    description: Статусы обработки и производные файлы.
+  - name: Download
+    description: Временные ссылки для скачивания.
+  - name: Embed
+    description: Встройка плеера и внешний embed облачной платформы.
+  - name: Webhooks
+    description: Уведомления сервера хранения в сторону портала.
+
+paths:
+  /storage/v1/uploads:
+    post:
+      tags: [Upload]
+      summary: Получить временную ссылку для загрузки файла.
+      operationId: createUploadUrl
+      security:
+        - serviceBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUploadRequest'
+      responses:
+        '201':
+          description: Временная ссылка для прямой загрузки.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/QuotaExceeded'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+
+  /storage/v1/uploads/{uploadId}/complete:
+    post:
+      tags: [Upload]
+      summary: Подтвердить завершение загрузки.
+      operationId: completeUpload
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UploadId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteUploadRequest'
+      responses:
+        '201':
+          description: Файл зарегистрирован как storage asset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageAsset'
+        '403':
+          $ref: '#/components/responses/QuotaExceeded'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /storage/v1/assets/{storageAssetId}:
+    get:
+      tags: [Assets]
+      summary: Получить техническую карточку файла.
+      operationId: getStorageAsset
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      responses:
+        '200':
+          description: Технические данные файла.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageAsset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Assets]
+      summary: Удалить файл или пометить его на удаление.
+      operationId: deleteStorageAsset
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      responses:
+        '202':
+          description: Удаление принято в обработку.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageOperation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /storage/v1/assets/{storageAssetId}/file-url:
+    get:
+      tags: [Assets]
+      summary: Получить URL файла для просмотра.
+      operationId: getFileUrl
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      responses:
+        '200':
+          description: URL файла или signed URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUrlResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /storage/v1/assets/{storageAssetId}/status:
+    get:
+      tags: [Processing]
+      summary: Получить статус загрузки/обработки файла.
+      operationId: getAssetProcessingStatus
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      responses:
+        '200':
+          description: Статус обработки.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcessingStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /storage/v1/assets/{storageAssetId}/preview:
+    get:
+      tags: [Preview]
+      summary: Получить превью файла.
+      operationId: getAssetPreview
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [small, medium, large, poster]
+            default: medium
+      responses:
+        '200':
+          description: Preview/thumbnail/poster.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewAsset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [Preview]
+      summary: Создать или обновить превью файла.
+      operationId: createAssetPreview
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePreviewRequest'
+      responses:
+        '202':
+          description: Генерация превью поставлена в очередь.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageOperation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /storage/v1/assets/{storageAssetId}/poi:
+    get:
+      tags: [POI]
+      summary: Получить точки интереса для PlayCanvas-плеера.
+      operationId: getAssetPoiList
+      description: |
+        Возвращает технический список POI в формате текущего PlayCanvas viewer.
+        Это не музейные метаданные и не CIDOC CRM, а сохраненное состояние точек на модели.
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      responses:
+        '200':
+          description: Список точек интереса.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoiListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [POI]
+      summary: Сохранить точки интереса для PlayCanvas-плеера.
+      operationId: updateAssetPoiList
+      description: |
+        Сохраняет весь список POI целиком. Для MVP этого достаточно: viewer или портал
+        редактирует точки локально, затем отправляет актуальный список на сервер хранения.
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePoiListRequest'
+      responses:
+        '200':
+          description: Список POI сохранен.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoiListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /storage/v1/assets/{storageAssetId}/download-url:
+    get:
+      tags: [Download]
+      summary: Получить временную ссылку для скачивания.
+      operationId: getDownloadUrl
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      responses:
+        '200':
+          description: Временная ссылка для скачивания.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DownloadUrlResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /storage/v1/assets/{storageAssetId}/archive:
+    post:
+      tags: [Assets]
+      summary: Переместить файл в архивный класс хранения.
+      operationId: archiveStorageAsset
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      responses:
+        '202':
+          description: Архивация принята в обработку.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageOperation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /storage/v1/assets/{storageAssetId}/restore:
+    post:
+      tags: [Assets]
+      summary: Восстановить файл из архивного класса хранения.
+      operationId: restoreStorageAsset
+      security:
+        - serviceBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StorageAssetId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreArchiveRequest'
+      responses:
+        '202':
+          description: Восстановление принято в обработку.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageOperation'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /storage/v1/embed:
+    post:
+      tags: [Embed]
+      summary: Получить embed для файла или облачного проекта.
+      operationId: createStorageEmbed
+      security:
+        - serviceBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStorageEmbedRequest'
+            examples:
+              playcanvasPublic:
+                summary: PlayCanvas public embed с явными параметрами встройки.
+                value:
+                  storageAssetId: st_01JASSET
+                  h3druObjectId: h3dru:object:01JOBJABCDEF1234567890
+                  h3druAssetId: h3dru:asset:01JASSET
+                  playerType: playcanvas_3d
+                  lang: ru
+                  preset: compact
+                  autoplay: false
+                  accessMode: public
+                  tokenTtlSeconds: 3600
+                  ui:
+                    panel: false
+                    poi: true
+                    tour: true
+                    measure: false
+                    info: true
+                    modelInfo: false
+                    controls: true
+                    fullscreen: true
+                    fit: true
+                    reset: true
+                  camera:
+                    position: [2, 2, 2]
+                    focus: [0, 0, 0]
+                  manifestUrl: null
+                  assetUrl: null
+                  width: 960
+                  height: 640
+                  title: 3D Viewer
+                  allowFullscreen: true
+                  referrerPolicy: strict-origin-when-cross-origin
+                  sandbox: [allow-scripts, allow-same-origin, allow-popups]
+      responses:
+        '200':
+          description: iframe URL/HTML или внешний embed облачной платформы.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageEmbedResponse'
+              examples:
+                playcanvasPublic:
+                  summary: Ответ с разложенными query-параметрами.
+                  value:
+                    playerType: playcanvas_3d
+                    embedSource: storage_generated
+                    iframeUrl: https://player.example.ru/viewer/?manifest=https%3A%2F%2Fstorage.example.ru%2Fmanifest%2Fst_01JASSET&embed=1&ui=compact&lang=ru&autoplay=0&panel=0&poi=1&tour=1&measure=0&info=1&modelInfo=0&controls=1&fullscreen=1&fit=1&reset=1&cameraPosition=2%2C2%2C2&cameraFocus=0%2C0%2C0
+                    iframeHtml: <iframe title="3D Viewer" src="https://player.example.ru/viewer/?manifest=https%3A%2F%2Fstorage.example.ru%2Fmanifest%2Fst_01JASSET&embed=1&ui=compact&lang=ru&autoplay=0&panel=0&poi=1&tour=1&measure=0&info=1&modelInfo=0&controls=1&fullscreen=1&fit=1&reset=1&cameraPosition=2%2C2%2C2&cameraFocus=0%2C0%2C0" width="960" height="640" allow="fullscreen; xr-spatial-tracking" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-popups"></iframe>
+                    externalEmbedUrl: null
+                    embedToken: null
+                    tokenExpiresAt: null
+                    manifestUrl: https://storage.example.ru/manifest/st_01JASSET
+                    assetUrl: null
+                    query:
+                      manifest: https://storage.example.ru/manifest/st_01JASSET
+                      load: null
+                      assetUrl: null
+                      embed: '1'
+                      ui: compact
+                      lang: ru
+                      autoplay: '0'
+                      panel: '0'
+                      poi: '1'
+                      tour: '1'
+                      measure: '0'
+                      info: '1'
+                      modelInfo: '0'
+                      controls: '1'
+                      fullscreen: '1'
+                      fit: '1'
+                      reset: '1'
+                      cameraPosition: 2,2,2
+                      cameraFocus: 0,0,0
+                      embedToken: null
+                    iframe:
+                      src: https://player.example.ru/viewer/?manifest=https%3A%2F%2Fstorage.example.ru%2Fmanifest%2Fst_01JASSET&embed=1&ui=compact&lang=ru&autoplay=0&panel=0&poi=1&tour=1&measure=0&info=1&modelInfo=0&controls=1&fullscreen=1&fit=1&reset=1&cameraPosition=2%2C2%2C2&cameraFocus=0%2C0%2C0
+                      title: 3D Viewer
+                      width: 960
+                      height: 640
+                      allow: fullscreen; xr-spatial-tracking
+                      allowFullscreen: true
+                      referrerPolicy: strict-origin-when-cross-origin
+                      sandbox: [allow-scripts, allow-same-origin, allow-popups]
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /storage/v1/webhooks/asset-status:
+    post:
+      tags: [Webhooks]
+      summary: Webhook о статусе файла в сторону портала.
+      operationId: receiveAssetStatusWebhook
+      security:
+        - webhookSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetStatusWebhook'
+      responses:
+        '202':
+          description: Webhook принят.
+
+components:
+  securitySchemes:
+    serviceBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Сервисный токен портала для запросов к серверу хранения.
+    webhookSignature:
+      type: apiKey
+      in: header
+      name: X-H3D-Signature
+      description: Подпись webhook-запроса.
+
+  parameters:
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: upl_01JUPLOAD
+    StorageAssetId:
+      name: storageAssetId
+      in: path
+      required: true
+      schema:
+        type: string
+      example: st_01JASSET
+
+  responses:
+    Forbidden:
+      description: Действие запрещено.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StorageError'
+    NotFound:
+      description: Ресурс не найден.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StorageError'
+    Conflict:
+      description: Конфликт состояния.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StorageError'
+    QuotaExceeded:
+      description: "Невозможно загрузить файл: лимит хранилища организации или тарифа исчерпан."
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StorageQuotaError'
+          examples:
+            basePlanLimit:
+              summary: Лимит базового тарифа 50 ГБ исчерпан.
+              value:
+                code: quota_exceeded
+                message: "Невозможно загрузить файл: лимит хранилища на базовом тарифе исчерпан."
+                details:
+                  organizationId: "h3dru:organization:01JORG"
+                  planCode: base
+                  planName: Базовый
+                  limitBytes: 53687091200
+                  limitHuman: "50 ГБ"
+                  usedBytes: 53519319040
+                  usedHuman: "49.84 ГБ"
+                  requestedBytes: 524288000
+                  requestedHuman: "500 МБ"
+                  availableBytes: 167772160
+                  availableHuman: "160 МБ"
+                  canRetry: false
+                  userMessage: "На базовом тарифе доступно 50 ГБ. Сейчас свободно 160 МБ, а файл занимает 500 МБ. Удалите лишние файлы или увеличьте лимит хранилища."
+    PayloadTooLarge:
+      description: Файл слишком большой.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StorageError'
+    UnsupportedMediaType:
+      description: Формат файла не поддерживается.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StorageError'
+
+  schemas:
+    CreateUploadRequest:
+      type: object
+      required: [twinId, h3druAssetId, organizationId, fileName, contentType, sizeBytes, kind, format]
+      properties:
+        twinId:
+          type: string
+          example: twin:01JTWIN
+        h3druAssetId:
+          type: string
+          example: h3dru:asset:01JASSET
+        organizationId:
+          type: string
+          example: h3dru:organization:01JORG
+        fileName:
+          type: string
+          example: model.glb
+        contentType:
+          type: string
+          example: model/gltf-binary
+        sizeBytes:
+          type: integer
+          format: int64
+        kind:
+          $ref: '#/components/schemas/AssetKind'
+        format:
+          $ref: '#/components/schemas/AssetFormat'
+        checksum:
+          type: [string, 'null']
+          example: sha256:8f14e45fceea167a5a36dedd4bea2543
+        storageClass:
+          $ref: '#/components/schemas/StorageClass'
+
+    UploadUrlResponse:
+      type: object
+      required: [uploadId, uploadUrl, method, expiresAt, storageKey]
+      properties:
+        uploadId:
+          type: string
+        uploadUrl:
+          type: string
+          format: uri
+        method:
+          type: string
+          enum: [PUT, POST]
+        expiresAt:
+          type: string
+          format: date-time
+        storageKey:
+          type: string
+          example: org/01JORG/twin/01JTWIN/asset/01JASSET/original/model.glb
+        requiredHeaders:
+          type: object
+          additionalProperties:
+            type: string
+
+    CompleteUploadRequest:
+      type: object
+      required: [h3druAssetId, checksum, sizeBytes]
+      properties:
+        h3druAssetId:
+          type: string
+        checksum:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+
+    StorageAsset:
+      type: object
+      required: [storageAssetId, h3druAssetId, twinId, storageKey, kind, format, status, checksum]
+      properties:
+        storageAssetId:
+          type: string
+          example: st_01JASSET
+        h3druAssetId:
+          type: string
+          example: h3dru:asset:01JASSET
+        twinId:
+          type: string
+          example: twin:01JTWIN
+        organizationId:
+          type: string
+          example: h3dru:organization:01JORG
+        storageKey:
+          type: string
+        kind:
+          $ref: '#/components/schemas/AssetKind'
+        format:
+          $ref: '#/components/schemas/AssetFormat'
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        checksum:
+          type: string
+        status:
+          $ref: '#/components/schemas/StorageAssetStatus'
+        storageClass:
+          $ref: '#/components/schemas/StorageClass'
+        fileUrl:
+          type: [string, 'null']
+          format: uri
+        preview:
+          oneOf:
+            - $ref: '#/components/schemas/PreviewAsset'
+            - type: 'null'
+        derivatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/DerivativeAsset'
+
+    FileUrlResponse:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url:
+          type: string
+          format: uri
+        expiresAt:
+          type: [string, 'null']
+          format: date-time
+        contentType:
+          type: string
+        checksum:
+          type: string
+
+    DownloadUrlResponse:
+      type: object
+      required: [downloadUrl, expiresAt, checksum]
+      properties:
+        downloadUrl:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
+        checksum:
+          type: string
+        fileName:
+          type: string
+
+    PreviewAsset:
+      type: object
+      required: [url, kind]
+      properties:
+        kind:
+          type: string
+          enum: [thumbnail, poster, screenshot]
+        url:
+          type: string
+          format: uri
+        width:
+          type: [integer, 'null']
+        height:
+          type: [integer, 'null']
+        format:
+          type: string
+          enum: [jpg, png, webp]
+
+    CreatePreviewRequest:
+      type: object
+      properties:
+        source:
+          type: string
+          enum: [auto, player_screenshot, uploaded_image, external_provider]
+          default: auto
+        size:
+          type: string
+          enum: [small, medium, large, poster]
+          default: medium
+        camera:
+          type: object
+          additionalProperties: true
+
+    PoiListResponse:
+      type: object
+      required: [storageAssetId, poi]
+      properties:
+        storageAssetId:
+          type: string
+          example: st_01JASSET
+        poi:
+          type: array
+          items:
+            $ref: '#/components/schemas/PoiItem'
+        updatedAt:
+          type: [string, 'null']
+          format: date-time
+
+    UpdatePoiListRequest:
+      type: object
+      required: [poi]
+      properties:
+        poi:
+          type: array
+          items:
+            $ref: '#/components/schemas/PoiItem'
+
+    PoiItem:
+      type: object
+      required: [id, number, position, normal]
+      properties:
+        id:
+          type: string
+          example: poi-1716280000000-1
+        number:
+          type: integer
+          minimum: 1
+          example: 1
+        title:
+          type: string
+          maxLength: 80
+          example: Главный фасад
+        description:
+          type: string
+          maxLength: 636
+          example: Точка интереса на поверхности модели.
+        color:
+          type: string
+          pattern: '^#[0-9a-fA-F]{6}$'
+          example: '#000000'
+        duration:
+          type: number
+          minimum: 0
+          maximum: 10
+          description: Время перелета камеры к точке, секунды.
+          example: 1
+        holdTime:
+          type: number
+          minimum: 0
+          maximum: 60
+          description: Время удержания точки в сценарии просмотра, секунды.
+          example: 2
+        camera:
+          oneOf:
+            - $ref: '#/components/schemas/PoiCameraView'
+            - type: 'null'
+        position:
+          $ref: '#/components/schemas/Vec3'
+        normal:
+          $ref: '#/components/schemas/Vec3'
+
+    PoiCameraView:
+      type: object
+      required: [position, focus]
+      properties:
+        position:
+          $ref: '#/components/schemas/Vec3'
+        focus:
+          $ref: '#/components/schemas/Vec3'
+        fov:
+          type: number
+          example: 45
+
+    Vec3:
+      type: array
+      minItems: 3
+      maxItems: 3
+      items:
+        type: number
+      example: [1.25, 0.5, -2.1]
+
+    ProcessingStatus:
+      type: object
+      required: [storageAssetId, status]
+      properties:
+        storageAssetId:
+          type: string
+        status:
+          $ref: '#/components/schemas/StorageAssetStatus'
+        progress:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+        message:
+          type: [string, 'null']
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateStorageEmbedRequest:
+      type: object
+      required: [storageAssetId, playerType]
+      properties:
+        storageAssetId:
+          type: string
+          description: Технический ID файла или облачного проекта на сервере хранения.
+        h3druObjectId:
+          type: [string, 'null']
+          description: H3DID культурного объекта. Передается для аудита и формирования manifest URL, если нужен.
+          example: h3dru:object:01JOBJABCDEF1234567890
+        h3druAssetId:
+          type: [string, 'null']
+          description: ID ассета на стороне портала. Не заменяет storageAssetId.
+          example: h3dru:asset:01JASSET
+        playerType:
+          $ref: '#/components/schemas/PlayerType'
+        lang:
+          type: string
+          enum: [ru, en, zh]
+          default: ru
+        preset:
+          type: string
+          enum: [full, compact, minimal]
+          default: compact
+          description: Пресет UI viewer. В query параметрах PlayCanvas соответствует `ui`.
+        autoplay:
+          type: boolean
+          default: true
+          description: Автоматически запускать просмотр после загрузки iframe.
+        accessMode:
+          type: string
+          enum: [public, restricted, moderation, password_protected]
+          default: public
+          description: Режим доступа, по которому сервер решает, нужен ли embedToken и какой TTL выдать.
+        tokenTtlSeconds:
+          type: integer
+          minimum: 60
+          maximum: 86400
+          default: 3600
+          description: Желаемый срок жизни embedToken для непубличного просмотра.
+        ui:
+          $ref: '#/components/schemas/EmbedUiOptions'
+        camera:
+          $ref: '#/components/schemas/EmbedCameraOptions'
+        manifestUrl:
+          type: [string, 'null']
+          format: uri
+          description: Явный URL manifest. Если не передан, storage/player собирает его сам или использует assetUrl.
+        assetUrl:
+          type: [string, 'null']
+          format: uri
+          description: Явный URL файла для viewer. Обычно сервер формирует его сам как signed URL.
+        width:
+          type: integer
+          minimum: 1
+          example: 960
+        height:
+          type: integer
+          minimum: 1
+          example: 640
+        title:
+          type: string
+          default: 3D Viewer
+        allowFullscreen:
+          type: boolean
+          default: true
+          description: Добавлять allowfullscreen в iframeHtml.
+        referrerPolicy:
+          type: string
+          default: strict-origin-when-cross-origin
+          example: strict-origin-when-cross-origin
+        sandbox:
+          type: array
+          description: Sandbox-разрешения iframe. Если не задано, сервер применяет безопасный preset.
+          items:
+            type: string
+          example: [allow-scripts, allow-same-origin, allow-popups]
+
+    StorageEmbedResponse:
+      type: object
+      required: [playerType, iframeUrl, iframeHtml, embedSource, query, iframe]
+      properties:
+        playerType:
+          $ref: '#/components/schemas/PlayerType'
+        embedSource:
+          type: string
+          enum: [storage_generated, external_provider]
+        iframeUrl:
+          type: string
+          format: uri
+        iframeHtml:
+          type: string
+        externalEmbedUrl:
+          type: [string, 'null']
+          format: uri
+        embedToken:
+          type: [string, 'null']
+          description: Короткоживущий token для restricted/moderation/password_protected embed. Для public может быть null.
+        tokenExpiresAt:
+          type: [string, 'null']
+          format: date-time
+          description: Когда истекает embedToken.
+        manifestUrl:
+          type: [string, 'null']
+          format: uri
+          description: Manifest URL, переданный в viewer через query.
+        assetUrl:
+          type: [string, 'null']
+          format: uri
+          description: Signed URL файла, если viewer работает напрямую с assetUrl/load.
+        query:
+          $ref: '#/components/schemas/EmbedQueryParameters'
+        iframe:
+          $ref: '#/components/schemas/EmbedIframeAttributes'
+
+    EmbedUiOptions:
+      type: object
+      description: |
+        Настройки интерфейса iframe. Для PlayCanvas viewer эти поля превращаются
+        в query-параметры `panel`, `poi`, `tour`, `measure`, `info`, `modelInfo`,
+        `controls`, `fullscreen`, `fit`, `reset`.
+      properties:
+        panel:
+          type: boolean
+          description: Показывать боковую панель.
+        poi:
+          type: boolean
+          description: Показывать точки интереса.
+        tour:
+          type: boolean
+          description: Показывать верхнюю tour-плашку/навигацию по POI.
+        measure:
+          type: boolean
+          description: Разрешить инструменты измерений.
+        info:
+          type: boolean
+          description: Показывать информационные элементы viewer.
+        modelInfo:
+          type: boolean
+          description: Показывать техническую информацию о модели.
+        controls:
+          type: boolean
+          description: Показывать основные кнопки управления.
+        fullscreen:
+          type: boolean
+          description: Разрешить кнопку полноэкранного режима.
+        fit:
+          type: boolean
+          description: Показывать кнопку вписать модель в экран.
+        reset:
+          type: boolean
+          description: Показывать кнопку сброса камеры.
+
+    EmbedCameraOptions:
+      type: object
+      description: Начальный ракурс PlayCanvas viewer.
+      properties:
+        position:
+          $ref: '#/components/schemas/Vec3'
+        focus:
+          $ref: '#/components/schemas/Vec3'
+
+    EmbedQueryParameters:
+      type: object
+      description: Нормализованные query-параметры, из которых собран iframeUrl.
+      properties:
+        manifest:
+          type: [string, 'null']
+          description: URL manifest для viewer.
+        load:
+          type: [string, 'null']
+          description: URL модели/файла, если viewer использует прямой load-параметр.
+        assetUrl:
+          type: [string, 'null']
+          description: Альтернативное имя параметра для прямого URL файла.
+        embed:
+          type: string
+          enum: ['1']
+          default: '1'
+        ui:
+          type: string
+          enum: [full, compact, minimal]
+        lang:
+          type: string
+          enum: [ru, en, zh]
+        autoplay:
+          type: string
+          enum: ['0', '1']
+        panel:
+          type: string
+          enum: ['0', '1']
+        poi:
+          type: string
+          enum: ['0', '1']
+        tour:
+          type: string
+          enum: ['0', '1']
+        measure:
+          type: string
+          enum: ['0', '1']
+        info:
+          type: string
+          enum: ['0', '1']
+        modelInfo:
+          type: string
+          enum: ['0', '1']
+        controls:
+          type: string
+          enum: ['0', '1']
+        fullscreen:
+          type: string
+          enum: ['0', '1']
+        fit:
+          type: string
+          enum: ['0', '1']
+        reset:
+          type: string
+          enum: ['0', '1']
+        cameraPosition:
+          type: [string, 'null']
+          description: "Начальная позиция камеры в формате x,y,z."
+          example: "2,2,2"
+        cameraFocus:
+          type: [string, 'null']
+          description: "Точка фокуса камеры в формате x,y,z."
+          example: "0,0,0"
+        embedToken:
+          type: [string, 'null']
+          description: Token просмотра, если accessMode не public.
+      additionalProperties:
+        type: string
+
+    EmbedIframeAttributes:
+      type: object
+      required: [src, title, width, height, allowFullscreen, referrerPolicy]
+      description: Атрибуты iframe, из которых собран iframeHtml.
+      properties:
+        src:
+          type: string
+          format: uri
+        title:
+          type: string
+          example: 3D Viewer
+        width:
+          type: integer
+          example: 960
+        height:
+          type: integer
+          example: 640
+        allow:
+          type: string
+          example: fullscreen; xr-spatial-tracking
+        allowFullscreen:
+          type: boolean
+        referrerPolicy:
+          type: string
+          example: strict-origin-when-cross-origin
+        sandbox:
+          type: array
+          items:
+            type: string
+          example: [allow-scripts, allow-same-origin, allow-popups]
+
+    RestoreArchiveRequest:
+      type: object
+      properties:
+        daysAvailable:
+          type: integer
+          default: 7
+        retrievalTier:
+          type: string
+          enum: [standard, bulk, expedited]
+          default: standard
+
+    StorageOperation:
+      type: object
+      required: [operationId, status]
+      properties:
+        operationId:
+          type: string
+        status:
+          type: string
+          enum: [accepted, queued, running, completed, failed]
+        message:
+          type: [string, 'null']
+
+    AssetStatusWebhook:
+      type: object
+      required: [storageAssetId, h3druAssetId, twinId, status]
+      properties:
+        storageAssetId:
+          type: string
+        h3druAssetId:
+          type: string
+        twinId:
+          type: string
+        status:
+          $ref: '#/components/schemas/StorageAssetStatus'
+        fileUrl:
+          type: [string, 'null']
+          format: uri
+        previewUrl:
+          type: [string, 'null']
+          format: uri
+        derivatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/DerivativeAsset'
+        message:
+          type: [string, 'null']
+
+    DerivativeAsset:
+      type: object
+      required: [kind, format, url]
+      properties:
+        kind:
+          type: string
+          enum: [web_model, tile_set, preview, report]
+        format:
+          $ref: '#/components/schemas/AssetFormat'
+        url:
+          type: string
+          format: uri
+        checksum:
+          type: [string, 'null']
+
+    AssetKind:
+      type: string
+      enum: [web_model, source_model, point_cloud, texture, panorama, image_set, gigapixel_image, archive_package]
+
+    AssetFormat:
+      type: string
+      enum: [glb, gltf, obj, ply, e57, laz, las, jpg, png, webp, iiif, dzi, tile_pyramid, geoscan_cloud_project, geoscan_cloud_embed, zip, json, other]
+
+    PlayerType:
+      type: string
+      enum: [playcanvas_3d, geoscan_cloud, gigapixel_2d]
+
+    StorageClass:
+      type: string
+      enum: [hot, private, archive, glacier]
+      default: hot
+
+    StorageAssetStatus:
+      type: string
+      enum: [upload_requested, uploaded, queued, processing, validating, ready, failed, archived, restore_requested, restoring, deleted]
+
+    StorageError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    StorageQuotaError:
+      type: object
+      required: [code, message, details]
+      description: "Ошибка превышения лимита хранилища. Возвращается до выдачи uploadUrl, чтобы фронт мог показать понятное сообщение пользователю."
+      properties:
+        code:
+          type: string
+          const: quota_exceeded
+        message:
+          type: string
+          example: "Невозможно загрузить файл: лимит хранилища на базовом тарифе исчерпан."
+        details:
+          type: object
+          required: [organizationId, planCode, limitBytes, usedBytes, requestedBytes, availableBytes, userMessage]
+          properties:
+            organizationId:
+              type: string
+              example: "h3dru:organization:01JORG"
+            planCode:
+              type: string
+              example: base
+            planName:
+              type: string
+              example: Базовый
+            limitBytes:
+              type: integer
+              format: int64
+              example: 53687091200
+            limitHuman:
+              type: string
+              example: "50 ГБ"
+            usedBytes:
+              type: integer
+              format: int64
+              example: 53519319040
+            usedHuman:
+              type: string
+              example: "49.84 ГБ"
+            requestedBytes:
+              type: integer
+              format: int64
+              example: 524288000
+            requestedHuman:
+              type: string
+              example: "500 МБ"
+            availableBytes:
+              type: integer
+              format: int64
+              example: 167772160
+            availableHuman:
+              type: string
+              example: "160 МБ"
+            canRetry:
+              type: boolean
+              default: false
+            userMessage:
+              type: string
+              example: "На базовом тарифе доступно 50 ГБ. Сейчас свободно 160 МБ, а файл занимает 500 МБ. Удалите лишние файлы или увеличьте лимит хранилища."

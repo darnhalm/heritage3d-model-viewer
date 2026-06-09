@@ -1,0 +1,840 @@
+{
+  "nodes": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": 0,
+      "y": -360,
+      "width": 1540,
+      "height": 180,
+      "color": "#111827",
+      "text": "# Функциональная связка API сайта и API storage/player\n\nСлева endpoints сайта, справа endpoints сервера хранения/плеера. Стрелки показывают, какой endpoint сайта вызывает какой endpoint storage или какой endpoint сайта принимает событие от storage."
+    },
+    {
+      "id": "site-column",
+      "type": "text",
+      "x": 0,
+      "y": -120,
+      "width": 640,
+      "height": 160,
+      "color": "#e0f2fe",
+      "text": "# API сайта\n\nРаботает с `H3DID`, культурной карточкой, каталогом, правами, публикацией и связкой `h3druAssetId -> storageAssetId`."
+    },
+    {
+      "id": "storage-column",
+      "type": "text",
+      "x": 980,
+      "y": -120,
+      "width": 640,
+      "height": 160,
+      "color": "#dcfce7",
+      "text": "# API storage/player\n\nРаботает с файлами, `storageAssetId`, upload, preview, POI, embed, download, archive и webhooks."
+    },
+    {
+      "id": "group-0",
+      "type": "text",
+      "x": 0,
+      "y": 0,
+      "width": 1620,
+      "height": 70,
+      "color": "#f8fafc",
+      "text": "# Создание и загрузка"
+    },
+    {
+      "id": "site-site-create-object",
+      "type": "text",
+      "x": 0,
+      "y": 110,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/objects\n\nСоздать H3DID / культурный объект."
+    },
+    {
+      "id": "site-site-create-object-method",
+      "type": "text",
+      "x": 16,
+      "y": 126,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "site-site-create-twin",
+      "type": "text",
+      "x": 0,
+      "y": 320,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/objects/{h3druObjectId}/twins\n\nСоздать цифровой двойник."
+    },
+    {
+      "id": "site-site-create-twin-method",
+      "type": "text",
+      "x": 16,
+      "y": 336,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "site-site-create-asset",
+      "type": "text",
+      "x": 0,
+      "y": 530,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/twins/{twinId}/assets\n\nСоздать запись файла на сайте."
+    },
+    {
+      "id": "site-site-create-asset-method",
+      "type": "text",
+      "x": 16,
+      "y": 546,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "site-site-link-storage",
+      "type": "text",
+      "x": 0,
+      "y": 740,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/assets/{h3druAssetId}/link-storage\n\nСохранить storageAssetId после загрузки."
+    },
+    {
+      "id": "site-site-link-storage-method",
+      "type": "text",
+      "x": 16,
+      "y": 756,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "storage-storage-upload",
+      "type": "text",
+      "x": 980,
+      "y": 110,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/uploads\n\nПолучить uploadUrl для прямой загрузки файла."
+    },
+    {
+      "id": "storage-storage-upload-method",
+      "type": "text",
+      "x": 996,
+      "y": 126,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "storage-storage-complete",
+      "type": "text",
+      "x": 980,
+      "y": 320,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/uploads/{uploadId}/complete\n\nПодтвердить загрузку и создать storageAssetId."
+    },
+    {
+      "id": "storage-storage-complete-method",
+      "type": "text",
+      "x": 996,
+      "y": 336,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "group-760",
+      "type": "text",
+      "x": 0,
+      "y": 760,
+      "width": 1620,
+      "height": 70,
+      "color": "#f8fafc",
+      "text": "# Каталог и просмотр"
+    },
+    {
+      "id": "site-site-get-asset",
+      "type": "text",
+      "x": 0,
+      "y": 870,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/assets/{h3druAssetId}\n\nПолучить asset сайта вместе со storage-связкой."
+    },
+    {
+      "id": "site-site-get-asset-method",
+      "type": "text",
+      "x": 16,
+      "y": 886,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "site-site-catalog-list",
+      "type": "text",
+      "x": 0,
+      "y": 1080,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/catalog/objects\n\nПубличный список каталога с preview."
+    },
+    {
+      "id": "site-site-catalog-list-method",
+      "type": "text",
+      "x": 16,
+      "y": 1096,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "site-site-catalog-page",
+      "type": "text",
+      "x": 0,
+      "y": 1290,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/catalog/objects/{slugOrH3DID}\n\nПубличная страница объекта."
+    },
+    {
+      "id": "site-site-catalog-page-method",
+      "type": "text",
+      "x": 16,
+      "y": 1306,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "site-site-object-embed",
+      "type": "text",
+      "x": 0,
+      "y": 1500,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/objects/{h3druObjectId}/embed\n\nПолучить embed для публичной страницы."
+    },
+    {
+      "id": "site-site-object-embed-method",
+      "type": "text",
+      "x": 16,
+      "y": 1516,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "site-site-asset-embed",
+      "type": "text",
+      "x": 0,
+      "y": 1710,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/assets/{h3druAssetId}/embed\n\nСформировать embed с настройками сайта."
+    },
+    {
+      "id": "site-site-asset-embed-method",
+      "type": "text",
+      "x": 16,
+      "y": 1726,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "storage-storage-asset",
+      "type": "text",
+      "x": 980,
+      "y": 870,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}\n\nПолучить техническую карточку файла."
+    },
+    {
+      "id": "storage-storage-asset-method",
+      "type": "text",
+      "x": 996,
+      "y": 886,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "storage-storage-status",
+      "type": "text",
+      "x": 980,
+      "y": 1080,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}/status\n\nПолучить статус обработки."
+    },
+    {
+      "id": "storage-storage-status-method",
+      "type": "text",
+      "x": 996,
+      "y": 1096,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "storage-storage-preview-get",
+      "type": "text",
+      "x": 980,
+      "y": 1290,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}/preview\n\nПолучить preview/poster/screenshot."
+    },
+    {
+      "id": "storage-storage-preview-get-method",
+      "type": "text",
+      "x": 996,
+      "y": 1306,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "storage-storage-file-url",
+      "type": "text",
+      "x": 980,
+      "y": 1500,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}/file-url\n\nПолучить fileUrl / signed URL для viewer."
+    },
+    {
+      "id": "storage-storage-file-url-method",
+      "type": "text",
+      "x": 996,
+      "y": 1516,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "storage-storage-embed",
+      "type": "text",
+      "x": 980,
+      "y": 1710,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/embed\n\nСформировать iframeUrl / iframeHtml."
+    },
+    {
+      "id": "storage-storage-embed-method",
+      "type": "text",
+      "x": 996,
+      "y": 1726,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "group-1680",
+      "type": "text",
+      "x": 0,
+      "y": 1680,
+      "width": 1620,
+      "height": 70,
+      "color": "#f8fafc",
+      "text": "# POI и управление просмотром"
+    },
+    {
+      "id": "site-site-poi-get",
+      "type": "text",
+      "x": 0,
+      "y": 1790,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/assets/{h3druAssetId}/poi\n\nПолучить POI через сайт."
+    },
+    {
+      "id": "site-site-poi-get-method",
+      "type": "text",
+      "x": 16,
+      "y": 1806,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "site-site-poi-put",
+      "type": "text",
+      "x": 0,
+      "y": 2000,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/assets/{h3druAssetId}/poi\n\nСохранить POI через сайт."
+    },
+    {
+      "id": "site-site-poi-put-method",
+      "type": "text",
+      "x": 16,
+      "y": 2016,
+      "width": 150,
+      "height": 54,
+      "color": "#f59e0b",
+      "text": "# PUT"
+    },
+    {
+      "id": "storage-storage-poi-get",
+      "type": "text",
+      "x": 980,
+      "y": 1790,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}/poi\n\nПолучить точки интереса."
+    },
+    {
+      "id": "storage-storage-poi-get-method",
+      "type": "text",
+      "x": 996,
+      "y": 1806,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "storage-storage-poi-put",
+      "type": "text",
+      "x": 980,
+      "y": 2000,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}/poi\n\nСохранить точки интереса."
+    },
+    {
+      "id": "storage-storage-poi-put-method",
+      "type": "text",
+      "x": 996,
+      "y": 2016,
+      "width": 150,
+      "height": 54,
+      "color": "#f59e0b",
+      "text": "# PUT"
+    },
+    {
+      "id": "storage-storage-preview-post",
+      "type": "text",
+      "x": 980,
+      "y": 2210,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}/preview\n\nЗапустить генерацию preview."
+    },
+    {
+      "id": "storage-storage-preview-post-method",
+      "type": "text",
+      "x": 996,
+      "y": 2226,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "group-2240",
+      "type": "text",
+      "x": 0,
+      "y": 2240,
+      "width": 1620,
+      "height": 70,
+      "color": "#f8fafc",
+      "text": "# Скачивание и жизненный цикл"
+    },
+    {
+      "id": "site-site-download",
+      "type": "text",
+      "x": 0,
+      "y": 2350,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/assets/{h3druAssetId}/download\n\nПроверить права и получить downloadUrl."
+    },
+    {
+      "id": "site-site-download-method",
+      "type": "text",
+      "x": 16,
+      "y": 2366,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "site-site-archive",
+      "type": "text",
+      "x": 0,
+      "y": 2560,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/assets/{h3druAssetId}/archive\n\nАрхивировать asset через сайт."
+    },
+    {
+      "id": "site-site-archive-method",
+      "type": "text",
+      "x": 16,
+      "y": 2576,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "site-site-restore",
+      "type": "text",
+      "x": 0,
+      "y": 2770,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/assets/{h3druAssetId}/restore\n\nВосстановить asset через сайт."
+    },
+    {
+      "id": "site-site-restore-method",
+      "type": "text",
+      "x": 16,
+      "y": 2786,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "site-site-delete",
+      "type": "text",
+      "x": 0,
+      "y": 2980,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/assets/{h3druAssetId}\n\nУдалить asset сайта и storage asset."
+    },
+    {
+      "id": "site-site-delete-method",
+      "type": "text",
+      "x": 16,
+      "y": 2996,
+      "width": 150,
+      "height": 54,
+      "color": "#f2645a",
+      "text": "# DELETE"
+    },
+    {
+      "id": "site-site-storage-webhook",
+      "type": "text",
+      "x": 0,
+      "y": 3190,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /site/v1/webhooks/storage/asset-status\n\nПринять webhook от storage."
+    },
+    {
+      "id": "site-site-storage-webhook-method",
+      "type": "text",
+      "x": 16,
+      "y": 3206,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "storage-storage-download",
+      "type": "text",
+      "x": 980,
+      "y": 2350,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}/download-url\n\nПолучить временную ссылку на скачивание."
+    },
+    {
+      "id": "storage-storage-download-method",
+      "type": "text",
+      "x": 996,
+      "y": 2366,
+      "width": 150,
+      "height": 54,
+      "color": "#55a2ff",
+      "text": "# GET"
+    },
+    {
+      "id": "storage-storage-archive",
+      "type": "text",
+      "x": 980,
+      "y": 2560,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}/archive\n\nПереместить файл в архивное хранение."
+    },
+    {
+      "id": "storage-storage-archive-method",
+      "type": "text",
+      "x": 996,
+      "y": 2576,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "storage-storage-restore",
+      "type": "text",
+      "x": 980,
+      "y": 2770,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}/restore\n\nВосстановить из архива."
+    },
+    {
+      "id": "storage-storage-restore-method",
+      "type": "text",
+      "x": 996,
+      "y": 2786,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    },
+    {
+      "id": "storage-storage-delete",
+      "type": "text",
+      "x": 980,
+      "y": 2980,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/assets/{storageAssetId}\n\nУдалить технический asset."
+    },
+    {
+      "id": "storage-storage-delete-method",
+      "type": "text",
+      "x": 996,
+      "y": 2996,
+      "width": 150,
+      "height": 54,
+      "color": "#f2645a",
+      "text": "# DELETE"
+    },
+    {
+      "id": "storage-storage-webhook",
+      "type": "text",
+      "x": 980,
+      "y": 3190,
+      "width": 640,
+      "height": 170,
+      "color": "#111827",
+      "text": "\n\n# /storage/v1/webhooks/asset-status\n\nСобытие статуса storage -> сайт."
+    },
+    {
+      "id": "storage-storage-webhook-method",
+      "type": "text",
+      "x": 996,
+      "y": 3206,
+      "width": 150,
+      "height": 54,
+      "color": "#08bf7a",
+      "text": "# POST"
+    }
+  ],
+  "edges": [
+    {
+      "id": "link-1",
+      "fromNode": "site-site-create-asset",
+      "fromSide": "right",
+      "toNode": "storage-storage-upload",
+      "toSide": "left",
+      "label": "сайт создает запись и запрашивает uploadUrl",
+      "color": "#08bf7a"
+    },
+    {
+      "id": "link-2",
+      "fromNode": "storage-storage-complete",
+      "fromSide": "right",
+      "toNode": "site-site-link-storage",
+      "toSide": "left",
+      "label": "storage возвращает storageAssetId, сайт сохраняет связку",
+      "color": "#08bf7a"
+    },
+    {
+      "id": "link-3",
+      "fromNode": "site-site-get-asset",
+      "fromSide": "right",
+      "toNode": "storage-storage-asset",
+      "toSide": "left",
+      "label": "сайт может подтянуть технический статус файла",
+      "color": "#55a2ff"
+    },
+    {
+      "id": "link-4",
+      "fromNode": "site-site-get-asset",
+      "fromSide": "right",
+      "toNode": "storage-storage-status",
+      "toSide": "left",
+      "label": "сайт проверяет processing status",
+      "color": "#55a2ff"
+    },
+    {
+      "id": "link-5",
+      "fromNode": "site-site-catalog-list",
+      "fromSide": "right",
+      "toNode": "storage-storage-preview-get",
+      "toSide": "left",
+      "label": "каталог берет preview для карточек",
+      "color": "#55a2ff"
+    },
+    {
+      "id": "link-6",
+      "fromNode": "site-site-catalog-page",
+      "fromSide": "right",
+      "toNode": "storage-storage-preview-get",
+      "toSide": "left",
+      "label": "страница объекта берет preview/poster",
+      "color": "#55a2ff"
+    },
+    {
+      "id": "link-7",
+      "fromNode": "site-site-catalog-page",
+      "fromSide": "right",
+      "toNode": "storage-storage-file-url",
+      "toSide": "left",
+      "label": "страница/viewer получает fileUrl при необходимости",
+      "color": "#55a2ff"
+    },
+    {
+      "id": "link-8",
+      "fromNode": "site-site-object-embed",
+      "fromSide": "right",
+      "toNode": "storage-storage-embed",
+      "toSide": "left",
+      "label": "GET сайта внутри вызывает POST storage embed",
+      "color": "#55a2ff"
+    },
+    {
+      "id": "link-9",
+      "fromNode": "site-site-asset-embed",
+      "fromSide": "right",
+      "toNode": "storage-storage-embed",
+      "toSide": "left",
+      "label": "POST сайта внутри вызывает POST storage embed",
+      "color": "#08bf7a"
+    },
+    {
+      "id": "link-10",
+      "fromNode": "site-site-poi-get",
+      "fromSide": "right",
+      "toNode": "storage-storage-poi-get",
+      "toSide": "left",
+      "label": "GET сайта проксирует GET storage POI",
+      "color": "#55a2ff"
+    },
+    {
+      "id": "link-11",
+      "fromNode": "site-site-poi-put",
+      "fromSide": "right",
+      "toNode": "storage-storage-poi-put",
+      "toSide": "left",
+      "label": "PUT сайта проксирует PUT storage POI",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "link-12",
+      "fromNode": "site-site-download",
+      "fromSide": "right",
+      "toNode": "storage-storage-download",
+      "toSide": "left",
+      "label": "сайт проверяет права и запрашивает signed downloadUrl",
+      "color": "#55a2ff"
+    },
+    {
+      "id": "link-13",
+      "fromNode": "site-site-archive",
+      "fromSide": "right",
+      "toNode": "storage-storage-archive",
+      "toSide": "left",
+      "label": "сайт проверяет права и отправляет в архив",
+      "color": "#08bf7a"
+    },
+    {
+      "id": "link-14",
+      "fromNode": "site-site-restore",
+      "fromSide": "right",
+      "toNode": "storage-storage-restore",
+      "toSide": "left",
+      "label": "сайт проверяет права и восстанавливает из архива",
+      "color": "#08bf7a"
+    },
+    {
+      "id": "link-15",
+      "fromNode": "site-site-delete",
+      "fromSide": "right",
+      "toNode": "storage-storage-delete",
+      "toSide": "left",
+      "label": "сайт проверяет права и удаляет storage asset",
+      "color": "#f2645a"
+    },
+    {
+      "id": "link-16",
+      "fromNode": "storage-storage-webhook",
+      "fromSide": "right",
+      "toNode": "site-site-storage-webhook",
+      "toSide": "left",
+      "label": "storage сам вызывает POST endpoint сайта",
+      "color": "#08bf7a"
+    }
+  ]
+}

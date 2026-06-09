@@ -1,0 +1,483 @@
+{
+  "nodes": [
+    {
+      "id": "title",
+      "type": "text",
+      "x": -360,
+      "y": -520,
+      "width": 1220,
+      "height": 150,
+      "color": "#111827",
+      "text": "# Две зоны ответственности\n\nСайт хранит смысл и H3DID. Сервер хранения/плеер хранит файлы и техническое состояние. Между ними ходят только технические API-команды."
+    },
+    {
+      "id": "site-zone",
+      "type": "text",
+      "x": -1180,
+      "y": -280,
+      "width": 940,
+      "height": 1320,
+      "color": "#e0f2fe",
+      "text": "# САЙТ / ПОРТАЛ 3D-НАСЛЕДИЕ\n\nИсточник истины по культурному объекту.\n\nГлавный ID: `H3DID` / `h3druObjectId`.\n\nЗдесь живут каталог, права, статусы, описания, CIDOC CRM / Dublin Core, связи с КАМИС, Госкаталогом, ЕГРОКН, организациями и пользователями."
+    },
+    {
+      "id": "server-zone",
+      "type": "text",
+      "x": 760,
+      "y": -280,
+      "width": 940,
+      "height": 1320,
+      "color": "#dcfce7",
+      "text": "# СЕРВЕР ХРАНЕНИЯ / ПЛЕЕРЫ\n\nТехнический слой медиа.\n\nГлавный ID: `storageAssetId`.\n\nЗдесь живут файлы, S3/object storage, Glacier/архив, обработка, preview, POI JSON, signed URLs, embed iframe и webhooks."
+    },
+    {
+      "id": "bridge-zone",
+      "type": "text",
+      "x": -140,
+      "y": -280,
+      "width": 680,
+      "height": 1740,
+      "color": "#f8fafc",
+      "text": "# КОМАНДЫ ОБМЕНА\n\nЭто не API культурной карточки. Это контракт между порталом и сервером хранения.\n\nГруппы: Upload, Assets, Processing, Preview, POI, Download, Embed, Webhooks."
+    },
+    {
+      "id": "h3did",
+      "type": "text",
+      "x": -1100,
+      "y": -70,
+      "width": 380,
+      "height": 230,
+      "color": "#ffffff",
+      "text": "# H3DID / Cultural Object\n\n`h3druObjectId`\n\nГлавная запись объекта культуры на сайте.\n\nПример: ОКН, музейный предмет, археологический объект, 2D/3D цифровой объект."
+    },
+    {
+      "id": "metadata",
+      "type": "text",
+      "x": -680,
+      "y": -70,
+      "width": 380,
+      "height": 230,
+      "color": "#ffffff",
+      "text": "# Метаданные\n\nCIDOC CRM / Dublin Core\n\nАдрес, описание, датировки, авторы, правообладатели, внешние ID: ЕГРОКН, Госкаталог, КАМИС."
+    },
+    {
+      "id": "twin",
+      "type": "text",
+      "x": -1100,
+      "y": 220,
+      "width": 380,
+      "height": 220,
+      "color": "#ffffff",
+      "text": "# Digital Twin\n\n`twinId`\n\nВерсия цифрового двойника: 3D, point cloud, gigapixel 2D, панорама, Agisoft/Geoscan Cloud."
+    },
+    {
+      "id": "portal-asset",
+      "type": "text",
+      "x": -680,
+      "y": 220,
+      "width": 380,
+      "height": 220,
+      "color": "#ffffff",
+      "text": "# Portal Asset\n\n`h3druAssetId`\n\nЗапись файла на сайте: к какому H3DID относится, кто владелец, можно ли публиковать и скачивать."
+    },
+    {
+      "id": "catalog",
+      "type": "text",
+      "x": -1100,
+      "y": 500,
+      "width": 380,
+      "height": 210,
+      "color": "#ffffff",
+      "text": "# Каталог и страница объекта\n\nПоказывает название, описание, preview, кнопку просмотра, embed iframe и права доступа."
+    },
+    {
+      "id": "policy",
+      "type": "text",
+      "x": -680,
+      "y": 500,
+      "width": 380,
+      "height": 210,
+      "color": "#ffffff",
+      "text": "# Права и статусы\n\n`draft`, `published`, `archived`, `password_protected`\n\nРоли портала решают, можно ли загрузить, удалить, скачать или опубликовать."
+    },
+    {
+      "id": "upload",
+      "type": "text",
+      "x": -80,
+      "y": -80,
+      "width": 560,
+      "height": 230,
+      "color": "#dbeafe",
+      "text": "# Upload\n\n`POST /storage/v1/uploads`\n\nПолучить временную ссылку для загрузки.\n\nRequest: `CreateUploadRequest`\n\nСайт передает: `twinId`, `h3druAssetId`, organizationId, fileName, contentType, sizeBytes, kind, format.\n\nResponse: `UploadUrlResponse`."
+    },
+    {
+      "id": "complete",
+      "type": "text",
+      "x": -80,
+      "y": 180,
+      "width": 560,
+      "height": 210,
+      "color": "#dbeafe",
+      "text": "# Upload Complete\n\n`POST /storage/v1/uploads/{uploadId}/complete`\n\nПодтвердить завершение загрузки.\n\nRequest: `CompleteUploadRequest`\n\nСайт подтверждает checksum и размер. Сервер создает `storageAssetId` и возвращает `StorageAsset`."
+    },
+    {
+      "id": "status",
+      "type": "text",
+      "x": -80,
+      "y": 420,
+      "width": 560,
+      "height": 190,
+      "color": "#fef3c7",
+      "text": "# Assets / Processing\n\n`GET /storage/v1/assets/{storageAssetId}`\n`GET /storage/v1/assets/{storageAssetId}/status`\n\nПортал получает техническую карточку файла и проверяет, готова ли модель/тайлы/preview.\n\nResponse: `StorageAsset`, `ProcessingStatus`."
+    },
+    {
+      "id": "webhook",
+      "type": "text",
+      "x": -80,
+      "y": 640,
+      "width": 560,
+      "height": 190,
+      "color": "#fef3c7",
+      "text": "# Webhooks\n\n`POST /storage/v1/webhooks/asset-status`\n\nСервер сам сообщает порталу: queued, uploading, processing, ready, failed, archived.\n\nAuth: `webhookSignature` / `X-H3D-Signature`."
+    },
+    {
+      "id": "preview",
+      "type": "text",
+      "x": -80,
+      "y": 860,
+      "width": 560,
+      "height": 170,
+      "color": "#f3e8ff",
+      "text": "# Preview\n\n`GET /storage/v1/assets/{storageAssetId}/preview`\n`POST /storage/v1/assets/{storageAssetId}/preview`\n\nПолучить или сгенерировать thumbnail/poster/screenshot для каталога и карточки."
+    },
+    {
+      "id": "viewer",
+      "type": "text",
+      "x": -80,
+      "y": 1060,
+      "width": 560,
+      "height": 230,
+      "color": "#ede9fe",
+      "text": "# Viewer / Embed / File URL\n\n`POST /storage/v1/embed`\n`GET /storage/v1/assets/{storageAssetId}/file-url`\n\nСайт получает `iframeUrl`, `iframeHtml` или signed URL для плеера.\n\nRequest: `CreateStorageEmbedRequest`.\nResponse: `StorageEmbedResponse`."
+    },
+    {
+      "id": "poi-api",
+      "type": "text",
+      "x": -80,
+      "y": 1320,
+      "width": 560,
+      "height": 190,
+      "color": "#dcfce7",
+      "text": "# POI API\n\n`GET /storage/v1/assets/{storageAssetId}/poi`\n`PUT /storage/v1/assets/{storageAssetId}/poi`\n\nПолучить/сохранить точки интереса PlayCanvas.\n\nSchema: `PoiItem`, `PoiListResponse`, `UpdatePoiListRequest`."
+    },
+    {
+      "id": "download-api",
+      "type": "text",
+      "x": -80,
+      "y": 1540,
+      "width": 560,
+      "height": 220,
+      "color": "#fee2e2",
+      "text": "# Download / Archive / Delete\n\n`GET /storage/v1/assets/{storageAssetId}/download-url`\n`POST /storage/v1/assets/{storageAssetId}/archive`\n`POST /storage/v1/assets/{storageAssetId}/restore`\n`DELETE /storage/v1/assets/{storageAssetId}`\n\nСкачивание, ледяное хранение, восстановление и удаление."
+    },
+    {
+      "id": "storage-asset",
+      "type": "text",
+      "x": 840,
+      "y": -70,
+      "width": 380,
+      "height": 230,
+      "color": "#ffffff",
+      "text": "# Storage Asset\n\n`storageAssetId`\n\nТехническая запись файла на сервере.\n\nХранит обратные ссылки: `h3druAssetId`, `twinId`."
+    },
+    {
+      "id": "s3",
+      "type": "text",
+      "x": 1260,
+      "y": -70,
+      "width": 380,
+      "height": 230,
+      "color": "#ffffff",
+      "text": "# S3 / Object Storage\n\n`storageKey`\n\nИсходники, web-модель, тайлы, текстуры, архивы, gigapixel pyramid, JSON рядом с файлом."
+    },
+    {
+      "id": "processing",
+      "type": "text",
+      "x": 840,
+      "y": 220,
+      "width": 380,
+      "height": 220,
+      "color": "#ffffff",
+      "text": "# Processing\n\nОчередь обработки: конвертация, генерация web-модели, тайлов, preview, проверка checksum."
+    },
+    {
+      "id": "poi",
+      "type": "text",
+      "x": 1260,
+      "y": 220,
+      "width": 380,
+      "height": 220,
+      "color": "#ffffff",
+      "text": "# POI JSON\n\n`GET /poi`\n`PUT /poi`\n\nТочки интереса PlayCanvas: позиция камеры, focus, title, description, color."
+    },
+    {
+      "id": "embed-service",
+      "type": "text",
+      "x": 840,
+      "y": 500,
+      "width": 380,
+      "height": 210,
+      "color": "#ffffff",
+      "text": "# Embed / Viewer Service\n\nФормирует iframe и query-параметры: ui, lang, poi, tour, measure, fullscreen, cameraPosition."
+    },
+    {
+      "id": "download",
+      "type": "text",
+      "x": 1260,
+      "y": 500,
+      "width": 380,
+      "height": 210,
+      "color": "#ffffff",
+      "text": "# Download / Archive\n\n`GET /download-url`\n`POST /archive`\n`POST /restore`\n`DELETE /asset`\n\nSigned URL, Glacier/архив, удаление."
+    },
+    {
+      "id": "postmessage",
+      "type": "text",
+      "x": 840,
+      "y": 770,
+      "width": 800,
+      "height": 220,
+      "color": "#ffffff",
+      "text": "# JS API внутри iframe\n\n`window.postMessage`\n\nКоманды: focus-poi, open-poi, next-poi, prev-poi, play-animation, pause-animation.\n\nСобытия: poi-selected, animation-time."
+    },
+    {
+      "id": "schemas",
+      "type": "text",
+      "x": 840,
+      "y": 1040,
+      "width": 380,
+      "height": 330,
+      "color": "#ffffff",
+      "text": "# Schemas\n\nCreateUploadRequest\nUploadUrlResponse\nCompleteUploadRequest\nStorageAsset\nFileUrlResponse\nDownloadUrlResponse\nPreviewAsset\nPoiItem\nCreateStorageEmbedRequest\nStorageEmbedResponse\nAssetStatusWebhook\nStorageError\n\nSchemas описывают поля request/response."
+    },
+    {
+      "id": "security",
+      "type": "text",
+      "x": 1260,
+      "y": 1040,
+      "width": 380,
+      "height": 330,
+      "color": "#ffffff",
+      "text": "# Security\n\n`serviceBearerAuth`\n\nСервисный Bearer JWT между порталом и сервером хранения.\n\n`webhookSignature`\n\nПодпись webhook через `X-H3D-Signature`.\n\nПользовательские роли проверяет портал, а не сервер хранения."
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "fromNode": "h3did",
+      "fromSide": "bottom",
+      "toNode": "twin",
+      "toSide": "top",
+      "label": "имеет цифровые двойники",
+      "color": "#64748b"
+    },
+    {
+      "id": "e2",
+      "fromNode": "twin",
+      "fromSide": "right",
+      "toNode": "portal-asset",
+      "toSide": "left",
+      "label": "имеет файлы",
+      "color": "#64748b"
+    },
+    {
+      "id": "e3",
+      "fromNode": "portal-asset",
+      "fromSide": "right",
+      "toNode": "upload",
+      "toSide": "left",
+      "label": "создать upload",
+      "color": "#2563eb"
+    },
+    {
+      "id": "e4",
+      "fromNode": "upload",
+      "fromSide": "right",
+      "toNode": "storage-asset",
+      "toSide": "left",
+      "label": "uploadUrl",
+      "color": "#2563eb"
+    },
+    {
+      "id": "e5",
+      "fromNode": "complete",
+      "fromSide": "right",
+      "toNode": "storage-asset",
+      "toSide": "left",
+      "label": "создать storageAssetId",
+      "color": "#2563eb"
+    },
+    {
+      "id": "e6",
+      "fromNode": "storage-asset",
+      "fromSide": "left",
+      "toNode": "complete",
+      "toSide": "right",
+      "label": "StorageAsset response",
+      "color": "#2563eb"
+    },
+    {
+      "id": "e7",
+      "fromNode": "portal-asset",
+      "fromSide": "right",
+      "toNode": "status",
+      "toSide": "left",
+      "label": "проверить status",
+      "color": "#b45309"
+    },
+    {
+      "id": "e8",
+      "fromNode": "processing",
+      "fromSide": "left",
+      "toNode": "webhook",
+      "toSide": "right",
+      "label": "status webhook",
+      "color": "#b45309"
+    },
+    {
+      "id": "e9",
+      "fromNode": "webhook",
+      "fromSide": "left",
+      "toNode": "policy",
+      "toSide": "right",
+      "label": "обновить статус публикации",
+      "color": "#b45309"
+    },
+    {
+      "id": "e10",
+      "fromNode": "catalog",
+      "fromSide": "right",
+      "toNode": "preview",
+      "toSide": "left",
+      "label": "получить preview",
+      "color": "#7c3aed"
+    },
+    {
+      "id": "e11",
+      "fromNode": "preview",
+      "fromSide": "right",
+      "toNode": "processing",
+      "toSide": "left",
+      "label": "thumbnail/poster",
+      "color": "#7c3aed"
+    },
+    {
+      "id": "e12",
+      "fromNode": "catalog",
+      "fromSide": "right",
+      "toNode": "viewer",
+      "toSide": "left",
+      "label": "получить embed",
+      "color": "#7c3aed"
+    },
+    {
+      "id": "e13",
+      "fromNode": "viewer",
+      "fromSide": "right",
+      "toNode": "embed-service",
+      "toSide": "left",
+      "label": "iframeUrl / iframeHtml",
+      "color": "#7c3aed"
+    },
+    {
+      "id": "e14",
+      "fromNode": "viewer",
+      "fromSide": "right",
+      "toNode": "s3",
+      "toSide": "left",
+      "label": "file-url / signed URL",
+      "color": "#7c3aed"
+    },
+    {
+      "id": "e15",
+      "fromNode": "portal-asset",
+      "fromSide": "right",
+      "toNode": "poi",
+      "toSide": "left",
+      "label": "GET/PUT POI",
+      "color": "#059669"
+    },
+    {
+      "id": "e16",
+      "fromNode": "policy",
+      "fromSide": "right",
+      "toNode": "download",
+      "toSide": "left",
+      "label": "download/archive/delete",
+      "color": "#dc2626"
+    },
+    {
+      "id": "e17",
+      "fromNode": "embed-service",
+      "fromSide": "bottom",
+      "toNode": "postmessage",
+      "toSide": "top",
+      "label": "команды iframe",
+      "color": "#64748b"
+    },
+    {
+      "id": "e18",
+      "fromNode": "portal-asset",
+      "fromSide": "right",
+      "toNode": "poi-api",
+      "toSide": "left",
+      "label": "получить/сохранить POI",
+      "color": "#059669"
+    },
+    {
+      "id": "e19",
+      "fromNode": "poi-api",
+      "fromSide": "right",
+      "toNode": "poi",
+      "toSide": "left",
+      "label": "PoiListResponse",
+      "color": "#059669"
+    },
+    {
+      "id": "e20",
+      "fromNode": "policy",
+      "fromSide": "right",
+      "toNode": "download-api",
+      "toSide": "left",
+      "label": "скачать/архив/удалить",
+      "color": "#dc2626"
+    },
+    {
+      "id": "e21",
+      "fromNode": "download-api",
+      "fromSide": "right",
+      "toNode": "download",
+      "toSide": "left",
+      "label": "signed URL / operation",
+      "color": "#dc2626"
+    },
+    {
+      "id": "e22",
+      "fromNode": "schemas",
+      "fromSide": "top",
+      "toNode": "storage-asset",
+      "toSide": "bottom",
+      "label": "описывают ответы",
+      "color": "#64748b"
+    },
+    {
+      "id": "e23",
+      "fromNode": "security",
+      "fromSide": "top",
+      "toNode": "server-zone",
+      "toSide": "right",
+      "label": "защищает API",
+      "color": "#64748b"
+    }
+  ]
+}

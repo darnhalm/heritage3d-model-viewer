@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>API сервера хранения и плееров 3D-наследие</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, Arial, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    body {
+      margin: 0;
+      padding: 32px;
+      background: #f8fafc;
+    }
+    .page {
+      max-width: 1800px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      line-height: 1.15;
+    }
+    .lead {
+      margin: 0 0 24px;
+      color: #475569;
+      font-size: 15px;
+      max-width: 980px;
+    }
+    .hint {
+      margin: 0 0 24px;
+      padding: 12px 14px;
+      background: #fffbeb;
+      border: 1px solid #f59e0b;
+      border-radius: 8px;
+      color: #713f12;
+      font-size: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      background: white;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 10px 12px;
+      vertical-align: top;
+      font-size: 13px;
+      line-height: 1.35;
+      white-space: normal;
+      word-break: break-word;
+    }
+    th {
+      background: #0f172a;
+      color: white;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      background: rgba(15, 23, 42, .06);
+      border-radius: 4px;
+      padding: 1px 4px;
+    }
+    .section-row td {
+      background: #e2e8f0;
+      border-top: 3px solid #64748b;
+      padding: 14px 16px;
+    }
+    .section-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .section-description {
+      margin-top: 3px;
+      color: #475569;
+      font-size: 13px;
+    }
+    .method-cell {
+      text-align: center;
+      width: 150px;
+    }
+    .method-badge {
+      display: inline-block;
+      min-width: 104px;
+      padding: 8px 12px;
+      border-radius: 7px;
+      font-weight: 900;
+      font-size: 15px;
+      letter-spacing: .02em;
+    }
+    .endpoint-cell {
+      font-weight: 700;
+    }
+    .summary {
+      margin-top: 7px;
+      color: #475569;
+      font-weight: 500;
+    }
+    .col-method { width: 150px; }
+    .col-endpoint { width: 340px; }
+    .col-operation { width: 210px; }
+    .col-params { width: 210px; }
+    .col-request { width: 210px; }
+    .col-responses { width: 390px; }
+    .col-auth { width: 170px; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <h1>API сервера хранения и плееров 3D-наследие</h1>
+    <p class="lead">Технический контракт для загрузки, хранения, обработки, выдачи файлов, превью, скачивания и embed.</p>
+    <p class="hint">Для Miro: открой этот HTML в браузере, выдели таблицу целиком, скопируй и вставь на доску. Если Miro упростит оформление, используй TSV-файл рядом как запасной вариант.</p>
+    <table>
+      <colgroup>
+        <col class="col-method">
+        <col class="col-endpoint">
+        <col class="col-operation">
+        <col class="col-params">
+        <col class="col-request">
+        <col class="col-responses">
+        <col class="col-auth">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Endpoint</th>
+          <th>operationId</th>
+          <th>Параметры</th>
+          <th>Request</th>
+          <th>Responses</th>
+          <th>Auth</th>
+        </tr>
+      </thead>
+      <tbody>
+        
+      <tr class="section-row">
+        <td colspan="7">
+          <div class="section-title">Upload</div>
+          <div class="section-description">Получение upload URL и подтверждение загрузки.</div>
+        </td>
+      </tr>
+      
+        <tr>
+          <td class="method-cell" style="background:#e7fbf2;">
+            <span class="method-badge" style="background:#08bf7a;color:#062116;">🟢 POST</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/uploads</code><div class="summary">Получить временную ссылку для загрузки файла.</div></td>
+          <td><code>createUploadUrl</code></td>
+          <td>нет</td>
+          <td><code>CreateUploadRequest</code></td>
+          <td>201: Временная ссылка для прямой загрузки. → UploadUrlResponse<br>403: Forbidden<br>409: QuotaExceeded<br>413: PayloadTooLarge<br>415: UnsupportedMediaType</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+        <tr>
+          <td class="method-cell" style="background:#e7fbf2;">
+            <span class="method-badge" style="background:#08bf7a;color:#062116;">🟢 POST</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/uploads/{uploadId}/complete</code><div class="summary">Подтвердить завершение загрузки.</div></td>
+          <td><code>completeUpload</code></td>
+          <td>uploadId (path)</td>
+          <td><code>CompleteUploadRequest</code></td>
+          <td>201: Файл зарегистрирован как storage asset. → StorageAsset<br>403: QuotaExceeded<br>404: NotFound<br>409: Conflict</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+      <tr class="section-row">
+        <td colspan="7">
+          <div class="section-title">Assets</div>
+          <div class="section-description">Технические данные файлов, URL выдачи, архивирование и удаление.</div>
+        </td>
+      </tr>
+      
+        <tr>
+          <td class="method-cell" style="background:#fff0ef;">
+            <span class="method-badge" style="background:#f2645a;color:#2b0806;">🔴 DELETE</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}</code><div class="summary">Удалить файл или пометить его на удаление.</div></td>
+          <td><code>deleteStorageAsset</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>нет</code></td>
+          <td>202: Удаление принято в обработку. → StorageOperation<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+        <tr>
+          <td class="method-cell" style="background:#eaf3ff;">
+            <span class="method-badge" style="background:#55a2ff;color:#061525;">🔵 GET</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}</code><div class="summary">Получить техническую карточку файла.</div></td>
+          <td><code>getStorageAsset</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>нет</code></td>
+          <td>200: Технические данные файла. → StorageAsset<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+        <tr>
+          <td class="method-cell" style="background:#e7fbf2;">
+            <span class="method-badge" style="background:#08bf7a;color:#062116;">🟢 POST</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}/archive</code><div class="summary">Переместить файл в архивный класс хранения.</div></td>
+          <td><code>archiveStorageAsset</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>нет</code></td>
+          <td>202: Архивация принята в обработку. → StorageOperation<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+        <tr>
+          <td class="method-cell" style="background:#eaf3ff;">
+            <span class="method-badge" style="background:#55a2ff;color:#061525;">🔵 GET</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}/file-url</code><div class="summary">Получить URL файла для просмотра.</div></td>
+          <td><code>getFileUrl</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>нет</code></td>
+          <td>200: URL файла или signed URL. → FileUrlResponse<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+        <tr>
+          <td class="method-cell" style="background:#e7fbf2;">
+            <span class="method-badge" style="background:#08bf7a;color:#062116;">🟢 POST</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}/restore</code><div class="summary">Восстановить файл из архивного класса хранения.</div></td>
+          <td><code>restoreStorageAsset</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>RestoreArchiveRequest</code></td>
+          <td>202: Восстановление принято в обработку. → StorageOperation<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+      <tr class="section-row">
+        <td colspan="7">
+          <div class="section-title">Processing</div>
+          <div class="section-description">Статусы обработки и производные файлы.</div>
+        </td>
+      </tr>
+      
+        <tr>
+          <td class="method-cell" style="background:#eaf3ff;">
+            <span class="method-badge" style="background:#55a2ff;color:#061525;">🔵 GET</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}/status</code><div class="summary">Получить статус загрузки/обработки файла.</div></td>
+          <td><code>getAssetProcessingStatus</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>нет</code></td>
+          <td>200: Статус обработки. → ProcessingStatus<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+      <tr class="section-row">
+        <td colspan="7">
+          <div class="section-title">Preview</div>
+          <div class="section-description">Thumbnail/poster/screenshot для каталога и карточки.</div>
+        </td>
+      </tr>
+      
+        <tr>
+          <td class="method-cell" style="background:#eaf3ff;">
+            <span class="method-badge" style="background:#55a2ff;color:#061525;">🔵 GET</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}/preview</code><div class="summary">Получить превью файла.</div></td>
+          <td><code>getAssetPreview</code></td>
+          <td>storageAssetId (path), size (query)</td>
+          <td><code>нет</code></td>
+          <td>200: Preview/thumbnail/poster. → PreviewAsset<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+        <tr>
+          <td class="method-cell" style="background:#e7fbf2;">
+            <span class="method-badge" style="background:#08bf7a;color:#062116;">🟢 POST</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}/preview</code><div class="summary">Создать или обновить превью файла.</div></td>
+          <td><code>createAssetPreview</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>CreatePreviewRequest</code></td>
+          <td>202: Генерация превью поставлена в очередь. → StorageOperation<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+      <tr class="section-row">
+        <td colspan="7">
+          <div class="section-title">POI</div>
+          <div class="section-description">Точки интереса PlayCanvas-плеера как технический JSON рядом с файлом.</div>
+        </td>
+      </tr>
+      
+        <tr>
+          <td class="method-cell" style="background:#eaf3ff;">
+            <span class="method-badge" style="background:#55a2ff;color:#061525;">🔵 GET</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}/poi</code><div class="summary">Получить точки интереса для PlayCanvas-плеера.</div></td>
+          <td><code>getAssetPoiList</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>нет</code></td>
+          <td>200: Список точек интереса. → PoiListResponse<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+        <tr>
+          <td class="method-cell" style="background:#fff7e8;">
+            <span class="method-badge" style="background:#f59e0b;color:#2b1600;">🟠 PUT</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}/poi</code><div class="summary">Сохранить точки интереса для PlayCanvas-плеера.</div></td>
+          <td><code>updateAssetPoiList</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>UpdatePoiListRequest</code></td>
+          <td>200: Список POI сохранен. → PoiListResponse<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+      <tr class="section-row">
+        <td colspan="7">
+          <div class="section-title">Download</div>
+          <div class="section-description">Временные ссылки для скачивания.</div>
+        </td>
+      </tr>
+      
+        <tr>
+          <td class="method-cell" style="background:#eaf3ff;">
+            <span class="method-badge" style="background:#55a2ff;color:#061525;">🔵 GET</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/assets/{storageAssetId}/download-url</code><div class="summary">Получить временную ссылку для скачивания.</div></td>
+          <td><code>getDownloadUrl</code></td>
+          <td>storageAssetId (path)</td>
+          <td><code>нет</code></td>
+          <td>200: Временная ссылка для скачивания. → DownloadUrlResponse<br>403: Forbidden<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+      <tr class="section-row">
+        <td colspan="7">
+          <div class="section-title">Embed</div>
+          <div class="section-description">Встройка плеера и внешний embed облачной платформы.</div>
+        </td>
+      </tr>
+      
+        <tr>
+          <td class="method-cell" style="background:#e7fbf2;">
+            <span class="method-badge" style="background:#08bf7a;color:#062116;">🟢 POST</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/embed</code><div class="summary">Получить embed для файла или облачного проекта.</div></td>
+          <td><code>createStorageEmbed</code></td>
+          <td>нет</td>
+          <td><code>CreateStorageEmbedRequest</code></td>
+          <td>200: iframe URL/HTML или внешний embed облачной платформы. → StorageEmbedResponse<br>404: NotFound</td>
+          <td><code>serviceBearerAuth</code></td>
+        </tr>
+      <tr class="section-row">
+        <td colspan="7">
+          <div class="section-title">Webhooks</div>
+          <div class="section-description">Уведомления сервера хранения в сторону портала.</div>
+        </td>
+      </tr>
+      
+        <tr>
+          <td class="method-cell" style="background:#e7fbf2;">
+            <span class="method-badge" style="background:#08bf7a;color:#062116;">🟢 POST</span>
+          </td>
+          <td class="endpoint-cell"><code>/storage/v1/webhooks/asset-status</code><div class="summary">Webhook о статусе файла в сторону портала.</div></td>
+          <td><code>receiveAssetStatusWebhook</code></td>
+          <td>нет</td>
+          <td><code>AssetStatusWebhook</code></td>
+          <td>202: Webhook принят.</td>
+          <td><code>webhookSignature</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>

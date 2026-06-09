@@ -1,0 +1,2506 @@
+{
+  "title": "API сайта Heritage3D",
+  "summary": "Черновик для ТЗ портала: H3DID, карточки объектов, метаданные, права, публикация, каталог и связь с сервером хранения.",
+  "rows": [
+    {
+      "section": "Авторизация через Geoscan Login",
+      "method": "GET",
+      "endpoint": "/site/v1/auth/session",
+      "summary": "Проверить текущую авторизованную сессию.",
+      "page": "Любая страница сайта",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Пользователь приходит из Geoscan Login."
+    },
+    {
+      "section": "Авторизация через Geoscan Login",
+      "method": "GET",
+      "endpoint": "/site/v1/me",
+      "summary": "Получить текущего пользователя и его портальные роли.",
+      "page": "Любая авторизованная страница",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Профиль сайта плюс geoscanUserId."
+    },
+    {
+      "section": "Авторизация через Geoscan Login",
+      "method": "POST",
+      "endpoint": "/site/v1/auth/logout",
+      "summary": "Завершить сессию на портале.",
+      "page": "Профиль пользователя",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Не заменяет logout в Geoscan, если нужен SSO logout."
+    },
+    {
+      "section": "Авторизация через Geoscan Login",
+      "method": "GET",
+      "endpoint": "/site/v1/permissions",
+      "summary": "Проверить права пользователя на действие.",
+      "page": "Фронтенд сайта",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Например asset:upload, object:publish, moderation:approve."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "POST",
+      "endpoint": "/site/v1/objects",
+      "summary": "Создать культурный объект и выдать h3druObjectId.",
+      "page": "Страница создания объекта",
+      "auth": "user/editor",
+      "storage": "нет",
+      "note": "Создает бизнес-сущность портала."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "GET",
+      "endpoint": "/site/v1/objects",
+      "summary": "Список объектов для админки/личного кабинета с фильтрами.",
+      "page": "Личный кабинет / админка",
+      "auth": "user/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Не публичный каталог, а рабочий список."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}",
+      "summary": "Получить полную карточку объекта.",
+      "page": "Карточка объекта в админке",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Включает статус, владельца, профиль, связи."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "PATCH",
+      "endpoint": "/site/v1/objects/{h3druObjectId}",
+      "summary": "Обновить основные поля объекта.",
+      "page": "Редактирование объекта",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Название, описание, тип, адрес, профиль."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "DELETE",
+      "endpoint": "/site/v1/objects/{h3druObjectId}",
+      "summary": "Удалить объект или пометить на удаление.",
+      "page": "Админка объекта",
+      "auth": "owner/admin",
+      "storage": "опционально DELETE storage assets",
+      "note": "Физическое удаление файлов лучше делать отдельной политикой."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "h3druObjectId / H3DID",
+      "summary": "Сквозной ID культурного объекта.",
+      "page": "Карточка объекта",
+      "auth": "system",
+      "storage": "нет",
+      "note": "Пример: h3dru:object:01JOBJABCDEF1234567890."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "objectType",
+      "summary": "Тип объекта портала.",
+      "page": "Карточка объекта",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "heritage_site, museum_object, archaeology, architecture, digital_only."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "title",
+      "summary": "Краткое название объекта для сайта.",
+      "page": "Карточка объекта / каталог",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Не заменяет Dublin Core title, но может синхронизироваться с ним."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "slug",
+      "summary": "Человекочитаемый URL объекта.",
+      "page": "Публичная страница",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Например usadebny-dom."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "shortDescription",
+      "summary": "Краткое описание для карточек каталога.",
+      "page": "Каталог",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Не полный научный текст."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "status",
+      "summary": "Статус жизненного цикла.",
+      "page": "Админка / модерация",
+      "auth": "system/editor/moderator",
+      "storage": "нет",
+      "note": "draft, review, approved, published, rejected, archived, deleted, password_protected."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "ownerOrganizationId",
+      "summary": "Организация-владелец H3DID.",
+      "page": "Карточка объекта",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "Музей/учреждение как юридически стабильный владелец."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "assignedWorkgroupId",
+      "summary": "Рабочая группа, которая сейчас ведет объект.",
+      "page": "Карточка объекта",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Может меняться без смены владельца H3DID."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "collectionIds[]",
+      "summary": "Коллекции, в которые входит объект.",
+      "page": "Каталог / админка",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Один объект может быть в нескольких коллекциях."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "primaryTwinId",
+      "summary": "Основной цифровой двойник для публичного просмотра.",
+      "page": "Карточка объекта",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Например главный PlayCanvas или Geoscan viewer."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "primaryPreviewAssetId",
+      "summary": "Preview/thumbnail для каталога.",
+      "page": "Каталог",
+      "auth": "owner/editor",
+      "storage": "GET storage preview",
+      "note": "Сайт может хранить ссылку на h3druAssetId превью."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "visibility",
+      "summary": "Видимость объекта.",
+      "page": "Публикация",
+      "auth": "owner/moderator",
+      "storage": "нет",
+      "note": "private, organization, password, public."
+    },
+    {
+      "section": "Культурные объекты",
+      "method": "FIELD",
+      "endpoint": "createdAt / updatedAt / publishedAt",
+      "summary": "Системные даты объекта.",
+      "page": "Админка",
+      "auth": "system",
+      "storage": "нет",
+      "note": "Для аудита и сортировки."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/dublin-core",
+      "summary": "Получить Dublin Core поля объекта.",
+      "page": "Форма описания / каталог",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Для базового описания и публикации."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "PUT",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/dublin-core",
+      "summary": "Сохранить Dublin Core профиль целиком.",
+      "page": "Форма описания",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Полная замена DC-полей."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "PATCH",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/dublin-core",
+      "summary": "Частично обновить Dublin Core поля.",
+      "page": "Форма описания",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Удобно для автосохранения."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:title",
+      "summary": "Название объекта.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Может синхронизироваться с title карточки."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:creator",
+      "summary": "Создатель объекта или цифрового ресурса.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Автор, мастер, организация, съемочная группа."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:subject",
+      "summary": "Темы/ключевые слова.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Для поиска и фасетов."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:description",
+      "summary": "Описание объекта.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Базовое текстовое описание."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:publisher",
+      "summary": "Публикатор ресурса.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Обычно организация/музей или портал."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:contributor",
+      "summary": "Участники создания/описания.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Фотограмметрист, реставратор, редактор."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:date",
+      "summary": "Дата, связанная с объектом или ресурсом.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Дата создания, съемки, публикации."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:type",
+      "summary": "Тип ресурса.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "PhysicalObject, 3DModel, Image, Dataset."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:format",
+      "summary": "Формат ресурса.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "model/gltf-binary, image/tiff, application/zip."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:identifier",
+      "summary": "Идентификатор ресурса.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "H3DID и/или внешний идентификатор."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:source",
+      "summary": "Источник данных.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Архив, фонд, исходная съемка, Geoscan Cloud."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:language",
+      "summary": "Язык описания.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "ru, en и т.д."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:relation",
+      "summary": "Связанные ресурсы.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Связь с коллекцией, объектом, публикацией."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:coverage",
+      "summary": "Пространственный/временной охват.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Место, период, территория."
+    },
+    {
+      "section": "Dublin Core metadata",
+      "method": "FIELD",
+      "endpoint": "dc:rights",
+      "summary": "Права и лицензия.",
+      "page": "Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Публичные права, ограничения, лицензия."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm",
+      "summary": "Получить CIDOC CRM модель объекта.",
+      "page": "Расширенная форма описания",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Для музейной/научной семантики."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "PUT",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm",
+      "summary": "Сохранить CIDOC CRM модель целиком.",
+      "page": "Расширенная форма описания",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Полная замена CRM-графа/профиля."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "PATCH",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm",
+      "summary": "Частично обновить CIDOC CRM модель.",
+      "page": "Расширенная форма описания",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Удобно для добавления событий/связей."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-profiles",
+      "summary": "Получить доступные профили описания.",
+      "page": "Настройки формы",
+      "auth": "user/editor/admin",
+      "storage": "нет",
+      "note": "Например okn, museum-object, archaeology, gigapixel."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-profiles/{profileId}",
+      "summary": "Получить схему полей конкретного профиля.",
+      "page": "Настройки формы",
+      "auth": "user/editor/admin",
+      "storage": "нет",
+      "note": "Схема для генерации формы."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "crmClass",
+      "summary": "Основной CIDOC CRM класс объекта.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Например E22 Human-Made Object, E27 Site, E24 Physical Human-Made Thing."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "E42 Identifier",
+      "summary": "CIDOC-класс для идентификаторов объекта.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Не дубль H3DID. H3DID хранится как главный системный ID портала и может быть представлен в CIDOC как один из E42 Identifier вместе с КАМИС, Госкаталог, ЕГРОКН, инвентарным номером."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "E55 Type",
+      "summary": "Тип/классификация объекта.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "ОКН, музейный предмет, архитектурный элемент, 3D модель."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "E53 Place",
+      "summary": "Место объекта.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Адрес, координаты, историческое место."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "E52 Time-Span",
+      "summary": "Временной интервал.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Период создания, бытования, съемки."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "E39 Actor",
+      "summary": "Участник/актор.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Автор, владелец, хранитель, организация."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "E40 Legal Body",
+      "summary": "Юридическое лицо.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Музей, учреждение, владелец."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "E12 Production",
+      "summary": "Событие создания.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Кто/когда/где создал объект."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "E7 Activity",
+      "summary": "Деятельность/событие.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Оцифровка, съемка, реставрация, обследование."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "E31 Document",
+      "summary": "Документ/описание.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Акт, паспорт объекта, публикация, отчет."
+    },
+    {
+      "section": "CIDOC CRM metadata",
+      "method": "FIELD",
+      "endpoint": "P-связи",
+      "summary": "CIDOC CRM predicates.",
+      "page": "CIDOC CRM",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Например P1 is identified by, P2 has type, P53 has former/current location."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-standards",
+      "summary": "Получить список поддерживаемых стандартов metadata.",
+      "page": "Настройки / документация",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Например dublin-core, cidoc-crm."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-standards/dublin-core/terms",
+      "summary": "Получить полный справочник Dublin Core terms.",
+      "page": "Конструктор формы / интеграция",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Не только 15 базовых элементов, но и расширенные DCMI terms, если включены в профиль."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-standards/dublin-core/terms/{termId}",
+      "summary": "Получить описание конкретного Dublin Core term.",
+      "page": "Конструктор формы / подсказка",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Например dc:title, dcterms:created, dcterms:spatial."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-standards/cidoc-crm/classes",
+      "summary": "Получить полный справочник классов CIDOC CRM.",
+      "page": "Конструктор формы / граф",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "E-сущности: E22, E27, E39, E53 и остальные из версии стандарта."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-standards/cidoc-crm/classes/{classId}",
+      "summary": "Получить описание класса CIDOC CRM.",
+      "page": "Конструктор формы / подсказка",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Например E22 Human-Made Object или E53 Place."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-standards/cidoc-crm/properties",
+      "summary": "Получить полный справочник свойств CIDOC CRM.",
+      "page": "Конструктор формы / граф",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "P-свойства: P1, P2, P53 и остальные из версии стандарта."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-standards/cidoc-crm/properties/{propertyId}",
+      "summary": "Получить описание свойства CIDOC CRM.",
+      "page": "Конструктор формы / подсказка",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Например P1 is identified by."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "GET",
+      "endpoint": "/site/v1/metadata-profiles/{profileId}/fields",
+      "summary": "Получить поля стандарта, включенные в конкретный профиль портала.",
+      "page": "Форма описания",
+      "auth": "user/editor/admin",
+      "storage": "нет",
+      "note": "Профиль выбирает subset стандартов под ОКН, музейный предмет, археологию, gigapixel."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "FIELD",
+      "endpoint": "MetadataStandardTerm",
+      "summary": "Термин справочника metadata.",
+      "page": "Schema",
+      "auth": "system",
+      "storage": "нет",
+      "note": "{ standard, id, label, description, type, uri, version }."
+    },
+    {
+      "section": "Справочники стандартов metadata",
+      "method": "FIELD",
+      "endpoint": "MetadataProfileField",
+      "summary": "Поле профиля портала.",
+      "page": "Schema",
+      "auth": "system",
+      "storage": "нет",
+      "note": "{ profileId, fieldId, standard, required, repeatable, uiWidget, validation }."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/dublin-core/{field}",
+      "summary": "Получить одно поле Dublin Core.",
+      "page": "Форма описания / интеграция",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Например field=dc:title или dc:rights."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "PATCH",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/dublin-core/{field}",
+      "summary": "Обновить одно поле Dublin Core.",
+      "page": "Форма описания",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Для автосохранения одного поля."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "DELETE",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/dublin-core/{field}",
+      "summary": "Очистить одно поле Dublin Core.",
+      "page": "Форма описания",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Удаляет значение поля, не объект."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/{field}",
+      "summary": "Получить один CIDOC CRM блок/класс.",
+      "page": "Расширенная форма описания",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Например field=E53%20Place или E42%20Identifier."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "PATCH",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/{field}",
+      "summary": "Обновить один CIDOC CRM блок/класс.",
+      "page": "Расширенная форма описания",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Подходит для простого профиля, где CRM разложен по блокам."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/nodes",
+      "summary": "Получить CIDOC CRM сущности графа.",
+      "page": "CIDOC CRM граф",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Узлы: объект, место, актор, событие, документ."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/nodes",
+      "summary": "Добавить CIDOC CRM сущность.",
+      "page": "CIDOC CRM граф",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Например добавить E39 Actor или E53 Place."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "PATCH",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/nodes/{nodeId}",
+      "summary": "Обновить CIDOC CRM сущность.",
+      "page": "CIDOC CRM граф",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Меняет данные конкретного узла."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "DELETE",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/nodes/{nodeId}",
+      "summary": "Удалить CIDOC CRM сущность.",
+      "page": "CIDOC CRM граф",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Должно проверять связанные relations."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/relations",
+      "summary": "Получить CIDOC CRM связи графа.",
+      "page": "CIDOC CRM граф",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Связи P1, P2, P53 и другие predicates."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/relations",
+      "summary": "Добавить CIDOC CRM связь.",
+      "page": "CIDOC CRM граф",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Связывает sourceNodeId -> predicate -> targetNodeId."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "PATCH",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/relations/{relationId}",
+      "summary": "Обновить CIDOC CRM связь.",
+      "page": "CIDOC CRM граф",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Меняет predicate или target/source при необходимости."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "DELETE",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/metadata/cidoc-crm/relations/{relationId}",
+      "summary": "Удалить CIDOC CRM связь.",
+      "page": "CIDOC CRM граф",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Удаляет связь, не сами узлы."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "FIELD",
+      "endpoint": "MetadataFieldResponse",
+      "summary": "Ответ для одного поля metadata.",
+      "page": "Schema",
+      "auth": "system",
+      "storage": "нет",
+      "note": "{ field, value, lang, standard, updatedAt, updatedBy }."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "FIELD",
+      "endpoint": "CidocNode",
+      "summary": "Узел CIDOC CRM графа.",
+      "page": "Schema",
+      "auth": "system",
+      "storage": "нет",
+      "note": "{ nodeId, crmClass, label, properties }."
+    },
+    {
+      "section": "Метаданные: отдельные поля и граф",
+      "method": "FIELD",
+      "endpoint": "CidocRelation",
+      "summary": "Связь CIDOC CRM графа.",
+      "page": "Schema",
+      "auth": "system",
+      "storage": "нет",
+      "note": "{ relationId, sourceNodeId, predicate, targetNodeId, properties }."
+    },
+    {
+      "section": "Внешние идентификаторы",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/external-ids",
+      "summary": "Получить внешние идентификаторы объекта.",
+      "page": "Карточка объекта",
+      "auth": "user/editor/moderator/admin",
+      "storage": "нет",
+      "note": "EGROKN, GOSKATALOG, KAMIS, GEOSCAN_CLOUD. Эти значения можно экспортировать в CIDOC как E42 Identifier с типом системы."
+    },
+    {
+      "section": "Внешние идентификаторы",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/external-ids",
+      "summary": "Добавить внешний идентификатор.",
+      "page": "Редактирование связей",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Не передается в плеер как обязательный параметр."
+    },
+    {
+      "section": "Внешние идентификаторы",
+      "method": "PATCH",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/external-ids/{externalId}",
+      "summary": "Изменить внешний идентификатор.",
+      "page": "Редактирование связей",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Например исправить URL или значение."
+    },
+    {
+      "section": "Внешние идентификаторы",
+      "method": "DELETE",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/external-ids/{externalId}",
+      "summary": "Удалить внешний идентификатор.",
+      "page": "Редактирование связей",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Удаляет связь, не внешний объект."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations/{organizationId}/collections",
+      "summary": "Получить дерево коллекций организации.",
+      "page": "Страница музея / коллекции",
+      "auth": "anonymous/user/editor",
+      "storage": "нет",
+      "note": "Возвращает collectionId и parentCollectionId."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "POST",
+      "endpoint": "/site/v1/organizations/{organizationId}/collections",
+      "summary": "Создать коллекцию или подколлекцию.",
+      "page": "Админка коллекций",
+      "auth": "organization_admin/editor",
+      "storage": "нет",
+      "note": "Если parentCollectionId=null, это верхний уровень."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "GET",
+      "endpoint": "/site/v1/collections/{collectionId}",
+      "summary": "Получить карточку коллекции.",
+      "page": "Страница коллекции",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Название, описание, владелец, parentCollectionId."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "PATCH",
+      "endpoint": "/site/v1/collections/{collectionId}",
+      "summary": "Обновить коллекцию.",
+      "page": "Админка коллекций",
+      "auth": "organization_admin/editor",
+      "storage": "нет",
+      "note": "Название, описание, порядок, slug, видимость."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "DELETE",
+      "endpoint": "/site/v1/collections/{collectionId}",
+      "summary": "Удалить или скрыть коллекцию.",
+      "page": "Админка коллекций",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "Не удаляет сами объекты без отдельной политики."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "PATCH",
+      "endpoint": "/site/v1/collections/{collectionId}/parent",
+      "summary": "Переместить коллекцию в другое место дерева.",
+      "page": "Админка коллекций",
+      "auth": "organization_admin/editor",
+      "storage": "нет",
+      "note": "Меняет parentCollectionId."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "GET",
+      "endpoint": "/site/v1/collections/{collectionId}/objects",
+      "summary": "Получить объекты коллекции.",
+      "page": "Страница коллекции",
+      "auth": "anonymous/user",
+      "storage": "GET preview при необходимости",
+      "note": "Для каталога и админки."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "POST",
+      "endpoint": "/site/v1/collections/{collectionId}/objects",
+      "summary": "Добавить объект в коллекцию.",
+      "page": "Админка коллекции",
+      "auth": "organization_admin/editor",
+      "storage": "нет",
+      "note": "Один объект может входить в несколько коллекций."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "DELETE",
+      "endpoint": "/site/v1/collections/{collectionId}/objects/{h3druObjectId}",
+      "summary": "Убрать объект из коллекции.",
+      "page": "Админка коллекции",
+      "auth": "organization_admin/editor",
+      "storage": "нет",
+      "note": "Удаляет связь, не объект."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "GET",
+      "endpoint": "/site/v1/collections/{collectionId}/thumbnail",
+      "summary": "Получить миниатюру коллекции.",
+      "page": "Страница коллекции / каталог",
+      "auth": "anonymous/user",
+      "storage": "GET storage preview",
+      "note": "По умолчанию берется primary thumbnail коллекции или коллаж из объектов."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "PUT",
+      "endpoint": "/site/v1/collections/{collectionId}/thumbnail",
+      "summary": "Назначить миниатюру коллекции.",
+      "page": "Админка коллекции",
+      "auth": "organization_admin/editor",
+      "storage": "опционально storage asset",
+      "note": "Можно выбрать h3druAssetId, загрузить отдельную обложку или использовать авто-коллаж."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "POST",
+      "endpoint": "/site/v1/collections/{collectionId}/thumbnail/generate",
+      "summary": "Сгенерировать авто-миниатюру коллекции.",
+      "page": "Админка коллекции",
+      "auth": "organization_admin/editor",
+      "storage": "GET storage previews",
+      "note": "Аналог идеи Sketchfab collections/thumbnails: собрать популярные/главные превью объектов."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/collections",
+      "summary": "Публичный список коллекций.",
+      "page": "Публичный каталог",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Для витрины музеев и тематических подборок."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/collections/{collectionSlugOrId}",
+      "summary": "Публичная страница коллекции.",
+      "page": "Публичная коллекция",
+      "auth": "anonymous/user",
+      "storage": "GET preview при необходимости",
+      "note": "Показывает опубликованные объекты коллекции."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "FIELD",
+      "endpoint": "thumbnailMode",
+      "summary": "Способ формирования миниатюры коллекции.",
+      "page": "Collection",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "manual, first_object, popular_objects, collage, organization_default."
+    },
+    {
+      "section": "Коллекции и подколлекции",
+      "method": "FIELD",
+      "endpoint": "thumbnailAssetId",
+      "summary": "Ассет миниатюры коллекции.",
+      "page": "Collection",
+      "auth": "owner/editor",
+      "storage": "GET storage preview",
+      "note": "Может ссылаться на h3druAssetId или специально загруженную обложку."
+    },
+    {
+      "section": "Цифровые двойники / представления",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/twins",
+      "summary": "Создать цифровой двойник объекта.",
+      "page": "Страница добавления представления",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Выдает twinId. Это не замена H3DID, а ID конкретного представления внутри объекта."
+    },
+    {
+      "section": "Цифровые двойники / представления",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/twins",
+      "summary": "Получить список цифровых двойников объекта.",
+      "page": "Карточка объекта",
+      "auth": "user/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Один H3DID может иметь несколько twinId."
+    },
+    {
+      "section": "Цифровые двойники / представления",
+      "method": "GET",
+      "endpoint": "/site/v1/twins/{twinId}",
+      "summary": "Получить цифровой двойник.",
+      "page": "Страница двойника",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Содержит viewerType, основной asset и связь с h3druObjectId."
+    },
+    {
+      "section": "Цифровые двойники / представления",
+      "method": "PATCH",
+      "endpoint": "/site/v1/twins/{twinId}",
+      "summary": "Обновить настройки цифрового двойника.",
+      "page": "Настройки двойника",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Тип viewer, основной asset, видимость."
+    },
+    {
+      "section": "Цифровые двойники / представления",
+      "method": "DELETE",
+      "endpoint": "/site/v1/twins/{twinId}",
+      "summary": "Удалить или скрыть цифровой двойник.",
+      "page": "Настройки двойника",
+      "auth": "owner/admin",
+      "storage": "опционально DELETE storage assets",
+      "note": "Зависит от политики удаления файлов."
+    },
+    {
+      "section": "Ассеты сайта и загрузка",
+      "method": "POST",
+      "endpoint": "/site/v1/twins/{twinId}/assets",
+      "summary": "Создать запись ассета на сайте и начать загрузку.",
+      "page": "Страница загрузки модели",
+      "auth": "owner/editor/admin",
+      "storage": "POST /storage/v1/uploads",
+      "note": "Сайт проверяет права пользователя, затем от имени сайта получает uploadUrl. Если storage вернул quota_exceeded, сайт показывает userMessage."
+    },
+    {
+      "section": "Ассеты сайта и загрузка",
+      "method": "GET",
+      "endpoint": "/site/v1/twins/{twinId}/assets",
+      "summary": "Получить ассеты цифрового двойника.",
+      "page": "Страница двойника",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "опционально GET status",
+      "note": "Список web/source/texture/point cloud/gigapixel."
+    },
+    {
+      "section": "Ассеты сайта и загрузка",
+      "method": "GET",
+      "endpoint": "/site/v1/assets/{h3druAssetId}",
+      "summary": "Получить запись ассета сайта.",
+      "page": "Страница ассета",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "GET /storage/v1/assets/{storageAssetId}",
+      "note": "Может подтягивать технический статус."
+    },
+    {
+      "section": "Ассеты сайта и загрузка",
+      "method": "PATCH",
+      "endpoint": "/site/v1/assets/{h3druAssetId}",
+      "summary": "Обновить настройки ассета на сайте.",
+      "page": "Страница ассета",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Название, тип, признак основного, доступность скачивания."
+    },
+    {
+      "section": "Ассеты сайта и загрузка",
+      "method": "POST",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/link-storage",
+      "summary": "Привязать storageAssetId после завершения загрузки.",
+      "page": "Внутренний шаг загрузки",
+      "auth": "system/site",
+      "storage": "после POST /storage/v1/uploads/{uploadId}/complete",
+      "note": "Фиксирует связь h3druAssetId -> storageAssetId."
+    },
+    {
+      "section": "Ассеты сайта и загрузка",
+      "method": "DELETE",
+      "endpoint": "/site/v1/assets/{h3druAssetId}",
+      "summary": "Удалить ассет сайта.",
+      "page": "Страница ассета",
+      "auth": "owner/admin",
+      "storage": "DELETE /storage/v1/assets/{storageAssetId}",
+      "note": "Сайт решает, удалять ли физический файл."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "GET",
+      "endpoint": "/site/v1/twins/{twinId}/technical-info",
+      "summary": "Получить техническую сводку цифрового двойника.",
+      "page": "Страница двойника / админка",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "GET storage asset/status",
+      "note": "Сводка по основному asset, форматам, размерам, геометрии, обработке."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "GET",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/technical-info",
+      "summary": "Получить технические данные конкретного ассета.",
+      "page": "Страница ассета",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "GET /storage/v1/assets/{storageAssetId}",
+      "note": "Файл, размер, формат, checksum, storageClass, производные файлы."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "GET",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/processing-status",
+      "summary": "Получить статус обработки ассета.",
+      "page": "Страница загрузки / админка",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "GET /storage/v1/assets/{storageAssetId}/status",
+      "note": "queued, processing, validating, ready, failed, archived."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "GET",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/derivatives",
+      "summary": "Получить производные файлы модели.",
+      "page": "Страница ассета",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "GET /storage/v1/assets/{storageAssetId}",
+      "note": "Например optimized glb, tiles, preview, report."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "GET",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/download",
+      "summary": "Получить временные ссылки на скачивание.",
+      "page": "Страница объекта / ассета",
+      "auth": "owner/editor/admin или public policy",
+      "storage": "GET /storage/v1/assets/{storageAssetId}/download-url",
+      "note": "Как у Sketchfab: API возвращает url, sizeBytes, expires для каждого формата."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "uploadedAt / createdAt / updatedAt",
+      "summary": "Даты жизненного цикла ассета.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "нет",
+      "note": "Когда файл загружен, создана запись, обновлены данные."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "processedAt / publishedAt",
+      "summary": "Даты обработки и публикации.",
+      "page": "TechnicalInfo",
+      "auth": "system/moderator",
+      "storage": "нет",
+      "note": "Когда обработка завершена и когда опубликовано."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "fileName",
+      "summary": "Имя исходного файла.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "нет",
+      "note": "Например model.glb или scan.zip."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "fileSizeBytes",
+      "summary": "Размер исходного файла.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage",
+      "note": "Для интерфейса лимитов и карточки ассета."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "sourceFormat",
+      "summary": "Исходный формат.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage",
+      "note": "obj, fbx, glb, e57, las, zip, tiff и т.д."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "viewerFormat",
+      "summary": "Формат для просмотра.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage/player",
+      "note": "glb, gltf, tiles, dzi, iiif, geoscan_cloud_embed."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "mimeType",
+      "summary": "MIME type файла.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage",
+      "note": "model/gltf-binary, image/tiff, application/zip."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "checksum",
+      "summary": "Контрольная сумма файла.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage",
+      "note": "sha256 для проверки целостности."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "storageClass",
+      "summary": "Класс хранения.",
+      "page": "TechnicalInfo",
+      "auth": "system/admin",
+      "storage": "storage",
+      "note": "hot, private, archive, glacier."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "modelSizeBytes",
+      "summary": "Размер оптимизированной модели.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage/player",
+      "note": "Размер файла, который реально грузит viewer."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "textureSizeBytes",
+      "summary": "Суммарный размер текстур.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage/player",
+      "note": "Для оценки тяжести модели."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "archiveSizeBytes",
+      "summary": "Размер архивного пакета.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage",
+      "note": "Если хранится source/archive package."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "vertexCount",
+      "summary": "Количество вершин.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "processor",
+      "note": "Для оценки сложности 3D модели."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "faceCount",
+      "summary": "Количество полигонов/граней.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "processor",
+      "note": "Для оценки сложности 3D модели."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "meshCount",
+      "summary": "Количество mesh-объектов.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "processor",
+      "note": "Полезно для диагностики модели."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "materialCount",
+      "summary": "Количество материалов.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "processor",
+      "note": "Показывается в технической карточке."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "textureCount",
+      "summary": "Количество текстур.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "processor",
+      "note": "Показывается в технической карточке."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "animationCount",
+      "summary": "Количество анимаций.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "processor",
+      "note": "Если модель содержит animation clips."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "durationSeconds",
+      "summary": "Длительность анимации/тура.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "processor/player",
+      "note": "Опционально для анимированных моделей."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "boundingBox",
+      "summary": "Габариты модели.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "processor/player",
+      "note": "{ min, max, size }."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "processingStatus",
+      "summary": "Текущий статус обработки.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage",
+      "note": "upload_requested, processing, ready, failed, archived."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "processingProgress",
+      "summary": "Прогресс обработки.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage",
+      "note": "0..1 или null."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "processingMessage",
+      "summary": "Техническое сообщение обработки.",
+      "page": "TechnicalInfo",
+      "auth": "system",
+      "storage": "storage",
+      "note": "Для ошибок и диагностики."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "isDownloadable",
+      "summary": "Можно ли скачивать asset.",
+      "page": "TechnicalInfo / rights",
+      "auth": "owner/moderator",
+      "storage": "нет",
+      "note": "Решает сайт по правам и публикации."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "downloadFormats",
+      "summary": "Доступные форматы скачивания.",
+      "page": "DownloadResponse",
+      "auth": "system",
+      "storage": "storage",
+      "note": "Например glb, gltf, usdz, source, textures, report."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "download.url",
+      "summary": "Временная ссылка скачивания.",
+      "page": "DownloadResponse",
+      "auth": "system",
+      "storage": "storage",
+      "note": "Не кешировать, срок действия ограничен."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "download.sizeBytes",
+      "summary": "Размер скачиваемого файла.",
+      "page": "DownloadResponse",
+      "auth": "system",
+      "storage": "storage",
+      "note": "Показывать перед скачиванием."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "download.expires",
+      "summary": "TTL ссылки в секундах.",
+      "page": "DownloadResponse",
+      "auth": "system",
+      "storage": "storage",
+      "note": "Например 300 секунд."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "license",
+      "summary": "Лицензия/права использования.",
+      "page": "TechnicalInfo / Dublin Core",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Связано с dc:rights, но удобно держать в сводке."
+    },
+    {
+      "section": "Технические данные модели",
+      "method": "FIELD",
+      "endpoint": "visibility / accessMode",
+      "summary": "Режим доступа.",
+      "page": "TechnicalInfo / rights",
+      "auth": "owner/moderator",
+      "storage": "нет",
+      "note": "public, organization, password, private, moderation."
+    },
+    {
+      "section": "Квоты, тарифы и ошибки загрузки",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations/{organizationId}/storage-usage",
+      "summary": "Получить использование хранилища организации.",
+      "page": "Админка организации / загрузка",
+      "auth": "organization_admin/editor",
+      "storage": "GET storage usage или локальный кеш",
+      "note": "Показывает лимит, использовано, свободно, тариф."
+    },
+    {
+      "section": "Квоты, тарифы и ошибки загрузки",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations/{organizationId}/plan",
+      "summary": "Получить тариф и лимиты организации.",
+      "page": "Админка организации",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "Например base: 50 ГБ."
+    },
+    {
+      "section": "Квоты, тарифы и ошибки загрузки",
+      "method": "POST",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/upload-retry",
+      "summary": "Повторить запрос uploadUrl после ошибки.",
+      "page": "Страница загрузки модели",
+      "auth": "owner/editor/admin",
+      "storage": "POST /storage/v1/uploads",
+      "note": "Используется после очистки места или увеличения лимита."
+    },
+    {
+      "section": "Квоты, тарифы и ошибки загрузки",
+      "method": "GET",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/upload-error",
+      "summary": "Получить последнюю ошибку загрузки.",
+      "page": "Страница загрузки модели",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Хранит code, message, userMessage, details от storage."
+    },
+    {
+      "section": "Публикация и модерация",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/submit",
+      "summary": "Отправить объект на модерацию.",
+      "page": "Редактирование объекта",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "draft -> review."
+    },
+    {
+      "section": "Публикация и модерация",
+      "method": "GET",
+      "endpoint": "/site/v1/moderation/tasks",
+      "summary": "Очередь задач модерации.",
+      "page": "Кабинет модератора",
+      "auth": "moderator/admin",
+      "storage": "опционально POST /storage/v1/embed",
+      "note": "Для предпросмотра черновиков сайт выдает временный embedToken."
+    },
+    {
+      "section": "Публикация и модерация",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/approve",
+      "summary": "Одобрить публикацию.",
+      "page": "Кабинет модератора",
+      "auth": "moderator/admin",
+      "storage": "нет",
+      "note": "review -> approved."
+    },
+    {
+      "section": "Публикация и модерация",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/reject",
+      "summary": "Отклонить публикацию с комментарием.",
+      "page": "Кабинет модератора",
+      "auth": "moderator/admin",
+      "storage": "нет",
+      "note": "review -> rejected."
+    },
+    {
+      "section": "Публикация и модерация",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/publish",
+      "summary": "Опубликовать объект.",
+      "page": "Админка публикации",
+      "auth": "moderator/admin",
+      "storage": "опционально POST /storage/v1/embed",
+      "note": "approved -> published."
+    },
+    {
+      "section": "Публикация и модерация",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/unpublish",
+      "summary": "Снять объект с публикации.",
+      "page": "Админка публикации",
+      "auth": "moderator/admin",
+      "storage": "нет",
+      "note": "published -> draft/archived."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/objects",
+      "summary": "Публичный список объектов каталога.",
+      "page": "Страница каталога",
+      "auth": "anonymous/user",
+      "storage": "GET /storage/v1/assets/{storageAssetId}/preview",
+      "note": "Сайт отдает title, previewUrl, тип, место, доступность viewer."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/objects/{slugOrH3DID}",
+      "summary": "Публичная страница объекта.",
+      "page": "Страница объекта",
+      "auth": "anonymous/user",
+      "storage": "GET preview / file-url при необходимости",
+      "note": "Постоянная страница, временные ссылки внутри."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/search",
+      "summary": "Единый поиск по объектам, коллекциям и организациям.",
+      "page": "Поиск",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Аналог Sketchfab /search, но источник — индекс сайта: H3DID, Dublin Core, CIDOC CRM, коллекции, организации."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/search/objects",
+      "summary": "Поиск только по объектам/моделям.",
+      "page": "Поиск / каталог объектов",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Фильтры: q, organizationId, collectionId, dc:type, dc:subject, crmClass, E55 Type, place, date, viewerType, downloadable."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/search/collections",
+      "summary": "Поиск только по коллекциям.",
+      "page": "Поиск / каталог коллекций",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Фильтры: q, organizationId, parentCollectionId, tag, createdSince, sortBy."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/search/organizations",
+      "summary": "Поиск по организациям/музеям.",
+      "page": "Поиск / каталог музеев",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Фильтры: q, city, country, organizationType, publicOnly."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/facets",
+      "summary": "Фасеты и фильтры каталога.",
+      "page": "Каталог",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Фасеты строятся из Dublin Core, CIDOC CRM, организаций, коллекций и технических полей без дублирования."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/map",
+      "summary": "Объекты для карты.",
+      "page": "Карта",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Координаты и краткие карточки."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.q",
+      "summary": "Полнотекстовый поисковый запрос.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Ищет по title, dc:title, dc:description, dc:subject, E42 Identifier, организации, коллекции."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.type",
+      "summary": "Тип сущности для поиска.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "objects, collections, organizations или all."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.dcType",
+      "summary": "Фильтр по Dublin Core dc:type.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Например 3DModel, Image, Dataset, PhysicalObject."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.dcSubject",
+      "summary": "Фильтр по Dublin Core dc:subject.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Используется как основа для тегов/тем, не создаем отдельную несвязанную категорию."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.crmClass",
+      "summary": "Фильтр по CIDOC CRM классу.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Например E22, E24, E27."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.e55Type",
+      "summary": "Фильтр по CIDOC CRM E55 Type.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Классификация объекта, если тип задан через CIDOC."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.place",
+      "summary": "Фильтр по месту.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Из E53 Place / dc:coverage."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.dateFrom / dateTo",
+      "summary": "Фильтр по датам.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Из dc:date, E52 Time-Span, publishedAt."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.viewerType",
+      "summary": "Фильтр по типу представления.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "playcanvas, geoscan, gigapixel, pointcloud."
+    },
+    {
+      "section": "Каталог и публичные страницы",
+      "method": "FIELD",
+      "endpoint": "search.sortBy",
+      "summary": "Сортировка поиска.",
+      "page": "Search",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "relevance, newest, updated, popular, title."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "GET",
+      "endpoint": "/site/v1/tags",
+      "summary": "Получить список тегов.",
+      "page": "Каталог / форма описания",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Аналог Sketchfab /tags, но теги связаны с Dublin Core/CIDOC."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "POST",
+      "endpoint": "/site/v1/tags",
+      "summary": "Создать тег.",
+      "page": "Админка справочников",
+      "auth": "admin/metadata_admin",
+      "storage": "нет",
+      "note": "Создает управляемый словарь, а не произвольный мусор."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "GET",
+      "endpoint": "/site/v1/tags/{tagId}",
+      "summary": "Получить тег.",
+      "page": "Каталог / форма описания",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Название, slug, язык, mapping на dc:subject или E55 Type."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "PATCH",
+      "endpoint": "/site/v1/tags/{tagId}",
+      "summary": "Обновить тег.",
+      "page": "Админка справочников",
+      "auth": "admin/metadata_admin",
+      "storage": "нет",
+      "note": "Синонимы, переводы, связь со стандартом."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "DELETE",
+      "endpoint": "/site/v1/tags/{tagId}",
+      "summary": "Удалить или скрыть тег.",
+      "page": "Админка справочников",
+      "auth": "admin/metadata_admin",
+      "storage": "нет",
+      "note": "Лучше soft-delete, чтобы не ломать историю."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/tags",
+      "summary": "Назначить теги объекту.",
+      "page": "Форма описания",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Пишет или синхронизирует значения с dc:subject."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "DELETE",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/tags/{tagId}",
+      "summary": "Убрать тег с объекта.",
+      "page": "Форма описания",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "Удаляет связь, не термин словаря."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "GET",
+      "endpoint": "/site/v1/categories",
+      "summary": "Получить категории витрины.",
+      "page": "Каталог",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Категории являются UI-группировкой над dc:type / E55 Type, а не отдельным дублем."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "GET",
+      "endpoint": "/site/v1/categories/{categoryId}",
+      "summary": "Получить категорию.",
+      "page": "Каталог",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Содержит mapping на metadata fields."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "FIELD",
+      "endpoint": "Tag.metadataMapping",
+      "summary": "Связь тега со стандартами.",
+      "page": "Tag",
+      "auth": "system",
+      "storage": "нет",
+      "note": "{ standard: dublin-core|cidoc-crm, field: dc:subject|E55 Type, value }."
+    },
+    {
+      "section": "Теги, темы и категории",
+      "method": "FIELD",
+      "endpoint": "Category.metadataMapping",
+      "summary": "Связь категории с metadata.",
+      "page": "Category",
+      "auth": "system",
+      "storage": "нет",
+      "note": "Категория в интерфейсе должна объясняться через Dublin Core или CIDOC."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "GET",
+      "endpoint": "/site/v1/me/favorites",
+      "summary": "Получить избранное текущего пользователя.",
+      "page": "Личный кабинет",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Возвращает organizations, collections, objects."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "POST",
+      "endpoint": "/site/v1/me/favorites/organizations/{organizationId}",
+      "summary": "Добавить музей/организацию в избранное.",
+      "page": "Страница организации",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Аналог follow/like для музея."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "DELETE",
+      "endpoint": "/site/v1/me/favorites/organizations/{organizationId}",
+      "summary": "Убрать организацию из избранного.",
+      "page": "Страница организации",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Удаляет только пользовательскую связь."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "POST",
+      "endpoint": "/site/v1/me/favorites/collections/{collectionId}",
+      "summary": "Добавить коллекцию в избранное.",
+      "page": "Страница коллекции",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Аналог Sketchfab likes/collections, но для музейной коллекции."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "DELETE",
+      "endpoint": "/site/v1/me/favorites/collections/{collectionId}",
+      "summary": "Убрать коллекцию из избранного.",
+      "page": "Страница коллекции",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Удаляет только пользовательскую связь."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "POST",
+      "endpoint": "/site/v1/me/favorites/objects/{h3druObjectId}",
+      "summary": "Добавить объект/модель в избранное.",
+      "page": "Карточка объекта",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Лайк модели на уровне H3DID."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "DELETE",
+      "endpoint": "/site/v1/me/favorites/objects/{h3druObjectId}",
+      "summary": "Убрать объект из избранного.",
+      "page": "Карточка объекта",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Удаляет только пользовательскую связь."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/favorite-stats",
+      "summary": "Получить счетчик избранного объекта.",
+      "page": "Каталог / карточка объекта",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Для публичной статистики, если она нужна."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "GET",
+      "endpoint": "/site/v1/collections/{collectionId}/favorite-stats",
+      "summary": "Получить счетчик избранного коллекции.",
+      "page": "Каталог / коллекция",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Можно скрыть в публичном UI, но оставить для сортировки popular."
+    },
+    {
+      "section": "Лайки / избранное",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations/{organizationId}/favorite-stats",
+      "summary": "Получить счетчик избранного организации.",
+      "page": "Страница организации",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Похоже на follow организации."
+    },
+    {
+      "section": "Embed и просмотр",
+      "method": "GET",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/embed",
+      "summary": "Получить embed опубликованного объекта.",
+      "page": "Публичная страница объекта",
+      "auth": "anonymous/user",
+      "storage": "POST /storage/v1/embed",
+      "note": "GET сайта может внутри вызывать POST storage и вернуть iframeUrl, iframeHtml, query, iframe."
+    },
+    {
+      "section": "Embed и просмотр",
+      "method": "POST",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/embed",
+      "summary": "Сформировать embed с настройками сайта.",
+      "page": "Страница объекта / модерация",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "POST /storage/v1/embed",
+      "note": "Передает accessMode, ui, camera, tokenTtlSeconds. Для черновиков нужен короткий embedToken."
+    },
+    {
+      "section": "Embed и просмотр",
+      "method": "GET",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/poi",
+      "summary": "Получить POI через сайт.",
+      "page": "Страница viewer",
+      "auth": "anonymous/user/editor",
+      "storage": "GET /storage/v1/assets/{storageAssetId}/poi",
+      "note": "Сайт может фильтровать доступ к POI."
+    },
+    {
+      "section": "Embed и просмотр",
+      "method": "PUT",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/poi",
+      "summary": "Сохранить POI через сайт.",
+      "page": "Редактор POI",
+      "auth": "owner/editor/admin",
+      "storage": "PUT /storage/v1/assets/{storageAssetId}/poi",
+      "note": "Пользовательские права проверяет сайт."
+    },
+    {
+      "section": "Embed и просмотр",
+      "method": "GET",
+      "endpoint": "/site/v1/player-messaging/protocol",
+      "summary": "Получить описание postMessage API.",
+      "page": "Документация / настройка iframe",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Сами сообщения идут через window.postMessage, не HTTP."
+    },
+    {
+      "section": "Скачивание и архив",
+      "method": "GET",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/download",
+      "summary": "Получить временную ссылку на скачивание.",
+      "page": "Страница объекта / ассета",
+      "auth": "owner/editor/admin или public policy",
+      "storage": "GET /storage/v1/assets/{storageAssetId}/download-url",
+      "note": "Скачивание отдельно от просмотра."
+    },
+    {
+      "section": "Скачивание и архив",
+      "method": "POST",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/archive",
+      "summary": "Отправить asset в архивное хранение.",
+      "page": "Админка ассета",
+      "auth": "owner/admin",
+      "storage": "POST /storage/v1/assets/{storageAssetId}/archive",
+      "note": "Например S3 Glacier."
+    },
+    {
+      "section": "Скачивание и архив",
+      "method": "POST",
+      "endpoint": "/site/v1/assets/{h3druAssetId}/restore",
+      "summary": "Восстановить asset из архива.",
+      "page": "Админка ассета",
+      "auth": "owner/admin",
+      "storage": "POST /storage/v1/assets/{storageAssetId}/restore",
+      "note": "Может быть не мгновенно."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations",
+      "summary": "Организации пользователя.",
+      "page": "Личный кабинет",
+      "auth": "user",
+      "storage": "нет",
+      "note": "Для выбора владельца объекта."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "POST",
+      "endpoint": "/site/v1/organizations",
+      "summary": "Создать организацию/музей.",
+      "page": "Админка платформы",
+      "auth": "admin",
+      "storage": "нет",
+      "note": "Обычно выполняется администратором портала."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations/{organizationId}",
+      "summary": "Карточка организации.",
+      "page": "Страница музея / админка",
+      "auth": "anonymous/user",
+      "storage": "нет",
+      "note": "Название, описание, статус, публичность."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "PATCH",
+      "endpoint": "/site/v1/organizations/{organizationId}",
+      "summary": "Обновить организацию.",
+      "page": "Админка организации",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "Профиль музея, контакты, настройки."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations/{organizationId}/avatar",
+      "summary": "Получить аватар/логотип организации.",
+      "page": "Страница музея / каталог",
+      "auth": "anonymous/user",
+      "storage": "GET storage preview",
+      "note": "Аналог Sketchfab avatars, но для музея/организации."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "PUT",
+      "endpoint": "/site/v1/organizations/{organizationId}/avatar",
+      "summary": "Загрузить или назначить аватар организации.",
+      "page": "Админка организации",
+      "auth": "organization_admin/admin",
+      "storage": "POST storage upload",
+      "note": "Логотип, герб, фото здания или официальная обложка."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations/{organizationId}/cover",
+      "summary": "Получить обложку организации.",
+      "page": "Страница музея",
+      "auth": "anonymous/user",
+      "storage": "GET storage preview",
+      "note": "Широкая обложка для страницы организации."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "PUT",
+      "endpoint": "/site/v1/organizations/{organizationId}/cover",
+      "summary": "Загрузить или назначить обложку организации.",
+      "page": "Админка организации",
+      "auth": "organization_admin/admin",
+      "storage": "POST storage upload",
+      "note": "Отдельно от avatar, чтобы не портить логотип."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations/{organizationId}/members",
+      "summary": "Участники организации.",
+      "page": "Админка организации",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "Список пользователей и ролей."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "POST",
+      "endpoint": "/site/v1/organizations/{organizationId}/members",
+      "summary": "Добавить участника.",
+      "page": "Админка организации",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "Приглашение или добавление."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "PATCH",
+      "endpoint": "/site/v1/organizations/{organizationId}/members/{userId}",
+      "summary": "Изменить роль участника.",
+      "page": "Админка организации",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "editor/moderator/viewer и т.д."
+    },
+    {
+      "section": "Организации / музеи",
+      "method": "DELETE",
+      "endpoint": "/site/v1/organizations/{organizationId}/members/{userId}",
+      "summary": "Удалить участника из организации.",
+      "page": "Админка организации",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "Не удаляет учетную запись Geoscan."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "POST",
+      "endpoint": "/site/v1/articles",
+      "summary": "Создать статью.",
+      "page": "Страница создания статьи",
+      "auth": "editor/organization_admin/admin",
+      "storage": "нет",
+      "note": "Черновик статьи с organizationId, title, slug, status."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "GET",
+      "endpoint": "/site/v1/articles",
+      "summary": "Получить рабочий список статей.",
+      "page": "Админка статей",
+      "auth": "editor/moderator/admin",
+      "storage": "нет",
+      "note": "Фильтры: organizationId, status, authorId, q."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "GET",
+      "endpoint": "/site/v1/articles/{articleId}",
+      "summary": "Получить статью для редактирования.",
+      "page": "Редактор статьи",
+      "auth": "owner/editor/moderator/admin",
+      "storage": "нет",
+      "note": "Текст, блоки, связанные модели, статусы."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "PATCH",
+      "endpoint": "/site/v1/articles/{articleId}",
+      "summary": "Обновить статью.",
+      "page": "Редактор статьи",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Заголовок, текст, SEO, блоки, обложка, статус черновика."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "DELETE",
+      "endpoint": "/site/v1/articles/{articleId}",
+      "summary": "Удалить или архивировать статью.",
+      "page": "Админка статей",
+      "auth": "owner/admin",
+      "storage": "нет",
+      "note": "Не удаляет модели и коллекции."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "POST",
+      "endpoint": "/site/v1/articles/{articleId}/objects",
+      "summary": "Добавить объект/модель в статью.",
+      "page": "Редактор статьи",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Связывает articleId с h3druObjectId и задает порядок."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "PATCH",
+      "endpoint": "/site/v1/articles/{articleId}/objects/{h3druObjectId}",
+      "summary": "Обновить блок модели в статье.",
+      "page": "Редактор статьи",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Порядок, подпись, выбранный twinId, режим embed, camera/poi."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "DELETE",
+      "endpoint": "/site/v1/articles/{articleId}/objects/{h3druObjectId}",
+      "summary": "Убрать объект из статьи.",
+      "page": "Редактор статьи",
+      "auth": "owner/editor/admin",
+      "storage": "нет",
+      "note": "Удаляет связь со статьей, не сам объект."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "PUT",
+      "endpoint": "/site/v1/articles/{articleId}/cover",
+      "summary": "Назначить обложку статьи.",
+      "page": "Редактор статьи",
+      "auth": "owner/editor/admin",
+      "storage": "POST storage upload или выбор preview",
+      "note": "Обложка может быть отдельным изображением или preview одной из моделей."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "POST",
+      "endpoint": "/site/v1/articles/{articleId}/submit",
+      "summary": "Отправить статью на модерацию.",
+      "page": "Редактор статьи",
+      "auth": "owner/editor",
+      "storage": "нет",
+      "note": "draft -> review."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "POST",
+      "endpoint": "/site/v1/articles/{articleId}/publish",
+      "summary": "Опубликовать статью.",
+      "page": "Модерация статей",
+      "auth": "moderator/admin",
+      "storage": "опционально POST /storage/v1/embed",
+      "note": "Перед публикацией проверяет доступность всех встроенных моделей."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/articles",
+      "summary": "Публичный список статей.",
+      "page": "Страница статей / каталог",
+      "auth": "anonymous/user",
+      "storage": "GET preview при необходимости",
+      "note": "Показывает только published."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "GET",
+      "endpoint": "/site/v1/catalog/articles/{slugOrArticleId}",
+      "summary": "Публичная страница статьи.",
+      "page": "Страница статьи",
+      "auth": "anonymous/user",
+      "storage": "POST /storage/v1/embed для моделей",
+      "note": "Возвращает текст, блоки, список моделей и embed-данные для каждой вставки."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "FIELD",
+      "endpoint": "ArticleModelBlock",
+      "summary": "Блок модели внутри статьи.",
+      "page": "Schema",
+      "auth": "system",
+      "storage": "нет",
+      "note": "{ h3druObjectId, twinId, caption, sortOrder, camera, poiId, embedPreset }."
+    },
+    {
+      "section": "Статьи и подборки моделей",
+      "method": "FIELD",
+      "endpoint": "article.status",
+      "summary": "Статус статьи.",
+      "page": "Article",
+      "auth": "editor/moderator",
+      "storage": "нет",
+      "note": "draft, review, published, archived."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "GET",
+      "endpoint": "/site/v1/organizations/{organizationId}/workgroups",
+      "summary": "Получить рабочие группы организации.",
+      "page": "Админка организации",
+      "auth": "organization_admin/editor",
+      "storage": "нет",
+      "note": "Например Оцифровка 2026, Модерация, 2D-сканы."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "POST",
+      "endpoint": "/site/v1/organizations/{organizationId}/workgroups",
+      "summary": "Создать рабочую группу.",
+      "page": "Админка организации",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "Группа получает workgroupId."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "GET",
+      "endpoint": "/site/v1/workgroups/{workgroupId}",
+      "summary": "Получить рабочую группу.",
+      "page": "Страница группы",
+      "auth": "member/organization_admin",
+      "storage": "нет",
+      "note": "Название, описание, организация, участники."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "PATCH",
+      "endpoint": "/site/v1/workgroups/{workgroupId}",
+      "summary": "Обновить рабочую группу.",
+      "page": "Админка группы",
+      "auth": "workgroup_admin/organization_admin",
+      "storage": "нет",
+      "note": "Название, описание, статус."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "DELETE",
+      "endpoint": "/site/v1/workgroups/{workgroupId}",
+      "summary": "Удалить или архивировать рабочую группу.",
+      "page": "Админка группы",
+      "auth": "organization_admin/admin",
+      "storage": "нет",
+      "note": "Не удаляет объекты."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "GET",
+      "endpoint": "/site/v1/workgroups/{workgroupId}/members",
+      "summary": "Участники рабочей группы.",
+      "page": "Админка группы",
+      "auth": "workgroup_admin/organization_admin",
+      "storage": "нет",
+      "note": "Роли внутри группы."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "POST",
+      "endpoint": "/site/v1/workgroups/{workgroupId}/members",
+      "summary": "Добавить участника в рабочую группу.",
+      "page": "Админка группы",
+      "auth": "workgroup_admin/organization_admin",
+      "storage": "нет",
+      "note": "Пользователь уже должен существовать в Geoscan Login."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "PATCH",
+      "endpoint": "/site/v1/workgroups/{workgroupId}/members/{userId}",
+      "summary": "Изменить роль в рабочей группе.",
+      "page": "Админка группы",
+      "auth": "workgroup_admin/organization_admin",
+      "storage": "нет",
+      "note": "Например editor/viewer."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "DELETE",
+      "endpoint": "/site/v1/workgroups/{workgroupId}/members/{userId}",
+      "summary": "Удалить участника из рабочей группы.",
+      "page": "Админка группы",
+      "auth": "workgroup_admin/organization_admin",
+      "storage": "нет",
+      "note": "Не удаляет из организации."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "POST",
+      "endpoint": "/site/v1/objects/{h3druObjectId}/assign-workgroup",
+      "summary": "Назначить объект рабочей группе.",
+      "page": "Карточка объекта",
+      "auth": "owner/editor/organization_admin",
+      "storage": "нет",
+      "note": "Меняет assignedWorkgroupId."
+    },
+    {
+      "section": "Рабочие группы",
+      "method": "POST",
+      "endpoint": "/site/v1/twins/{twinId}/assign-workgroup",
+      "summary": "Назначить цифровой двойник рабочей группе.",
+      "page": "Страница двойника",
+      "auth": "owner/editor/organization_admin",
+      "storage": "нет",
+      "note": "Если двойник ведет отдельная команда."
+    },
+    {
+      "section": "Webhooks от storage",
+      "method": "POST",
+      "endpoint": "/site/v1/webhooks/storage/asset-status",
+      "summary": "Принять статус обработки файла.",
+      "page": "Системный endpoint",
+      "auth": "storage webhook signature",
+      "storage": "вызывает storage",
+      "note": "Обновляет asset.processingStatus/storageStatus."
+    },
+    {
+      "section": "Webhooks от storage",
+      "method": "POST",
+      "endpoint": "/site/v1/webhooks/storage/preview-ready",
+      "summary": "Принять событие готовности preview.",
+      "page": "Системный endpoint",
+      "auth": "storage webhook signature",
+      "storage": "вызывает storage",
+      "note": "Обновляет previewUrl и готовность публикации."
+    },
+    {
+      "section": "Интеграции",
+      "method": "POST",
+      "endpoint": "/site/v1/import/kamis",
+      "summary": "Импорт данных из КАМИС.",
+      "page": "Админка импорта",
+      "auth": "admin/integration",
+      "storage": "нет",
+      "note": "Создает или обновляет карточки сайта."
+    },
+    {
+      "section": "Интеграции",
+      "method": "POST",
+      "endpoint": "/site/v1/import/goskatalog",
+      "summary": "Импорт/сверка с Госкаталогом.",
+      "page": "Админка импорта",
+      "auth": "admin/integration",
+      "storage": "нет",
+      "note": "Заполняет externalIds и метаданные."
+    },
+    {
+      "section": "Интеграции",
+      "method": "POST",
+      "endpoint": "/site/v1/import/egrokn",
+      "summary": "Импорт/сверка с ЕГРОКН.",
+      "page": "Админка импорта",
+      "auth": "admin/integration",
+      "storage": "нет",
+      "note": "Для объектов культурного наследия."
+    },
+    {
+      "section": "Интеграции",
+      "method": "GET",
+      "endpoint": "/site/v1/integrations",
+      "summary": "Список подключенных интеграций.",
+      "page": "Настройки интеграций",
+      "auth": "admin",
+      "storage": "нет",
+      "note": "Ключи, статусы, расписания."
+    },
+    {
+      "section": "Интеграции",
+      "method": "POST",
+      "endpoint": "/site/v1/integrations/{integrationId}/sync",
+      "summary": "Запустить синхронизацию.",
+      "page": "Настройки интеграций",
+      "auth": "admin",
+      "storage": "нет",
+      "note": "Ручной запуск."
+    }
+  ]
+}

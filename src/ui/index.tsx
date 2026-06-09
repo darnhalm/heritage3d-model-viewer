@@ -17,6 +17,7 @@ type PoiUiEntry = {
     title?: string;
     duration?: number;
     holdTime?: number;
+    trigger?: boolean;
 };
 
 const rgbToCssColor = (color?: { r: number; g: number; b: number } | null) => {
@@ -118,7 +119,9 @@ class App extends React.Component<{ observer: Observer }> {
     private getPoiList(): PoiUiEntry[] {
         try {
             const parsed = JSON.parse(String(this.state?.poi?.list ?? '[]'));
-            return Array.isArray(parsed) ? parsed as PoiUiEntry[] : [];
+            // Тур-плеер показывает только обычные точки. Триггеры (привязаны к нотам)
+            // — отдельный тип, в тур/навигацию/слайдшоу не входят.
+            return Array.isArray(parsed) ? (parsed as PoiUiEntry[]).filter(p => !p.trigger) : [];
         } catch {
             return [];
         }

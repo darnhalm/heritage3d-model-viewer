@@ -16,6 +16,8 @@ type PoiItem = {
     description?: string;
     duration?: number;
     holdTime?: number;
+    trigger?: boolean;
+    systemName?: string;
     camera?: unknown;
 };
 
@@ -47,6 +49,8 @@ type ViewerApi = {
     clearPoiCameraView?: (id: string) => void;
     updatePoiDuration?: (id: string, value: number) => void;
     updatePoiHoldTime?: (id: string, value: number) => void;
+    updatePoiTrigger?: (id: string, value: boolean) => void;
+    updatePoiSystemName?: (id: string, value: string) => void;
     removePoi?: (id: string) => void;
 };
 
@@ -122,6 +126,8 @@ const parsePoiList = (raw: string | undefined): PoiItem[] => parseJsonArray<PoiI
         description: typeof candidate.description === 'string' ? candidate.description : undefined,
         duration: typeof candidate.duration === 'number' ? candidate.duration : undefined,
         holdTime: typeof candidate.holdTime === 'number' ? candidate.holdTime : undefined,
+        trigger: typeof candidate.trigger === 'boolean' ? candidate.trigger : undefined,
+        systemName: typeof candidate.systemName === 'string' ? candidate.systemName : undefined,
         camera: candidate.camera
     };
 });
@@ -1201,41 +1207,64 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     onChange={(value: string) => getViewer()?.updatePoiTitle?.(String(poi.id), value)}
                                                 />
                                             </div>
+                                            <div className='poi-trigger-row' style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '6px 0' }}>
+                                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>
+                                                    <input
+                                                        type='checkbox'
+                                                        checked={!!poi.trigger}
+                                                        onChange={(event: any) => getViewer()?.updatePoiTrigger?.(String(poi.id), event.currentTarget.checked)}
+                                                    />
+                                                    {t('Trigger', lang)}
+                                                </label>
+                                                {poi.trigger ? (
+                                                    <TextInput
+                                                        class='poi-list-input'
+                                                        placeholder={t('Short name', lang)}
+                                                        value={String(poi.systemName ?? '')}
+                                                        onChange={(value: string) => getViewer()?.updatePoiSystemName?.(String(poi.id), value)}
+                                                    />
+                                                ) : null}
+                                            </div>
                                             <ColorPickerControl
                                                 label={t('Color', lang)}
                                                 value={hexToArr(poi.color)}
                                                 setProperty={(value: number[]) => getViewer()?.updatePoiColor?.(String(poi.id), arrToHex(value))}
                                             />
-                                            <div className='poi-description-field'>
-                                                <textarea
-                                                    className='poi-list-description'
-                                                    value={String(poi.description ?? '')}
-                                                    maxLength={636}
-                                                    placeholder={t('Description', lang)}
-                                                    onChange={event => getViewer()?.updatePoiDescription?.(String(poi.id), event.target.value)}
-                                                />
-                                            </div>
-                                            <div className='poi-list-actions poi-list-actions-secondary'>
-                                                <button
-                                                    type='button'
-                                                    className={`poi-list-secondary-button${poi.camera ? ' is-saved' : ''}`}
-                                                    onClick={() => getViewer()?.capturePoiCameraView?.(String(poi.id))}
-                                                >
-                                                    <img src='static/icons/poi-capture-view.svg' alt='' className='poi-list-secondary-button-icon' />
-                                                    {t(poi.camera ? 'Retake View' : 'Capture View', lang)}
-                                                </button>
-                                                {poi.camera ? (
+                                            {!poi.trigger && (
+                                                <div className='poi-description-field'>
+                                                    <textarea
+                                                        className='poi-list-description'
+                                                        value={String(poi.description ?? '')}
+                                                        maxLength={636}
+                                                        placeholder={t('Description', lang)}
+                                                        onChange={event => getViewer()?.updatePoiDescription?.(String(poi.id), event.target.value)}
+                                                    />
+                                                </div>
+                                            )}
+                                            {!poi.trigger && (
+                                                <div className='poi-list-actions poi-list-actions-secondary'>
                                                     <button
                                                         type='button'
-                                                        className='poi-list-secondary-button poi-list-secondary-button-delete-view'
-                                                        onClick={() => getViewer()?.clearPoiCameraView?.(String(poi.id))}
+                                                        className={`poi-list-secondary-button${poi.camera ? ' is-saved' : ''}`}
+                                                        onClick={() => getViewer()?.capturePoiCameraView?.(String(poi.id))}
                                                     >
-                                                        <img src='static/icons/poi-delete-view.svg' alt='' className='poi-list-secondary-button-icon' />
-                                                        {t('Delete View', lang)}
+                                                        <img src='static/icons/poi-capture-view.svg' alt='' className='poi-list-secondary-button-icon' />
+                                                        {t(poi.camera ? 'Retake View' : 'Capture View', lang)}
                                                     </button>
-                                                ) : null}
-                                            </div>
+                                                    {poi.camera ? (
+                                                        <button
+                                                            type='button'
+                                                            className='poi-list-secondary-button poi-list-secondary-button-delete-view'
+                                                            onClick={() => getViewer()?.clearPoiCameraView?.(String(poi.id))}
+                                                        >
+                                                            <img src='static/icons/poi-delete-view.svg' alt='' className='poi-list-secondary-button-icon' />
+                                                            {t('Delete View', lang)}
+                                                        </button>
+                                                    ) : null}
+                                                </div>
+                                            )}
                                             <div className='poi-list-actions'>
+                                                {!poi.trigger && (
                                                 <div className='poi-list-sliders' style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                                     <div className='poi-list-duration'>
                                                         <span title={t('Transition', lang)} style={{ width: 24, display: 'inline-block', textAlign: 'center' }}>
@@ -1272,6 +1301,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                         </div>
                                                     </div>
                                                 </div>
+                                                )}
                                                 <button
                                                     type='button'
                                                     className='poi-list-delete'
