@@ -158,6 +158,9 @@ class PoiController {
             const grabbedPoiId = this.findPoiNearScreenPoint(canvasX, canvasY);
             if (grabbedPoiId) {
                 this.draggingPoiId = grabbedPoiId;
+                // Select in list immediately — event.preventDefault() below will
+                // suppress the subsequent click event in most browsers.
+                this.setActivePoi(grabbedPoiId);
                 this.poiIsPotentialClick = false;
                 this.poiClickDown = null;
                 event.preventDefault();
