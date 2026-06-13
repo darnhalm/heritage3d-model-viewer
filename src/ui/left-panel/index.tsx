@@ -690,7 +690,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'posteffects'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'posteffects', 'animation.list'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) ||
@@ -875,6 +875,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const { tab, draggingPoiId, dragOverPoiId, dragX, dragY } = this.state;
         const { observerData, setProperty } = this.props;
         const lang = observerData?.ui?.language;
+        const animTracks: string[] = (() => {
+            try { const l = JSON.parse(observerData?.animation?.list ?? '[]'); return Array.isArray(l) ? l.filter((s: unknown) => typeof s === 'string' && s !== 'ALL_TRACKS') : []; }
+            catch { return []; }
+        })();
         const embedEnabled = !!observerData?.ui?.embed?.enabled;
         const embedPreset = observerData?.ui?.embed?.preset;
         const showMaterialsTab = !embedEnabled && !observerData?.scene?.hasGsplat;
@@ -1221,12 +1225,25 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             </div>
                                             {poi.trigger ? (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '4px 0 6px' }}>
-                                                    <TextInput
-                                                        class='poi-list-input'
-                                                        placeholder={t('Anim clip', lang)}
-                                                        value={String(poi.animClip ?? '')}
-                                                        onChange={(value: string) => getViewer()?.updatePoiAnimClip?.(String(poi.id), value)}
-                                                    />
+                                                    {animTracks.length > 0 ? (
+                                                        <select
+                                                            value={poi.animClip ?? ''}
+                                                            onChange={(e: any) => getViewer()?.updatePoiAnimClip?.(String(poi.id), e.target.value)}
+                                                            style={{ fontSize: 11, padding: '2px 4px', borderRadius: 3, border: '1px solid var(--pcui-border-color, #444)', background: 'var(--pcui-background, #222)', color: 'inherit', width: '100%' }}
+                                                        >
+                                                            <option value=''>— {t('Anim clip', lang)} —</option>
+                                                            {animTracks.map((clip: string) => (
+                                                                <option key={clip} value={clip}>{clip}</option>
+                                                            ))}
+                                                        </select>
+                                                    ) : (
+                                                        <TextInput
+                                                            class='poi-list-input'
+                                                            placeholder={t('Anim clip', lang)}
+                                                            value={String(poi.animClip ?? '')}
+                                                            onChange={(value: string) => getViewer()?.updatePoiAnimClip?.(String(poi.id), value)}
+                                                        />
+                                                    )}
                                                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                                                         <input
                                                             type='number'
