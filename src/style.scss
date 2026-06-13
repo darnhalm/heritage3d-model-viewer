@@ -132,6 +132,13 @@ select {
     object-position: center center;
     filter: blur(10px);
     transform: scale(1.04);
+    /* Плавно проявляем размытую заставку поверх фона — без резкого «выскока». */
+    animation: h3d-backdrop-fade 0.35s ease forwards;
+}
+
+@keyframes h3d-backdrop-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 #embed-start-button {
@@ -2094,6 +2101,20 @@ input {
     color: #fff;
 }
 
+#alignment-panel .alignment-dimension-summary {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 2px 8px 10px;
+}
+
+#alignment-panel .alignment-dimension-summary .panel-label {
+    width: 100%;
+    color: #b8c0cc;
+    font-size: 11px;
+    line-height: 1.35;
+    white-space: normal;
+}
+
 /* ID panel — plain HTML, no pcui for text */
 .id-panel {
     display: flex;
@@ -2844,6 +2865,9 @@ input {
     inset: 0;
     z-index: 4;
     pointer-events: none;
+    /* Плавный переход от нейтрального дефолта к «правильному» цвету сцены —
+       чтобы не мелькал резкий кадр под прогресс-баром. */
+    transition: background-color 0.25s ease;
 }
 
 .load-progress-value {

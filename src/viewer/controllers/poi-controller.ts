@@ -669,8 +669,16 @@ class PoiController {
                     if (cur?.trigger) {
                         // Каждый клик по триггеру — отдельный «хит» (нота играется КАЖДЫЙ
                         // раз, даже повторно), мимо дедупликации по activeId.
+                        // Анимационный диапазон точки кладём прямо в хит, чтобы плеер
+                        // проиграл его сам, не завися от внешнего хоста.
                         this.observer.set('poi.triggerHit', JSON.stringify({
-                            id: cur.id, systemName: cur.systemName ?? '', ts: Date.now()
+                            id: cur.id,
+                            systemName: cur.systemName ?? '',
+                            animClip: cur.animClip ?? null,
+                            animFrom: cur.animFrom ?? null,
+                            animTo: cur.animTo ?? null,
+                            animFps: cur.animFps ?? null,
+                            ts: Date.now()
                         }));
                         this.pulsePoi(cur.id);
                     } else {

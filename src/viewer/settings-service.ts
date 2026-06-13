@@ -32,7 +32,7 @@ type SettingsServiceArgs = {
 };
 
 class SettingsService {
-    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'poi', 'enableWebGPU', 'metadata'];
+    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi', 'enableWebGPU'];
 
     private static readonly SETTINGS_FILTER_PATHS = ['skybox.options', 'debug.renderMode'];
 
@@ -286,6 +286,13 @@ class SettingsService {
             debug: options.debug,
             shadowCatcher: options.shadowCatcher,
             measure: options.measure,
+            dimensionBox: (() => {
+                const d = options.dimensionBox;
+                // Размеры/центр сохраняем, но включённость — нет (сессионный инструмент).
+                return d && typeof d === 'object' && !Array.isArray(d)
+                    ? { ...(d as Record<string, unknown>), enabled: false }
+                    : d;
+            })(),
             poi: {
                 list: (() => {
                     try {
@@ -375,6 +382,9 @@ class SettingsService {
         o.set('measure.pointCount', 0);
         o.set('measure.knownDistance', 0);
         o.set('measure.knownDistanceWarning', false);
+        o.set('dimensionBox.enabled', false);
+        o.set('dimensionBox.size', [1, 1, 1]);
+        o.set('dimensionBox.center', [0, 0, 0]);
         o.set('poi.enabled', false);
         o.set('poi.list', '[]');
         this.onMeasurementReset();
@@ -407,6 +417,12 @@ class SettingsService {
                     return clampFinite(value, 0, 7);
                 case 'poi.list':
                     return Array.isArray(value) ? JSON.stringify(value) : '[]';
+                case 'dimensionBox.size':
+                case 'dimensionBox.center': {
+                    if (!Array.isArray(value) || value.length < 3) return null;
+                    const tuple = value.slice(0, 3).map((entry) => Number(entry));
+                    return tuple.every((entry) => Number.isFinite(entry)) ? tuple : null;
+                }
                 default:
                     return value;
             }
@@ -424,6 +440,12 @@ class SettingsService {
         };
         const loadRec = (path: string, value: unknown): void => {
             if (filter.indexOf(path) !== -1) return;
+            // Бокс размеров — сессионный инструмент: НЕ восстанавливаем его включённым
+            // из сохранённых настроек, иначе он «висит» поверх модели после загрузки.
+            if (path === 'dimensionBox.enabled') {
+                this.observer.set(path, false);
+                return;
+            }
             if (colorPaths.indexOf(path) !== -1) {
                 const rgb = toRgb(value);
                 if (rgb) {
@@ -440,7 +462,7 @@ class SettingsService {
                 });
             } else {
                 const safeValue = sanitizeLeaf(path, value);
-                if (numericPaths.has(path) && safeValue == null) return;
+                if ((numericPaths.has(path) || path === 'dimensionBox.size' || path === 'dimensionBox.center') && safeValue == null) return;
                 if (path !== 'skybox.value' || safeValue === 'None' || this.skyboxUrls.has(safeValue as string)) {
                     this.observer.set(path, safeValue);
                 }

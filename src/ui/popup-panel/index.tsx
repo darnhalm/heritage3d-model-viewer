@@ -61,7 +61,9 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
         const lang = this.props.observerData?.ui?.language;
         const embed = this.props.observerData?.ui?.embed;
         const embedPreset = embed?.preset;
-        const showAnimationControls = !(embed?.enabled && embedPreset === 'minimal');
+        // Вне встройки — всегда; во встройке — по флагу animControls (его дефолт
+        // зависит от пресета: full/compact → вкл, minimal → выкл).
+        const showAnimationControls = !(embed?.enabled) || embed?.animControls !== false;
         const showInfoButton = !(embed?.enabled) || embed.info || embed.controls;
         const showMeasureButton = !(embed?.enabled) || embed.measure;
         const showFitButton = !(embed?.enabled) || embed.fit;

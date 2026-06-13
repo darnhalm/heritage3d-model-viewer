@@ -120,6 +120,8 @@ const observerData: ObserverData = {
             enabled: false,
             preset: 'full',
             autoplay: true,
+            animAutoplay: true,
+            animControls: true,
             waiting: false,
             placeholderUrl: null,
             panel: true,
@@ -228,6 +230,7 @@ const observerData: ObserverData = {
         textureVRAM: null,
         meshVRAM: null,
         bounds: null,
+        boundsCenter: null,
         materialChannelsWithTextures: '[]',
         materialChannelFilenames: '{}',
         selectedMaterialNames: '[]',
@@ -278,6 +281,11 @@ const observerData: ObserverData = {
         knownDistance: 0,
         knownDistanceWarning: false
     },
+    dimensionBox: {
+        enabled: false,
+        size: [1, 1, 1],
+        center: [0, 0, 0]
+    },
     posteffects: {
         bloom: {
             enabled: false,
@@ -313,27 +321,10 @@ const observerData: ObserverData = {
     morphs: null,
     enableWebGPU: false,
     centerScene: false,
+    // Метаданные убраны из плеера (источник правды — портал). Остаётся только
+    // невидимый идентификатор для связи файла с записью инструмента.
     metadata: {
-        title: '',
-        creator: '',
-        subject: '',
-        description: '',
-        publisher: '',
-        contributor: '',
-        date: '',
-        type: '',
-        format: '',
-        identifier: '',
-        source: '',
-        language: '',
-        relation: '',
-        coverage: '',
-        rights: '',
-        egrokn: false,
-        egroknLevel: 'federal',
-        objectNumber: '',
-        isMuseumItem: false,
-        goskatalogLink: ''
+        identifier: ''
     }
 };
 
@@ -374,6 +365,7 @@ const saveOptions = (observer: Observer, name: string) => {
         debug,
         shadowCatcher: options.shadowCatcher,
         measure: options.measure,
+        dimensionBox: options.dimensionBox,
         enableWebGPU: options.enableWebGPU,
         metadata: options.metadata ?? {},
         ui: { language: options.ui?.language }
@@ -431,14 +423,18 @@ const main = () => {
         embedPresetParam :
         'full';
     const embedDefaults = {
-        full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, fullscreen: true, fit: true, reset: true },
-        compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, fullscreen: true, fit: true, reset: true },
-        minimal: { panel: false, poi: true, tour: true, measure: false, info: false, modelInfo: false, controls: false, fullscreen: true, fit: false, reset: true }
+        full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, fullscreen: true, fit: true, reset: true, animAutoplay: true, animControls: true },
+        compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, fullscreen: true, fit: true, reset: true, animAutoplay: true, animControls: true },
+        minimal: { panel: false, poi: true, tour: true, measure: false, info: false, modelInfo: false, controls: false, fullscreen: true, fit: false, reset: true, animAutoplay: true, animControls: false }
     } as const;
     const embedConfig: NonNullable<ObserverData['ui']['embed']> = {
         enabled: embedEnabled,
         preset: embedPreset,
         autoplay: parseBool('autoplay', true),
+        // Автозапуск анимации при загрузке и показ контроллера анимации — отдельные
+        // флаги встройки (по умолчанию включены, чтобы не менять текущее поведение).
+        animAutoplay: parseBool('animAutoplay', embedDefaults[embedPreset].animAutoplay),
+        animControls: parseBool('animControls', embedDefaults[embedPreset].animControls),
         waiting: false,
         placeholderUrl: null,
         panel: parseBool('panel', embedDefaults[embedPreset].panel),
@@ -457,6 +453,8 @@ const main = () => {
         'ui',
         'panel',
         'autoplay',
+        'animAutoplay',
+        'animControls',
         'poi',
         'tour',
         'measure',
@@ -467,7 +465,8 @@ const main = () => {
         'fit',
         'reset',
         'lang',
-        'perf'
+        'perf',
+        'poster'
     ]);
 
     initMaterials();
@@ -666,11 +665,22 @@ const main = () => {
                 }
                 case 'play-animation': {
                     setAnimationClip(data.clip);
+                    const duration = getActiveAnimationDuration();
                     const time = resolveTime(data);
                     if (time !== null) {
                         seekAnimationToTime(time);
                     }
+                    // Автостоп по кадру 'to' (в секунды через fps, по умолчанию 24).
+                    // Зажимаем по длительности клипа: кадр за пределами клипа → стоп в конце.
+                    let stopTime: number | null = null;
+                    if (typeof data.to === 'number') {
+                        const fps = typeof data.fps === 'number' && data.fps > 0 ? data.fps : 24;
+                        stopTime = data.to / fps;
+                        if (duration > 0) stopTime = Math.min(stopTime, duration);
+                    }
                     viewer.play();
+                    // Ставим ПОСЛЕ play()/seek: seek снимает автостоп, play() его не трогает.
+                    viewer.setAnimationStopTime(stopTime);
                     break;
                 }
                 case 'pause-animation': {
@@ -701,6 +711,10 @@ const main = () => {
 
             if (activeId) {
                 const poi = poiList.find(entry => entry.id === activeId);
+                // playing=true → переключение пришло от плеера тура. Хост по этому
+                // флагу НЕ перематывает текст к точке (иначе тур постоянно уводит
+                // страницу от окна модели), а только подсвечивает её.
+                const tourPlaying = !!observer.get('poi.playing');
                 window.parent?.postMessage({
                     type: 'poi-selected',
                     id: activeId,
@@ -709,7 +723,8 @@ const main = () => {
                     description: poi?.description ?? null,
                     color: poi?.color ?? null,
                     trigger: poi?.trigger ?? false,
-                    systemName: poi?.systemName ?? null
+                    systemName: poi?.systemName ?? null,
+                    tour: tourPlaying
                 }, '*');
             } else {
                 window.parent?.postMessage({
@@ -718,19 +733,29 @@ const main = () => {
             }
         });
 
-        // Каждый клик по точке-триггеру (даже повторный по той же) → отдельный
-        // poi-selected{trigger} хосту, чтобы нота играла КАЖДЫЙ раз.
+        // Каждый клик по точке-триггеру (даже повторный по той же).
         observer.on('poi.triggerHit:set', (raw: string) => {
             try {
                 const hit = JSON.parse(String(raw || '{}'));
-                if (hit && hit.systemName) {
-                    window.parent?.postMessage({
-                        type: 'poi-selected',
-                        id: hit.id,
-                        trigger: true,
-                        systemName: hit.systemName
-                    }, '*');
+                if (!hit || !hit.id) return;
+                // Анимацию точки плеер играет САМ — диапазон пришёл в самом хите.
+                // Не зависим от внешнего хоста: работает в редакторе и автономно.
+                if (hit.animClip || hit.animFrom != null || hit.animTo != null) {
+                    const msg: Record<string, unknown> = { type: 'play-animation' };
+                    if (hit.animClip) msg.clip = hit.animClip;
+                    if (hit.animFrom != null) msg.frame = hit.animFrom;
+                    if (hit.animTo != null) msg.to = hit.animTo;
+                    if (hit.animFps != null) msg.fps = hit.animFps;
+                    window.postMessage(msg, '*');
                 }
+                // Хосту — только нота сэмплера (звук живёт на стороне сайта).
+                // systemName необязателен: триггер может быть чисто анимационным.
+                window.parent?.postMessage({
+                    type: 'poi-selected',
+                    id: hit.id,
+                    trigger: true,
+                    systemName: hit.systemName || null
+                }, '*');
             } catch { /* ignore */ }
         });
 
@@ -743,11 +768,12 @@ const main = () => {
             });
             const clip = observer.get('animation.selectedTrack') ?? null;
             const fps = 24;
+            const time = progress * duration;
             window.parent?.postMessage({
                 type: 'animation-time',
                 clip,
-                time: progress * duration,
-                frame: Math.round(progress * duration * fps),
+                time,
+                frame: Math.round(time * fps),
                 fps,
                 duration,
                 progress
@@ -779,6 +805,13 @@ const main = () => {
                     const loadUrl = decodeURIComponent(value);
                     const absoluteUrl = loadUrl.startsWith('http') ? loadUrl : new URL(loadUrl, window.location.href).href;
                     files.push({ url: absoluteUrl, filename: loadUrl });
+                    break;
+                }
+                case 'id':
+                case 'efkId': {
+                    // Невидимый идентификатор для связи файла с записью инструмента
+                    // на портале. UI не показывает — метаданные живут на портале.
+                    if (value) observer.set('metadata.identifier', value);
                     break;
                 }
                 case 'cameraPosition': {
@@ -823,7 +856,12 @@ const main = () => {
 
         Promise.all(promises).then(async () => {
             if (files.length > 0) {
-                const placeholderUrl = embedConfig.enabled ? await findEmbedPlaceholder(files) : null;
+                // Заставка-заглушка: приоритет — явный ?poster= (ручной/авто URL с
+                // хоста), иначе ищем по имени файла модели (model.png рядом).
+                const posterParam = url.searchParams.get('poster'); // get() уже декодирует
+                const placeholderUrl = posterParam
+                    ? posterParam
+                    : (embedConfig.enabled ? await findEmbedPlaceholder(files) : null);
                 observer.set('ui.embed.placeholderUrl', placeholderUrl);
                 if (embedConfig.enabled && !embedConfig.autoplay) {
                     observer.set('ui.embed.waiting', true);

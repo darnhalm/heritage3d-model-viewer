@@ -45,7 +45,27 @@
 
 ---
 
-## 3. Документация
+## 3. Размерный бокс объекта (Dimension Box)
+
+**Описание:** В панели **Alignment** добавлен измерительный каркас поверх модели. Он нужен для калибровки сцены и фиксации примерных реальных размеров предмета.
+
+**Функции:**
+- Включение/выключение через **Show dimension box**
+- Кнопка **Box from Model Bounds** строит стартовый бокс по текущим границам модели после выравнивания
+- Редактирование **Width / Height / Depth** в выбранных единицах измерения (`mm`, `cm`, `m`)
+- Визуализация отдельным цветным каркасом поверх модели
+- Экспорт/импорт в `model.model-viewer-settings.json` через поле `dimensionBox`
+
+**Формат JSON:**
+- `dimensionBox.enabled`
+- `dimensionBox.size` — `[x, y, z]` в единицах сцены/модели
+- `dimensionBox.center` — `[x, y, z]` в координатах сцены
+
+Реальные размеры считаются как `dimensionBox.size * measure.unitScale` и затем переводятся в выбранные `measure.unit`.
+
+---
+
+## 4. Документация
 
 | Файл | Назначение |
 |------|------------|
@@ -57,7 +77,7 @@
 
 ---
 
-## 4. Вспомогательные изменения
+## 5. Вспомогательные изменения
 
 - **Иконки во вкладке Materials:** слева от надписей отображаются иконки в `static/icons/` — `final-render-icon.svg` (Final Render), `diffuse-icon.svg` (Base Color), `metalness-icon.svg` (Metalness)
 - **CameraControls:** методы `getPosition()` и `getFocus()` для экспорта позиции и фокуса камеры
@@ -109,3 +129,30 @@
 **Документация для разработчиков:** [POST-EFFECTS.md](./POST-EFFECTS.md).
 
 Кратко: при `autoRender === false` после изменения очереди/параметров post-effects нужно вызывать **`renderNextFrame()`**, иначе при неподвижной камере кадр не перерисуется и эффекты кажутся «мёртвыми».
+
+---
+
+## Интеграция с хостом: `export-project` / `export-settings` / `export-cover`
+
+**Что это.** Вьюер встраивается в админку etnophonica как iframe. По postMessage хост
+просит отдать настройки/обложку/модель: типы `export-settings`, `export-cover`,
+`export-project` (обработчик в `viewer.ts`, см. `window.addEventListener('message', …)`).
+На каждый приходит ответ `*-result` с тем же `requestId`. Кнопка «Сохранить в проект»
+в админке шлёт `export-project` и ждёт `export-project-result`.
+
+**⚠️ Подводный камень — зависание `captureCoverImage()` (2026-06-08).**
+`captureCoverImage()` рендерит кадр в отдельный RenderTarget и ждёт событие
+`app.once('postrender', …)` после `renderNextFrame()`. Если рендер-луп в этот момент
+**простаивает** (типично сразу после перезаливки модели / при `autoRender=false`),
+`postrender` не наступает → промис **никогда не резолвится** → обработчик
+`export-project` висит вечно → хост через 25 с показывает «Вьюер не ответил».
+
+**Инвариант (чтобы не повторилось):** любой async-ответ хосту ОБЯЗАН завершаться.
+В `captureCoverImage` стоит таймаут-страховка (`safetyTimer`, 8 с): если `postrender`
+не пришёл — чистим RenderTarget (`cleanupCoverCapture`) и `resolve(null)`. Гард
+`settled` гарантирует один резолв. При добавлении новых `export-*` ответов, зависящих
+от рендера/сети, **всегда** оборачивай ожидание таймаутом и в `catch` шли `export-error`.
+
+**На стороне хоста** (`etnophonica/.../Model3DPanel.tsx`): `onMsg` обрабатывает и
+`export-error`, и `export-project-result`, и имеет свой таймаут — чтобы спиннер
+«Сохранение…» не крутился вечно ни при каком ответе вьюера.

@@ -259,21 +259,21 @@ class DebugLines {
         this.vertexCursor = 0;
     }
 
-    box(min: Vec3, max: Vec3): void {
-        this.line(new Vec3(min.x, min.y, min.z), new Vec3(max.x, min.y, min.z));
-        this.line(new Vec3(max.x, min.y, min.z), new Vec3(max.x, min.y, max.z));
-        this.line(new Vec3(max.x, min.y, max.z), new Vec3(min.x, min.y, max.z));
-        this.line(new Vec3(min.x, min.y, max.z), new Vec3(min.x, min.y, min.z));
+    box(min: Vec3, max: Vec3, clr = 0xffffffff): void {
+        this.line(new Vec3(min.x, min.y, min.z), new Vec3(max.x, min.y, min.z), clr);
+        this.line(new Vec3(max.x, min.y, min.z), new Vec3(max.x, min.y, max.z), clr);
+        this.line(new Vec3(max.x, min.y, max.z), new Vec3(min.x, min.y, max.z), clr);
+        this.line(new Vec3(min.x, min.y, max.z), new Vec3(min.x, min.y, min.z), clr);
 
-        this.line(new Vec3(min.x, max.y, min.z), new Vec3(max.x, max.y, min.z));
-        this.line(new Vec3(max.x, max.y, min.z), new Vec3(max.x, max.y, max.z));
-        this.line(new Vec3(max.x, max.y, max.z), new Vec3(min.x, max.y, max.z));
-        this.line(new Vec3(min.x, max.y, max.z), new Vec3(min.x, max.y, min.z));
+        this.line(new Vec3(min.x, max.y, min.z), new Vec3(max.x, max.y, min.z), clr);
+        this.line(new Vec3(max.x, max.y, min.z), new Vec3(max.x, max.y, max.z), clr);
+        this.line(new Vec3(max.x, max.y, max.z), new Vec3(min.x, max.y, max.z), clr);
+        this.line(new Vec3(min.x, max.y, max.z), new Vec3(min.x, max.y, min.z), clr);
 
-        this.line(new Vec3(min.x, min.y, min.z), new Vec3(min.x, max.y, min.z));
-        this.line(new Vec3(max.x, min.y, min.z), new Vec3(max.x, max.y, min.z));
-        this.line(new Vec3(max.x, min.y, max.z), new Vec3(max.x, max.y, max.z));
-        this.line(new Vec3(min.x, min.y, max.z), new Vec3(min.x, max.y, max.z));
+        this.line(new Vec3(min.x, min.y, min.z), new Vec3(min.x, max.y, min.z), clr);
+        this.line(new Vec3(max.x, min.y, min.z), new Vec3(max.x, max.y, min.z), clr);
+        this.line(new Vec3(max.x, min.y, max.z), new Vec3(max.x, max.y, max.z), clr);
+        this.line(new Vec3(min.x, min.y, max.z), new Vec3(min.x, max.y, max.z), clr);
     }
 
     line(v0: Vec3, v1: Vec3, clr = 0xffffffff): void {

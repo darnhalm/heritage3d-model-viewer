@@ -201,15 +201,6 @@ const STEP_DEFS: StepDef[] = [
         align: 'start'
     },
     {
-        switchTab: '.left-panel-tab-metadata',
-        elementSelector: '#metadata-panel',
-        fallbackSelector: '.left-panel-tab-metadata',
-        titleKey: 'Tour: Metadata title',
-        bodyKey: 'Tour: Metadata body',
-        side: 'right',
-        align: 'start'
-    },
-    {
         switchTab: '.left-panel-tab-scene',
         elementSelector: '.export-settings-button',
         fallbackSelector: '.left-panel-tab-scene',

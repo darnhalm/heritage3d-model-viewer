@@ -40,6 +40,8 @@ export interface ObserverData {
             enabled: boolean,
             preset: 'full' | 'compact' | 'minimal',
             autoplay: boolean,
+            animAutoplay: boolean,
+            animControls: boolean,
             waiting?: boolean,
             placeholderUrl?: string | null,
             panel: boolean,
@@ -160,6 +162,7 @@ export interface ObserverData {
         textureVRAM?: number,
         meshVRAM?: number,
         bounds?: any,
+        boundsCenter?: any,
         materialChannelsWithTextures?: string,
         materialChannelFilenames?: string,
         selectedMaterialNames?: string,
@@ -232,6 +235,13 @@ export interface ObserverData {
         /** Warning shown when scene-scale calibration collapses multiple distance segments to one. */
         knownDistanceWarning: boolean
     },
+    dimensionBox: {
+        enabled: boolean,
+        /** Box dimensions in scene/model units. Real size = size * measure.unitScale. */
+        size: [number, number, number],
+        /** Box center in scene/model coordinates. */
+        center: [number, number, number]
+    },
     posteffects?: {
         bloom: { enabled: boolean; intensity: number; threshold: number; blurAmount: number };
         ssao: { enabled: boolean; radius: number; intensity: number; samples: number };
@@ -242,36 +252,13 @@ export interface ObserverData {
     },
     enableWebGPU: boolean,
     centerScene: boolean,
-    /** Dublin Core metadata */
+    /**
+     * Метаданные убраны из плеера — источник правды портал. Остаётся только
+     * невидимый идентификатор для связи файла с записью инструмента (через ?id=).
+     */
     metadata?: {
-        title?: string;
-        creator?: string;
-        subject?: string;
-        description?: string;
-        publisher?: string;
-        contributor?: string;
-        date?: string;
-        type?: string;
-        format?: string;
         identifier?: string;
-        source?: string;
-        language?: string;
-        relation?: string;
-        coverage?: string;
-        rights?: string;
-        /** ЕГРОКН — объект в реестре культурного наследия */
-        egrokn?: boolean;
-        /** Уровень значения: федеральный, региональный, муниципальный */
-        egroknLevel?: 'federal' | 'regional' | 'municipal';
-        /** Номер объекта */
-        objectNumber?: string;
-        /** Музейный предмет */
-        isMuseumItem?: boolean;
-        /** Ссылка на Госкаталог */
-        goskatalogLink?: string;
     };
 }
 
 export type SetProperty = (path: string, value: any) => void;
-
-export const DUBLIN_CORE_KEYS = ['title', 'creator', 'subject', 'description', 'publisher', 'contributor', 'date', 'type', 'format', 'identifier', 'source', 'language', 'relation', 'coverage', 'rights'] as const;

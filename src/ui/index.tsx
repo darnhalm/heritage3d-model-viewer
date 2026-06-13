@@ -26,7 +26,10 @@ const rgbToCssColor = (color?: { r: number; g: number; b: number } | null) => {
     return `rgb(${channel(color.r)}, ${channel(color.g)}, ${channel(color.b)})`;
 };
 
-const DEFAULT_LOADING_BACKGROUND_COLOR = '#ffffff';
+// Нейтральный тёмно-серый фон загрузки (НЕ белый и НЕ цветной) — чтобы под
+// прогресс-баром не мелькал ни белый кадр, ни «синий» дефолт. Поверх плавно
+// проявляется размытая заставка и подгружается реальный цвет сцены.
+const DEFAULT_LOADING_BACKGROUND_COLOR = '#2b2e33';
 
 class App extends React.Component<{ observer: Observer }> {
     state: ObserverData | null = null;
@@ -135,7 +138,12 @@ class App extends React.Component<{ observer: Observer }> {
         const playing = this.state?.poi?.playing ?? false;
         const prevPlaying = prevState?.poi?.playing ?? false;
 
-        if (poiList !== prevPoiList && poiList !== '[]' && !activeId) {
+        // Авто-фокус первой точки при загрузке нужен ТОЛЬКО для тур-плеера.
+        // Если плеер тура скрыт (tour выключен), не выделяем точку автоматически —
+        // иначе на хосте текст сам прокручивается к «точке интереса 1» при открытии.
+        const embed = this.state?.ui?.embed;
+        const tourPlayerShown = !(embed?.enabled && !embed?.tour);
+        if (tourPlayerShown && poiList !== prevPoiList && poiList !== '[]' && !activeId) {
             const firstPoi = this.getPoiList()[0];
             if (firstPoi?.id) {
                 window.viewer?.focusPoi?.(String(firstPoi.id));

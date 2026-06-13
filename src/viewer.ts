@@ -592,6 +592,10 @@ class Viewer {
 
     suppressAnimationProgressUpdate: boolean;
 
+    // Целевое время (сек) автостопа анимации для проигрывания ограниченного
+    // диапазона (триггерные POI). null — играть без ограничения.
+    animStopTime: number | null = null;
+
     selectedNode: GraphNode | null;
 
     multiframe: Multiframe | null;
@@ -1870,6 +1874,8 @@ class Viewer {
             // animation
             'animation.playing': (playing: boolean) => {
                 if (playing) {
+                    // Ручной play не ограничен диапазоном POI-триггера.
+                    this.animStopTime = null;
                     this.play();
                 } else {
                     this.stop();
@@ -4031,12 +4037,21 @@ class Viewer {
 
     // stop playing animations
     stop() {
+        this.animStopTime = null;
         this.entities.forEach((e) => {
             if (e.anim) {
                 e.anim.playing = false;
                 e.anim.baseLayer?.pause();
             }
         });
+    }
+
+    /**
+     * Задать время (сек) автостопа анимации. Цикл обновления остановит
+     * проигрывание, когда текущее время клипа достигнет цели. null — снять.
+     */
+    setAnimationStopTime(time: number | null) {
+        this.animStopTime = time;
     }
 
     // set the animation speed
@@ -4072,6 +4087,8 @@ class Viewer {
 
     setAnimationProgress(progress: number) {
         if (this.suppressAnimationProgressUpdate) return;
+        // Ручная перемотка — снимаем автостоп диапазона (пользователь взял управление).
+        this.animStopTime = null;
         this.entities.forEach((e) => {
             const anim = e.anim;
             const baseLayer = anim?.baseLayer;
@@ -4786,6 +4803,12 @@ class Viewer {
                 const entity = this.entities[i];
                 if (entity && entity.anim) {
                     const baseLayer = entity.anim.baseLayer;
+                    // Автостоп ограниченного диапазона (POI-триггер): останавливаем,
+                    // когда текущее время клипа достигло цели. Здесь время
+                    // авторитетно (в секундах), в отличие от обработчика progress.
+                    if (this.animStopTime !== null && baseLayer.activeStateCurrentTime >= this.animStopTime) {
+                        this.stop();
+                    }
                     const progress = baseLayer.activeStateCurrentTime / baseLayer.activeStateDuration;
                     this.suppressAnimationProgressUpdate = true;
                     observer.set('animation.progress', progress === 1 ? progress : progress % 1);
@@ -4884,7 +4907,10 @@ class Viewer {
         const animationKeys = Object.keys(this.animationMap);
         animationState.list = JSON.stringify(animationKeys);
         animationState.selectedTrack = animationKeys[0];
-        animationState.playing = true;
+        // Авто-старт анимации можно отключить флагом встройки animAutoplay
+        // (модель грузится и видна, но анимация стоит на паузе на кадре 0).
+        const embed = this.observer.get('ui.embed');
+        animationState.playing = !embed?.enabled || embed?.animAutoplay !== false;
         this.observer.set('animation', animationState);
     }
 

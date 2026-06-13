@@ -811,24 +811,8 @@ class ViewPanel extends React.Component <{
     }
 }
 
-const DUBLIN_CORE_DISPLAY_KEYS = ['title', 'creator', 'subject', 'description', 'publisher', 'contributor', 'date', 'type', 'format', 'identifier', 'source', 'language', 'relation', 'coverage', 'rights'] as const;
-const DUBLIN_CORE_LABELS: Record<string, string> = {
-    title: 'Title',
-    creator: 'Creator',
-    subject: 'Subject',
-    description: 'Description',
-    publisher: 'Publisher',
-    contributor: 'Contributor',
-    date: 'Date',
-    type: 'Type',
-    format: 'Format',
-    identifier: 'Identifier',
-    source: 'Source',
-    language: 'Language',
-    relation: 'Relation',
-    coverage: 'Coverage',
-    rights: 'Rights'
-};
+// Метаданные (Dublin Core) убраны из плеера — источник правды портал.
+// ID-панель показывает только техническую идентификацию узла сцены (путь/имя).
 
 class IDPanel extends React.Component <{
     observerData: ObserverData,
@@ -837,20 +821,15 @@ class IDPanel extends React.Component <{
         observerData: ObserverData;
         setProperty: SetProperty; }>): boolean {
         return JSON.stringify(nextProps.observerData.scene?.selectedNode) !== JSON.stringify(this.props.observerData.scene?.selectedNode) ||
-               JSON.stringify(nextProps.observerData.ui) !== JSON.stringify(this.props.observerData.ui) ||
-               JSON.stringify(nextProps.observerData.metadata) !== JSON.stringify(this.props.observerData.metadata);
+               JSON.stringify(nextProps.observerData.ui) !== JSON.stringify(this.props.observerData.ui);
     }
 
     render() {
         const props = this.props;
         const scene = props.observerData.scene;
-        const metadata = props.observerData.metadata ?? {};
         const lang = props.observerData?.ui?.language;
         const path = scene?.selectedNode?.path ?? '';
         const name = scene?.selectedNode?.name ?? '';
-        const filledFields = DUBLIN_CORE_DISPLAY_KEYS.filter(
-            key => (metadata[key] !== undefined && metadata[key] !== null && String(metadata[key]).trim() !== '')
-        );
 
         const isActive = props.observerData.ui.active === 'id';
         return (
@@ -878,17 +857,6 @@ class IDPanel extends React.Component <{
                             />
                         </>
                     ) : null}
-                    {filledFields.length > 0 && (
-                        <div className='id-panel-section'>
-                            <h3 className='id-panel-heading'>{t('Metadata (Dublin Core)', lang)}</h3>
-                            {filledFields.map(key => (
-                                <div key={key} className='id-panel-row'>
-                                    <span className='id-panel-label'>{t(DUBLIN_CORE_LABELS[key], lang)}</span>
-                                    <span className='id-panel-value'>{String(metadata[key])}</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
                 </div>
             </div>
         );
