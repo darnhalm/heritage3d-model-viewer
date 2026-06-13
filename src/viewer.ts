@@ -785,12 +785,15 @@ class Viewer {
                     reply({ type: 'export-cover-result', cover: png ? bytesToBase64(png) : null });
                 } else if (d.type === 'export-project') {
                     const settings = this.settingsService.getSettingsData();
-                    const png = await this.captureCoverImage();
+                    // Два снимка: вытянутый вьюпорт (заставка-заглушка) и квадрат (обложка).
+                    const splash = await this.captureViewportImage();
+                    const cover = await this.captureCoverImage();
                     const model = d.includeModel ? await getModelExport() : null;
                     reply({
                         type: 'export-project-result',
                         settings,
-                        cover: png ? bytesToBase64(png) : null,
+                        cover: cover ? bytesToBase64(cover) : null,
+                        splash: splash ? bytesToBase64(splash) : null,
                         model
                     });
                 }
@@ -1642,6 +1645,22 @@ class Viewer {
         this.poiController?.updatePoiSystemName(id, systemName);
     }
 
+    updatePoiAnimClip(id: string, value: string) {
+        this.poiController?.updatePoiAnimClip(id, value);
+    }
+
+    updatePoiAnimFrom(id: string, value: number | null) {
+        this.poiController?.updatePoiAnimFrom(id, value);
+    }
+
+    updatePoiAnimTo(id: string, value: number | null) {
+        this.poiController?.updatePoiAnimTo(id, value);
+    }
+
+    updatePoiAnimFps(id: string, value: number | null) {
+        this.poiController?.updatePoiAnimFps(id, value);
+    }
+
     capturePoiCameraView(id: string) {
         this.poiController?.capturePoiCameraView(id);
         this.poiController?.pulsePoi(id);
@@ -1899,6 +1918,18 @@ class Viewer {
             },
             'measure.knownDistance': () => {
                 this.measurementController?.limitToLatestKnownDistanceSegment();
+            },
+            'dimensionBox.enabled': () => {
+                this.dirtyBounds = true;
+                this.renderNextFrame();
+            },
+            'dimensionBox.size': () => {
+                this.dirtyBounds = true;
+                this.renderNextFrame();
+            },
+            'dimensionBox.center': () => {
+                this.dirtyBounds = true;
+                this.renderNextFrame();
             }
         };
 
@@ -2206,6 +2237,13 @@ class Viewer {
         this.uvDebugMode = null;
         this.resetMaterialOverrides();
         this.clearMeasurement();
+
+        // Бокс размеров — сессионный инструмент: гасим при сбросе сцены и чистим
+        // отрисовку, чтобы он не «висел» поверх новой/перезагружаемой модели.
+        this.observer.set('dimensionBox.enabled', false);
+        this.debugBounds.clear();
+        this.debugBounds.update();
+        this.dirtyBounds = true;
 
         // reset animation state
         this.animTracks = [];
@@ -3033,11 +3071,61 @@ class Viewer {
         });
     }
 
+    // Снимает ТЕКУЩИЙ вьюпорт (вытянутый, как канвас) и возвращает PNG-байты
+    // без скачивания — для заставки-заглушки под прогресс-баром на хосте.
+    captureViewportImage(): Promise<Uint8Array | null> {
+        return new Promise((resolve) => {
+            if (!this.pngExporter) {
+                this.pngExporter = new PngExporter();
+            }
+            let settled = false;
+            let timer: ReturnType<typeof setTimeout> | null = null;
+            const done = (v: Uint8Array | null) => {
+                if (settled) return;
+                settled = true;
+                if (timer) clearTimeout(timer);
+                resolve(v);
+            };
+            timer = setTimeout(() => done(null), 8000);
+            this.renderNextFrame();
+            this.app.once('postrender', () => {
+                try {
+                    const texture = this.camera.camera.renderTarget?.colorBuffer;
+                    if (!texture || !texture.width || !texture.height) {
+                        done(null);
+                        return;
+                    }
+                    texture.read(0, 0, texture.width, texture.height).then((typedArray: Uint32Array) => {
+                        return this.pngExporter.encode(
+                            new Uint32Array(typedArray.buffer.slice(0)),
+                            texture.width,
+                            texture.height
+                        );
+                    }).then((png: Uint8Array) => done(png)).catch(() => done(null));
+                } catch {
+                    done(null);
+                }
+            });
+        });
+    }
+
     // Снимает квадратную обложку и возвращает PNG-байты (без скачивания).
     captureCoverImage(): Promise<Uint8Array | null> {
-        return new Promise((resolve) => {
+        return new Promise((rawResolve) => {
             const COVER_SIZE = 1024;
             const device = this.app.graphicsDevice;
+
+            // Гард: резолвим ровно один раз. Нужен для таймаут-страховки ниже —
+            // иначе при простое рендер-лупа (нет postrender) промис висел бы вечно,
+            // а хост получал «Вьюер не ответил» при «Сохранить в проект».
+            let settled = false;
+            let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+            const resolve = (v: Uint8Array | null) => {
+                if (settled) return;
+                settled = true;
+                if (safetyTimer) clearTimeout(safetyTimer);
+                rawResolve(v);
+            };
 
             if (!this.pngExporter) {
                 this.pngExporter = new PngExporter();
@@ -3084,6 +3172,12 @@ class Viewer {
 
             this.camera.camera.renderTarget = squareRT;
             this.focus(false, 1);
+
+            // Если postrender не наступит за 8с — чистим и отдаём null, не зависая.
+            safetyTimer = setTimeout(() => {
+                this.cleanupCoverCapture(squareRT, savedRenderTarget, savedFocus, savedPosition, savedMultiframe);
+                resolve(null);
+            }, 8000);
 
             this.renderNextFrame();
             this.app.once('postrender', () => {
@@ -3370,6 +3464,25 @@ class Viewer {
 
     resetObjectTransform() {
         this.resetSceneTransform();
+    }
+
+    setDimensionBoxFromModelBounds() {
+        this.calcSceneBounds(this.dynamicSceneBounds);
+        const size: [number, number, number] = [
+            Math.max(0.000001, this.dynamicSceneBounds.halfExtents.x * 2),
+            Math.max(0.000001, this.dynamicSceneBounds.halfExtents.y * 2),
+            Math.max(0.000001, this.dynamicSceneBounds.halfExtents.z * 2)
+        ];
+        const center: [number, number, number] = [
+            this.dynamicSceneBounds.center.x,
+            this.dynamicSceneBounds.center.y,
+            this.dynamicSceneBounds.center.z
+        ];
+        this.observer.set('dimensionBox.size', size);
+        this.observer.set('dimensionBox.center', center);
+        this.observer.set('dimensionBox.enabled', true);
+        this.dirtyBounds = true;
+        this.renderNextFrame();
     }
 
     rotateSelectedObject() {
@@ -3757,7 +3870,16 @@ class Viewer {
             // Запоминаем основную модель — мост сможет отдать её байты на хост.
             if (modelFiles[0]) this.lastModelFile = modelFiles[0];
 
+            // Чтобы фон не «мигал» (серый → белый → родной) до прихода настроек:
+            // держим ТЕКУЩИЙ фон через сброс к дефолтам, а родной цвет поставит
+            // preload ниже. Без этого reset перекрашивал в дефолтный серо-голубой.
+            const prevBg = this.observer.get('skybox.background');
+            const prevBgColor = this.observer.get('skybox.backgroundColor');
             this.resetViewerSettingsToDefaults();
+            if (prevBgColor) {
+                this.observer.set('skybox.background', prevBg);
+                this.observer.set('skybox.backgroundColor', prevBgColor);
+            }
             this.observer.set('ui.spinner', true);
             this.observer.set('ui.loadProgress', 0);
             this.observer.set('ui.loadingBackgroundReady', false);
@@ -4112,6 +4234,24 @@ class Viewer {
     }
 
     private transformPoisBetween(previousTransform: Mat4, nextTransform: Mat4) {
+        const previousInverse = new Mat4().copy(previousTransform).invert();
+
+        // Бокс размеров следует за моделью: переносим его центр тем же
+        // преобразованием. Делаем это ДО раннего выхода по отсутствию POI,
+        // чтобы бокс двигался даже когда точек интереса нет.
+        if (this.observer.get('dimensionBox.enabled')) {
+            const c = this.observer.get('dimensionBox.center') as unknown;
+            if (Array.isArray(c) && c.length >= 3) {
+                const bp = new Vec3(Number(c[0]) || 0, Number(c[1]) || 0, Number(c[2]) || 0);
+                const bl = new Vec3();
+                const bw = new Vec3();
+                previousInverse.transformPoint(bp, bl);
+                nextTransform.transformPoint(bl, bw);
+                this.observer.set('dimensionBox.center', [bw.x, bw.y, bw.z]);
+                this.dirtyBounds = true;
+            }
+        }
+
         const poiListRaw = this.observer.get('poi.list');
         if (!poiListRaw) {
             return;
@@ -4127,7 +4267,6 @@ class Viewer {
             return;
         }
 
-        const previousInverse = new Mat4().copy(previousTransform).invert();
         const point = new Vec3();
         const localPoint = new Vec3();
         const worldPoint = new Vec3();
@@ -5049,6 +5188,23 @@ class Viewer {
                 this.calcSceneBounds(bbox, this.selectedNode as Entity);
                 this.debugBounds.box(bbox.getMin(), bbox.getMax());
             }
+            if (this.observer.get('dimensionBox.enabled')) {
+                const size = this.observer.get('dimensionBox.size') as [number, number, number] | undefined;
+                const center = this.observer.get('dimensionBox.center') as [number, number, number] | undefined;
+                if (Array.isArray(size) && Array.isArray(center) && size.length >= 3 && center.length >= 3) {
+                    const sx = Math.max(0.000001, Number(size[0]) || 0.000001);
+                    const sy = Math.max(0.000001, Number(size[1]) || 0.000001);
+                    const sz = Math.max(0.000001, Number(size[2]) || 0.000001);
+                    const cx = Number(center[0]) || 0;
+                    const cy = Number(center[1]) || 0;
+                    const cz = Number(center[2]) || 0;
+                    this.debugBounds.box(
+                        new Vec3(cx - sx / 2, cy - sy / 2, cz - sz / 2),
+                        new Vec3(cx + sx / 2, cy + sy / 2, cz + sz / 2),
+                        0xff33d6ff
+                    );
+                }
+            }
             this.debugBounds.update();
 
             this.tmpBoundsSize.set(
@@ -5057,6 +5213,7 @@ class Viewer {
                 this.dynamicSceneBounds.halfExtents.z * 2
             );
             this.observer.set('scene.bounds', this.tmpBoundsSize.toString());
+            this.observer.set('scene.boundsCenter', this.dynamicSceneBounds.center.toString());
         }
 
         // debug normals

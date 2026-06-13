@@ -18,6 +18,10 @@ type PoiItem = {
     holdTime?: number;
     trigger?: boolean;
     systemName?: string;
+    animClip?: string;
+    animFrom?: number;
+    animTo?: number;
+    animFps?: number;
     camera?: unknown;
 };
 
@@ -37,6 +41,7 @@ type ViewerApi = {
     setObjectPivotToCenter?: () => void;
     resetObjectTransform?: () => void;
     frameScene?: () => void;
+    setDimensionBoxFromModelBounds?: () => void;
     pulsePois?: () => void;
     reorderPoi?: (sourceId: string, targetId: string) => void;
     setSelectedMaterialFactor?: (channel: 'metallic' | 'roughness' | 'opacity', value: number) => void;
@@ -51,11 +56,35 @@ type ViewerApi = {
     updatePoiHoldTime?: (id: string, value: number) => void;
     updatePoiTrigger?: (id: string, value: boolean) => void;
     updatePoiSystemName?: (id: string, value: string) => void;
+    updatePoiAnimClip?: (id: string, value: string) => void;
+    updatePoiAnimFrom?: (id: string, value: number | null) => void;
+    updatePoiAnimTo?: (id: string, value: number | null) => void;
+    updatePoiAnimFps?: (id: string, value: number | null) => void;
     removePoi?: (id: string) => void;
 };
 
 const getViewer = (): ViewerApi | undefined => (window as Window & { viewer?: ViewerApi }).viewer;
 const isHTMLElement = (value: EventTarget | null): value is HTMLElement => value instanceof HTMLElement;
+const unitDisplayFactor = (unit: string | undefined) => unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
+const safeUnitScale = (value: unknown) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+};
+const sceneToDisplaySize = (sceneValue: number, unitScale: number, unit: string | undefined) => sceneValue * unitScale * unitDisplayFactor(unit);
+const displayToSceneSize = (displayValue: number, unitScale: number, unit: string | undefined) => {
+    const sceneValue = displayValue / unitDisplayFactor(unit) / unitScale;
+    return Number.isFinite(sceneValue) && sceneValue > 0 ? sceneValue : 0.000001;
+};
+const parseVec3String = (value: unknown): [number, number, number] | null => {
+    if (Array.isArray(value) && value.length >= 3) {
+        const tuple = value.slice(0, 3).map((entry) => Number(entry));
+        return tuple.every((entry) => Number.isFinite(entry)) ? tuple as [number, number, number] : null;
+    }
+    const matches = String(value ?? '').match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi);
+    if (!matches || matches.length < 3) return null;
+    const tuple = matches.slice(0, 3).map((entry) => Number(entry));
+    return tuple.every((entry) => Number.isFinite(entry)) ? tuple as [number, number, number] : null;
+};
 
 const parseJsonArray = <T, >(raw: string | undefined, mapItem?: (value: unknown) => T | null): T[] => {
     try {
@@ -128,6 +157,10 @@ const parsePoiList = (raw: string | undefined): PoiItem[] => parseJsonArray<PoiI
         holdTime: typeof candidate.holdTime === 'number' ? candidate.holdTime : undefined,
         trigger: typeof candidate.trigger === 'boolean' ? candidate.trigger : undefined,
         systemName: typeof candidate.systemName === 'string' ? candidate.systemName : undefined,
+        animClip: typeof candidate.animClip === 'string' ? candidate.animClip : undefined,
+        animFrom: typeof candidate.animFrom === 'number' ? candidate.animFrom : undefined,
+        animTo: typeof candidate.animTo === 'number' ? candidate.animTo : undefined,
+        animFps: typeof candidate.animFps === 'number' ? candidate.animFps : undefined,
         camera: candidate.camera
     };
 });
@@ -196,109 +229,10 @@ const exportViewerSettings = (observerData: ObserverData) => {
     URL.revokeObjectURL(url);
 };
 
-type LeftPanelTab = 'scene' | 'alignment' | 'materials' | 'poi' | 'metadata' | 'effects';
+type LeftPanelTab = 'scene' | 'alignment' | 'materials' | 'poi' | 'effects';
 
-const DUBLIN_CORE_FIELDS: Array<{ key: string; labelKey: string }> = [
-    { key: 'title', labelKey: 'Title' }, { key: 'creator', labelKey: 'Creator' }, { key: 'subject', labelKey: 'Subject' },
-    { key: 'description', labelKey: 'Description' }, { key: 'publisher', labelKey: 'Publisher' }, { key: 'contributor', labelKey: 'Contributor' },
-    { key: 'date', labelKey: 'Date' }, { key: 'type', labelKey: 'Type' }, { key: 'format', labelKey: 'Format' },
-    { key: 'identifier', labelKey: 'Identifier' }, { key: 'source', labelKey: 'Source' }, { key: 'language', labelKey: 'Language' },
-    { key: 'relation', labelKey: 'Relation' }, { key: 'coverage', labelKey: 'Coverage' }, { key: 'rights', labelKey: 'Rights' }
-];
-
-class MetadataPanel extends React.Component<{ observerData: ObserverData; setProperty: SetProperty }> {
-    state: { saved: boolean } = { saved: false };
-
-    saveTimer: ReturnType<typeof setTimeout> | null = null;
-
-    shouldComponentUpdate(nextProps: { observerData: ObserverData }, nextState: { saved: boolean }) {
-        return JSON.stringify(nextProps.observerData.metadata) !== JSON.stringify(this.props.observerData.metadata) ||
-               nextProps.observerData?.ui?.language !== this.props.observerData?.ui?.language ||
-               nextState.saved !== this.state.saved;
-    }
-
-    componentWillUnmount() {
-        if (this.saveTimer) clearTimeout(this.saveTimer);
-    }
-
-    handleSave = () => {
-        this.setState({ saved: true });
-        if (this.saveTimer) clearTimeout(this.saveTimer);
-        this.saveTimer = setTimeout(() => this.setState({ saved: false }), 2000);
-    };
-
-    render() {
-        const { observerData, setProperty } = this.props;
-        const metadata = observerData.metadata ?? {};
-        const lang = observerData?.ui?.language;
-        const egrokn = !!metadata.egrokn;
-        const isMuseumItem = !!metadata.isMuseumItem;
-        const egroknLevelOptions = [
-            { v: 'federal', t: t('Federal', lang) },
-            { v: 'regional', t: t('Regional', lang) },
-            { v: 'municipal', t: t('Municipal', lang) }
-        ];
-        return (
-            <Container id='metadata-panel' class='tab-panel'>
-                {DUBLIN_CORE_FIELDS.map(({ key, labelKey }) => (
-                    <Container key={key} class={['panel-option', 'metadata-field']}>
-                        <Label class='panel-label' text={t(labelKey, lang)} />
-                        <TextInput
-                            class='panel-value'
-                            value={String(metadata[key as keyof typeof metadata] ?? '')}
-                            onChange={(value: string) => setProperty(`metadata.${key}`, value)}
-                        />
-                    </Container>
-                ))}
-                <Container class={['panel-option', 'metadata-section-header']}>
-                    <Label class='panel-label' text={t('Heritage', lang)} />
-                </Container>
-                <Toggle
-                    label={t('EGROKN', lang)}
-                    value={egrokn}
-                    setProperty={(v: boolean) => setProperty('metadata.egrokn', v)}
-                />
-                {egrokn && (
-                    <Select
-                        label={t('EGROKN level', lang)}
-                        type='string'
-                        options={egroknLevelOptions}
-                        value={metadata.egroknLevel ?? 'federal'}
-                        setProperty={(v: string) => setProperty('metadata.egroknLevel', v)}
-                    />
-                )}
-                <Container class={['panel-option', 'metadata-field']}>
-                    <Label class='panel-label' text={t('Object number', lang)} />
-                    <TextInput
-                        class='panel-value'
-                        value={metadata.objectNumber ?? ''}
-                        onChange={(value: string) => setProperty('metadata.objectNumber', value)}
-                    />
-                </Container>
-                <Toggle
-                    label={t('Museum item', lang)}
-                    value={isMuseumItem}
-                    setProperty={(v: boolean) => setProperty('metadata.isMuseumItem', v)}
-                />
-                {isMuseumItem && (
-                    <Container class={['panel-option', 'metadata-field']}>
-                        <Label class='panel-label' text={t('Goskatalog link', lang)} />
-                        <TextInput
-                            class='panel-value'
-                            placeholder='https://goskatalog.ru/...'
-                            value={metadata.goskatalogLink ?? ''}
-                            onChange={(value: string) => setProperty('metadata.goskatalogLink', value)}
-                        />
-                    </Container>
-                )}
-                <div id='metadata-save-row'>
-                    <Button class='secondary' text={t('Save', lang)} onClick={this.handleSave} />
-                    {this.state.saved && <span className='metadata-saved-feedback'>✓ {t('Saved', lang)}</span>}
-                </div>
-            </Container>
-        );
-    }
-}
+// Метаданные (Dublin Core/ЕГРОКН/Госкаталог) убраны из плеера: источник правды —
+// портал. Здесь остаётся лишь невидимый identifier (см. types/index defaults).
 
 const toggleCollapsed = () => {
     const leftPanel = document.getElementById('panel-left');
@@ -609,13 +543,32 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
 
 class AlignmentPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty, setAlignmentMode: (value: boolean) => void }> {
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; setAlignmentMode: (value: boolean) => void }>): boolean {
-        const keys = ['debug', 'scene.selectedNode', 'ui.language'];
+        const keys = ['debug', 'scene.selectedNode', 'scene.bounds', 'scene.boundsCenter', 'measure.unit', 'measure.unitScale', 'dimensionBox', 'ui.language'];
         return JSON.stringify(extract(nextProps.observerData, keys)) !== JSON.stringify(extract(this.props.observerData, keys));
     }
 
     render() {
         const props = this.props;
         const debugData = props.observerData.debug;
+        const dimensionBox = props.observerData.dimensionBox;
+        const unit = props.observerData.measure?.unit ?? 'm';
+        const unitScale = safeUnitScale(props.observerData.measure?.unitScale);
+        const boxSize = Array.isArray(dimensionBox?.size) ? dimensionBox.size : [1, 1, 1];
+        const sceneBoundsSize = parseVec3String(props.observerData.scene?.bounds);
+        const sceneBoundsCenter = parseVec3String(props.observerData.scene?.boundsCenter) ?? [0, 0, 0];
+        const setBoxAxis = (axis: 0 | 1 | 2, value: number) => {
+            const next: [number, number, number] = [
+                Number(boxSize[0]) || 1,
+                Number(boxSize[1]) || 1,
+                Number(boxSize[2]) || 1
+            ];
+            next[axis] = displayToSceneSize(value, unitScale, unit);
+            props.setProperty('dimensionBox.size', next);
+        };
+        const formatDimension = (value: number) => {
+            const n = sceneToDisplaySize(value, unitScale, unit);
+            return `${n.toFixed(unit === 'm' ? 3 : 1)} ${unit}`;
+        };
         const lang = props.observerData?.ui?.language;
 
         return (
@@ -656,6 +609,56 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                         onClick={() => getViewer()?.frameScene?.()}
                     />
                 </Container>
+                <Container class='alignment-section-header'>
+                    <Label class='panel-label' text={t('Dimension Box', lang)} />
+                </Container>
+                <Toggle
+                    label={t('Show dimension box', lang)}
+                    value={dimensionBox?.enabled ?? false}
+                    setProperty={(value: boolean) => props.setProperty('dimensionBox.enabled', value)} />
+                <Container class={['alignment-action-row', 'alignment-single-row']}>
+                    <button
+                        type='button'
+                        className='pcui-button secondary alignment-box-button'
+                        onClick={() => {
+                            if (sceneBoundsSize) {
+                                props.setProperty('dimensionBox.size', sceneBoundsSize);
+                                props.setProperty('dimensionBox.center', sceneBoundsCenter);
+                            } else {
+                                getViewer()?.setDimensionBoxFromModelBounds?.();
+                            }
+                            props.setProperty('dimensionBox.enabled', true);
+                        }}
+                    >
+                        {t('Box from Model Bounds', lang)}
+                    </button>
+                </Container>
+                <Numeric
+                    label={`${t('Width', lang)}, ${unit}`}
+                    value={sceneToDisplaySize(Number(boxSize[0]) || 1, unitScale, unit)}
+                    min={0.001}
+                    max={1000000000}
+                    enabled={dimensionBox?.enabled ?? false}
+                    setProperty={(value: number) => setBoxAxis(0, value)} />
+                <Numeric
+                    label={`${t('Height', lang)}, ${unit}`}
+                    value={sceneToDisplaySize(Number(boxSize[1]) || 1, unitScale, unit)}
+                    min={0.001}
+                    max={1000000000}
+                    enabled={dimensionBox?.enabled ?? false}
+                    setProperty={(value: number) => setBoxAxis(1, value)} />
+                <Numeric
+                    label={`${t('Depth', lang)}, ${unit}`}
+                    value={sceneToDisplaySize(Number(boxSize[2]) || 1, unitScale, unit)}
+                    min={0.001}
+                    max={1000000000}
+                    enabled={dimensionBox?.enabled ?? false}
+                    setProperty={(value: number) => setBoxAxis(2, value)} />
+                {sceneBoundsSize &&
+                    <Container class='alignment-dimension-summary'>
+                        <Label class='panel-label' text={`${t('Model Bounds', lang)}: ${formatDimension(sceneBoundsSize[0])} × ${formatDimension(sceneBoundsSize[1])} × ${formatDimension(sceneBoundsSize[2])}`} />
+                    </Container>
+                }
             </Container>
         );
     }
@@ -687,7 +690,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'metadata', 'posteffects'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'posteffects'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) ||
@@ -942,15 +945,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             onClick={() => this.setState({ tab: 'poi' })}
                         >
                             {t('POI', lang)}
-                        </button>
-                    )}
-                    {!embedEnabled && (
-                        <button
-                            type='button'
-                            className={`left-panel-tab left-panel-tab-metadata${tab === 'metadata' ? ' active' : ''}`}
-                            onClick={() => this.setState({ tab: 'metadata' })}
-                        >
-                            {t('Metadata (Dublin Core)', lang)}
                         </button>
                     )}
                     {!embedEnabled && (
@@ -1225,6 +1219,56 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     />
                                                 ) : null}
                                             </div>
+                                            {poi.trigger ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '4px 0 6px' }}>
+                                                    <TextInput
+                                                        class='poi-list-input'
+                                                        placeholder={t('Anim clip', lang)}
+                                                        value={String(poi.animClip ?? '')}
+                                                        onChange={(value: string) => getViewer()?.updatePoiAnimClip?.(String(poi.id), value)}
+                                                    />
+                                                    <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                                                        <input
+                                                            type='number'
+                                                            placeholder={t('From', lang)}
+                                                            value={poi.animFrom ?? ''}
+                                                            min={0}
+                                                            step={1}
+                                                            style={{ width: 60, fontSize: 11, padding: '2px 4px', borderRadius: 3, border: '1px solid var(--pcui-border-color, #444)', background: 'var(--pcui-background, #222)', color: 'inherit' }}
+                                                            onChange={(e: any) => {
+                                                                const v = e.target.value === '' ? null : Number(e.target.value);
+                                                                getViewer()?.updatePoiAnimFrom?.(String(poi.id), v);
+                                                            }}
+                                                        />
+                                                        <span style={{ fontSize: 10, opacity: 0.6 }}>–</span>
+                                                        <input
+                                                            type='number'
+                                                            placeholder={t('To', lang)}
+                                                            value={poi.animTo ?? ''}
+                                                            min={0}
+                                                            step={1}
+                                                            style={{ width: 60, fontSize: 11, padding: '2px 4px', borderRadius: 3, border: '1px solid var(--pcui-border-color, #444)', background: 'var(--pcui-background, #222)', color: 'inherit' }}
+                                                            onChange={(e: any) => {
+                                                                const v = e.target.value === '' ? null : Number(e.target.value);
+                                                                getViewer()?.updatePoiAnimTo?.(String(poi.id), v);
+                                                            }}
+                                                        />
+                                                        <span style={{ fontSize: 10, opacity: 0.6 }}>fps</span>
+                                                        <input
+                                                            type='number'
+                                                            placeholder='24'
+                                                            value={poi.animFps ?? ''}
+                                                            min={1}
+                                                            step={1}
+                                                            style={{ width: 44, fontSize: 11, padding: '2px 4px', borderRadius: 3, border: '1px solid var(--pcui-border-color, #444)', background: 'var(--pcui-background, #222)', color: 'inherit' }}
+                                                            onChange={(e: any) => {
+                                                                const v = e.target.value === '' ? null : Number(e.target.value);
+                                                                getViewer()?.updatePoiAnimFps?.(String(poi.id), v);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            ) : null}
                                             <ColorPickerControl
                                                 label={t('Color', lang)}
                                                 value={hexToArr(poi.color)}
@@ -1341,7 +1385,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             </div>
                         </Container>
                     )}
-                    {tab === 'metadata' && <MetadataPanel observerData={observerData} setProperty={setProperty} />}
                     {tab === 'effects' && (
                         <Container id='effects-panel' class='tab-panel'>
                             <PostEffectsPanel observerData={observerData} setProperty={setProperty} />

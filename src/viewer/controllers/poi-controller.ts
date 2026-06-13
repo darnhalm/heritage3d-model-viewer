@@ -21,6 +21,10 @@ type PoiEntry = {
     // Точка-триггер: без анимации/туров; systemName — системное имя (напр. нота "C#4").
     trigger?: boolean;
     systemName?: string;
+    animClip?: string;
+    animFrom?: number;
+    animTo?: number;
+    animFps?: number;
     camera?: {
         position: [number, number, number];
         focus: [number, number, number];
@@ -476,6 +480,35 @@ class PoiController {
             if (poi.id !== id) return poi;
             return { ...poi, systemName: value };
         });
+        this.setPoiList(updated);
+    }
+
+    updatePoiAnimClip(id: string, value: string) {
+        const clip = String(value ?? '').slice(0, 256);
+        const updated = this.getPoiList().map(poi =>
+            poi.id !== id ? poi : { ...poi, animClip: clip || undefined }
+        );
+        this.setPoiList(updated);
+    }
+
+    updatePoiAnimFrom(id: string, value: number | null) {
+        const updated = this.getPoiList().map(poi =>
+            poi.id !== id ? poi : { ...poi, animFrom: value ?? undefined }
+        );
+        this.setPoiList(updated);
+    }
+
+    updatePoiAnimTo(id: string, value: number | null) {
+        const updated = this.getPoiList().map(poi =>
+            poi.id !== id ? poi : { ...poi, animTo: value ?? undefined }
+        );
+        this.setPoiList(updated);
+    }
+
+    updatePoiAnimFps(id: string, value: number | null) {
+        const updated = this.getPoiList().map(poi =>
+            poi.id !== id ? poi : { ...poi, animFps: value ?? undefined }
+        );
         this.setPoiList(updated);
     }
 
