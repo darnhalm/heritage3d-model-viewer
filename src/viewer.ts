@@ -4075,41 +4075,36 @@ class Viewer {
                 const warnings: string[] = rejectedFiles.slice();
                 const total = modelFiles.length;
                 const progressPerFile: number[] = new Array(total).fill(0);
-                let lastProgressUpdate = 0;
                 let lastProgressValue = 0;
-                const PROGRESS_THROTTLE_MS = 80;
-                const PROGRESS_MIN_DELTA = 1.5;
-
-                let fallbackInterval: ReturnType<typeof setInterval> | null = null;
-                const stopFallbackProgress = () => {
-                    if (fallbackInterval) {
-                        clearInterval(fallbackInterval);
-                        fallbackInterval = null;
+                let lastSet = -1;
+                // Монотонно (бар не откатывается назад), потолок 98 — ровно 100 ставит .finally.
+                const setProgress = (v: number) => {
+                    const nv = Math.max(lastProgressValue, Math.min(98, v));
+                    lastProgressValue = nv;
+                    if (Math.round(nv) !== lastSet) {
+                        lastSet = Math.round(nv);
+                        this.observer.set('ui.loadProgress', nv);
                     }
                 };
 
+                // Реальный прогресс скачивания файлов модели → диапазон 0..90.
                 const setAggregateProgress = () => {
                     const sum = progressPerFile.reduce((a, b) => a + b, 0);
                     const pct = total > 0 ? (sum / total) * 90 : 0;
-                    const target = Math.min(90, Math.floor(pct * 10) / 10);
-                    const now = Date.now();
-                    const deltaOk = Math.abs(target - lastProgressValue) >= PROGRESS_MIN_DELTA;
-                    const timeOk = now - lastProgressUpdate >= PROGRESS_THROTTLE_MS;
-                    if (target >= 90 || deltaOk || timeOk) {
-                        lastProgressUpdate = now;
-                        lastProgressValue = target;
-                        this.observer.set('ui.loadProgress', target);
-                    }
-                    if (sum > 0 && fallbackInterval) stopFallbackProgress();
+                    setProgress(pct);
                 };
 
-                const startFallbackProgress = () => {
-                    fallbackInterval = setInterval(() => {
-                        const current = this.observer.get('ui.loadProgress') as number;
-                        if (current >= 90) return;
-                        this.observer.set('ui.loadProgress', Math.min(90, current + 3));
-                    }, 150);
-                };
+                // Непрерывный «ползунок»: бар никогда не застывает. Во время скачивания
+                // подбираемся к 90; ПОСЛЕ него (парсинг GLB, применение настроек, загрузка
+                // неба — там прогресса нет) продолжаем ползти к 98. Реальный прогресс, если
+                // он выше, перепрыгивает вперёд через setProgress(max). Мин. шаг = не замираем.
+                const creepInterval = setInterval(() => {
+                    const target = lastProgressValue < 90 ? 90 : 98;
+                    if (lastProgressValue < target) {
+                        const step = Math.max(0.25, (target - lastProgressValue) * 0.06);
+                        setProgress(lastProgressValue + step);
+                    }
+                }, 160);
 
                 const promises = modelFiles.map((file, modelIndex) => {
                     const onProgress = (p: number) => {
@@ -4120,10 +4115,6 @@ class Viewer {
                         this.loadGltf(file, files, warnings, onProgress) :
                         this.loadPly(file, files, onProgress);
                 });
-
-                setTimeout(() => {
-                    if ((this.observer.get('ui.loadProgress') as number) === 0) startFallbackProgress();
-                }, 300);
 
                 const wrappedPromises = promises.map((p, i) => p.then((asset) => {
                     progressPerFile[i] = 1;
@@ -4174,7 +4165,7 @@ class Viewer {
                     this.observer.set('ui.error', err?.toString() || err);
                 })
                 .finally(() => {
-                    stopFallbackProgress();
+                    clearInterval(creepInterval);
                     this.observer.set('ui.loadProgress', 100);
                     setTimeout(() => {
                         this.observer.set('ui.spinner', false);
