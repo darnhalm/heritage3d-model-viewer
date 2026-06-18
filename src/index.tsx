@@ -694,6 +694,21 @@ const main = () => {
                     seekAnimationToTime(time);
                     break;
                 }
+                case 'microphone:move': {
+                    const id = typeof data.id === 'string' ? data.id : '';
+                    const name = typeof data.name === 'string' ? data.name : '';
+                    const position = data.position && typeof data.position === 'object'
+                        ? { x: Number(data.position.x), y: Number(data.position.y), z: Number(data.position.z) }
+                        : null;
+                    if (id && position) {
+                        viewer.moveMicrophone(id, name, position);
+                    }
+                    break;
+                }
+                case 'microphone:clear': {
+                    viewer.clearMicrophones();
+                    break;
+                }
                 default:
                     break;
             }

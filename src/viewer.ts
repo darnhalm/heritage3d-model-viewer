@@ -93,7 +93,7 @@ import { ShadowCatcher } from './shadow-catcher';
 import arCloseImage from './svg/ar-close.svg';
 import arModeImage from './svg/ar-mode.svg';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
-import { MeasurementController, PoiController, SelectionController } from './viewer/controllers';
+import { MeasurementController, PoiController, SelectionController, MicrophoneController } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
 import { createLut1DTextureFromCubeData, createLutTextureFromCubeData } from './viewer/lut/createLutTexture';
@@ -588,6 +588,8 @@ class Viewer {
 
     selectionController: SelectionController;
 
+    microphoneController: MicrophoneController;
+
     settingsService: SettingsService;
 
     suppressAnimationProgressUpdate: boolean;
@@ -618,6 +620,11 @@ class Viewer {
     private lutTextureResource: Texture | null = null;
 
     private isCapturingCoverImage = false;
+
+    // Отдельный флаг для топ-даун-захвата: cover/topdown идут последовательно в
+    // export-project, и async-cleanup cover'а (.finally) гасит isCapturingCoverImage
+    // уже ПОСЛЕ старта topdown — из-за чего rebuildRenderTargets подменял наш RT.
+    private isCapturingTopDown = false;
 
     picker: Picker = null;
 
@@ -789,15 +796,27 @@ class Viewer {
                     reply({ type: 'export-cover-result', cover: png ? bytesToBase64(png) : null });
                 } else if (d.type === 'export-project') {
                     const settings = this.settingsService.getSettingsData();
-                    // Два снимка: вытянутый вьюпорт (заставка-заглушка) и квадрат (обложка).
+                    // Три снимка: вытянутый вьюпорт (заставка-заглушка), квадрат (обложка) и вид сверху (ортогональный, для калибровки).
                     const splash = await this.captureViewportImage();
                     const cover = await this.captureCoverImage();
+                    // Барьер: даём async-cleanup'у cover'а (.finally восстанавливает
+                    // camera.renderTarget на канвас-RT) полностью отработать ДО topdown,
+                    // иначе он перетирает наш квадратный RT уже после его установки.
+                    await new Promise<void>(r => requestAnimationFrame(() => r()));
+                    const topdown = await this.captureTopDownImage();
                     const model = d.includeModel ? await getModelExport() : null;
                     reply({
                         type: 'export-project-result',
                         settings,
                         cover: cover ? bytesToBase64(cover) : null,
                         splash: splash ? bytesToBase64(splash) : null,
+                        topdown: topdown ? bytesToBase64(topdown.png) : null,
+                        spatial_calibration: topdown ? {
+                            centerX: topdown.centerX,
+                            centerY: topdown.centerY,
+                            centerZ: topdown.centerZ,
+                            orthoHeight: topdown.orthoHeight
+                        } : null,
                         model
                     });
                 }
@@ -1189,6 +1208,10 @@ class Viewer {
             applyCameraView: (view, duration) => this.flyToCameraView(view, duration),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
+        this.microphoneController = new MicrophoneController({
+            canvas: this.canvas,
+            observer: this.observer
+        });
         this.selectionController = new SelectionController({
             canvas: this.canvas,
             observer: this.observer,
@@ -1389,6 +1412,7 @@ class Viewer {
         this.measurementController?.dispose?.();
         this.poiController?.dispose?.();
         this.selectionController?.dispose?.();
+        this.microphoneController?.dispose?.();
     }
 
     /**
@@ -2164,7 +2188,7 @@ class Viewer {
         const heightPixels = device.height;
 
         const old = this.camera.camera.renderTarget;
-        if (this.isCapturingCoverImage || (old && old.width === widthPixels && old.height === heightPixels)) {
+        if (this.isCapturingCoverImage || this.isCapturingTopDown || (old && old.width === widthPixels && old.height === heightPixels)) {
             return;
         }
 
@@ -3244,6 +3268,158 @@ class Viewer {
         if (this.multiframe) this.multiframe.enabled = savedMultiframe;
         this.renderNextFrame();
     }
+
+    moveMicrophone(id: string, name: string, position: { x: number; y: number; z: number }) {
+        this.microphoneController?.moveMicrophone(id, name, position);
+        this.renderNextFrame();
+    }
+
+    clearMicrophones() {
+        this.microphoneController?.clearMicrophones();
+        this.renderNextFrame();
+    }
+
+    captureTopDownImage(): Promise<{ png: Uint8Array; orthoHeight: number; centerX: number; centerY: number; centerZ: number } | null> {
+        return new Promise((rawResolve) => {
+            const SIZE = 1024;
+            const device = this.app.graphicsDevice;
+
+            let settled = false;
+            let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+            const resolve = (v: { png: Uint8Array; orthoHeight: number; centerX: number; centerY: number; centerZ: number } | null) => {
+                if (settled) return;
+                settled = true;
+                if (safetyTimer) clearTimeout(safetyTimer);
+                rawResolve(v);
+            };
+
+            if (!this.pngExporter) {
+                this.pngExporter = new PngExporter();
+            }
+
+            const savedPosition = this.camera.getPosition().clone();
+            const savedRotation = this.camera.getRotation().clone();
+            const savedProjection = this.camera.camera.projection;
+            const savedOrthoHeight = this.camera.camera.orthoHeight;
+            const savedRenderTarget = this.camera.camera.renderTarget;
+            const savedMultiframe = this.multiframe?.enabled ?? false;
+            const savedControlsEnabled = this.cameraControls.enabled;
+
+            this.cameraControls.enabled = false;
+            if (this.multiframe) this.multiframe.enabled = false;
+            // Не даём rebuildRenderTargets() подменить наш квадратный RT на канвас-размер
+            // (иначе postrender прочтёт RT не того размера и вернёт null). Свой флаг —
+            // не пересекается с async-cleanup'ом captureCoverImage.
+            this.isCapturingTopDown = true;
+
+            const createTexture = (w: number, h: number) => new Texture(device, {
+                name: 'topdown-rt-texture',
+                width: w,
+                height: h,
+                format: PIXELFORMAT_RGBA8,
+                mipmaps: false,
+                minFilter: FILTER_NEAREST,
+                magFilter: FILTER_NEAREST,
+                addressU: ADDRESS_CLAMP_TO_EDGE,
+                addressV: ADDRESS_CLAMP_TO_EDGE
+            });
+
+            const colorBuffer = createTexture(SIZE, SIZE);
+            const depthBuffer = new Texture(device, {
+                name: 'topdown-rt-depth',
+                width: SIZE,
+                height: SIZE,
+                format: PIXELFORMAT_DEPTH,
+                mipmaps: false
+            });
+
+            const squareRT = new RenderTarget({
+                name: 'viewer-topdown-rt',
+                colorBuffer,
+                depthBuffer,
+                flipY: false,
+                samples: 1,
+                autoResolve: false
+            });
+
+            this.camera.camera.renderTarget = squareRT;
+
+            const bbox = new BoundingBox();
+            this.calcSceneBounds(bbox);
+            const focus = this.calcFocalPoint(bbox);
+            const sceneSize = bbox.halfExtents.length();
+
+            this.camera.camera.projection = 1; // ORTHOGRAPHIC
+            const maxDimension = Math.max(bbox.halfExtents.x, bbox.halfExtents.z) * 2;
+            this.camera.camera.orthoHeight = maxDimension * 1.1;
+
+            const camPos = new Vec3(focus.x, focus.y + sceneSize * 2, focus.z);
+            this.camera.setPosition(camPos);
+            this.camera.lookAt(focus, new Vec3(0, 0, -1));
+
+            safetyTimer = setTimeout(() => {
+                this.cleanupTopDownCapture(squareRT, savedRenderTarget, savedPosition, savedRotation, savedProjection, savedOrthoHeight, savedMultiframe, savedControlsEnabled);
+                resolve(null);
+            }, 8000);
+
+            this.renderNextFrame();
+            this.app.once('postrender', () => {
+                const texture = this.camera.camera.renderTarget?.colorBuffer;
+                if (!texture || texture.width !== SIZE || texture.height !== SIZE) {
+                    this.cleanupTopDownCapture(squareRT, savedRenderTarget, savedPosition, savedRotation, savedProjection, savedOrthoHeight, savedMultiframe, savedControlsEnabled);
+                    resolve(null);
+                    return;
+                }
+                texture.read(0, 0, SIZE, SIZE).then((typedArray: Uint32Array) => {
+                    return this.pngExporter.encode(
+                        new Uint32Array(typedArray.buffer.slice(0)),
+                        SIZE,
+                        SIZE
+                    );
+                }).then((png: Uint8Array) => {
+                    resolve({
+                        png,
+                        orthoHeight: this.camera.camera.orthoHeight,
+                        centerX: focus.x,
+                        centerY: focus.y,
+                        centerZ: focus.z
+                    });
+                }).catch((err: unknown) => {
+                    console.error('Failed to capture top-down image:', err);
+                    resolve(null);
+                }).finally(() => {
+                    this.cleanupTopDownCapture(squareRT, savedRenderTarget, savedPosition, savedRotation, savedProjection, savedOrthoHeight, savedMultiframe, savedControlsEnabled);
+                });
+            });
+        });
+    }
+
+    private cleanupTopDownCapture(
+        squareRT: RenderTarget,
+        savedRenderTarget: RenderTarget | null,
+        savedPosition: Vec3,
+        savedRotation: Quat,
+        savedProjection: number,
+        savedOrthoHeight: number,
+        savedMultiframe: boolean,
+        savedControlsEnabled: boolean
+    ) {
+        if (squareRT.colorBuffer) squareRT.colorBuffer.destroy();
+        if (squareRT.depthBuffer) squareRT.depthBuffer.destroy();
+        squareRT.destroy();
+
+        this.camera.camera.renderTarget = savedRenderTarget;
+        this.camera.setPosition(savedPosition);
+        this.camera.setRotation(savedRotation);
+        this.camera.camera.projection = savedProjection;
+        this.camera.camera.orthoHeight = savedOrthoHeight;
+
+        if (this.multiframe) this.multiframe.enabled = savedMultiframe;
+        this.cameraControls.enabled = savedControlsEnabled;
+        this.isCapturingTopDown = false;
+        this.renderNextFrame();
+    }
+
 
     /** Export current viewer settings (camera, skybox, light, etc.) to a JSON file. */
     exportViewerSettings() {
@@ -5341,6 +5517,7 @@ class Viewer {
         this.drawReferenceRuler();
         this.measurementController.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
         this.poiController.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
+        this.microphoneController?.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
 
         // fit camera planes to the scene
         this.fitCameraClipPlanes();

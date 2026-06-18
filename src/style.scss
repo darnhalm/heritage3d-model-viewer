@@ -3092,3 +3092,31 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
 .pcui-select-input:not(.pcui-disabled):not(.pcui-readonly) .pcui-select-input-list > *:hover, .pcui-select-input:not(.pcui-disabled):not(.pcui-readonly) .pcui-select-input-list > .pcui-select-input-label-highlighted {
     background-color: $bcg-primary;
 }
+
+.mic-marker {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border: 2px solid rgba(136, 188, 232, 0.9);
+    border-radius: 20px;
+    background: rgba(13, 27, 42, 0.9);
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+
+    .mic-icon {
+        font-size: 13px;
+        line-height: 1;
+    }
+
+    .mic-name {
+        line-height: 1.2;
+    }
+}
+
