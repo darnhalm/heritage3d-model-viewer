@@ -115,6 +115,7 @@ export interface ObserverData {
         grid: boolean,
         alignmentMode?: boolean,
         alignmentGizmoMode?: 'move' | 'rotate',
+        alignmentTarget?: 'model' | 'helper',
         normals: number,
         uvCheckerScale: number,
         selectedUvSet: number,
@@ -241,6 +242,12 @@ export interface ObserverData {
         size: [number, number, number],
         /** Box center in scene/model coordinates. */
         center: [number, number, number]
+    },
+    helpers?: {
+        visible: boolean,
+        editable: boolean,
+        group: string,
+        activeId?: string
     },
     posteffects?: {
         bloom: { enabled: boolean; intensity: number; threshold: number; blurAmount: number };

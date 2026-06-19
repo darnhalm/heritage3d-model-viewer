@@ -183,6 +183,7 @@ const observerData: ObserverData = {
         grid: false,
         alignmentMode: false,
         alignmentGizmoMode: 'rotate',
+        alignmentTarget: 'model',
         normals: 0,
         uvCheckerScale: 16,
         selectedUvSet: 0,
@@ -285,6 +286,12 @@ const observerData: ObserverData = {
         enabled: false,
         size: [1, 1, 1],
         center: [0, 0, 0]
+    },
+    helpers: {
+        visible: false,
+        editable: false,
+        group: 'all',
+        activeId: ''
     },
     posteffects: {
         bloom: {
@@ -588,6 +595,36 @@ const main = () => {
                 return false;
             };
 
+            const parseHelper = (raw: unknown) => {
+                if (!raw || typeof raw !== 'object') return null;
+                const helper = raw as {
+                    id?: unknown;
+                    name?: unknown;
+                    type?: unknown;
+                    group?: unknown;
+                    color?: unknown;
+                    position?: { x?: unknown; y?: unknown; z?: unknown } | unknown;
+                };
+                const id = typeof helper.id === 'string' ? helper.id : '';
+                if (!id) return null;
+                const p = helper.position && typeof helper.position === 'object'
+                    ? helper.position as { x?: unknown; y?: unknown; z?: unknown }
+                    : null;
+                if (!p) return null;
+                const x = Number(p.x);
+                const y = Number(p.y);
+                const z = Number(p.z);
+                if (![x, y, z].every(Number.isFinite)) return null;
+                return {
+                    id,
+                    name: typeof helper.name === 'string' ? helper.name : id,
+                    type: typeof helper.type === 'string' ? helper.type : undefined,
+                    group: typeof helper.group === 'string' ? helper.group : undefined,
+                    color: typeof helper.color === 'string' ? helper.color : undefined,
+                    position: [x, y, z] as [number, number, number]
+                };
+            };
+
             switch (data.type) {
                 case 'focus-poi':
                 case 'open-poi': {
@@ -695,6 +732,8 @@ const main = () => {
                     break;
                 }
                 case 'microphone:move': {
+                    observer.set('helpers.visible', true);
+                    observer.set('helpers.group', 'mic');
                     const id = typeof data.id === 'string' ? data.id : '';
                     const name = typeof data.name === 'string' ? data.name : '';
                     const position = data.position && typeof data.position === 'object'
@@ -707,6 +746,36 @@ const main = () => {
                 }
                 case 'microphone:clear': {
                     viewer.clearMicrophones();
+                    break;
+                }
+                case 'helper:set': {
+                    const helper = parseHelper(data.helper ?? data);
+                    if (helper) viewer.setHelper(helper);
+                    break;
+                }
+                case 'helper:set-many': {
+                    const helpers = Array.isArray(data.helpers)
+                        ? data.helpers.map(parseHelper).filter(Boolean)
+                        : [];
+                    viewer.setHelpers(helpers);
+                    break;
+                }
+                case 'helper:clear': {
+                    viewer.clearHelpers(typeof data.group === 'string' ? data.group : undefined);
+                    break;
+                }
+                case 'helper:visibility': {
+                    observer.set('helpers.visible', !!data.visible);
+                    if (typeof data.group === 'string') observer.set('helpers.group', data.group);
+                    break;
+                }
+                case 'helper:editable': {
+                    observer.set('helpers.editable', !!data.editable);
+                    if (data.editable) {
+                        observer.set('helpers.visible', true);
+                        observer.set('debug.alignmentTarget', 'helper');
+                        observer.set('debug.alignmentGizmoMode', 'move');
+                    }
                     break;
                 }
                 default:

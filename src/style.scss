@@ -3098,7 +3098,7 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
     align-items: center;
     gap: 5px;
     padding: 4px 8px;
-    border: 2px solid rgba(136, 188, 232, 0.9);
+    border: 2px solid var(--helper-color, rgba(136, 188, 232, 0.9));
     border-radius: 20px;
     background: rgba(13, 27, 42, 0.9);
     color: #ffffff;
@@ -3110,6 +3110,11 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
     user-select: none;
     -webkit-user-select: none;
 
+    &.mic-marker-active {
+        background: rgba(28, 20, 4, 0.96);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.82), 0 6px 18px rgba(0, 0, 0, 0.5);
+    }
+
     .mic-icon {
         font-size: 13px;
         line-height: 1;
@@ -3119,4 +3124,3 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
         line-height: 1.2;
     }
 }
-

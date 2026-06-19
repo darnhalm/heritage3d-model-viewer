@@ -543,7 +543,7 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
 
 class AlignmentPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty, setAlignmentMode: (value: boolean) => void }> {
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; setAlignmentMode: (value: boolean) => void }>): boolean {
-        const keys = ['debug', 'scene.selectedNode', 'scene.bounds', 'scene.boundsCenter', 'measure.unit', 'measure.unitScale', 'dimensionBox', 'ui.language'];
+        const keys = ['debug', 'scene.selectedNode', 'scene.bounds', 'scene.boundsCenter', 'measure.unit', 'measure.unitScale', 'dimensionBox', 'helpers', 'ui.language'];
         return JSON.stringify(extract(nextProps.observerData, keys)) !== JSON.stringify(extract(this.props.observerData, keys));
     }
 
@@ -551,6 +551,7 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
         const props = this.props;
         const debugData = props.observerData.debug;
         const dimensionBox = props.observerData.dimensionBox;
+        const helpers = props.observerData.helpers;
         const unit = props.observerData.measure?.unit ?? 'm';
         const unitScale = safeUnitScale(props.observerData.measure?.unitScale);
         const boxSize = Array.isArray(dimensionBox?.size) ? dimensionBox.size : [1, 1, 1];
@@ -573,6 +574,25 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
 
         return (
             <Container id='alignment-panel' class='tab-panel'>
+                <Container class='alignment-section-header'>
+                    <Label class='panel-label' text='Target' />
+                </Container>
+                <Container class={['alignment-action-row', 'alignment-dual-row']}>
+                    <Button
+                        class={['secondary', ...((debugData?.alignmentTarget ?? 'model') === 'model' ? ['active'] : [])]}
+                        text='Model'
+                        onClick={() => props.setProperty('debug.alignmentTarget', 'model')}
+                    />
+                    <Button
+                        class={['secondary', ...((debugData?.alignmentTarget ?? 'model') === 'helper' ? ['active'] : [])]}
+                        text='Helper'
+                        onClick={() => {
+                            props.setProperty('debug.alignmentTarget', 'helper');
+                            props.setProperty('debug.alignmentGizmoMode', 'move');
+                            props.setProperty('helpers.visible', true);
+                        }}
+                    />
+                </Container>
                 <Container class={['alignment-action-row', 'alignment-dual-row']}>
                     <Button
                         class={['secondary', 'alignment-move-button', ...((debugData?.alignmentGizmoMode ?? 'rotate') === 'move' ? ['active'] : [])]}
@@ -585,6 +605,35 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                         onClick={() => props.setProperty('debug.alignmentGizmoMode', 'rotate')}
                     />
                 </Container>
+                <Container class='alignment-section-header'>
+                    <Label class='panel-label' text='Helpers' />
+                </Container>
+                <Toggle
+                    label='Show helpers'
+                    value={helpers?.visible ?? false}
+                    setProperty={(value: boolean) => props.setProperty('helpers.visible', value)} />
+                <Toggle
+                    label='Edit helpers'
+                    value={helpers?.editable ?? false}
+                    setProperty={(value: boolean) => {
+                        props.setProperty('helpers.editable', value);
+                        if (value) {
+                            props.setProperty('helpers.visible', true);
+                            props.setProperty('debug.alignmentTarget', 'helper');
+                            props.setProperty('debug.alignmentGizmoMode', 'move');
+                        }
+                    }} />
+                <Select
+                    label='Helper group'
+                    value={helpers?.group ?? 'all'}
+                    type='string'
+                    options={[
+                        { v: 'all', t: 'All' },
+                        { v: 'mic', t: 'mic*' },
+                        { v: 'audio-source', t: 'audio-source' }
+                    ]}
+                    setProperty={(value: string) => props.setProperty('helpers.group', value)} />
+                <Detail label='Selected helper' value={helpers?.activeId || '-'} />
                 <Container class='alignment-section-header'>
                     <Label class='panel-label' text={t('Object Pivot', lang)} />
                 </Container>

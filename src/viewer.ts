@@ -93,7 +93,7 @@ import { ShadowCatcher } from './shadow-catcher';
 import arCloseImage from './svg/ar-close.svg';
 import arModeImage from './svg/ar-mode.svg';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
-import { MeasurementController, PoiController, SelectionController, MicrophoneController } from './viewer/controllers';
+import { MeasurementController, PoiController, SelectionController, MicrophoneController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
 import { createLut1DTextureFromCubeData, createLutTextureFromCubeData } from './viewer/lut/createLutTexture';
@@ -119,6 +119,8 @@ const bbox = new BoundingBox();
 
 const FOCUS_FOV = 75;
 const ZOOM_SCALE_MIN = 0.01;
+const MIC_HELPER_NODE_RE = /^mic(?:[_-]|$)/i;
+const MIC_CAMEL_HELPER_NODE_RE = /^mic[A-Z0-9]/;
 
 const doubleTapDelay = 400;
 const doubleTapRadius = 45;
@@ -466,6 +468,10 @@ class Viewer {
     translateGizmo: TranslateGizmo | null;
 
     lastAlignmentContentTransform: Mat4 | null;
+
+    helperEntities: Map<string, Entity>;
+
+    activeHelperId: string | null;
 
     debugRoot: Entity;
 
@@ -912,6 +918,8 @@ class Viewer {
         this.rotateGizmo = null;
         this.translateGizmo = null;
         this.lastAlignmentContentTransform = null;
+        this.helperEntities = new Map();
+        this.activeHelperId = null;
         this.debugRoot = debugRoot;
         this.entities = [];
         this.entityAssets = [];
@@ -1122,9 +1130,14 @@ class Viewer {
         this.translateGizmo.enabled = false;
         this.translateGizmo.on('transform:start', () => {
             this.cameraControls.enabled = false;
-            this.lastAlignmentContentTransform = this.captureSceneContentTransform();
+            this.lastAlignmentContentTransform = this.getAlignmentTarget() === 'helper' ? null : this.captureSceneContentTransform();
         });
         this.translateGizmo.on('transform:move', () => {
+            if (this.getAlignmentTarget() === 'helper') {
+                this.syncActiveHelperFromEntity(false);
+                this.renderNextFrame();
+                return;
+            }
             this.applyPoiTransformFromLastAlignmentState();
             const position = this.sceneRoot.getLocalPosition();
             const centered = this.observer.get('centerScene');
@@ -1139,6 +1152,12 @@ class Viewer {
             this.renderNextFrame();
         });
         this.translateGizmo.on('transform:end', () => {
+            if (this.getAlignmentTarget() === 'helper') {
+                this.syncActiveHelperFromEntity(true);
+                this.cameraControls.enabled = true;
+                this.renderNextFrame();
+                return;
+            }
             this.applyPoiTransformFromLastAlignmentState();
             const position = this.sceneRoot.getLocalPosition();
             const centered = this.observer.get('centerScene');
@@ -1210,7 +1229,8 @@ class Viewer {
         });
         this.microphoneController = new MicrophoneController({
             canvas: this.canvas,
-            observer: this.observer
+            observer: this.observer,
+            onSelect: (id) => this.selectHelper(id)
         });
         this.selectionController = new SelectionController({
             canvas: this.canvas,
@@ -1880,6 +1900,7 @@ class Viewer {
             'debug.grid': this.setDebugGrid.bind(this),
             'debug.alignmentMode': this.setAlignmentMode.bind(this),
             'debug.alignmentGizmoMode': this.setAlignmentGizmoMode.bind(this),
+            'debug.alignmentTarget': () => this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate'),
             'debug.normals': this.setNormalLength.bind(this),
             'debug.uvCheckerScale': this.setUvCheckerScale.bind(this),
             'debug.selectedUvSet': this.setSelectedUvSet.bind(this),
@@ -1960,6 +1981,19 @@ class Viewer {
             'dimensionBox.center': () => {
                 this.dirtyBounds = true;
                 this.renderNextFrame();
+            },
+            'helpers.visible': () => {
+                this.renderNextFrame();
+            },
+            'helpers.editable': () => {
+                this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
+                this.renderNextFrame();
+            },
+            'helpers.group': () => {
+                this.renderNextFrame();
+            },
+            'helpers.activeId': (id: string) => {
+                this.selectHelper(id || null);
             }
         };
 
@@ -2232,6 +2266,8 @@ class Viewer {
     // reset the viewer, unloading resources
     resetScene() {
         const app = this.app;
+
+        this.clearHelpers();
 
         // reset camera state first - switch back to viewer camera before destroying entities
         if (this.activeSceneCamera) {
@@ -3033,6 +3069,7 @@ class Viewer {
 
         // hierarchy
         this.observer.set('scene.nodes', JSON.stringify(graph));
+        this.importHelpersFromScene();
 
         // mesh stats
         this.observer.set('scene.meshCount', meshCount);
@@ -3270,12 +3307,18 @@ class Viewer {
     }
 
     moveMicrophone(id: string, name: string, position: { x: number; y: number; z: number }) {
-        this.microphoneController?.moveMicrophone(id, name, position);
+        this.setHelper({
+            id,
+            name: name || id,
+            type: 'audio-source',
+            group: 'mic',
+            position: [position.x, position.y, position.z]
+        });
         this.renderNextFrame();
     }
 
     clearMicrophones() {
-        this.microphoneController?.clearMicrophones();
+        this.clearHelpers('mic');
         this.renderNextFrame();
     }
 
@@ -3646,6 +3689,173 @@ class Viewer {
 
     resetObjectTransform() {
         this.resetSceneTransform();
+    }
+
+    private getOrCreateHelperEntity(id: string) {
+        let entity = this.helperEntities.get(id);
+        if (!entity) {
+            entity = new Entity(`helper:${id}`);
+            this.app.root.addChild(entity);
+            this.helperEntities.set(id, entity);
+        }
+        return entity;
+    }
+
+    setHelper(helper: SceneHelperEntry) {
+        const entity = this.getOrCreateHelperEntity(helper.id);
+        entity.setLocalPosition(helper.position[0], helper.position[1], helper.position[2]);
+        this.microphoneController?.setHelper(helper);
+        this.renderNextFrame();
+    }
+
+    setHelpers(helpers: SceneHelperEntry[]) {
+        const activeIds = new Set(helpers.map(helper => helper.id));
+        helpers.forEach(helper => this.setHelper(helper));
+        [...this.helperEntities.entries()].forEach(([id, entity]) => {
+            if (!activeIds.has(id)) {
+                entity.destroy();
+                this.helperEntities.delete(id);
+            }
+        });
+        this.microphoneController?.setHelpers(helpers);
+        this.renderNextFrame();
+    }
+
+    clearHelpers(group?: string) {
+        [...this.helperEntities.entries()].forEach(([id, entity]) => {
+            const helper = this.microphoneController?.getHelper(id);
+            if (!group || helper?.group === group || helper?.type === group) {
+                entity.destroy();
+                this.helperEntities.delete(id);
+            }
+        });
+        this.microphoneController?.clearHelpers(group);
+        if (this.activeHelperId && !this.helperEntities.has(this.activeHelperId)) {
+            this.activeHelperId = null;
+            this.observer.set('helpers.activeId', '');
+        }
+        this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
+        this.renderNextFrame();
+    }
+
+    private getAlignmentTarget(): 'model' | 'helper' {
+        return this.observer.get('debug.alignmentTarget') === 'helper' ? 'helper' : 'model';
+    }
+
+    selectHelper(id: string | null) {
+        const helperId = id && this.helperEntities.has(id) ? id : null;
+        this.activeHelperId = helperId;
+        if (this.observer.get('helpers.activeId') !== (helperId ?? '')) {
+            this.observer.set('helpers.activeId', helperId ?? '');
+        }
+        this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
+        this.renderNextFrame();
+    }
+
+    private syncActiveHelperFromEntity(emit: boolean) {
+        if (!this.activeHelperId) return;
+        const entity = this.helperEntities.get(this.activeHelperId);
+        if (!entity) return;
+        const position = entity.getLocalPosition();
+        this.microphoneController?.updateHelperPosition(this.activeHelperId, {
+            x: position.x,
+            y: position.y,
+            z: position.z
+        });
+        if (emit) {
+            window.parent?.postMessage({
+                type: 'helper:moved',
+                id: this.activeHelperId,
+                position: { x: position.x, y: position.y, z: position.z }
+            }, '*');
+        }
+    }
+
+    private isImportableHelperName(name: string) {
+        return MIC_HELPER_NODE_RE.test(name) || MIC_CAMEL_HELPER_NODE_RE.test(name);
+    }
+
+    private helperIdFromNodeName(name: string, usedIds: Set<string>) {
+        const base = name
+        .trim()
+        .replace(/[^a-zA-Z0-9_-]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'mic_helper';
+        let id = base;
+        let index = 2;
+        while (usedIds.has(id)) {
+            id = `${base}_${index}`;
+            index += 1;
+        }
+        usedIds.add(id);
+        return id;
+    }
+
+    private entityHasRenderableComponent(entity: Entity) {
+        return !!(
+            entity.findComponent('render') ||
+            entity.findComponent('model') ||
+            entity.findComponent('gsplat') ||
+            entity.findComponent('camera') ||
+            entity.findComponent('light')
+        );
+    }
+
+    private collectImportedHelpers() {
+        const helpers: SceneHelperEntry[] = [];
+        const usedIds = new Set<string>();
+
+        const visit = (node: GraphNode) => {
+            const entity = node instanceof Entity ? node : null;
+            const name = String(node.name ?? '').trim();
+            if (
+                entity &&
+                name &&
+                this.isImportableHelperName(name) &&
+                !name.startsWith('helper:') &&
+                !this.entityHasRenderableComponent(entity)
+            ) {
+                const position = entity.getPosition();
+                helpers.push({
+                    id: this.helperIdFromNodeName(name, usedIds),
+                    name,
+                    type: 'audio-source',
+                    group: 'mic',
+                    color: '#f5b642',
+                    position: [position.x, position.y, position.z]
+                });
+            }
+            node.children.forEach(visit);
+        };
+
+        this.entities.forEach(visit);
+        return helpers;
+    }
+
+    private importHelpersFromScene() {
+        const helpers = this.collectImportedHelpers();
+        if (helpers.length === 0) return;
+
+        const currentHelpers = [...this.helperEntities.keys()]
+        .map(id => this.microphoneController?.getHelper(id))
+        .filter((helper): helper is SceneHelperEntry => !!helper && helper.group !== 'mic');
+
+        this.setHelpers([...currentHelpers, ...helpers]);
+        this.observer.set('helpers.group', 'mic');
+        window.parent?.postMessage({
+            type: 'helper:imported',
+            helpers: helpers.map(helper => ({
+                id: helper.id,
+                name: helper.name,
+                type: helper.type,
+                group: helper.group,
+                color: helper.color,
+                position: {
+                    x: helper.position[0],
+                    y: helper.position[1],
+                    z: helper.position[2]
+                }
+            }))
+        }, '*');
     }
 
     setDimensionBoxFromModelBounds() {
@@ -4552,12 +4762,27 @@ class Viewer {
         }
 
         const enabled = !!this.observer.get('debug.alignmentMode');
+        const target = this.getAlignmentTarget();
         this.rotateGizmo.enabled = false;
         this.translateGizmo.enabled = false;
         this.rotateGizmo.detach();
         this.translateGizmo.detach();
 
         if (!enabled) {
+            this.renderNextFrame();
+            return;
+        }
+
+        if (target === 'helper') {
+            const editable = !!this.observer.get('helpers.editable');
+            const entity = this.activeHelperId ? this.helperEntities.get(this.activeHelperId) : null;
+            if (!editable || !entity || mode !== 'move') {
+                this.renderNextFrame();
+                return;
+            }
+            this.translateGizmo.attach([entity]);
+            this.translateGizmo.enabled = true;
+            this.translateGizmo.update();
             this.renderNextFrame();
             return;
         }
