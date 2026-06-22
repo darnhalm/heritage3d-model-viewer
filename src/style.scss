@@ -3118,6 +3118,11 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
     .mic-icon {
         font-size: 13px;
         line-height: 1;
+
+        &.material-icons {
+            font-size: 15px;
+            color: var(--helper-color, #f5b642);
+        }
     }
 
     .mic-name {

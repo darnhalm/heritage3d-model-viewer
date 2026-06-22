@@ -821,7 +821,12 @@ class Viewer {
                             centerX: topdown.centerX,
                             centerY: topdown.centerY,
                             centerZ: topdown.centerZ,
-                            orthoHeight: topdown.orthoHeight
+                            orthoHeight: topdown.orthoHeight,
+                            boxX: topdown.boxX,
+                            boxY: topdown.boxY,
+                            boxZ: topdown.boxZ,
+                            boxCenterX: topdown.boxCenterX,
+                            boxCenterZ: topdown.boxCenterZ
                         } : null,
                         model
                     });
@@ -3322,14 +3327,14 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    captureTopDownImage(): Promise<{ png: Uint8Array; orthoHeight: number; centerX: number; centerY: number; centerZ: number } | null> {
+    captureTopDownImage(): Promise<{ png: Uint8Array; orthoHeight: number; centerX: number; centerY: number; centerZ: number; boxX: number; boxY: number; boxZ: number; boxCenterX: number; boxCenterZ: number } | null> {
         return new Promise((rawResolve) => {
             const SIZE = 1024;
             const device = this.app.graphicsDevice;
 
             let settled = false;
             let safetyTimer: ReturnType<typeof setTimeout> | null = null;
-            const resolve = (v: { png: Uint8Array; orthoHeight: number; centerX: number; centerY: number; centerZ: number } | null) => {
+            const resolve = (v: { png: Uint8Array; orthoHeight: number; centerX: number; centerY: number; centerZ: number; boxX: number; boxY: number; boxZ: number; boxCenterX: number; boxCenterZ: number } | null) => {
                 if (settled) return;
                 settled = true;
                 if (safetyTimer) clearTimeout(safetyTimer);
@@ -3425,7 +3430,14 @@ class Viewer {
                         orthoHeight: this.camera.camera.orthoHeight,
                         centerX: focus.x,
                         centerY: focus.y,
-                        centerZ: focus.z
+                        centerZ: focus.z,
+                        // Габариты обводящей коробки модели (в юнитах сцены) и её центр —
+                        // для отрисовки реального контура инструмента на миллиметровке.
+                        boxX: bbox.halfExtents.x * 2,
+                        boxY: bbox.halfExtents.y * 2,
+                        boxZ: bbox.halfExtents.z * 2,
+                        boxCenterX: bbox.center.x,
+                        boxCenterZ: bbox.center.z
                     });
                 }).catch((err: unknown) => {
                     console.error('Failed to capture top-down image:', err);
@@ -4360,7 +4372,17 @@ class Viewer {
                         this.observer.set('ui.warnings', warnings);
                     }
 
-                    // auto-load settings from model folder (URL) or from dropped/selected files (blob)
+                    // Модель уже в сцене — для пользователя загрузка ЗАВЕРШЕНА: гасим
+                    // индикатор сразу, не дожидаясь настроек/HDR-неба. Иначе бар висит
+                    // на ~98% всё время загрузки настроек и тяжёлого skybox-HDR.
+                    clearInterval(creepInterval);
+                    this.observer.set('ui.loadProgress', 100);
+                    setTimeout(() => {
+                        this.observer.set('ui.spinner', false);
+                        this.observer.set('ui.loadingBackgroundReady', false);
+                    }, 250);
+
+                    // Настройки (камера/свет/небо) догружаем В ФОНЕ — не блокируют индикатор.
                     const firstModelUrl = modelFiles[0]?.url;
                     return this.tryFetchAndApplySettings(firstModelUrl, files);
                 })
@@ -4375,6 +4397,7 @@ class Viewer {
                     this.observer.set('ui.error', err?.toString() || err);
                 })
                 .finally(() => {
+                    // Подстраховка: гарантированно снимаем индикатор (в т.ч. при ошибке).
                     clearInterval(creepInterval);
                     this.observer.set('ui.loadProgress', 100);
                     setTimeout(() => {

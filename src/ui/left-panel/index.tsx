@@ -677,6 +677,9 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                                 getViewer()?.setDimensionBoxFromModelBounds?.();
                             }
                             props.setProperty('dimensionBox.enabled', true);
+                            // Сигналим хосту сохранить настройки сразу (бокс не теряется при
+                            // закрытии редактора). Хост сам запросит свежие настройки.
+                            window.parent?.postMessage({ type: 'dimensionbox-changed' }, '*');
                         }}
                     >
                         {t('Box from Model Bounds', lang)}

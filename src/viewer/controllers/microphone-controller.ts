@@ -8,6 +8,10 @@ export type SceneHelperEntry = {
     group?: string;
     color?: string;
     position: [number, number, number];
+    /** Имя Google Material Icon (ligature), напр. "headphones"/"hearing"/"mic". */
+    icon?: string;
+    /** Можно ли выбирать/двигать этот хелпер. false → клик игнорируется (фиксирован). */
+    editable?: boolean;
 };
 
 type MicrophoneControllerArgs = {
@@ -96,6 +100,10 @@ class MicrophoneController {
             marker.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
+                // Фиксированный хелпер (editable === false) нельзя выбрать/двигать —
+                // напр. микрофоны в публичном плеере (двигается только слушатель).
+                const current = this.helpers.get(helper.id);
+                if (current?.editable === false) return;
                 this.observer.set('helpers.activeId', helper.id);
                 this.onSelect?.(helper.id);
             });
@@ -104,8 +112,11 @@ class MicrophoneController {
         }
 
         const label = helper.name || helper.id;
-        const icon = isMicHelper(helper.id) || isMicHelper(label) ? '🎤' : '●';
-        marker.innerHTML = `<span class="mic-icon">${icon}</span><span class="mic-name">${label}</span>`;
+        // Material-иконка, если задана; иначе эмодзи по типу (микрофон/прочее).
+        const iconHtml = helper.icon
+            ? `<span class="mic-icon material-icons">${helper.icon}</span>`
+            : `<span class="mic-icon">${isMicHelper(helper.id) || isMicHelper(label) ? '🎤' : '●'}</span>`;
+        marker.innerHTML = `${iconHtml}<span class="mic-name">${label}</span>`;
         marker.style.setProperty('--helper-color', helper.color || '#f5b642');
     }
 

@@ -17,6 +17,16 @@ import './style.scss';
 import { version as modelViewerVersion } from '../package.json';
 import { DummyWebGPU } from './dummy-webgpu';
 
+// Google Material Icons — для иконок в лейблах хелперов (слушатель/микрофон).
+// Подключаем рантаймом (в style.scss мешает порядок @use/@import).
+if (typeof document !== 'undefined' && !document.getElementById('material-icons-font')) {
+    const link = document.createElement('link');
+    link.id = 'material-icons-font';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/icon?family=Material+Icons';
+    document.head.appendChild(link);
+}
+
 // Permit some additional properties to be set on the window
 declare global {
     interface LaunchParams {
@@ -603,6 +613,8 @@ const main = () => {
                     type?: unknown;
                     group?: unknown;
                     color?: unknown;
+                    icon?: unknown;
+                    editable?: unknown;
                     position?: { x?: unknown; y?: unknown; z?: unknown } | unknown;
                 };
                 const id = typeof helper.id === 'string' ? helper.id : '';
@@ -621,6 +633,8 @@ const main = () => {
                     type: typeof helper.type === 'string' ? helper.type : undefined,
                     group: typeof helper.group === 'string' ? helper.group : undefined,
                     color: typeof helper.color === 'string' ? helper.color : undefined,
+                    icon: typeof helper.icon === 'string' ? helper.icon : undefined,
+                    editable: typeof helper.editable === 'boolean' ? helper.editable : undefined,
                     position: [x, y, z] as [number, number, number]
                 };
             };
