@@ -59,8 +59,22 @@
 7. **Расширенные материалы и дебаг** — иконки каналов, варианты glTF, texel density, UV и пр. (зависит от типа сцены; для gaussian splat часть вкладок скрывается).
 8. **Morph targets** в панели **Info** → **Model**.
 9. **Снимки** из **View & share** — PNG, обложка 1:1; отдельно — экспорт в **файл конфигурации** (см. выше).
+10. **Микрофоны / пространственный звук** — позиционирование источников звука в сцене (с портала: `microphone:move` / `microphone:clear`).
+11. **Хелперы (инструменты звукоизвлечения)** — вспомогательные объекты (смычок и т.п.): позиция/видимость/редактируемость (`helper:set[-many]` / `helper:clear` / `helper:visibility` / `helper:editable`).
 
 > Метаданные (Dublin Core / ЕГРОКН / Госкаталог) **вынесены из плеера** — источник правды теперь портал-каталог (etnophonica).
+
+---
+
+## Интеграция: встраивание и `postMessage`-API
+
+Вьюер встраивается в `<iframe>` и **двусторонне** общается с хост-страницей через `window.postMessage` (в оригинале PlayCanvas такого протокола нет).
+
+- **Embed:** query-параметры `embed`, `ui=full|compact|minimal`, флаги панелей/POI/тура/измерений/info; iframe генерируется в **View & share**. URL-загрузка: `assetUrl`/`load`, `id`/`efkId`, `cameraPosition`, `cameraFocus`.
+- **Команды хост → вьюер:** POI (`focus-poi`, `open-poi`, `clear-poi`, `next-poi`, `prev-poi`, `focus-system`); анимация (`play-animation`, `pause-animation`, `seek-animation`, `freeze-animation`); звук (`set-trigger-note`, `microphone:move`, `microphone:clear`); хелперы (`helper:set[-many]`, `helper:clear`, `helper:visibility`, `helper:editable`); экспорт по `requestId` (`export-settings`, `export-cover`, `export-project`).
+- **События вьюер → хост:** `init`, `poi-selected`, `poi-cleared`, `animation-time`, `dimensionbox-changed`, `trigger-note-set`, `audio-source`, `export-*-result` / `export-error`.
+
+Полная спецификация: [`api/EMBED-API.md`](./api/EMBED-API.md), [`api/API-COMMANDS-RU.md`](./api/API-COMMANDS-RU.md), OpenAPI — [`api/openapi.yaml`](./api/openapi.yaml).
 
 ---
 

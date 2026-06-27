@@ -50,8 +50,42 @@
 7. **Расширенные материалы и дебаг** — иконки каналов, варианты glTF, texel density, UV и пр. (для gaussian splat часть вкладок скрывается).
 8. **Morph targets** в панели **Info** → **Model**.
 9. **Снимки** из **View & share** — PNG, обложка 1:1; кастомные HDRI-окружения.
+10. **Микрофоны / пространственный звук** — позиционирование источников звука в сцене (управляется с портала через postMessage: `microphone:move` / `microphone:clear`).
+11. **Хелперы (инструменты звукоизвлечения)** — вспомогательные объекты (смычок и т.п.) с позицией/видимостью/редактируемостью (`helper:set` / `helper:set-many` / `helper:clear` / `helper:visibility` / `helper:editable`).
 
 > Метаданные (Dublin Core / ЕГРОКН / Госкаталог) **вынесены из плеера** — источник правды теперь портал-каталог (etnophonica), а не вьюер.
+
+---
+
+## Интеграция: встраивание и `postMessage`-API
+
+Главное отличие форка для интеграторов: вьюер встраивается в `<iframe>` и **двусторонне** общается с хост-страницей через `window.postMessage`. В оригинале PlayCanvas такого протокола управления нет.
+
+**Встраивание (iframe + query-параметры):** `embed`, `ui=full|compact|minimal`, флаги панелей/POI/тура/измерений/info; готовый iframe генерируется в панели **View & share**. Также URL-параметры загрузки: `assetUrl`/`load`, `id`/`efkId`, `cameraPosition`, `cameraFocus`.
+
+**Команды хост → вьюер** (`iframe.contentWindow.postMessage({...}, '*')`):
+
+| Группа | Команды |
+|---|---|
+| POI / навигация | `focus-poi`, `open-poi`, `clear-poi`, `next-poi`, `prev-poi`, `focus-system` |
+| Анимация | `play-animation`, `pause-animation`, `seek-animation` (по `time`/`frame`+`fps`), `freeze-animation` |
+| Звук | `set-trigger-note`, `microphone:move`, `microphone:clear` |
+| Хелперы | `helper:set`, `helper:set-many`, `helper:clear`, `helper:visibility`, `helper:editable` |
+| Загрузка/камера | `load`/`assetUrl`, `id`/`efkId`, `cameraPosition`, `cameraFocus`, `dummyWebGPU` |
+| Экспорт (запрос→ответ по `requestId`) | `export-settings`, `export-cover`, `export-project` |
+
+**События вьюер → хост** (через `postMessage` на родителя):
+
+| Событие | Когда |
+|---|---|
+| `init` | вьюер готов |
+| `poi-selected` / `poi-cleared` | выбор/сброс точки интереса |
+| `animation-time` | тик времени анимации |
+| `dimensionbox-changed` | изменён размерный бокс |
+| `trigger-note-set` / `audio-source` | звуковые триггеры/источник |
+| `export-settings-result` / `export-cover-result` / `export-project-result` / `export-error` | результат соответствующего запроса (с `requestId`) |
+
+📄 Полная спецификация: [`docs/api/EMBED-API.md`](docs/api/EMBED-API.md) (формат сообщений, примеры приёма событий), [`docs/api/API-COMMANDS-RU.md`](docs/api/API-COMMANDS-RU.md) (HTTP-API портала + postMessage + capabilities/policy), OpenAPI — [`docs/api/openapi.yaml`](docs/api/openapi.yaml).
 
 ---
 
