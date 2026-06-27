@@ -42,6 +42,9 @@ type ViewerApi = {
     resetObjectTransform?: () => void;
     frameScene?: () => void;
     setDimensionBoxFromModelBounds?: () => void;
+    setStandardView?: (view: string) => void;
+    setCameraProjection?: (ortho: boolean) => void;
+    isOrthographic?: () => boolean;
     pulsePois?: () => void;
     reorderPoi?: (sourceId: string, targetId: string) => void;
     setSelectedMaterialFactor?: (channel: 'metallic' | 'roughness' | 'opacity', value: number) => void;
@@ -551,7 +554,6 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
         const props = this.props;
         const debugData = props.observerData.debug;
         const dimensionBox = props.observerData.dimensionBox;
-        const helpers = props.observerData.helpers;
         const unit = props.observerData.measure?.unit ?? 'm';
         const unitScale = safeUnitScale(props.observerData.measure?.unitScale);
         const boxSize = Array.isArray(dimensionBox?.size) ? dimensionBox.size : [1, 1, 1];
@@ -589,7 +591,6 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                         onClick={() => {
                             props.setProperty('debug.alignmentTarget', 'helper');
                             props.setProperty('debug.alignmentGizmoMode', 'move');
-                            props.setProperty('helpers.visible', true);
                         }}
                     />
                 </Container>
@@ -605,35 +606,6 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                         onClick={() => props.setProperty('debug.alignmentGizmoMode', 'rotate')}
                     />
                 </Container>
-                <Container class='alignment-section-header'>
-                    <Label class='panel-label' text='Helpers' />
-                </Container>
-                <Toggle
-                    label='Show helpers'
-                    value={helpers?.visible ?? false}
-                    setProperty={(value: boolean) => props.setProperty('helpers.visible', value)} />
-                <Toggle
-                    label='Edit helpers'
-                    value={helpers?.editable ?? false}
-                    setProperty={(value: boolean) => {
-                        props.setProperty('helpers.editable', value);
-                        if (value) {
-                            props.setProperty('helpers.visible', true);
-                            props.setProperty('debug.alignmentTarget', 'helper');
-                            props.setProperty('debug.alignmentGizmoMode', 'move');
-                        }
-                    }} />
-                <Select
-                    label='Helper group'
-                    value={helpers?.group ?? 'all'}
-                    type='string'
-                    options={[
-                        { v: 'all', t: 'All' },
-                        { v: 'mic', t: 'mic*' },
-                        { v: 'audio-source', t: 'audio-source' }
-                    ]}
-                    setProperty={(value: string) => props.setProperty('helpers.group', value)} />
-                <Detail label='Selected helper' value={helpers?.activeId || '-'} />
                 <Container class='alignment-section-header'>
                     <Label class='panel-label' text={t('Object Pivot', lang)} />
                 </Container>

@@ -372,6 +372,13 @@ class CameraControls {
         this._pose.copy(this._controller.update(frame, dt));
         this._camera.entity.setPosition(this._pose.position);
         this._camera.entity.setEulerAngles(this._pose.angles);
+
+        // Ортогональная камера: зум (колесо) меняет distance как в перспективе, а размер
+        // кадра выводим из distance → orthoHeight. Иначе orthoHeight фиксирован и зум «не работает».
+        if (this._camera.projection !== PROJECTION_PERSPECTIVE) {
+            const half = Math.tan(0.5 * this._camera.fov * Math.PI / 180);
+            this._camera.orthoHeight = Math.max(0.001, this._pose.distance * half);
+        }
     }
 
     destroy() {

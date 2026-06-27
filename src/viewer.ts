@@ -77,6 +77,8 @@ import {
     TranslateGizmo,
     Vec3,
     Vec2,
+    Vec4,
+    ViewCube,
     CameraComponent,
     PostEffect
 } from 'playcanvas';
@@ -584,6 +586,10 @@ class Viewer {
 
     debugRuler: DebugLines;
 
+    // Навигационный куб (как в 3ds Max) + иконка орто/перспектива — видны только в режиме выравнивания.
+    private viewCube: ViewCube | null = null;
+    private orthoButton: HTMLButtonElement | null = null;
+
     miniStats: MiniStats;
 
     observer: Observer;
@@ -911,6 +917,8 @@ class Viewer {
         this.camera = camera;
         this.initialCameraPosition = null;
         this.initialCameraFocus = null;
+        // Куб ориентации — после того как this.camera назначен (нужен isOrthographic()).
+        this.initViewCube();
         this.light = light;
         this.sceneRoot = sceneRoot;
         this.sceneContentRoot = sceneContentRoot;
@@ -3889,6 +3897,119 @@ class Viewer {
         this.renderNextFrame();
     }
 
+    /** Жёсткий стандартный вид камеры: top/bottom/front/back/left/right. */
+    setStandardView(view: string) {
+        const bbox = new BoundingBox();
+        this.calcSceneBounds(bbox);
+        const center = bbox.center.clone();
+        const radius = Math.max(bbox.halfExtents.x, bbox.halfExtents.y, bbox.halfExtents.z, 0.001);
+        const dist = radius * 4;
+        const dirs: Record<string, [number, number, number]> = {
+            top: [0, 1, 0],
+            bottom: [0, -1, 0],
+            front: [0, 0, 1],
+            back: [0, 0, -1],
+            right: [1, 0, 0],
+            left: [-1, 0, 0]
+        };
+        const d = dirs[view] || dirs.front;
+        const pos = new Vec3(center.x + d[0] * dist, center.y + d[1] * dist, center.z + d[2] * dist);
+        this.cameraControls.reset(center, pos);
+        if (this.camera.camera.projection === 1) {
+            this.camera.camera.orthoHeight = radius * 1.2;
+        }
+        this.renderNextFrame();
+    }
+
+    /** Тип проекции камеры: ortho (true) / perspective (false). */
+    setCameraProjection(ortho: boolean) {
+        this.camera.camera.projection = ortho ? 1 : 0; // 1 = ORTHOGRAPHIC, 0 = PERSPECTIVE
+        if (ortho) {
+            const bbox = new BoundingBox();
+            this.calcSceneBounds(bbox);
+            const radius = Math.max(bbox.halfExtents.x, bbox.halfExtents.y, bbox.halfExtents.z, 0.001);
+            this.camera.camera.orthoHeight = radius * 1.2;
+        }
+        this.renderNextFrame();
+    }
+
+    /** Текущая проекция камеры ортогональна? */
+    isOrthographic(): boolean {
+        return this.camera.camera.projection === 1;
+    }
+
+    /** Навигационный куб + иконка орто/перспектива (создаётся скрытым, показывается в режиме выравнивания). */
+    private initViewCube() {
+        // Отказоустойчиво: если ViewCube недоступен/падает — НЕ роняем весь вьюер
+        // (иначе модели перестают грузиться). Куб опционален.
+        try {
+        const wrapper = document.getElementById('canvas-wrapper');
+        if (!wrapper) return;
+        if (typeof ViewCube !== 'function') return;
+
+        // Куб ориентации в правом верхнем углу. Клик по грани → выравнивание камеры.
+        this.viewCube = new ViewCube(new Vec4(1, 1, 0, 0));
+        this.viewCube.dom.style.position = 'absolute';
+        this.viewCube.dom.style.zIndex = '24';
+        this.viewCube.dom.style.display = 'none';
+        wrapper.appendChild(this.viewCube.dom);
+        this.viewCube.on(ViewCube.EVENT_CAMERAALIGN, (dir: Vec3) => this.alignCameraToDir(dir));
+
+        // Отдельная иконка переключения проекции (орто/перспектива).
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'viewcube-proj-btn';
+        btn.title = 'Проекция: перспектива / ортогональная';
+        btn.textContent = '⟂'; // обновляется в updateOrthoButton
+        Object.assign(btn.style, {
+            position: 'absolute', top: '92px', right: '8px', zIndex: '24', display: 'none',
+            width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer',
+            border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(13,27,42,0.9)',
+            color: '#fff', fontSize: '14px', lineHeight: '1'
+        } as CSSStyleDeclaration);
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.setCameraProjection(!this.isOrthographic());
+            this.updateOrthoButton();
+        });
+        wrapper.appendChild(btn);
+        this.orthoButton = btn;
+        this.updateOrthoButton();
+        } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('ViewCube init failed (пропускаем, плеер работает):', e);
+            this.viewCube = null;
+            this.orthoButton = null;
+        }
+    }
+
+    private updateOrthoButton() {
+        if (!this.orthoButton) return;
+        const ortho = this.isOrthographic();
+        this.orthoButton.textContent = ortho ? '▱' : '◹';
+        this.orthoButton.title = ortho ? 'Проекция: ортогональная (клик → перспектива)' : 'Проекция: перспектива (клик → ортогональная)';
+    }
+
+    /** Показать/скрыть навигационный куб и иконку проекции (режим выравнивания). */
+    setViewCubeVisible(visible: boolean) {
+        if (this.viewCube) this.viewCube.dom.style.display = visible ? '' : 'none';
+        if (this.orthoButton) this.orthoButton.style.display = visible ? '' : 'none';
+        if (visible) this.updateOrthoButton();
+    }
+
+    /** Выровнять камеру по направлению (от ViewCube): сохраняем дистанцию орбиты. */
+    private alignCameraToDir(dir: Vec3) {
+        const bbox = new BoundingBox();
+        this.calcSceneBounds(bbox);
+        const center = bbox.center.clone();
+        const radius = Math.max(bbox.halfExtents.x, bbox.halfExtents.y, bbox.halfExtents.z, 0.001);
+        const dist = radius * 4;
+        const pos = new Vec3(center.x + dir.x * dist, center.y + dir.y * dist, center.z + dir.z * dist);
+        this.cameraControls.reset(center, pos);
+        this.renderNextFrame();
+    }
+
     rotateSelectedObject() {
         this.sceneTransform = {
             ...this.sceneTransform,
@@ -4769,12 +4890,19 @@ class Viewer {
 
         this.rotateGizmo.enabled = false;
         this.translateGizmo.enabled = false;
+        // Навигационный куб + иконка проекции — инструменты «песочницы» выравнивания:
+        // показываем при входе, прячем при выходе.
+        this.setViewCubeVisible(enabled);
         if (enabled) {
             this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
         } else {
             this.rotateGizmo.detach();
             this.translateGizmo.detach();
             this.cameraControls.enabled = true;
+            // Все отображения выравнивания гаснут при выходе: размерный бокс и орто-проекция
+            // (камера возвращается к обычной перспективе — это была песочница).
+            this.observer.set('dimensionBox.enabled', false);
+            if (this.isOrthographic()) this.setCameraProjection(false);
         }
         this.renderNextFrame();
     }
@@ -5026,6 +5154,11 @@ class Viewer {
         // update the orbit camera
         if (!this.xrMode?.active && !this.cameraFlyTransition) {
             this.cameraControls.update(deltaTime);
+        }
+
+        // Синхронизируем навигационный куб с ориентацией камеры (только когда он виден).
+        if (this.viewCube && this.viewCube.dom.style.display !== 'none') {
+            this.viewCube.update(this.camera.getWorldTransform());
         }
 
         this.setRotationSnap(!!this.rotateGizmo?.enabled && this.app.keyboard.isPressed(KEY_CONTROL));
