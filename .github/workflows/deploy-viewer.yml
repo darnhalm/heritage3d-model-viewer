@@ -1,0 +1,44 @@
+name: Deploy viewer
+
+# Ручной деплой 3D-вьюера в Yandex Object Storage (бакет playcanvasviewer).
+# Кнопка: Actions → Deploy viewer → Run workflow. Секреты: YC_S3_KEY_ID, YC_S3_SECRET.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-viewer
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: 'npm'
+      - run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload to Object Storage
+        env:
+          YC_S3_KEY_ID: ${{ secrets.YC_S3_KEY_ID }}
+          YC_S3_SECRET: ${{ secrets.YC_S3_SECRET }}
+        run: |
+          pip install boto3
+          python3 scripts/deploy-viewer.py
+
+      - name: Smoke
+        run: |
+          sleep 5
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
+            https://playcanvasviewer.website.yandexcloud.net/)
+          echo "viewer → $code"
+          test "$code" = "200"
