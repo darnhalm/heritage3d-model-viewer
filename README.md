@@ -1,4 +1,28 @@
-# PlayCanvas Model Viewer
+# HERITAGE3D Viewer
+
+> Форк [PlayCanvas Model Viewer](https://github.com/playcanvas/model-viewer) для задач цифрового наследия, музейных каталогов, аннотирования, измерений и встраивания. Технологическая основа (PlayCanvas Engine, Observer, PCUI, glTF 2.0) сохранена; изменена продуктовая оболочка и добавлены функции ниже.
+
+## Что добавлено по сравнению с оригиналом
+
+- **Файл конфигурации сцены** `*.model-viewer-settings.json` (sidecar рядом с моделью) — воспроизводимый вид: камера, свет, небо, единицы измерения, POI, оверрайды материалов, трансформ сцены. Кнопка **Export viewer settings** / автоподхват при загрузке. *(главный механизм форка)*
+- **Режим измерений** — 2 точки, единицы mm/cm/m, калибровка масштаба по известному расстоянию, измерение угла и площади; результаты сохраняются в конфиг.
+- **Встраивание (embed)** — query-параметры (`embed`, `ui=full|compact|minimal`, флаги панелей/POI/тура/measure/info), генератор iframe в **View & share**.
+- **POI / тур** — точки интереса с проигрывателем, слайд-шоу; список в конфиге, в embed управляется флагами `poi`/`tour`.
+- **Метаданные Dublin Core** — вкладка + панель **ID**; `metadata` можно подставлять из JSON при загрузке (для каталогов).
+- **Выравнивание объекта** — режим alignment, gizmo move/rotate, центрирование/сброс/fit; **ViewCube** (как в 3ds Max, в режиме выравнивания), жёсткие стандартные виды (сверху/снизу/спереди/сзади/слева/справа), переключатель **орто/перспектива** с зумом колесом в орто.
+- **Постобработка (вкладка Effects)** — Bloom, SSAO, Bokeh, цветокор, FXAA, **LUT (.cube 1D/3D)** и др.; очередь эффектов на камере (см. [`docs/POST-EFFECTS.md`](docs/POST-EFFECTS.md)).
+- **Локализация UI** — EN / RU / ZH.
+- **Переработанная раскладка** — левая сворачиваемая панель (Settings / Alignment / Materials / POI / Metadata / Effects) + центральная нижняя полоса быстрых действий и шаринга.
+- **Расширенные материалы/дебаг, morph targets, снимки** (PNG + обложка 1:1), кастомные HDRI.
+- **Брендинг** HERITAGE3D + расширенная документация в [`docs/`](docs/).
+
+📄 Подробное сравнение: [`docs/FORK-VS-UPSTREAM.md`](docs/FORK-VS-UPSTREAM.md) · история правок: [`docs/CHANGELOG-FORK.md`](docs/CHANGELOG-FORK.md)
+
+> ⚠️ Ветка `main` содержит Heritage3D-форк; обновления upstream PlayCanvas (WebXR, новый picker) пока не влиты.
+
+---
+
+# PlayCanvas Model Viewer (оригинальный README)
 
 [![Github Release](https://img.shields.io/github/v/release/playcanvas/model-viewer)](https://github.com/playcanvas/model-viewer/releases)
 [![License](https://img.shields.io/github/license/playcanvas/model-viewer)](https://github.com/playcanvas/model-viewer/blob/main/LICENSE)
