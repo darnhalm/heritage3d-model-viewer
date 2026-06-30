@@ -5992,6 +5992,14 @@ class Viewer {
 
             // reinit scene bounds after first render in order to get accurate morph target and skinned bounds
             this.initSceneBounds();
+
+            // Сообщаем хосту, что вьюер инициализирован и принимает команды
+            // (helper/microphone/poi). До этого вьюер НЕ слал родителю ни одного
+            // сообщения, поэтому встройка не знала о готовности и не отправляла,
+            // например, микрофоны пространственной записи на пассивной странице.
+            try {
+                window.parent?.postMessage({ type: 'viewer-ready' }, '*');
+            } catch { /* cross-origin */ }
         }
 
         // resolve the (possibly multisampled) render target — use post-effect output when the queue is active
