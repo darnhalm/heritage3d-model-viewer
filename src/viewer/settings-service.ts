@@ -285,7 +285,14 @@ class SettingsService {
             light,
             debug: options.debug,
             shadowCatcher: options.shadowCatcher,
-            measure: options.measure,
+            measure: (() => {
+                const m = options.measure;
+                // Калибровку/единицы/точки сохраняем, но активность режима — нет
+                // (сессионный инструмент, не должен «висеть» в плеере).
+                return m && typeof m === 'object' && !Array.isArray(m)
+                    ? { ...(m as Record<string, unknown>), enabled: false }
+                    : m;
+            })(),
             dimensionBox: (() => {
                 const d = options.dimensionBox;
                 // Размеры/центр сохраняем, но включённость — нет (сессионный инструмент).
@@ -443,6 +450,13 @@ class SettingsService {
             // Бокс размеров — сессионный инструмент: НЕ восстанавливаем его включённым
             // из сохранённых настроек, иначе он «висит» поверх модели после загрузки.
             if (path === 'dimensionBox.enabled') {
+                this.observer.set(path, false);
+                return;
+            }
+            // Режим измерения — тоже сессионный инструмент: всегда выключен по
+            // умолчанию, не восстанавливаем активность из настроек (иначе утекает
+            // из админки в публичный плеер).
+            if (path === 'measure.enabled') {
                 this.observer.set(path, false);
                 return;
             }
