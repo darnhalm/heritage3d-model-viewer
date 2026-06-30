@@ -1147,7 +1147,10 @@ class Viewer {
         });
         this.translateGizmo.on('transform:move', () => {
             if (this.getAlignmentTarget() === 'helper') {
-                this.syncActiveHelperFromEntity(false);
+                // emit=true → шлём helper:moved прямо во время драга (живое обновление
+                // позиции/высоты слушателя на хосте). Круг 3D→u,v,Z→3D у хоста
+                // тождественный, поэтому эхо helper:set не дёргает гизмо.
+                this.syncActiveHelperFromEntity(true);
                 this.renderNextFrame();
                 return;
             }
