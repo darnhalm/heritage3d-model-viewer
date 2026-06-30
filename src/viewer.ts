@@ -4915,8 +4915,12 @@ class Viewer {
             return;
         }
 
-        const enabled = !!this.observer.get('debug.alignmentMode');
         const target = this.getAlignmentTarget();
+        // Гизмо доступен либо в режиме выравнивания (редактор), либо когда активен
+        // РЕДАКТИРУЕМЫЙ хелпер (напр. «слушатель» пространственного звука на публичной
+        // странице, где alignmentMode выключен). Иначе слушателя нельзя было таскать.
+        const helperEditing = target === 'helper' && !!this.observer.get('helpers.editable');
+        const enabled = !!this.observer.get('debug.alignmentMode') || helperEditing;
         this.rotateGizmo.enabled = false;
         this.translateGizmo.enabled = false;
         this.rotateGizmo.detach();
