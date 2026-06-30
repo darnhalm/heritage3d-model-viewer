@@ -4938,6 +4938,8 @@ class Viewer {
                 this.renderNextFrame();
                 return;
             }
+            // Крупнее (2×) для хелпера: подпись «Слушатель» перекрывает стандартный размер.
+            this.translateGizmo.size = 2;
             this.translateGizmo.attach([entity]);
             this.translateGizmo.enabled = true;
             this.translateGizmo.update();
@@ -4946,6 +4948,7 @@ class Viewer {
         }
 
         if (mode === 'move') {
+            this.translateGizmo.size = 1; // обычный размер для выравнивания сцены
             this.translateGizmo.attach([this.sceneRoot]);
             this.translateGizmo.enabled = true;
             this.translateGizmo.update();
