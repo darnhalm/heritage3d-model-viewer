@@ -536,6 +536,9 @@ class Viewer {
 
     firstFrame: boolean;
 
+    // Таймер «ползущего» прогресса загрузки; гасится на первом кадре модели.
+    loadCreepTimer: ReturnType<typeof setInterval> | null = null;
+
     skyboxLoaded: boolean;
 
     animSpeed: number;
@@ -4444,6 +4447,7 @@ class Viewer {
                 // подбираемся к 90; ПОСЛЕ него (парсинг GLB, применение настроек, загрузка
                 // неба — там прогресса нет) продолжаем ползти к 98. Реальный прогресс, если
                 // он выше, перепрыгивает вперёд через setProgress(max). Мин. шаг = не замираем.
+                if (this.loadCreepTimer) clearInterval(this.loadCreepTimer);
                 const creepInterval = setInterval(() => {
                     const target = lastProgressValue < 90 ? 90 : 98;
                     if (lastProgressValue < target) {
@@ -4451,6 +4455,7 @@ class Viewer {
                         setProgress(lastProgressValue + step);
                     }
                 }, 160);
+                this.loadCreepTimer = creepInterval;
 
                 const promises = modelFiles.map((file, modelIndex) => {
                     const onProgress = (p: number) => {
@@ -4496,15 +4501,10 @@ class Viewer {
                         this.observer.set('ui.warnings', warnings);
                     }
 
-                    // Модель уже в сцене — для пользователя загрузка ЗАВЕРШЕНА: гасим
-                    // индикатор сразу, не дожидаясь настроек/HDR-неба. Иначе бар висит
-                    // на ~98% всё время загрузки настроек и тяжёлого skybox-HDR.
-                    clearInterval(creepInterval);
-                    this.observer.set('ui.loadProgress', 100);
-                    setTimeout(() => {
-                        this.observer.set('ui.spinner', false);
-                        this.observer.set('ui.loadingBackgroundReady', false);
-                    }, 250);
+                    // НЕ гасим индикатор здесь: ассет скачан, но модель ещё не
+                    // отрисована (впереди применение настроек + postSceneLoad + первый
+                    // кадр). Бар продолжает ползти к 98 и гаснет на ПЕРВОМ КАДРЕ модели
+                    // (onPostrender/firstFrame) — иначе была пауза «пусто» после бара.
 
                     // Настройки (камера/свет/небо) догружаем В ФОНЕ — не блокируют индикатор.
                     const firstModelUrl = modelFiles[0]?.url;
@@ -4519,15 +4519,20 @@ class Viewer {
                         this.observer.set('ui.warnings', warnings);
                     }
                     this.observer.set('ui.error', err?.toString() || err);
+                    // Ошибка → модель не отрисуется, первого кадра не будет: гасим тут.
+                    if (this.loadCreepTimer) { clearInterval(this.loadCreepTimer); this.loadCreepTimer = null; }
+                    this.observer.set('ui.loadProgress', 100);
+                    this.observer.set('ui.spinner', false);
+                    this.observer.set('ui.loadingBackgroundReady', false);
                 })
                 .finally(() => {
-                    // Подстраховка: гарантированно снимаем индикатор (в т.ч. при ошибке).
-                    clearInterval(creepInterval);
-                    this.observer.set('ui.loadProgress', 100);
+                    // В норме индикатор гасит ПЕРВЫЙ КАДР модели (onPostrender/firstFrame).
+                    // Здесь — только подстраховка: если кадр по какой-то причине не наступит.
                     setTimeout(() => {
+                        if (this.loadCreepTimer) { clearInterval(this.loadCreepTimer); this.loadCreepTimer = null; }
                         this.observer.set('ui.spinner', false);
                         this.observer.set('ui.loadingBackgroundReady', false);
-                    }, 250);
+                    }, 10000);
                 });
             });
         } else {
@@ -6002,6 +6007,13 @@ class Viewer {
 
             // reinit scene bounds after first render in order to get accurate morph target and skinned bounds
             this.initSceneBounds();
+
+            // Модель РЕАЛЬНО отрисована на этом кадре → только теперь гасим индикатор
+            // загрузки (прогресс-бар держался до появления модели, без паузы «пусто»).
+            if (this.loadCreepTimer) { clearInterval(this.loadCreepTimer); this.loadCreepTimer = null; }
+            this.observer.set('ui.loadProgress', 100);
+            this.observer.set('ui.spinner', false);
+            this.observer.set('ui.loadingBackgroundReady', false);
 
             // Сообщаем хосту, что вьюер инициализирован и принимает команды
             // (helper/microphone/poi). До этого вьюер НЕ слал родителю ни одного
