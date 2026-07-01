@@ -613,7 +613,11 @@ class PoiController {
         const marker = this.markerEls.get(id);
         if (marker) {
             marker.classList.remove('poi-marker-pulse');
-            void marker.offsetWidth; // reflow
+            // Форсируем reflow, чтобы CSS-анимация перезапускалась при ПОВТОРНОМ клике.
+            // ВАЖНО: через вызов МЕТОДА (getBoundingClientRect), а не `void el.offsetWidth`
+            // — минификатор считает чтение свойства «без побочек» и выкидывает строку,
+            // из-за чего в прод-сборке пульс срабатывал только с первого раза.
+            marker.getBoundingClientRect();
             marker.classList.add('poi-marker-pulse');
         }
         this.renderNextFrame();
