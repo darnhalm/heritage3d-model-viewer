@@ -4870,11 +4870,12 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    setWireframeColor(color: { r: number; g: number; b: number }) {
-        this.wireframeMaterial.ambient = new Color(color.r, color.g, color.b);
-        this.wireframeMaterial.diffuse = new Color(color.r, color.g, color.b);
+    setWireframeColor(color: { r: number; g: number; b: number } | null | undefined) {
+        const safe = Viewer.sanitizeRgb(color, { r: 0, g: 1, b: 0 });
+        this.wireframeMaterial.ambient = new Color(safe.r, safe.g, safe.b);
+        this.wireframeMaterial.diffuse = new Color(safe.r, safe.g, safe.b);
         this.wireframeMaterial.specular = new Color(0, 0, 0);
-        this.wireframeMaterial.emissive = new Color(color.r, color.g, color.b);
+        this.wireframeMaterial.emissive = new Color(safe.r, safe.g, safe.b);
         this.wireframeMaterial.update();
         this.renderNextFrame();
     }
@@ -5053,8 +5054,9 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    setLightColor(color: { r: number; g: number; b: number }) {
-        this.light.light.color = new Color(color.r, color.g, color.b);
+    setLightColor(color: { r: number; g: number; b: number } | null | undefined) {
+        const safe = Viewer.sanitizeRgb(color, { r: 1, g: 1, b: 1 });
+        this.light.light.color = new Color(safe.r, safe.g, safe.b);
         this.renderNextFrame();
     }
 
@@ -5156,11 +5158,25 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    setBackgroundColor(color: { r: number; g: number; b: number }) {
+    setBackgroundColor(color: { r: number; g: number; b: number } | null | undefined) {
+        // null/битый цвет (испорченный localStorage или sidecar-настройки) не должен
+        // валить вьюер на старте — молча берём дефолтный фон.
+        const safe = Viewer.sanitizeRgb(color, { r: 134 / 255, g: 152 / 255, b: 174 / 255 });
         const cnv = (value: number) => Math.max(0, Math.min(255, Math.floor(value * 255)));
-        document.getElementById('canvas-wrapper').style.backgroundColor = `rgb(${cnv(color.r)}, ${cnv(color.g)}, ${cnv(
-            color.b
+        document.getElementById('canvas-wrapper').style.backgroundColor = `rgb(${cnv(safe.r)}, ${cnv(safe.g)}, ${cnv(
+            safe.b
         )})`;
+    }
+
+    private static sanitizeRgb(
+        color: { r?: unknown; g?: unknown; b?: unknown } | null | undefined,
+        fallback: { r: number; g: number; b: number }
+    ): { r: number; g: number; b: number } {
+        if (!color || typeof color !== 'object') return fallback;
+        const r = Number(color.r);
+        const g = Number(color.g);
+        const b = Number(color.b);
+        return [r, g, b].every(Number.isFinite) ? { r, g, b } : fallback;
     }
 
     update(deltaTime: number) {

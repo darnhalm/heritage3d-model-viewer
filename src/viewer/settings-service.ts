@@ -464,8 +464,11 @@ class SettingsService {
                 const rgb = toRgb(value);
                 if (rgb) {
                     this.observer.set(path, rgb);
-                    return;
                 }
+                // Нераспарсенный цвет (null/битый hex) ПРОПУСКАЕМ, не проваливаясь
+                // ниже: иначе сырое значение попадало в observer, консервировалось
+                // saveOptions в localStorage и роняло вьюер на каждом старте.
+                return;
             }
             if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
                 const obj = value as Record<string, unknown>;

@@ -402,6 +402,12 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
                 loadRec(path ? `${path}.${k}` : k, (value as Record<string, unknown>)[k]);
             });
         } else {
+            // null/undefined из сохранённого состояния не переносим: испорченное
+            // значение (напр. skybox.backgroundColor=null) роняло вьюер на старте,
+            // и localStorage «отравлял» все последующие загрузки. Дефолт надёжнее.
+            if (value === null || value === undefined) {
+                return;
+            }
             if (path !== 'skybox.value' || value === 'None' || (typeof value === 'string' && skyboxUrls.has(value))) {
                 observer.set(path, value);
             }
