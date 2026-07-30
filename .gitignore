@@ -3,3 +3,6 @@
 node_modules
 dist
 .npmrc
+# локальные настройки Claude Code и macOS-мусор рядом с файлами
+.claude/
+._*

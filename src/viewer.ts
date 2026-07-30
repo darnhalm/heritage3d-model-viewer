@@ -3758,7 +3758,10 @@ class Viewer {
                 throw new Error(this.formatUnknownRemoteSizeMessage(gltfUrl.filename ?? gltfUrl.url ?? '', '1 GB'));
             }
             if (oversizedBytes !== null) {
-                throw new Error(this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', gltfUrl.filename ?? gltfUrl.url ?? '', oversizedBytes));
+                const name = gltfUrl.filename ?? gltfUrl.url ?? '';
+                throw new Error(typeof oversizedBytes === 'object' ?
+                    this.formatMissingRemoteFileMessage(name, oversizedBytes.missing) :
+                    this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', name, oversizedBytes));
             }
             return new Promise((resolve, reject) => {
             // provide buffer view callback so we can handle models compressed with MeshOptimizer
@@ -3931,7 +3934,10 @@ class Viewer {
                 throw new Error(this.formatUnknownRemoteSizeMessage(url.filename ?? url.url ?? '', '1 GB'));
             }
             if (oversizedBytes !== null) {
-                throw new Error(this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', url.filename ?? url.url ?? '', oversizedBytes));
+                const name = url.filename ?? url.url ?? '';
+                throw new Error(typeof oversizedBytes === 'object' ?
+                    this.formatMissingRemoteFileMessage(name, oversizedBytes.missing) :
+                    this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', name, oversizedBytes));
             }
             if (this.isSpzFilename(url.filename ?? url.url ?? '')) {
                 return this.loadSpzAsCompressedPly(url, onProgress);
@@ -4101,6 +4107,15 @@ class Viewer {
         .replace('{size}', this.formatBytes(sizeBytes));
     }
 
+    private formatMissingRemoteFileMessage(filename: string, status: number): string {
+        const lang = this.observer.get('ui.language') as string | undefined;
+        const key = status === 403 ? 'File "{filename}" is not accessible on the server (HTTP {status}).' :
+            'File "{filename}" was not found on the server (HTTP {status}).';
+        return t(key, lang)
+        .replace('{filename}', filename)
+        .replace('{status}', String(status));
+    }
+
     private formatUnknownRemoteSizeMessage(filename: string, limitLabel: string): string {
         const lang = this.observer.get('ui.language') as string | undefined;
         return t('File "{filename}" was blocked because server does not provide size metadata. Limit: {size}.', lang)
@@ -4116,7 +4131,23 @@ class Viewer {
         return Number.isFinite(total) && total > 0 ? total : null;
     }
 
-    private async resolveRemoteFileSize(url: string): Promise<number | null> {
+    /**
+     * Probe a remote file's size before downloading it.
+     *
+     * The Range probe is authoritative for existence: a HEAD may be rejected by servers that still
+     * serve GET (some CDNs answer HEAD without `content-length`), so only the ranged GET decides
+     * whether the file is actually missing. Distinguishing "missing" from "size unknown" matters
+     * because the two need very different error messages.
+     *
+     * @param url - Absolute http(s) URL.
+     * @returns The size in bytes, or `{ missing: status }` when the server refused the file, or
+     * null when it exists but the size could not be determined.
+     */
+    private async resolveRemoteFileSize(url: string): Promise<number | { missing: number } | null> {
+        // A 4xx from HEAD is remembered rather than returned: some CDNs reject HEAD but serve GET,
+        // so the range probe below still gets a chance to prove the file exists.
+        let refusedStatus: number | null = null;
+
         const headController = new AbortController();
         const headTimeoutId = setTimeout(() => headController.abort(), Viewer.REMOTE_HEAD_TIMEOUT_MS);
         try {
@@ -4127,6 +4158,8 @@ class Viewer {
                 if (Number.isFinite(bytes) && bytes > 0) {
                     return bytes;
                 }
+            } else if (response.status >= 400 && response.status < 500) {
+                refusedStatus = response.status;
             }
         } catch {
             // ignore and try range probe
@@ -4143,7 +4176,12 @@ class Viewer {
                 signal: rangeController.signal,
                 cache: 'no-store'
             });
-            if (!response.ok) return null;
+            if (!response.ok) {
+                // 4xx means the server knows the file and refuses it (missing, forbidden, gone) —
+                // report that instead of blaming missing size metadata.
+                const status = response.status >= 400 && response.status < 500 ? response.status : refusedStatus;
+                return status === null ? null : { missing: status };
+            }
 
             const rangeTotal = this.parseContentRangeTotal(response.headers.get('content-range'));
             if (rangeTotal !== null) return rangeTotal;
@@ -4152,13 +4190,16 @@ class Viewer {
             const bytes = Number(contentLength);
             return Number.isFinite(bytes) && bytes > 0 ? bytes : null;
         } catch {
-            return null;
+            // The range probe itself can fail cross-origin: a `Range` header makes the request
+            // non-simple, so it needs a CORS preflight that many static-file hosts don't answer.
+            // In that case a 4xx seen by HEAD is the best evidence we have.
+            return refusedStatus === null ? null : { missing: refusedStatus };
         } finally {
             clearTimeout(rangeTimeoutId);
         }
     }
 
-    private async exceedsRemoteSizeLimit(file: File, limitBytes: number): Promise<number | 'unknown' | null> {
+    private async exceedsRemoteSizeLimit(file: File, limitBytes: number): Promise<number | 'unknown' | { missing: number } | null> {
         if (typeof file.sizeBytes === 'number' && file.sizeBytes > 0) {
             return file.sizeBytes > limitBytes ? file.sizeBytes : null;
         }
@@ -4166,9 +4207,10 @@ class Viewer {
         if (!/^https?:\/\//i.test(fileUrl)) {
             return null;
         }
-        const resolvedBytes = await this.resolveRemoteFileSize(fileUrl);
-        if (resolvedBytes === null) return 'unknown';
-        return resolvedBytes > limitBytes ? resolvedBytes : null;
+        const resolved = await this.resolveRemoteFileSize(fileUrl);
+        if (resolved === null) return 'unknown';
+        if (typeof resolved === 'object') return resolved;
+        return resolved > limitBytes ? resolved : null;
     }
 
     // load the list of urls.
