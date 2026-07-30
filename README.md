@@ -6,6 +6,10 @@
 >
 > ⚠️ Ветка `main` содержит Heritage3D-форк; обновления upstream PlayCanvas пока не влиты.
 > Постобработка (вкладка Effects) и AR/WebXR-режим из форка **удалены** — см. `docs/CHANGELOG-FORK.md`.
+>
+> 🖥 **Графика:** по умолчанию WebGPU с автоматическим откатом на WebGL2; `?webgl` — принудительно
+> WebGL2. Gaussian Splats (PLY / SOG / LOD) идут через unified GSplat pipeline движка:
+> GPU-сортировка на WebGPU, CPU-сортировка на WebGL.
 
 ---
 
@@ -19,8 +23,8 @@
 | **Версия формата** | В корне JSON: `modelViewerSettingsVersion: 1`. |
 | **Как получить** | Кнопка **EXPORT VIEWER SETTINGS** в панели **View & share** — скачивает JSON с именем от первой загруженной модели. |
 | **Как применяется** | После загрузки модели **автоматически** запрашивается sidecar с тем же базовым именем. При отсутствии файла часть состояния сбрасывается к умолчанию. |
-| **Что внутри (экспорт)** | `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `dimensionBox`, `poi` (список точек), `enableWebGPU`, при наличии — `materialOverrides`, всегда — `sceneTransform`. В режиме **orbit** в `camera` дополнительно сохраняются `position` и `focus`. Цвета — **HEX-строки** (`#rrggbb`). |
-| **Whitelist применения** | При импорте применяются только ключи из `SETTINGS_APPLY_KEYS` (`camera, skybox, light, debug, shadowCatcher, measure, dimensionBox, poi, enableWebGPU`). |
+| **Что внутри (экспорт)** | `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `dimensionBox`, `poi` (список точек), `graphicsBackend`, при наличии — `materialOverrides`, всегда — `sceneTransform`. В режиме **orbit** в `camera` дополнительно сохраняются `position` и `focus`. Цвета — **HEX-строки** (`#rrggbb`). |
+| **Whitelist применения** | При импорте применяются только ключи из `SETTINGS_APPLY_KEYS` (`camera, skybox, light, debug, shadowCatcher, measure, dimensionBox, poi, graphicsBackend`). |
 | **Ограничения** | Максимальный размер файла **10 MB**; для удалённой загрузки — таймауты и проверки (см. `src/viewer/settings-service.ts`). |
 
 **Зачем это важно:** один GLB на CDN + один JSON рядом дают **воспроизводимый вид** (ракурс, окружение, масштаб измерений, тур) без ручного кликанья в UI.

@@ -3,6 +3,8 @@ import { version as pcuiVersion, revision as pcuiRevision } from '@playcanvas/pc
 import {
     basisInitialize,
     createGraphicsDevice,
+    DEVICETYPE_WEBGL2,
+    DEVICETYPE_WEBGPU,
     Vec3,
     WasmModule,
     version as engineVersion,
@@ -268,6 +270,7 @@ const observerData: ObserverData = {
     },
     runtime: {
         activeDeviceType: '',
+        gsplatRenderer: '',
         viewportWidth: 0,
         viewportHeight: 0
     },
@@ -302,7 +305,7 @@ const observerData: ObserverData = {
         activeId: ''
     },
     morphs: null,
-    enableWebGPU: false,
+    graphicsBackend: 'auto',
     centerScene: false,
     // Метаданные убраны из плеера (источник правды — портал). Остаётся только
     // невидимый идентификатор для связи файла с записью инструмента.
@@ -325,14 +328,17 @@ const saveOptions = (observer: Observer, name: string) => {
         shadowCatcher: options.shadowCatcher,
         measure: options.measure,
         dimensionBox: options.dimensionBox,
-        enableWebGPU: options.enableWebGPU,
+        graphicsBackend: options.graphicsBackend,
         metadata: options.metadata ?? {},
         ui: { language: options.ui?.language }
     }));
 };
 
 const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, string>) => {
-    const filter = ['skybox.options', 'debug.renderMode', 'debug.alignmentMode'];
+    // `enableWebGPU` is a legacy key: it stored `false` both when the user opted out and simply
+    // because that used to be the default, so it cannot be honoured now that WebGPU is the default.
+    // Backend preference lives in `graphicsBackend` instead.
+    const filter = ['skybox.options', 'debug.renderMode', 'debug.alignmentMode', 'enableWebGPU'];
 
     const loadRec = (path: string, value: unknown) => {
         if (filter.indexOf(path) !== -1) {
@@ -486,13 +492,21 @@ const main = () => {
     // create the canvas
     const canvas = document.getElementById('application-canvas') as HTMLCanvasElement;
 
+    // Graphics backend: WebGPU-first. `createGraphicsDevice` appends its own WebGL2/null fallbacks
+    // to whatever we request, so an unsupported or failing WebGPU device degrades to WebGL2 instead
+    // of rejecting — no manual feature detection or try/catch orchestration needed here.
+    //
+    // Precedence: ?webgl (force WebGL, for diagnostics) > ?webgpu (kept for existing links; same as
+    // the default now) > the saved `graphicsBackend` preference.
+    const forceWebGL = url.searchParams.has('webgl') ||
+        (!url.searchParams.has('webgpu') && observer.get('graphicsBackend') === 'webgl');
+
     // create the graphics device
     createGraphicsDevice(canvas, {
-        deviceTypes: url.searchParams.has('webgpu') || observer.get('enableWebGPU') ? ['webgpu'] : [],
+        deviceTypes: forceWebGL ? [DEVICETYPE_WEBGL2] : [DEVICETYPE_WEBGPU],
         antialias: false,
         depth: false,
         stencil: false,
-        xrCompatible: true,
         powerPreference: 'high-performance'
     }).then((device) => {
         observer.set('runtime.activeDeviceType', device.deviceType);
@@ -503,6 +517,9 @@ const main = () => {
         // make available globally
         window.viewer = viewer;
         viewer.setPerfEnabled(perfEnabled);
+
+        // one-time backend report (alongside the version banner above; never per frame)
+        console.log(`Graphics backend: ${viewer.graphicsBackend === 'webgpu' ? 'WebGPU' : 'WebGL 2'} | GSplat renderer: ${observer.get('runtime.gsplatRenderer')}`);
 
         // save orbit camera position before unload so it can be restored on next load
         window.addEventListener('beforeunload', () => {

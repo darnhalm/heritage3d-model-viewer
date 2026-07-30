@@ -52,6 +52,10 @@ import {
     GraphicsDevice,
     GraphNode,
     Gizmo,
+    DEVICETYPE_WEBGPU,
+    GSPLAT_RENDERER_COMPUTE,
+    GSPLAT_RENDERER_RASTER_CPU_SORT,
+    GSPLAT_RENDERER_RASTER_GPU_SORT,
     GSplatComponent,
     GSplatComponentSystem,
     GSplatData,
@@ -1298,6 +1302,7 @@ class Viewer {
      */
     private initGSplat() {
         const gsplatSystem = this.app.systems.gsplat as GSplatComponentSystem;
+        const gsplatParams = this.app.scene.gsplat;
 
         gsplatSystem.on('frame:request', () => {
             this.renderNextFrame();
@@ -1305,7 +1310,35 @@ class Viewer {
 
         // Global splat budget. Only caps octree (LOD/streamed) scenes — plain PLY/SOG are unaffected
         // (see GSplatWorld._enforceBudget) — so a budget here just bounds streaming memory/perf.
-        this.app.scene.gsplat.splatBudget = platform.mobile ? 1500000 : 3000000;
+        gsplatParams.splatBudget = platform.mobile ? 1500000 : 3000000;
+
+        // Sorting pipeline, chosen explicitly per backend as supersplat-viewer does, rather than
+        // leaving GSPLAT_RENDERER_AUTO implicit: same resolution (WebGPU → GPU sort, WebGL → CPU
+        // sort), but the choice is visible in code and easy to override.
+        // GSPLAT_RENDERER_COMPUTE also exists in this engine version; supersplat-viewer does not use
+        // it as its production renderer yet, so we don't either — switching means one line here.
+        gsplatParams.renderer = this.graphicsBackend === 'webgpu' ?
+            GSPLAT_RENDERER_RASTER_GPU_SORT :
+            GSPLAT_RENDERER_RASTER_CPU_SORT;
+
+        // Report what the engine actually resolved to (it falls back on its own if a mode needs
+        // WebGPU on a WebGL device), not what we asked for.
+        const rendererLabels: Record<number, string> = {
+            [GSPLAT_RENDERER_RASTER_CPU_SORT]: 'CPU sort',
+            [GSPLAT_RENDERER_RASTER_GPU_SORT]: 'GPU sort',
+            [GSPLAT_RENDERER_COMPUTE]: 'compute'
+        };
+        const resolved = gsplatParams.currentRenderer;
+        this.observer.set('runtime.gsplatRenderer', rendererLabels[resolved] ?? `unknown (${resolved})`);
+    }
+
+    /**
+     * Graphics backend actually in use, after the engine's WebGPU → WebGL2 fallback.
+     *
+     * @returns 'webgpu' or 'webgl'.
+     */
+    get graphicsBackend(): 'webgpu' | 'webgl' {
+        return this.app.graphicsDevice.deviceType === DEVICETYPE_WEBGPU ? 'webgpu' : 'webgl';
     }
 
     private _showRipple(x: number, y: number) {

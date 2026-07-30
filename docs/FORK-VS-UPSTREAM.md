@@ -16,8 +16,8 @@
 | **Версия формата** | В корне JSON: `modelViewerSettingsVersion: 1`. |
 | **Как получить** | Кнопка **EXPORT VIEWER SETTINGS** в панели **View & share** — скачивает JSON с именем от первой загруженной модели. |
 | **Как применяется** | После загрузки модели **автоматически** запрашивается sidecar с тем же базовым именем (HTTP(S), таймауты и лимиты — в `SettingsService` / [`CHANGELOG-FORK.md`](./CHANGELOG-FORK.md)). При отсутствии файла часть состояния сбрасывается к умолчанию (см. логику в коде). |
-| **Что внутри (экспорт)** | `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `poi` (список точек), `enableWebGPU`, при наличии — `materialOverrides`, всегда — `sceneTransform`. В режиме **orbit** в `camera` дополнительно сохраняются `position` и `focus` (массивы из трёх чисел). Цвета фона и света в файле — **HEX-строки** (`#rrggbb`). |
-| **Whitelist применения** | При **импорте** применяются только ветки из `SETTINGS_APPLY_KEYS` (`camera, skybox, light, debug, shadowCatcher, measure, dimensionBox, poi, enableWebGPU`). |
+| **Что внутри (экспорт)** | `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `poi` (список точек), `graphicsBackend`, при наличии — `materialOverrides`, всегда — `sceneTransform`. В режиме **orbit** в `camera` дополнительно сохраняются `position` и `focus` (массивы из трёх чисел). Цвета фона и света в файле — **HEX-строки** (`#rrggbb`). |
+| **Whitelist применения** | При **импорте** применяются только ветки из `SETTINGS_APPLY_KEYS` (`camera, skybox, light, debug, shadowCatcher, measure, dimensionBox, poi, graphicsBackend`). |
 | **Ограничения** | Максимальный размер файла **10 MB**; для удалённой загрузки действуют таймауты и проверки (см. `src/viewer/settings-service.ts`). Drag-and-drop модели и JSON одним жестом — в пожеланиях, [`FEATURE-WISHES.md`](./FEATURE-WISHES.md). |
 
 **Зачем это важно:** один GLB на CDN + один JSON рядом дают **воспроизводимый вид** (ракурс, окружение, масштаб измерений, тур) без ручного кликанья в UI. Это отличает форк от «чистого» model-viewer, где состояние в основном живёт в сессии и `localStorage`, а не в переносимом артефакте рядом с моделью.

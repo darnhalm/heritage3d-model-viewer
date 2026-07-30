@@ -37,7 +37,7 @@
 
 **Формат JSON:**
 - Версия: `modelViewerSettingsVersion: 1`
-- Разделы: `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `enableWebGPU`
+- Разделы: `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `graphicsBackend`
 - Цвета сохраняются в HEX (`#rrggbb`) для однозначной сериализации
 
 **Применение:**
@@ -141,6 +141,44 @@
 
 Побочный эффект, который сохранён отдельно: очередь пост-эффектов раньше попутно
 переставляла камеру у `Multiframe`. Теперь это делает `Viewer.syncMultiframeCamera()`.
+
+---
+
+## WebGPU-first и unified GSplat
+
+**Движок:** `playcanvas` 2.15.2 → **2.20.6** (версия, на которой работает
+`supersplat-viewer`). Ниже 2.18 нет констант `GSPLAT_RENDERER_*`, ниже 2.20 — события
+`frame:request`.
+
+**Выбор бэкенда** (`src/index.tsx`): по умолчанию запрашивается WebGPU.
+`createGraphicsDevice` сам дописывает WebGL2 и null в список устройств и при
+неподдерживаемом или упавшем WebGPU молча уходит на WebGL2 — своего feature detection
+и try/catch не нужно.
+
+| URL | Бэкенд |
+|---|---|
+| без параметров | WebGPU, при недоступности → WebGL2 |
+| `?webgl` | принудительно WebGL2 (диагностика) |
+| `?webgpu` | как дефолт (оставлен для существующих ссылок) |
+
+Приоритет: `?webgl` > `?webgpu` > сохранённая настройка.
+
+**Настройка вместо `enableWebGPU`:** `graphicsBackend: 'auto' | 'webgl'` (дефолт `auto`).
+Старый ключ `enableWebGPU` при загрузке из localStorage **игнорируется**: в нём `false`
+означало и «пользователь отключил», и «просто старый дефолт», различить нельзя — иначе
+все существующие пользователи навсегда остались бы на WebGL. Тумблер «Use WebGPU» в
+Settings переключает `auto` ↔ `webgl` (с перезагрузкой страницы, как раньше).
+
+**GSplat renderer** (`Viewer.initGSplat`): выбирается явно, как в `supersplat-viewer` —
+WebGPU → `GSPLAT_RENDERER_RASTER_GPU_SORT`, WebGL → `GSPLAT_RENDERER_RASTER_CPU_SORT`
+(то же, что дал бы `GSPLAT_RENDERER_AUTO`, но видно в коде). `GSPLAT_RENDERER_COMPUTE` в
+2.20.6 есть, но `supersplat-viewer` пока не использует его как продакшн-рендерер —
+переключение будет правкой одной строки.
+
+**Диагностика:** `viewer.graphicsBackend` → `'webgpu' | 'webgl'` (после фолбэка движка),
+`runtime.gsplatRenderer` в observer → `'GPU sort' | 'CPU sort' | 'compute'` (читается из
+`app.scene.gsplat.currentRenderer`, т.е. фактический, а не запрошенный). В консоль один
+раз при старте печатается строка `Graphics backend: … | GSplat renderer: …`.
 
 ---
 

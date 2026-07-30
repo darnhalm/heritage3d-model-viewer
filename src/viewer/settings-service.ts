@@ -32,7 +32,7 @@ type SettingsServiceArgs = {
 };
 
 class SettingsService {
-    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi', 'enableWebGPU'];
+    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi', 'graphicsBackend'];
 
     private static readonly SETTINGS_FILTER_PATHS = ['skybox.options', 'debug.renderMode'];
 
@@ -310,7 +310,7 @@ class SettingsService {
                     }
                 })()
             },
-            enableWebGPU: options.enableWebGPU
+            graphicsBackend: options.graphicsBackend
         };
         const materialOverrides = this.getMaterialOverrides();
         if (Object.keys(materialOverrides).length > 0) {

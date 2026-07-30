@@ -169,7 +169,7 @@
 <thead><tr><th>Элемент UI</th><th>Тип</th><th>Observer path</th><th>Описание</th></tr></thead>
 <tbody>
 <tr><td>Current Device</td><td>Detail (read-only)</td><td><code>runtime.activeDeviceType</code></td><td>WebGPU или WebGL 2</td></tr>
-<tr><td>Use WebGPU</td><td>Toggle</td><td><code>enableWebGPU</code></td><td>Переключение на WebGPU (с перезагрузкой страницы)</td></tr>
+<tr><td>Use WebGPU</td><td>Toggle</td><td><code>graphicsBackend</code></td><td><code>auto</code> (WebGPU при поддержке, иначе WebGL2) ↔ <code>webgl</code> (принудительно WebGL2); с перезагрузкой страницы</td></tr>
 <tr><td>Render Mode</td><td>Select</td><td><code>debug.renderMode</code></td><td>Default, Lighting, Albedo, …</td></tr>
 <tr><td><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAABO0lEQVR42p3UOy8EYRTG8Z/Nsi4rEkRUhA+jFIUofQetECIiLglCtCqNzgdQ6Fx6oaAQ14aQCCFxaU4xJmN3Z59mnsx583/nPPOeF0Zxjj20ya9u7OMUQw24xGAUL/CSE9iJgfDHRZwF8AfbeMwJ7Mdk+DMo4wET6tdStFwq4BXveMoJacdI+Hs846OQWFDIAStjFUfpQjHhf3LANjAdUf1R8qu+aoC1BWwGt1kLksCPKrBWrGEW1/8tSrZcqgBriczmcFNp18I/8CzYfDVYGvieUW/GOhZqgaWB36laCZtYqZRZpQyTagrYYsx6zcrKsCkyW84LSwMb4zkWZ+2inqEuxl9sjnsNdurgdMVsNxaxi964MT6zxqmKBjAVfqsBV+iLFw94ywksoyf8CYzjDgfoqKPdHhzG0Rr+BXdXPOUfa2KEAAAAAElFTkSuQmCC" width="22" height="22" alt="" /> Wireframe</td><td>ToggleColor</td><td><code>debug.wireframe</code>, <code>debug.wireframeColor</code></td><td>Каркас и цвет линий</td></tr>
 <tr><td>Grid</td><td>Toggle</td><td><code>debug.grid</code></td><td>Сетка</td></tr>
@@ -211,7 +211,7 @@
 | <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAABDklEQVR42uXUTyuEURQG8J+3MZQs5l2oMVKU1Wz4EKJslLLiC8xSyUZ6pyQbS18AC/kGLGzsbZRYWrCwYGFBM4nNGWmK0cxYzanTvefec56ee/5cek76Yp3HKvrbxKnjAKeQ4g0fHeor0gRFDKAajNvRKgZRTLqdw9wP5xs4xhwKjdyE/Rz2Ai4w+RfAXbxgG2eYwTBKmMI69rGHcVw3An978ntU7xyb0QEZ7pEPn5XmoGbAHYzG/hYVTAeTZnnESKscLn1zmsAWLsOvHgxLqOEON60AK5jFGo4wFIxP4n4ZD1GUBFcYi7x+STkaM+ugW7LAKCf/Mc9pjE03Rq+QwxMW43PIt0mqhsNo+l6TT87sT2dsPh1jAAAAAElFTkSuQmCC" width="22" height="22" alt="" /> EXPORT VIEWER SETTINGS | Button | `viewer.exportViewerSettings()` → JSON настроек сцены |
 
 **Формат экспорта настроек (model-viewer-settings.json):**  
-Корень: `modelViewerSettingsVersion: 1`, плюс объекты `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, скаляр `enableWebGPU`. В орбитальном режиме в `camera` добавляются массивы `position` и `focus` (три числа). Цвета фона и света сохраняются в HEX (`skybox.backgroundColor`, `light.color` — строка вида `#rrggbb`) для однозначной записи и корректного применения при загрузке.
+Корень: `modelViewerSettingsVersion: 1`, плюс объекты `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, скаляр `graphicsBackend` (`'auto'` / `'webgl'`). В орбитальном режиме в `camera` добавляются массивы `position` и `focus` (три числа). Цвета фона и света сохраняются в HEX (`skybox.backgroundColor`, `light.color` — строка вида `#rrggbb`) для однозначной записи и корректного применения при загрузке.
 
 **Автоподхват настроек из папки модели:** при загрузке модели по HTTP(S) viewer ищет в том же каталоге файл настроек: `имя.model-viewer-settings.json` или с суффиксом в скобках (как при повторном скачивании в Chrome): `имя.model-viewer-settings(1).json`, `(2).json`, … до `(20).json`. Если найдено несколько вариантов, применяется файл с **наибольшим номером в скобках** (наиболее «свежая» версия). Таймаут запросов 5 с. Подхват при одновременном перетаскивании модели и файла настроек не реализован; пожелание — в `docs/FEATURE-WISHES.md`.
 
@@ -260,7 +260,7 @@
 - **Camera:** `camera.fov`, `camera.tonemapping`, `camera.pixelScale`, `camera.multisample`, `camera.hq`, `camera.mode`, `scene.selectedCamera`
 - **Sky:** `skybox.value`, `skybox.exposure`, `skybox.rotation`, `skybox.background`, `skybox.backgroundColor`, `skybox.blur`, `skybox.domeProjection.*`
 - **Light:** `light.enabled`, `light.intensity`, `light.color`, `light.follow`, `light.shadow`; shadow catcher — `shadowCatcher.enabled`, `shadowCatcher.intensity`
-- **Settings:** `debug.*`, `enableWebGPU`; перезагрузка при смене WebGPU
+- **Settings:** `debug.*`, `graphicsBackend`; перезагрузка при смене бэкенда
 - **Animation:** `animation.playing`, `animation.selectedTrack`, `animation.progress`, `animation.speed`, `animation.list` — обрабатываются в viewer (setAnimationProgress, setSelectedTrack, play/stop и т.д.)
 
 Share/View не подписывается на observer для данных сцены — читает `sceneData.urls` и формирует URL в компоненте ViewPanel.
