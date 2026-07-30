@@ -166,6 +166,9 @@ type GltfTextureLike = object;
 type AssetProcessContinuation = (err: string | null, result: unknown) => void;
 type AssetLoadProcessOptions = Record<string, unknown>;
 
+/** Engine input devices keep their DOM move handler private; the viewer wraps it (see constructor). */
+type MoveHandlerHost<E extends Event> = { _moveHandler: (event: E) => void };
+
 // override global pick to pack depth instead of meshInstance id
 const pickDepthGlsl = /* glsl */ `
 vec4 packFloat(float depth) {
@@ -706,18 +709,22 @@ class Viewer {
 
         // monkeypatch the mouse and touch input devices to ignore touch events
         // when they don't originate from the canvas.
-        const origMouseHandler = app.mouse._moveHandler;
+        // `_moveHandler` is declared private by the engine (since 2.20), so go through a narrow
+        // structural cast rather than weakening the typing of the whole device.
+        const mouseHost = app.mouse as unknown as MoveHandlerHost<MouseEvent>;
+        const origMouseHandler = mouseHost._moveHandler;
         app.mouse.detach();
-        app.mouse._moveHandler = (event: MouseEvent) => {
+        mouseHost._moveHandler = (event: MouseEvent) => {
             if (event.target === canvas) {
                 origMouseHandler(event);
             }
         };
         app.mouse.attach(canvas);
 
-        const origTouchHandler = app.touch._moveHandler;
+        const touchHost = app.touch as unknown as MoveHandlerHost<TouchEvent>;
+        const origTouchHandler = touchHost._moveHandler;
         app.touch.detach();
-        app.touch._moveHandler = (event: MouseEvent) => {
+        touchHost._moveHandler = (event: TouchEvent) => {
             if (event.target === canvas) {
                 origTouchHandler(event);
             }
