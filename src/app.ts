@@ -13,7 +13,6 @@ import {
     ContainerHandler,
     CubemapHandler,
     TextureHandler,
-    XrManager,
     GSplatComponentSystem,
     GSplatHandler,
     ScriptComponentSystem
@@ -40,7 +39,6 @@ class App extends AppBase {
         appOptions.scriptsOrder = options.scriptsOrder;
 
         appOptions.lightmapper = Lightmapper;
-        appOptions.xr = XrManager;
 
         this.init(appOptions);
     }

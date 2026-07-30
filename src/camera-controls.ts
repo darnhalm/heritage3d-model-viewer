@@ -362,12 +362,6 @@ class CameraControls {
         v.add(stickRotate.mulScalar(this.orbitSpeed * dt));
         deltas.rotate.append([v.x, v.y, v.z]);
 
-        // check if XR is active, just read frame to clear it
-        if (this._app.xr?.active) {
-            frame.read();
-            return;
-        }
-
         // update controller by consuming frame
         this._pose.copy(this._controller.update(frame, dt));
         this._camera.entity.setPosition(this._pose.position);

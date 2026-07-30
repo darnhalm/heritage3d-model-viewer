@@ -198,7 +198,7 @@ Dublin Core
   "playerType": "playcanvas_3d",
   "embedSource": "storage_generated",
   "iframeUrl": "https://player.example.ru/viewer/?manifest=https%3A%2F%2Fstorage.example.ru%2Fmanifest%2Fst_01JASSET&embed=1&ui=compact&lang=ru&autoplay=0&panel=0&poi=1&tour=1&measure=0&info=1&modelInfo=0&controls=1&fullscreen=1&fit=1&reset=1",
-  "iframeHtml": "<iframe title=\"3D Viewer\" src=\"https://player.example.ru/viewer/?...\" width=\"960\" height=\"640\" allow=\"fullscreen; xr-spatial-tracking\" allowfullscreen referrerpolicy=\"strict-origin-when-cross-origin\" sandbox=\"allow-scripts allow-same-origin allow-popups\"></iframe>",
+  "iframeHtml": "<iframe title=\"3D Viewer\" src=\"https://player.example.ru/viewer/?...\" width=\"960\" height=\"640\" allow=\"fullscreen\" allowfullscreen referrerpolicy=\"strict-origin-when-cross-origin\" sandbox=\"allow-scripts allow-same-origin allow-popups\"></iframe>",
   "externalEmbedUrl": null,
   "embedToken": null,
   "tokenExpiresAt": null,
@@ -228,7 +228,7 @@ Dublin Core
     "title": "3D Viewer",
     "width": 960,
     "height": 640,
-    "allow": "fullscreen; xr-spatial-tracking",
+    "allow": "fullscreen",
     "allowFullscreen": true,
     "referrerPolicy": "strict-origin-when-cross-origin",
     "sandbox": ["allow-scripts", "allow-same-origin", "allow-popups"]

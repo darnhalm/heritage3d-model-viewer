@@ -124,11 +124,23 @@
 
 ---
 
-## Post-processing (вкладка Effects)
+## Удалено: постобработка (вкладка Effects) и AR/WebXR
 
-**Документация для разработчиков:** [POST-EFFECTS.md](./POST-EFFECTS.md).
+Обе подсистемы вырезаны из форка (шаг подготовки к WebGPU-first + unified GSplat).
 
-Кратко: при `autoRender === false` после изменения очереди/параметров post-effects нужно вызывать **`renderNextFrame()`**, иначе при неподвижной камере кадр не перерисуется и эффекты кажутся «мёртвыми».
+- **Постобработка**: удалены `src/viewer/posteffects/*` (Bloom, SSAO, FXAA, LUT, цветокор,
+  tilt-shift и др.), `src/viewer/lut/*`, `src/posteffects-sanitize.ts`,
+  `src/ui/left-panel/PostEffectsPanel.tsx`, вкладка **Effects**, ветка `posteffects` в
+  observer/типах и ключ `Effects` в i18n. Причина: все эффекты были только на GLSL
+  (`vertexGLSL`/`fragmentGLSL`) и на WebGPU-устройстве не компилируются.
+- **AR/WebXR**: удалены `src/xr-mode.ts`, иконки `src/svg/ar-*.svg`, `appOptions.xr = XrManager`,
+  ветки `xrMode?.active` в `viewer.ts`, `runtime.xrSupported` / `runtime.xrActive`,
+  XR-ветка в `camera-controls.ts`, `xr-spatial-tracking` в генераторе embed-кода.
+  Причина: AR/VR не поддерживается на WebGPU-рендерере (ср. `supersplat-viewer`,
+  который для XR принудительно перезагружается в WebGL).
+
+Побочный эффект, который сохранён отдельно: очередь пост-эффектов раньше попутно
+переставляла камеру у `Multiframe`. Теперь это делает `Viewer.syncMultiframeCamera()`.
 
 ---
 

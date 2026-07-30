@@ -64,7 +64,7 @@ Viewer также отправляет события обратно наруж�
   width="960"
   height="640"
   style="border:0"
-  allow="autoplay; fullscreen; xr-spatial-tracking; web-share"
+  allow="autoplay; fullscreen; web-share"
   allowfullscreen
 ></iframe>
 ```

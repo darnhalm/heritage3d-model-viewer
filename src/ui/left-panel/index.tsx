@@ -5,7 +5,6 @@ import { extract } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
-import PostEffectsPanel from './PostEffectsPanel';
 import { maybeAutoStartTour, startLeftPanelTour } from './tour';
 
 type PoiItem = {
@@ -232,7 +231,7 @@ const exportViewerSettings = (observerData: ObserverData) => {
     URL.revokeObjectURL(url);
 };
 
-type LeftPanelTab = 'scene' | 'alignment' | 'materials' | 'poi' | 'effects';
+type LeftPanelTab = 'scene' | 'alignment' | 'materials' | 'poi';
 
 // Метаданные (Dublin Core/ЕГРОКН/Госкаталог) убраны из плеера: источник правды —
 // портал. Здесь остаётся лишь невидимый identifier (см. types/index defaults).
@@ -714,7 +713,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'posteffects', 'animation.list'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'enableWebGPU', 'ui.language', 'animation.list'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) ||
@@ -973,16 +972,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             onClick={() => this.setState({ tab: 'poi' })}
                         >
                             {t('POI', lang)}
-                        </button>
-                    )}
-                    {!embedEnabled && (
-                        <button
-                            type='button'
-                            className={`left-panel-tab left-panel-tab-effects${tab === 'effects' ? ' active' : ''}`}
-                            onClick={() => this.setState({ tab: 'effects' })}
-                        >
-                            <span className='material-symbols-outlined left-panel-tab-effects-icon' aria-hidden='true'>wand_stars</span>
-                            {t('Effects', lang)}
                         </button>
                     )}
                     {!embedEnabled && (
@@ -1424,11 +1413,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 <Button class='secondary' text={t('Save', lang)} onClick={this.handlePoiSave} />
                                 {this.state.poiSaved && <span className='metadata-saved-feedback'>✓ {t('Saved', lang)}</span>}
                             </div>
-                        </Container>
-                    )}
-                    {tab === 'effects' && (
-                        <Container id='effects-panel' class='tab-panel'>
-                            <PostEffectsPanel observerData={observerData} setProperty={setProperty} />
                         </Container>
                     )}
                 </div>
