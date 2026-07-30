@@ -6,7 +6,6 @@ import { Picker } from '../../picker';
 
 const MEASURE_CLICK_DRAG_THRESHOLD = 5;
 const AREA_CLOSE_HIT_RADIUS = 16;
-type ViewerTaggedMeshInstance = MeshInstance & { __viewerIsGsplat?: boolean };
 type MeasureMode = 'distance' | 'angle' | 'area';
 type ScreenPoint = { x: number; y: number; z: number };
 type StoredMeasurement = {
@@ -587,7 +586,6 @@ class MeasurementController {
         let bestPoint: Vec3 | null = null;
 
         this.getMeshInstances().forEach((mi) => {
-            if ((mi as ViewerTaggedMeshInstance).__viewerIsGsplat) return;
             const aabb = mi.aabb;
             if (!aabb) return;
 

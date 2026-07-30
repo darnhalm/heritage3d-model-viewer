@@ -53,6 +53,7 @@ import {
     GraphNode,
     Gizmo,
     GSplatComponent,
+    GSplatComponentSystem,
     GSplatData,
     GSplatResource,
     GSplatResourceBase,
@@ -79,7 +80,8 @@ import {
     Vec2,
     Vec4,
     ViewCube,
-    CameraComponent
+    CameraComponent,
+    platform
 } from 'playcanvas';
 
 import { App } from './app';
@@ -114,7 +116,6 @@ const doubleTapDelay = 400;
 const doubleTapRadius = 45;
 const RIPPLE_CAMERA_DELAY_MS = 380;
 const RIPPLE_REMOVE_MS = 900;
-type ViewerTaggedMeshInstance = MeshInstance & { __viewerIsGsplat?: boolean };
 type TextureAssetFile = { filename?: string };
 type TextureLike = {
     name?: string;
@@ -140,9 +141,6 @@ type ContainerResourceLike = {
     animations?: Array<{ resource: AnimTrack }>;
     getMaterialVariants?: () => string[];
     instantiateRenderEntity?: () => Entity;
-};
-type AssetFileLike = {
-    filename?: string;
 };
 type MeshoptCompressionExt = {
     buffer: number;
@@ -1171,6 +1169,9 @@ class Viewer {
         // dynamic shadow catcher
         this.shadowCatcher = new ShadowCatcher(app, this.camera.camera, this.debugRoot, this.sceneRoot);
 
+        // gaussian splat pipeline
+        this.initGSplat();
+
         // initialize control events
         this.bindControlEvents();
 
@@ -1285,6 +1286,26 @@ class Viewer {
         if (enabled) {
             console.log('[perf] enabled (window=5s)');
         }
+    }
+
+    /**
+     * Configure the engine's unified gsplat pipeline. Called once from the constructor.
+     *
+     * The viewer runs with `app.autoRender === false`, so splat streaming and sorting must be able
+     * to ask for a frame: 'frame:request' fires when streaming produced new data or a sort result is
+     * ready to be applied. This replaces the legacy per-component `instance.sorter.on('updated')`,
+     * which only existed on the non-unified (CPU-sorted) path.
+     */
+    private initGSplat() {
+        const gsplatSystem = this.app.systems.gsplat as GSplatComponentSystem;
+
+        gsplatSystem.on('frame:request', () => {
+            this.renderNextFrame();
+        });
+
+        // Global splat budget. Only caps octree (LOD/streamed) scenes — plain PLY/SOG are unaffected
+        // (see GSplatWorld._enforceBudget) — so a budget here just bounds streaming memory/perf.
+        this.app.scene.gsplat.splatBudget = platform.mobile ? 1500000 : 3000000;
     }
 
     private _showRipple(x: number, y: number) {
@@ -1481,14 +1502,9 @@ class Viewer {
                 }
             }
 
-            const gsplatComponents = entity.findComponents('gsplat');
-            for (let i = 0; i < gsplatComponents.length; i++) {
-                const gsplat = gsplatComponents[i] as GSplatComponent;
-                if (gsplat.instance) {
-                    (gsplat.instance.meshInstance as ViewerTaggedMeshInstance).__viewerIsGsplat = true;
-                    meshInstances.push(gsplat.instance.meshInstance);
-                }
-            }
+            // Unified gsplat components render through the engine's gsplat director and expose no
+            // MeshInstance, so they never appear in this list. Splat bounds come from
+            // GSplatComponent#customAabb instead (see calcSceneBounds).
         }
         return meshInstances;
     }
@@ -4932,19 +4948,14 @@ class Viewer {
                 // container/glb
                 entity = resource?.instantiateRenderEntity?.() ?? new Entity();
             } else {
-                const unified = ((asset.file as AssetFileLike | undefined)?.filename ?? '').endsWith('lod-meta.json');
-
-                // gaussian splat scene
+                // Gaussian splat scene. Every format (PLY, compressed PLY, SOG, LOD/streaming
+                // meta.json) goes through the engine's unified gsplat pipeline: `unified` defaults
+                // to true since engine 2.20 and the non-unified path is deprecated there, so we
+                // deliberately don't pass the flag. Frame invalidation for splat streaming/sorting
+                // is handled once, app-wide, in initGSplat().
                 entity = new Entity();
                 entity.setEulerAngles(0, 0, 180);
-                entity.addComponent('gsplat', { unified, asset });
-
-                // render frame if gaussian splat sorter updates)
-                if (!unified) {
-                    entity.gsplat.instance.sorter.on('updated', () => {
-                        this.renderNextFrame();
-                    });
-                }
+                entity.addComponent('gsplat', { asset });
             }
 
             this.entities.push(entity);
@@ -4988,7 +4999,10 @@ class Viewer {
         }
 
         // if no meshes are currently loaded, then enable skeleton rendering so user can see something
-        if (this.meshInstances.length === 0) {
+        // Mesh-less scenes default to skeleton debug — but a splat scene is not "empty", it just has
+        // no MeshInstances under the unified gsplat pipeline.
+        const hasGsplat = this.entities.some(entity => !!entity.findComponent('gsplat'));
+        if (this.meshInstances.length === 0 && !hasGsplat) {
             this.observer.set('debug.skeleton', true);
         }
 

@@ -8,7 +8,6 @@ const POI_CLICK_DRAG_THRESHOLD = 5;
 const POI_MARKER_HIT_RADIUS = 18;
 const POI_TITLE_MAX_LENGTH = 80;
 const POI_DESCRIPTION_MAX_LENGTH = 636;
-type ViewerTaggedMeshInstance = MeshInstance & { __viewerIsGsplat?: boolean };
 
 type PoiEntry = {
     id: string;
@@ -294,7 +293,6 @@ class PoiController {
         let bestHit: ReturnType<typeof intersectMeshTrianglesDetailed> = null;
 
         this.getMeshInstances().forEach((mi) => {
-            if ((mi as ViewerTaggedMeshInstance).__viewerIsGsplat) return;
             const aabb = mi.aabb;
             if (!aabb) return;
 
