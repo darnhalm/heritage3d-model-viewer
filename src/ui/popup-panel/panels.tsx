@@ -604,7 +604,7 @@ class ViewPanel extends React.Component <{
     get embedCode() {
         const allowAttrs = ['autoplay'];
         if (this.state.allowFullscreen) {
-            allowAttrs.push('fullscreen', 'xr-spatial-tracking', 'web-share');
+            allowAttrs.push('fullscreen', 'web-share');
         }
         if (this.state.embedType === 'responsive') {
             return `<div style="position: relative; width: 100%; height: ${this.state.height}px;">

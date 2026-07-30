@@ -11,6 +11,8 @@
             "dom",
             "dom.iterable",
         ],
+        // es2022 so the lazily imported SPZ codec (dynamic import) type-checks
+        "module": "es2022",
         "moduleResolution": "node",
         "noEmit": true,
         "noImplicitAny": true,

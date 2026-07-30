@@ -202,10 +202,10 @@ export interface ObserverData {
     }>,
     runtime: {
         activeDeviceType: string,
+        /** Resolved gsplat renderer, e.g. 'GPU sort' / 'CPU sort'. Debug/diagnostics only. */
+        gsplatRenderer: string,
         viewportWidth: number,
-        viewportHeight: number,
-        xrSupported: boolean,
-        xrActive: boolean
+        viewportHeight: number
     },
     poi: {
         enabled: boolean,
@@ -249,15 +249,12 @@ export interface ObserverData {
         group: string,
         activeId?: string
     },
-    posteffects?: {
-        bloom: { enabled: boolean; intensity: number; threshold: number; blurAmount: number };
-        ssao: { enabled: boolean; radius: number; intensity: number; samples: number };
-        brightnessContrast: { enabled: boolean; brightness: number; contrast: number };
-        hueSaturation: { enabled: boolean; hue: number; saturation: number };
-        lut: { enabled: boolean; intensity: number; fileName: string | null };
-        fxaa: { enabled: boolean };
-    },
-    enableWebGPU: boolean,
+    /**
+     * Preferred graphics backend. 'auto' = WebGPU when the browser supports it, WebGL2 otherwise
+     * (the engine performs the fallback); 'webgl' = force WebGL2. Replaces the old boolean
+     * `enableWebGPU`, whose stored `false` could not be told apart from the old default.
+     */
+    graphicsBackend: 'auto' | 'webgl',
     centerScene: boolean,
     /**
      * Метаданные убраны из плеера — источник правды портал. Остаётся только

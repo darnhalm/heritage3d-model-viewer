@@ -1,3 +1,4 @@
+import type { SpzModule } from '@adobe/spz';
 import { Observer } from '@playcanvas/observer';
 import {
     ADDRESS_CLAMP_TO_EDGE,
@@ -52,7 +53,12 @@ import {
     GraphicsDevice,
     GraphNode,
     Gizmo,
+    DEVICETYPE_WEBGPU,
+    GSPLAT_RENDERER_COMPUTE,
+    GSPLAT_RENDERER_RASTER_CPU_SORT,
+    GSPLAT_RENDERER_RASTER_GPU_SORT,
     GSplatComponent,
+    GSplatComponentSystem,
     GSplatData,
     GSplatResource,
     GSplatResourceBase,
@@ -80,8 +86,9 @@ import {
     Vec4,
     ViewCube,
     CameraComponent,
-    PostEffect
+    platform
 } from 'playcanvas';
+import { serializeCompressedPly } from 'spz-js';
 
 import { App } from './app';
 import { CameraControls } from './camera-controls';
@@ -92,23 +99,10 @@ import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
 import { ShadowCatcher } from './shadow-catcher';
-import arCloseImage from './svg/ar-close.svg';
-import arModeImage from './svg/ar-mode.svg';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
-import { createLut1DTextureFromCubeData, createLutTextureFromCubeData } from './viewer/lut/createLutTexture';
-import { decodeLutFileBuffer, lutBufferLooksBinaryAfterUtf8Decode } from './viewer/lut/decodeLutFile';
-import { tryParseBinaryCubeLut } from './viewer/lut/parseBinaryCubeLut';
-import { MAX_LUT_FILE_BYTES, parseCubeLut, type ParseCubeLutResult } from './viewer/lut/parseCubeLut';
-import { BloomEffect } from './viewer/posteffects/BloomEffect';
-import { BrightnessContrastEffect } from './viewer/posteffects/BrightnessContrastEffect';
-import { FXAAEffect } from './viewer/posteffects/FXAAEffect';
-import { HueSaturationEffect } from './viewer/posteffects/HueSaturationEffect';
-import { LutEffect } from './viewer/posteffects/LutEffect';
-import { SSAOEffect } from './viewer/posteffects/SSAOEffect';
-import { XRObjectPlacementController } from './xr-mode';
 import { MeshoptDecoder } from '../lib/meshopt_decoder.module.js';
 
 // model filename extensions
@@ -128,7 +122,6 @@ const doubleTapDelay = 400;
 const doubleTapRadius = 45;
 const RIPPLE_CAMERA_DELAY_MS = 380;
 const RIPPLE_REMOVE_MS = 900;
-type ViewerTaggedMeshInstance = MeshInstance & { __viewerIsGsplat?: boolean };
 type TextureAssetFile = { filename?: string };
 type TextureLike = {
     name?: string;
@@ -155,9 +148,6 @@ type ContainerResourceLike = {
     getMaterialVariants?: () => string[];
     instantiateRenderEntity?: () => Entity;
 };
-type AssetFileLike = {
-    filename?: string;
-};
 type MeshoptCompressionExt = {
     buffer: number;
     byteOffset?: number;
@@ -179,6 +169,9 @@ type GltfImageLike = {
 type GltfTextureLike = object;
 type AssetProcessContinuation = (err: string | null, result: unknown) => void;
 type AssetLoadProcessOptions = Record<string, unknown>;
+
+/** Engine input devices keep their DOM move handler private; the viewer wraps it (see constructor). */
+type MoveHandlerHost<E extends Event> = { _moveHandler: (event: E) => void };
 
 // override global pick to pack depth instead of meshInstance id
 const pickDepthGlsl = /* glsl */ `
@@ -619,20 +612,8 @@ class Viewer {
 
     multiframeBusy = false;
 
-    private postEffectsBloom!: BloomEffect;
-
-    private postEffectsSsao!: SSAOEffect;
-
-
-    private postEffectsBrightnessContrast!: BrightnessContrastEffect;
-
-    private postEffectsHueSaturation!: HueSaturationEffect;
-
-    private postEffectsFxaa!: FXAAEffect;
-
-    private lutEffect!: LutEffect;
-
-    private lutTextureResource: Texture | null = null;
+    /** Lazily created SPZ codec (see getSpzCodec). */
+    private static spzCodec: Promise<SpzModule> | null = null;
 
     private isCapturingCoverImage = false;
 
@@ -668,8 +649,6 @@ class Viewer {
     loadTimestamp?: number = null;
 
     shadowCatcher: ShadowCatcher = null;
-
-    xrMode: XRObjectPlacementController;
 
     canvasResize = true;
 
@@ -737,18 +716,22 @@ class Viewer {
 
         // monkeypatch the mouse and touch input devices to ignore touch events
         // when they don't originate from the canvas.
-        const origMouseHandler = app.mouse._moveHandler;
+        // `_moveHandler` is declared private by the engine (since 2.20), so go through a narrow
+        // structural cast rather than weakening the typing of the whole device.
+        const mouseHost = app.mouse as unknown as MoveHandlerHost<MouseEvent>;
+        const origMouseHandler = mouseHost._moveHandler;
         app.mouse.detach();
-        app.mouse._moveHandler = (event: MouseEvent) => {
+        mouseHost._moveHandler = (event: MouseEvent) => {
             if (event.target === canvas) {
                 origMouseHandler(event);
             }
         };
         app.mouse.attach(canvas);
 
-        const origTouchHandler = app.touch._moveHandler;
+        const touchHost = app.touch as unknown as MoveHandlerHost<TouchEvent>;
+        const origTouchHandler = touchHost._moveHandler;
         app.touch.detach();
-        app.touch._moveHandler = (event: MouseEvent) => {
+        touchHost._moveHandler = (event: TouchEvent) => {
             if (event.target === canvas) {
                 origTouchHandler(event);
             }
@@ -847,10 +830,8 @@ class Viewer {
 
         // observe canvas size changes
         new ResizeObserver(() => {
-            if (this.xrMode && !this.xrMode.active) {
-                this.canvasResize = true;
-                this.renderNextFrame();
-            }
+            this.canvasResize = true;
+            this.renderNextFrame();
         }).observe(window.document.getElementById('canvas-wrapper'));
 
         // Depth layer is where the framebuffer is copied to a texture to be used in the following layers.
@@ -1085,15 +1066,6 @@ class Viewer {
 
         this.observer = observer;
 
-        const gd = app.graphicsDevice;
-        this.postEffectsBloom = new BloomEffect(gd);
-        this.postEffectsSsao = new SSAOEffect(gd);
-        this.postEffectsBrightnessContrast = new BrightnessContrastEffect(gd);
-        this.postEffectsHueSaturation = new HueSaturationEffect(gd);
-        this.postEffectsFxaa = new FXAAEffect(gd);
-        this.lutEffect = new LutEffect(gd);
-        this.installPostEffectsObserverBindings();
-
         this.observer.set('debug.texelDensityHeatmap', false);
         this.settingsService = new SettingsService({
             observer: this.observer,
@@ -1206,8 +1178,8 @@ class Viewer {
         // dynamic shadow catcher
         this.shadowCatcher = new ShadowCatcher(app, this.camera.camera, this.debugRoot, this.sceneRoot);
 
-        // xr support
-        this.initXrMode();
+        // gaussian splat pipeline
+        this.initGSplat();
 
         // initialize control events
         this.bindControlEvents();
@@ -1325,68 +1297,53 @@ class Viewer {
         }
     }
 
-    private initXrMode() {
-        const xr = this.app.xr;
+    /**
+     * Configure the engine's unified gsplat pipeline. Called once from the constructor.
+     *
+     * The viewer runs with `app.autoRender === false`, so splat streaming and sorting must be able
+     * to ask for a frame: 'frame:request' fires when streaming produced new data or a sort result is
+     * ready to be applied. This replaces the legacy per-component `instance.sorter.on('updated')`,
+     * which only existed on the non-unified (CPU-sorted) path.
+     */
+    private initGSplat() {
+        const gsplatSystem = this.app.systems.gsplat as GSplatComponentSystem;
+        const gsplatParams = this.app.scene.gsplat;
 
-        this.xrMode = new XRObjectPlacementController({
-            xr: xr,
-            camera: this.camera,
-            content: this.sceneRoot,
-            showUI: false,
-            startArImgSrc: arModeImage.src,
-            stopArImgSrc: arCloseImage.src,
-            getContentScale: () => {
-                const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
-                return Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
-            }
+        gsplatSystem.on('frame:request', () => {
+            this.renderNextFrame();
         });
 
-        const events = this.xrMode.events;
+        // Global splat budget. Only caps octree (LOD/streamed) scenes — plain PLY/SOG are unaffected
+        // (see GSplatWorld._enforceBudget) — so a budget here just bounds streaming memory/perf.
+        gsplatParams.splatBudget = platform.mobile ? 1500000 : 3000000;
 
-        // Reflect runtime AR capability/state for UI visibility logic.
-        this.observer.set('runtime.xrSupported', this.xrMode.available);
-        this.observer.set('runtime.xrActive', false);
+        // Sorting pipeline, chosen explicitly per backend as supersplat-viewer does, rather than
+        // leaving GSPLAT_RENDERER_AUTO implicit: same resolution (WebGPU → GPU sort, WebGL → CPU
+        // sort), but the choice is visible in code and easy to override.
+        // GSPLAT_RENDERER_COMPUTE also exists in this engine version; supersplat-viewer does not use
+        // it as its production renderer yet, so we don't either — switching means one line here.
+        gsplatParams.renderer = this.graphicsBackend === 'webgpu' ?
+            GSPLAT_RENDERER_RASTER_GPU_SORT :
+            GSPLAT_RENDERER_RASTER_CPU_SORT;
 
-        events.on('xr:available', (available: boolean) => {
-            this.observer.set('runtime.xrSupported', available);
-        });
+        // Report what the engine actually resolved to (it falls back on its own if a mode needs
+        // WebGPU on a WebGL device), not what we asked for.
+        const rendererLabels: Record<number, string> = {
+            [GSPLAT_RENDERER_RASTER_CPU_SORT]: 'CPU sort',
+            [GSPLAT_RENDERER_RASTER_GPU_SORT]: 'GPU sort',
+            [GSPLAT_RENDERER_COMPUTE]: 'compute'
+        };
+        const resolved = gsplatParams.currentRenderer;
+        this.observer.set('runtime.gsplatRenderer', rendererLabels[resolved] ?? `unknown (${resolved})`);
+    }
 
-        events.on('xr:started', () => {
-            this.observer.set('runtime.xrActive', true);
-
-            // prepare scene settings for AR mode
-            this.setShadowCatcherEnabled(true);
-            this.setShadowCatcherIntensity(0.4);
-            this.setDebugGrid(false);
-            this.setDebugBounds(false);
-            this.setLightEnabled(true);
-            this.setLightShadow(true);
-            this.setLightFollow(false);
-            this.setCenterScene(true);
-
-            this.setSkyboxBackground('None');
-            this.setSkyboxExposure(0);
-            this.setBackgroundColor(Color.BLACK);
-            this.app.scene.layers.getLayerById(LAYERID_SKYBOX).enabled = false;
-
-            this.multiframe.blend = 0.5;
-        });
-
-        events.on('xr:initial-place', () => {
-            this.multiframe.blend = 1.0;
-        });
-
-        events.on('xr:ended', () => {
-            this.observer.set('runtime.xrActive', false);
-
-            // reload all user options
-            this.reloadSettings();
-
-            // background color isn't correctly restored
-            this.setBackgroundColor(this.observer.get('skybox.backgroundColor'));
-
-            this.multiframe.blend = 1.0;
-        });
+    /**
+     * Graphics backend actually in use, after the engine's WebGPU → WebGL2 fallback.
+     *
+     * @returns 'webgpu' or 'webgl'.
+     */
+    get graphicsBackend(): 'webgpu' | 'webgl' {
+        return this.app.graphicsDevice.deviceType === DEVICETYPE_WEBGPU ? 'webgpu' : 'webgl';
     }
 
     private _showRipple(x: number, y: number) {
@@ -1440,244 +1397,22 @@ class Viewer {
     destroy() {
         if (this.destroyed) return;
         this.destroyed = true;
-        this.clearPostEffectsQueueOnCamera(this.camera.camera);
-        if (this.activeSceneCamera) {
-            this.clearPostEffectsQueueOnCamera(this.activeSceneCamera);
-        }
-        this.lutTextureResource?.destroy();
-        this.lutTextureResource = null;
-        this.lutEffect.lutTexture = null;
-        this.lutEffect.lutSize = 0;
         this.measurementController?.dispose?.();
         this.poiController?.dispose?.();
         this.selectionController?.dispose?.();
         this.microphoneController?.dispose?.();
     }
 
-    /**
-     * Load a 3D LUT from an Iridas/Adobe ASCII .cube file (Effects tab).
-     */
-    loadLutFromCubeFile(domFile: globalThis.File): void {
-        void (async () => {
-            try {
-                const buf = await domFile.arrayBuffer();
-                if (buf.byteLength > MAX_LUT_FILE_BYTES) {
-                    this.observer.set(
-                        'ui.error',
-                        `LUT file is too large (max ${MAX_LUT_FILE_BYTES / (1024 * 1024)} MB).`
-                    );
-                    return;
-                }
-                const head = new Uint8Array(buf.slice(0, 2));
-                const utf16Bom =
-                    buf.byteLength >= 2 &&
-                    ((head[0] === 0xff && head[1] === 0xfe) || (head[0] === 0xfe && head[1] === 0xff));
-
-                let parsed: ParseCubeLutResult;
-                if (utf16Bom) {
-                    parsed = parseCubeLut(decodeLutFileBuffer(buf));
-                } else {
-                    const binary = tryParseBinaryCubeLut(buf);
-                    if (binary !== null) {
-                        parsed = binary;
-                    } else if (lutBufferLooksBinaryAfterUtf8Decode(buf)) {
-                        this.observer.set(
-                            'ui.error',
-                            'Binary LUT is not supported. Use Iridas/Adobe text .cube/.lut, or a raw float32 3D LUT with the supported 28-byte header.'
-                        );
-                        return;
-                    } else {
-                        parsed = parseCubeLut(decodeLutFileBuffer(buf));
-                    }
-                }
-                if (parsed.ok === false) {
-                    this.observer.set('ui.error', parsed.reason);
-                    return;
-                }
-                this.lutTextureResource?.destroy();
-                const lut = parsed.lut;
-                let tex: Texture;
-                if (lut.kind === '3d') {
-                    this.lutEffect.lutIs1D = false;
-                    tex = createLutTextureFromCubeData(this.app.graphicsDevice, lut.rgb, lut.size);
-                    this.lutEffect.lutSize = lut.size;
-                } else {
-                    this.lutEffect.lutIs1D = true;
-                    this.lutEffect.lutDomainMin = lut.domainMin;
-                    this.lutEffect.lutDomainMax = lut.domainMax;
-                    this.lutEffect.lutOutputMin = lut.outputMin;
-                    this.lutEffect.lutOutputMax = lut.outputMax;
-                    tex = createLut1DTextureFromCubeData(
-                        this.app.graphicsDevice,
-                        lut.rgb,
-                        lut.size,
-                        lut.outputMin,
-                        lut.outputMax
-                    );
-                    this.lutEffect.lutSize = lut.size;
-                }
-                this.lutTextureResource = tex;
-                this.lutEffect.lutTexture = tex;
-                this.observer.set('posteffects.lut.fileName', domFile.name);
-                this.observer.set('posteffects.lut.enabled', true);
-                this.applyPostEffectsParamsFromObserver();
-                this.rebuildPostEffectsQueue();
-                this.renderNextFrame();
-            } catch (e) {
-                const msg = e instanceof Error ? e.message : String(e);
-                this.observer.set('ui.error', msg);
-            }
-        })();
-    }
-
-    clearLut(): void {
-        this.lutTextureResource?.destroy();
-        this.lutTextureResource = null;
-        this.lutEffect.lutTexture = null;
-        this.lutEffect.lutSize = 0;
-        this.lutEffect.lutIs1D = false;
-        this.observer.set('posteffects.lut.fileName', null);
-        this.observer.set('posteffects.lut.enabled', false);
-        this.applyPostEffectsParamsFromObserver();
-        this.rebuildPostEffectsQueue();
-        this.renderNextFrame();
-    }
-
-    private syncLutEffectFromObserver(): void {
-        const enabled = !!this.observer.get('posteffects.lut.enabled');
-        const intensity = Math.max(0, Math.min(1, Number(this.observer.get('posteffects.lut.intensity') ?? 1)));
-        this.lutEffect.intensity = enabled ? intensity : 0;
-    }
-
-    /** Camera that actually draws the viewport (glTF scene camera or viewer camera). Post-effects must attach here. */
+    /** Camera that actually draws the viewport (glTF scene camera or viewer camera). */
     private getRenderingCamera(): CameraComponent {
         return this.activeSceneCamera ?? this.camera.camera;
     }
 
-    private clearPostEffectsQueueOnCamera(cam: CameraComponent): void {
-        const q = cam.postEffects;
-        while (q.effects.length > 0) {
-            q.removeEffect(q.effects[0].effect);
-        }
-    }
-
-    private applyPostEffectsParamsFromObserver(): void {
-        const pe = this.observer.get('posteffects') as ObserverData['posteffects'] | undefined;
-        const rc = this.getRenderingCamera();
-        if (!pe) {
-            return;
-        }
-
-        this.postEffectsBloom.bloomThreshold = Math.max(0, Math.min(1, Number(pe.bloom?.threshold ?? 0.25)));
-        this.postEffectsBloom.blurAmount = Math.max(1, Math.min(20, Number(pe.bloom?.blurAmount ?? 4)));
-        this.postEffectsBloom.bloomIntensity = Math.max(0, Math.min(5, Number(pe.bloom?.intensity ?? 1.25)));
-
-        this.postEffectsSsao.radius = Math.max(0.01, Math.min(1, Number(pe.ssao?.radius ?? 0.2)));
-        this.postEffectsSsao.samples = Math.max(4, Math.min(64, Math.round(Number(pe.ssao?.samples ?? 20))));
-        const ssaoInt = Number(pe.ssao?.intensity ?? 2);
-        this.postEffectsSsao.brightness = Math.max(0, Math.min(1, 1 - Math.min(1, ssaoInt / 5)));
-        this.postEffectsSsao.cameraFarClip = rc.farClip;
-
-        this.postEffectsBrightnessContrast.brightness = Math.max(-1, Math.min(1, Number(pe.brightnessContrast?.brightness ?? 0)));
-        this.postEffectsBrightnessContrast.contrast = Math.max(-1, Math.min(1, Number(pe.brightnessContrast?.contrast ?? 0)));
-
-        this.postEffectsHueSaturation.hue = Math.max(-1, Math.min(1, Number(pe.hueSaturation?.hue ?? 0)));
-        this.postEffectsHueSaturation.saturation = Math.max(-1, Math.min(1, Number(pe.hueSaturation?.saturation ?? 0)));
-
-        this.syncLutEffectFromObserver();
-    }
-
-    private rebuildPostEffectsQueue(): void {
-        this.clearPostEffectsQueueOnCamera(this.camera.camera);
-        if (this.activeSceneCamera) {
-            this.clearPostEffectsQueueOnCamera(this.activeSceneCamera);
-        }
-        this.applyPostEffectsParamsFromObserver();
-
-        const cam = this.getRenderingCamera();
-        /* Post stack needs a render target; scene camera may hold the shared viewer RT when orbit cam is off */
-        if (!cam.renderTarget) {
-            if (this.multiframe) {
-                this.multiframe.camera = cam;
-            }
-            return;
-        }
-        const pe = this.observer.get('posteffects') as ObserverData['posteffects'] | undefined;
-        if (!pe) {
-            if (this.multiframe) {
-                this.multiframe.camera = cam;
-            }
-            return;
-        }
-        const add = (eff: PostEffect) => {
-            cam.postEffects.addEffect(eff);
-        };
-        if (pe.ssao?.enabled) {
-            add(this.postEffectsSsao);
-        }
-        if (pe.bloom?.enabled) {
-            add(this.postEffectsBloom);
-        }
-        if (pe.brightnessContrast?.enabled) {
-            add(this.postEffectsBrightnessContrast);
-        }
-        if (pe.hueSaturation?.enabled) {
-            add(this.postEffectsHueSaturation);
-        }
-        if (this.lutEffect.lutTexture && pe.lut?.enabled && pe.lut?.fileName) {
-            add(this.lutEffect);
-        }
-        if (pe.fxaa?.enabled) {
-            add(this.postEffectsFxaa);
-        }
+    /** Multiframe jitters the camera that actually draws, so it must follow camera switches. */
+    private syncMultiframeCamera(): void {
         if (this.multiframe) {
-            this.multiframe.camera = cam;
+            this.multiframe.camera = this.getRenderingCamera();
         }
-    }
-
-    /**
-     * Post-effects: see docs/POST-EFFECTS.md. With `app.autoRender === false`, every path that
-     * calls `rebuildPostEffectsQueue()` must also call `renderNextFrame()` or the canvas may not
-     * redraw until the camera moves.
-     */
-    private installPostEffectsObserverBindings(): void {
-        const paths = [
-            'posteffects.bloom.enabled',
-            'posteffects.bloom.intensity',
-            'posteffects.bloom.threshold',
-            'posteffects.bloom.blurAmount',
-            'posteffects.ssao.enabled',
-            'posteffects.ssao.radius',
-            'posteffects.ssao.intensity',
-            'posteffects.ssao.samples',
-            'posteffects.brightnessContrast.enabled',
-            'posteffects.brightnessContrast.brightness',
-            'posteffects.brightnessContrast.contrast',
-            'posteffects.hueSaturation.enabled',
-            'posteffects.hueSaturation.hue',
-            'posteffects.hueSaturation.saturation',
-            'posteffects.lut.enabled',
-            'posteffects.lut.intensity',
-            'posteffects.fxaa.enabled'
-        ];
-        for (const p of paths) {
-            this.observer.on(`${p}:set`, () => {
-                this.applyPostEffectsParamsFromObserver();
-                this.rebuildPostEffectsQueue();
-                this.renderNextFrame();
-            });
-        }
-        /* Whole-object set (mergePosteffectsDefaults, localStorage) does not fire leaf :set events */
-        this.observer.on('posteffects:set', () => {
-            this.applyPostEffectsParamsFromObserver();
-            this.rebuildPostEffectsQueue();
-            this.renderNextFrame();
-        });
-        this.observer.on('posteffects.lut.fileName:set', () => {
-            this.applyPostEffectsParamsFromObserver();
-            this.rebuildPostEffectsQueue();
-            this.renderNextFrame();
-        });
     }
 
     removePoi(id: string) {
@@ -1805,14 +1540,9 @@ class Viewer {
                 }
             }
 
-            const gsplatComponents = entity.findComponents('gsplat');
-            for (let i = 0; i < gsplatComponents.length; i++) {
-                const gsplat = gsplatComponents[i] as GSplatComponent;
-                if (gsplat.instance) {
-                    (gsplat.instance.meshInstance as ViewerTaggedMeshInstance).__viewerIsGsplat = true;
-                    meshInstances.push(gsplat.instance.meshInstance);
-                }
-            }
+            // Unified gsplat components render through the engine's gsplat director and expose no
+            // MeshInstance, so they never appear in this list. Splat bounds come from
+            // GSplatComponent#customAabb instead (see calcSceneBounds).
         }
         return meshInstances;
     }
@@ -2029,7 +1759,7 @@ class Viewer {
         this.controlEventKeys.forEach((e) => {
             this.observer.set(e, this.observer.get(e), false, false, true);
         });
-        this.rebuildPostEffectsQueue();
+        this.syncMultiframeCamera();
         this.renderNextFrame();
     }
 
@@ -2221,10 +1951,6 @@ class Viewer {
         if (rt && this.activeSceneCamera && this.activeSceneCamera.renderTarget === rt) {
             this.activeSceneCamera.renderTarget = null;
         }
-        this.clearPostEffectsQueueOnCamera(this.camera.camera);
-        if (this.activeSceneCamera) {
-            this.clearPostEffectsQueueOnCamera(this.activeSceneCamera);
-        }
         if (rt) {
             rt.colorBuffer?.destroy();
             rt.depthBuffer?.destroy();
@@ -2279,7 +2005,7 @@ class Viewer {
         if (this.activeSceneCamera) {
             this.activeSceneCamera.renderTarget = renderTarget;
         }
-        this.rebuildPostEffectsQueue();
+        this.syncMultiframeCamera();
     }
 
     // reset the viewer, unloading resources
@@ -3537,10 +3263,6 @@ class Viewer {
 
     // adjust camera clipping planes to fit the scene
     fitCameraClipPlanes() {
-        if (this.xrMode?.active) {
-            return;
-        }
-
         const mat = this.camera.getWorldTransform();
 
         const cameraPosition = mat.getTranslation();
@@ -4211,6 +3933,9 @@ class Viewer {
             if (oversizedBytes !== null) {
                 throw new Error(this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', url.filename ?? url.url ?? '', oversizedBytes));
             }
+            if (this.isSpzFilename(url.filename ?? url.url ?? '')) {
+                return this.loadSpzAsCompressedPly(url, onProgress);
+            }
             const urls: Record<string, string> = {};
             externalUrls.forEach((externalUrl) => {
                 urls[externalUrl.filename] = externalUrl.url;
@@ -4235,6 +3960,111 @@ class Viewer {
         });
     }
 
+    /**
+     * The SPZ codec instance, created on first use and shared afterwards (it carries a wasm
+     * instance, so building one per file would be wasteful).
+     *
+     * @returns The initialised codec module.
+     */
+    private static getSpzCodec() {
+        Viewer.spzCodec ??= import('@adobe/spz').then(module => module.default());
+        return Viewer.spzCodec;
+    }
+
+    /**
+     * Load an SPZ (Niantic) splat file by converting it to a compressed PLY in memory.
+     *
+     * The engine has no SPZ parser (checked through 2.22 beta), so instead of adding a second
+     * gsplat code path we decode SPZ here and hand the engine the format its own PlyParser
+     * already reads. The asset gets a `.compressed.ply` filename because the engine picks the
+     * parser from `asset.file.filename`, and the bytes are passed as `contents` so nothing is
+     * fetched twice.
+     *
+     * Decoding uses `@adobe/spz` — the same codec `@playcanvas/splat-transform` relies on, so it
+     * handles current SPZ versions (v3/v4 use zstd streams; the pure-JS `spz-js` decoder only
+     * understands the older gzip-based v1/v2). It is loaded lazily so the ~850 KB wasm bundle is
+     * only fetched when an SPZ file is actually opened. Serialization to compressed PLY comes from
+     * `spz-js`, which already encodes the PLY conventions (log scales, logit opacity, SH layout).
+     *
+     * SPZ stores RUB by design, PLY uses RDF, so the decode is asked for RDF — otherwise the scene
+     * would arrive rotated.
+     *
+     * Note this re-quantizes: the codec unpacks to float arrays and the compressed-PLY writer
+     * re-packs them into the engine's chunked layout. Fidelity is comparable to any other
+     * compressed-PLY scene, but it is not bit-identical to the source file.
+     *
+     * @param url - The file to load (remote URL or blob URL from drag & drop).
+     * @param onProgress - Download progress callback, 0..1.
+     * @returns The loaded gsplat asset.
+     */
+    private async loadSpzAsCompressedPly(url: File, onProgress?: (progress: number) => void): Promise<Asset> {
+        const source = url.filename ?? url.url ?? '';
+        const response = await fetch(url.url);
+        if (!response.ok) {
+            throw new Error(`Failed to load "${source}" (HTTP ${response.status})`);
+        }
+
+        const bytes = new Uint8Array(await this.readBodyWithProgress(response, onProgress));
+
+        const spz = await Viewer.getSpzCodec();
+        const cloud = spz.loadSpzFromBuffer(bytes, { to: spz.CoordinateSystem.RDF });
+        const ply = serializeCompressedPly(cloud);
+        onProgress?.(1);
+
+        const filename = `${source.replace(/\.spz$/i, '')}.compressed.ply`;
+        // `.slice()` gives a view backed by a plain ArrayBuffer, which is what Response accepts.
+        const contents = new Response(ply.slice(), {
+            headers: { 'content-length': String(ply.byteLength) }
+        });
+
+        return new Promise<Asset>((resolve, reject) => {
+            // The engine's PlyParser awaits `contents` and reads `.body` from it (see
+            // parsers/ply.js), i.e. it expects a Response — but the typings declare an
+            // ArrayBuffer, which is what the other handlers use. Hence the cast.
+            const file = { url: url.url, filename, contents: contents as unknown as ArrayBuffer };
+            const asset = new Asset(filename, 'gsplat', file);
+            asset.on('load', () => resolve(asset));
+            asset.on('error', (err: string) => reject(err));
+            this.app.assets.add(asset);
+            this.app.assets.load(asset);
+        });
+    }
+
+    /**
+     * Read a response body, reporting download progress when the server tells us the total size.
+     *
+     * @param response - The response to drain.
+     * @param onProgress - Progress callback, 0..1.
+     * @returns The full body.
+     */
+    private async readBodyWithProgress(response: Response, onProgress?: (progress: number) => void): Promise<ArrayBuffer> {
+        const total = Number(response.headers.get('content-length') ?? 0);
+        if (!onProgress || !response.body || !(total > 0)) {
+            return response.arrayBuffer();
+        }
+
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+        for (;;) {
+            // eslint-disable-next-line no-await-in-loop -- draining a stream is inherently sequential
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (!value) continue;
+            chunks.push(value);
+            received += value.byteLength;
+            onProgress(Math.min(1, received / total));
+        }
+
+        const body = new Uint8Array(received);
+        let offset = 0;
+        for (const chunk of chunks) {
+            body.set(chunk, offset);
+            offset += chunk.byteLength;
+        }
+        return body.buffer;
+    }
+
     // returns true if the filename has one of the recognized model extensions
     isModelFilename(filename: string) {
         const parts = filename.split('?')[0].split('/').pop().split('.');
@@ -4244,8 +4074,13 @@ class Viewer {
 
     isGSplatFilename(filename: string) {
         const parts = filename.split('?')[0].split('/').pop().split('.');
-        const result = parts.length > 0 && ['ply', 'json', 'sog'].includes(parts.pop().toLowerCase());
+        const result = parts.length > 0 && ['ply', 'json', 'sog', 'spz'].includes(parts.pop().toLowerCase());
         return result;
+    }
+
+    // SPZ needs decoding before the engine can read it — see loadSpzAsCompressedPly
+    private isSpzFilename(filename: string) {
+        return filename.split('?')[0].toLowerCase().endsWith('.spz');
     }
 
     private isViewerSettingsFilename(filename: string): boolean {
@@ -4735,7 +4570,7 @@ class Viewer {
             this.cameraControls.enabled = true;
         }
 
-        this.rebuildPostEffectsQueue();
+        this.syncMultiframeCamera();
         this.renderNextFrame();
     }
 
@@ -5183,7 +5018,7 @@ class Viewer {
         this.updateCameraFlyTransition(deltaTime);
 
         // update the orbit camera
-        if (!this.xrMode?.active && !this.cameraFlyTransition) {
+        if (!this.cameraFlyTransition) {
             this.cameraControls.update(deltaTime);
         }
 
@@ -5206,11 +5041,6 @@ class Viewer {
         const cameraWorldTransform = this.camera.getWorldTransform();
         if (maxdiff(cameraWorldTransform, this.prevCameraMat) > 1e-4) {
             this.prevCameraMat.copy(cameraWorldTransform);
-            this.renderNextFrame();
-        }
-
-        // always render during xr sessions
-        if (this.xrMode?.active) {
             this.renderNextFrame();
         }
 
@@ -5269,19 +5099,14 @@ class Viewer {
                 // container/glb
                 entity = resource?.instantiateRenderEntity?.() ?? new Entity();
             } else {
-                const unified = ((asset.file as AssetFileLike | undefined)?.filename ?? '').endsWith('lod-meta.json');
-
-                // gaussian splat scene
+                // Gaussian splat scene. Every format (PLY, compressed PLY, SOG, LOD/streaming
+                // meta.json) goes through the engine's unified gsplat pipeline: `unified` defaults
+                // to true since engine 2.20 and the non-unified path is deprecated there, so we
+                // deliberately don't pass the flag. Frame invalidation for splat streaming/sorting
+                // is handled once, app-wide, in initGSplat().
                 entity = new Entity();
                 entity.setEulerAngles(0, 0, 180);
-                entity.addComponent('gsplat', { unified, asset });
-
-                // render frame if gaussian splat sorter updates)
-                if (!unified) {
-                    entity.gsplat.instance.sorter.on('updated', () => {
-                        this.renderNextFrame();
-                    });
-                }
+                entity.addComponent('gsplat', { asset });
             }
 
             this.entities.push(entity);
@@ -5325,7 +5150,10 @@ class Viewer {
         }
 
         // if no meshes are currently loaded, then enable skeleton rendering so user can see something
-        if (this.meshInstances.length === 0) {
+        // Mesh-less scenes default to skeleton debug — but a splat scene is not "empty", it just has
+        // no MeshInstances under the unified gsplat pipeline.
+        const hasGsplat = this.entities.some(entity => !!entity.findComponent('gsplat'));
+        if (this.meshInstances.length === 0 && !hasGsplat) {
             this.observer.set('debug.skeleton', true);
         }
 
@@ -5782,7 +5610,7 @@ class Viewer {
         }
 
         // debug bounds
-        if (this.dirtyBounds || this.xrMode?.active) {
+        if (this.dirtyBounds) {
             this.dirtyBounds = false;
 
             // calculate bounds
@@ -6040,11 +5868,8 @@ class Viewer {
             } catch { /* cross-origin */ }
         }
 
-        // resolve the (possibly multisampled) render target — use post-effect output when the queue is active
-        const cam = this.getRenderingCamera();
-        const pq = cam.postEffects;
-        const dest = pq.enabled && pq.effects.length > 0 ? pq.destinationRenderTarget : null;
-        const rt = dest ?? cam.renderTarget;
+        // resolve the (possibly multisampled) render target
+        const rt = this.getRenderingCamera().renderTarget;
         if (rt && rt.samples > 1) {
             rt.resolve();
         }

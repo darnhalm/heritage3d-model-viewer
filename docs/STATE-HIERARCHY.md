@@ -2,7 +2,7 @@
 
 Ниже — дерево состояния (observer). Значения можно сохранять в JSON и восстанавливать по этой структуре.
 
-**Сейчас в localStorage сохраняется** только ветка из `saveOptions`: `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `enableWebGPU`. Остальное — полный список того, что можно при желании тоже сохранять (например, для привязки к модели).
+**Сейчас в localStorage сохраняется** только ветка из `saveOptions`: `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `graphicsBackend`. Остальное — полный список того, что можно при желании тоже сохранять (например, для привязки к модели).
 
 ---
 
@@ -55,7 +55,7 @@ debug
 ├── grid                   boolean
 └── normals                number   (0–1)
 
-enableWebGPU               boolean
+graphicsBackend            'auto' | 'webgl'
 ```
 
 ---
@@ -166,7 +166,7 @@ runtime                 (обычно не сохраняют — зависит
 └── xrActive
 
 morphs                  (зависит от модели)
-enableWebGPU            boolean
+graphicsBackend         'auto' | 'webgl'
 centerScene             boolean
 ```
 
@@ -175,7 +175,7 @@ centerScene             boolean
 ## 3. Рекомендации при сохранении «на модель»
 
 - **Сохранять (хорошо для профиля под модель):**  
-  `camera`, `skybox`, `light`, `shadowCatcher`, `debug`, `enableWebGPU`, при желании `animation` (speed, selectedTrack, progress), `scene.selectedNode` (если хотите запоминать выбор узла), `centerScene`.
+  `camera`, `skybox`, `light`, `shadowCatcher`, `debug`, `graphicsBackend`, при желании `animation` (speed, selectedTrack, progress), `scene.selectedNode` (если хотите запоминать выбор узла), `centerScene`.
 
 - **Не сохранять или подставлять осторожно:**  
   `skybox.options` (зависит от списка skybox в приложении), `scene.urls` / `filenames` / `nodes` / `cameras` (зависят от загруженной модели), `ui` (spinner, error, loadProgress), `runtime`, `morphs`.

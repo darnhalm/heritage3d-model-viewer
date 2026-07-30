@@ -37,7 +37,7 @@
 
 **Формат JSON:**
 - Версия: `modelViewerSettingsVersion: 1`
-- Разделы: `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `enableWebGPU`
+- Разделы: `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `graphicsBackend`
 - Цвета сохраняются в HEX (`#rrggbb`) для однозначной сериализации
 
 **Применение:**
@@ -124,11 +124,102 @@
 
 ---
 
-## Post-processing (вкладка Effects)
+## Удалено: постобработка (вкладка Effects) и AR/WebXR
 
-**Документация для разработчиков:** [POST-EFFECTS.md](./POST-EFFECTS.md).
+Обе подсистемы вырезаны из форка (шаг подготовки к WebGPU-first + unified GSplat).
 
-Кратко: при `autoRender === false` после изменения очереди/параметров post-effects нужно вызывать **`renderNextFrame()`**, иначе при неподвижной камере кадр не перерисуется и эффекты кажутся «мёртвыми».
+- **Постобработка**: удалены `src/viewer/posteffects/*` (Bloom, SSAO, FXAA, LUT, цветокор,
+  tilt-shift и др.), `src/viewer/lut/*`, `src/posteffects-sanitize.ts`,
+  `src/ui/left-panel/PostEffectsPanel.tsx`, вкладка **Effects**, ветка `posteffects` в
+  observer/типах и ключ `Effects` в i18n. Причина: все эффекты были только на GLSL
+  (`vertexGLSL`/`fragmentGLSL`) и на WebGPU-устройстве не компилируются.
+- **AR/WebXR**: удалены `src/xr-mode.ts`, иконки `src/svg/ar-*.svg`, `appOptions.xr = XrManager`,
+  ветки `xrMode?.active` в `viewer.ts`, `runtime.xrSupported` / `runtime.xrActive`,
+  XR-ветка в `camera-controls.ts`, `xr-spatial-tracking` в генераторе embed-кода.
+  Причина: AR/VR не поддерживается на WebGPU-рендерере (ср. `supersplat-viewer`,
+  который для XR принудительно перезагружается в WebGL).
+
+Побочный эффект, который сохранён отдельно: очередь пост-эффектов раньше попутно
+переставляла камеру у `Multiframe`. Теперь это делает `Viewer.syncMultiframeCamera()`.
+
+---
+
+## WebGPU-first и unified GSplat
+
+**Движок:** `playcanvas` 2.15.2 → **2.20.6** (версия, на которой работает
+`supersplat-viewer`). Ниже 2.18 нет констант `GSPLAT_RENDERER_*`, ниже 2.20 — события
+`frame:request`.
+
+**Выбор бэкенда** (`src/index.tsx`): по умолчанию запрашивается WebGPU.
+`createGraphicsDevice` сам дописывает WebGL2 и null в список устройств и при
+неподдерживаемом или упавшем WebGPU молча уходит на WebGL2 — своего feature detection
+и try/catch не нужно.
+
+| URL | Бэкенд |
+|---|---|
+| без параметров | WebGPU, при недоступности → WebGL2 |
+| `?webgl` | принудительно WebGL2 (диагностика) |
+| `?webgpu` | как дефолт (оставлен для существующих ссылок) |
+
+Приоритет: `?webgl` > `?webgpu` > сохранённая настройка.
+
+**Настройка вместо `enableWebGPU`:** `graphicsBackend: 'auto' | 'webgl'` (дефолт `auto`).
+Тумблер «Use WebGPU» в Settings переключает `auto` ↔ `webgl` (с перезагрузкой страницы,
+как раньше). Со старым ключом `enableWebGPU` два разных решения:
+
+- **в localStorage — игнорируется**: там `false` означало и «пользователь отключил», и
+  «просто старый дефолт», различить нельзя, а если уважать — все существующие пользователи
+  навсегда остались бы на WebGL;
+- **в файле настроек сцены — уважается** (`SettingsService.withLegacyGraphicsBackend`):
+  такой файл кто-то осознанно экспортировал или сформировал портал, поэтому `false` там
+  трактуется как `graphicsBackend: 'webgl'`, а `true` — как `'auto'`. Если в файле есть
+  сам `graphicsBackend`, он выигрывает. Так старые JSON портала продолжают работать.
+
+Оговорка: бэкенд из файла настроек вступает в силу со **следующей** загрузки страницы —
+графическое устройство создаётся до того, как файл скачан (у старого тумблера было так же,
+он делал перезагрузку). Проверено: файл с `enableWebGPU: false` → `graphicsBackend: 'webgl'`
+→ при повторном открытии сцены реально WebGL2 и CPU sort.
+
+**GSplat renderer** (`Viewer.initGSplat`): выбирается явно, как в `supersplat-viewer` —
+WebGPU → `GSPLAT_RENDERER_RASTER_GPU_SORT`, WebGL → `GSPLAT_RENDERER_RASTER_CPU_SORT`
+(то же, что дал бы `GSPLAT_RENDERER_AUTO`, но видно в коде). `GSPLAT_RENDERER_COMPUTE` в
+2.20.6 есть, но `supersplat-viewer` пока не использует его как продакшн-рендерер —
+переключение будет правкой одной строки.
+
+**Диагностика:** `viewer.graphicsBackend` → `'webgpu' | 'webgl'` (после фолбэка движка),
+`runtime.gsplatRenderer` в observer → `'GPU sort' | 'CPU sort' | 'compute'` (читается из
+`app.scene.gsplat.currentRenderer`, т.е. фактический, а не запрошенный). В консоль один
+раз при старте печатается строка `Graphics backend: … | GSplat renderer: …`.
+
+---
+
+## Поддержка SPZ (Niantic)
+
+Движок PlayCanvas SPZ **не умеет** — ни 2.20.6, ни 2.21.3, ни 2.22.0-beta.7 (в редакторе
+SuperSplat поддержка есть, но через `@playcanvas/splat-transform`, который тянет 4.5 МБ,
+wasm+worker и полностью распаковывает сцену в память вместо стриминга). Поэтому декодируем сами:
+
+- **декодер — `@adobe/spz`** (тот же кодек, на который опирается `@playcanvas/splat-transform`).
+  Важно: SPZ v3/v4 используют zstd-стримы, а чистый JS-декодер `spz-js` понимает только старые
+  gzip-версии v1/v2 и на актуальных файлах отвечает `version not supported: 4`
+  (проверено на `biker.spz` из ассетов движка — там как раз v4, без gzip-обёртки);
+- **сериализация — `spz-js`** (`serializeCompressedPly`): в нём уже зашиты соглашения PLY
+  (лог-шкалы, logit-прозрачность, порядок SH-коэффициентов);
+- результат отдаётся движку как **compressed PLY** через `asset.file.contents` (движок выбирает
+  парсер по `asset.file.filename`, поэтому имя меняется на `*.compressed.ply`). Второго gsplat-пути
+  в вьюере не появляется — рендер идёт штатным unified-пайплайном;
+- кодек грузится **лениво** (`import('@adobe/spz')`), поэтому ~950 КБ уходят в отдельный чанк и
+  скачиваются только при открытии SPZ-файла; основной бандл не вырос;
+- распаковка запрашивается в системе координат **RDF** (SPZ по умолчанию хранит RUB, PLY — RDF),
+  иначе сцена приезжает повёрнутой.
+
+Оговорки: конвертация **переквантует** данные (декод во float → упаковка в chunked-формат движка),
+то есть файл не бит-в-бит; на `biker.spz` против эталонного `biker.compressed.ply` — одинаковое
+число сплатов (152 746) и расхождение габаритов ~1%. Выигрыш SPZ — размер файла, не FPS: после
+декодирования сцена идёт тем же путём, что и любая другая.
+
+`isGSplatFilename` теперь принимает `ply`, `json`, `sog`, `spz`; в диалог выбора файла добавлены
+`.sog` и `.spz` (раньше `.sog` не предлагался, хотя поддерживался).
 
 ---
 

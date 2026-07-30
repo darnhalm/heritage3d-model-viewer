@@ -32,7 +32,7 @@ type SettingsServiceArgs = {
 };
 
 class SettingsService {
-    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi', 'enableWebGPU'];
+    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi', 'graphicsBackend'];
 
     private static readonly SETTINGS_FILTER_PATHS = ['skybox.options', 'debug.renderMode'];
 
@@ -310,7 +310,7 @@ class SettingsService {
                     }
                 })()
             },
-            enableWebGPU: options.enableWebGPU
+            graphicsBackend: options.graphicsBackend
         };
         const materialOverrides = this.getMaterialOverrides();
         if (Object.keys(materialOverrides).length > 0) {
@@ -400,6 +400,23 @@ class SettingsService {
         this.syncSkyboxAndLightFromObserver();
     }
 
+    /**
+     * Translate the legacy `enableWebGPU` boolean into `graphicsBackend`.
+     *
+     * Settings files are authored deliberately (exported from the viewer, or written by the
+     * portal), so unlike the localStorage copy of that key a `false` here really does mean "this
+     * scene wants WebGL" and is worth honouring. Files that already carry `graphicsBackend` win.
+     *
+     * @param data - Parsed settings file.
+     * @returns The settings with `graphicsBackend` filled in when only the legacy key was present.
+     */
+    private static withLegacyGraphicsBackend(data: Record<string, unknown>): Record<string, unknown> {
+        if (data.graphicsBackend !== undefined || typeof data.enableWebGPU !== 'boolean') {
+            return data;
+        }
+        return { ...data, graphicsBackend: data.enableWebGPU ? 'auto' : 'webgl' };
+    }
+
     applyViewerSettings(data: Record<string, unknown>) {
         const filter = SettingsService.SETTINGS_FILTER_PATHS;
         const blockedKeys = new Set(['__proto__', 'constructor', 'prototype']);
@@ -486,7 +503,7 @@ class SettingsService {
             }
         };
         try {
-            loadRec('', data);
+            loadRec('', SettingsService.withLegacyGraphicsBackend(data));
             const materialOverrides = data.materialOverrides;
             if (materialOverrides && typeof materialOverrides === 'object' && !Array.isArray(materialOverrides)) {
                 this.applyMaterialOverrides(materialOverrides as Record<string, unknown>);

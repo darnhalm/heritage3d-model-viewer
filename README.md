@@ -2,9 +2,15 @@
 
 Форк **[PlayCanvas Model Viewer](https://github.com/playcanvas/model-viewer)** (glTF 2.0, движок PlayCanvas, PCUI, Observer) для задач каталогов цифрового наследия, встраивания и работы со сценой. Технологическая основа сохранена; изменена продуктовая оболочка и добавлены функции ниже.
 
-> Детальный перечень правок и заметки по безопасности — в [`docs/CHANGELOG-FORK.md`](docs/CHANGELOG-FORK.md); про постобработку — в [`docs/POST-EFFECTS.md`](docs/POST-EFFECTS.md).
+> Детальный перечень правок и заметки по безопасности — в [`docs/CHANGELOG-FORK.md`](docs/CHANGELOG-FORK.md).
 >
-> ⚠️ Ветка `main` содержит Heritage3D-форк; обновления upstream PlayCanvas (WebXR, новый picker) пока не влиты.
+> ⚠️ Ветка `main` содержит Heritage3D-форк; обновления upstream PlayCanvas пока не влиты.
+> Постобработка (вкладка Effects) и AR/WebXR-режим из форка **удалены** — см. `docs/CHANGELOG-FORK.md`.
+>
+> 🖥 **Графика:** по умолчанию WebGPU с автоматическим откатом на WebGL2; `?webgl` — принудительно
+> WebGL2. Gaussian Splats (PLY / SOG / SPZ / LOD) идут через unified GSplat pipeline движка:
+> GPU-сортировка на WebGPU, CPU-сортировка на WebGL. SPZ декодируется во вьюере (движок его
+> не поддерживает) и передаётся движку как compressed PLY.
 
 ---
 
@@ -18,8 +24,8 @@
 | **Версия формата** | В корне JSON: `modelViewerSettingsVersion: 1`. |
 | **Как получить** | Кнопка **EXPORT VIEWER SETTINGS** в панели **View & share** — скачивает JSON с именем от первой загруженной модели. |
 | **Как применяется** | После загрузки модели **автоматически** запрашивается sidecar с тем же базовым именем. При отсутствии файла часть состояния сбрасывается к умолчанию. |
-| **Что внутри (экспорт)** | `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `dimensionBox`, `poi` (список точек), `enableWebGPU`, при наличии — `materialOverrides`, всегда — `sceneTransform`. В режиме **orbit** в `camera` дополнительно сохраняются `position` и `focus`. Цвета — **HEX-строки** (`#rrggbb`). |
-| **Whitelist применения** | При импорте применяются только ключи из `SETTINGS_APPLY_KEYS` (`camera, skybox, light, debug, shadowCatcher, measure, dimensionBox, poi, enableWebGPU`). Постобработка (`posteffects`) в экспорт пока не входит. |
+| **Что внутри (экспорт)** | `camera`, `skybox`, `light`, `debug`, `shadowCatcher`, `measure`, `dimensionBox`, `poi` (список точек), `graphicsBackend`, при наличии — `materialOverrides`, всегда — `sceneTransform`. В режиме **orbit** в `camera` дополнительно сохраняются `position` и `focus`. Цвета — **HEX-строки** (`#rrggbb`). |
+| **Whitelist применения** | При импорте применяются только ключи из `SETTINGS_APPLY_KEYS` (`camera, skybox, light, debug, shadowCatcher, measure, dimensionBox, poi, graphicsBackend`). |
 | **Ограничения** | Максимальный размер файла **10 MB**; для удалённой загрузки — таймауты и проверки (см. `src/viewer/settings-service.ts`). |
 
 **Зачем это важно:** один GLB на CDN + один JSON рядом дают **воспроизводимый вид** (ракурс, окружение, масштаб измерений, тур) без ручного кликанья в UI.
@@ -31,7 +37,7 @@
 **Оригинал:** нижняя полоска с быстрым доступом к панелям Camera / Sky / Light / Settings.
 
 **Форк:**
-- **Левая сворачиваемая панель** — вкладки **Settings** (камера, небо, свет, дебаг), **Object Alignment**, **Materials**, **POI**, **Effects** (постобработка).
+- **Левая сворачиваемая панель** — вкладки **Settings** (камера, небо, свет, дебаг), **Object Alignment**, **Materials**, **POI**.
 - **Центральная полоса внизу** — анимация, **Info**, HD/SD, **Measurement**, **View & share**, кадрирование, Orbit/Fly, полный экран; часть пунктов открывает всплывающие панели.
 - Переключатель **языка** (EN / RU / ZH) на левой панели (во внешнем режиме).
 
@@ -46,7 +52,6 @@
 3. **Локализация** — строки через `src/i18n/translations.ts`, три языка в UI.
 4. **POI / тур** — вкладка и проигрыватель точек интереса, слайд-шоу (список POI входит в файл конфигурации; в embed управляется флагами `poi` / `tour`).
 5. **Выравнивание объекта** — режим alignment, gizmo move/rotate, центрирование, сброс, fit (`sceneTransform` сохраняется в JSON). Дополнительно: **ViewCube** (как в 3ds Max, виден только в режиме выравнивания), жёсткие стандартные виды (сверху/снизу/спереди/сзади/слева/справа), переключатель **орто/перспектива** с зумом колесом в ортогональном режиме. Размерный бокс (`dimensionBox`) тоже сохраняется в конфиг.
-6. **Вкладка Effects** — цепочка постобработки (Bloom, SSAO, Bokeh, цветокор, FXAA, **LUT .cube 1D/3D** и др.), см. [`docs/POST-EFFECTS.md`](docs/POST-EFFECTS.md) (контракт `autoRender` / `renderNextFrame`). Параметры эффектов **пока не сериализуются** в `model-viewer-settings.json`.
 7. **Расширенные материалы и дебаг** — иконки каналов, варианты glTF, texel density, UV и пр. (для gaussian splat часть вкладок скрывается).
 8. **Morph targets** в панели **Info** → **Model**.
 9. **Снимки** из **View & share** — PNG, обложка 1:1; кастомные HDRI-окружения.

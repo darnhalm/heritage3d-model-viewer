@@ -43,7 +43,7 @@
         "eslint": "9.39.2",
         "eslint-import-resolver-typescript": "4.4.4",
         "globals": "17.2.0",
-        "playcanvas": "2.15.2",
+        "playcanvas": "2.20.6",
         "qrious": "4.0.2",
         "react": "19.2.4",
         "react-dom": "19.2.4",
@@ -68,7 +68,9 @@
         "node": ">=18.0.0"
     },
     "dependencies": {
+        "@adobe/spz": "^0.2.2",
         "driver.js": "^1.4.0",
-        "flag-icons": "^7.5.0"
+        "flag-icons": "^7.5.0",
+        "spz-js": "^1.2.5"
     }
 }
