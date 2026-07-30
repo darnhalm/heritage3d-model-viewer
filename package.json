@@ -68,7 +68,9 @@
         "node": ">=18.0.0"
     },
     "dependencies": {
+        "@adobe/spz": "^0.2.2",
         "driver.js": "^1.4.0",
-        "flag-icons": "^7.5.0"
+        "flag-icons": "^7.5.0",
+        "spz-js": "^1.2.5"
     }
 }

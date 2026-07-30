@@ -8,8 +8,9 @@
 > Постобработка (вкладка Effects) и AR/WebXR-режим из форка **удалены** — см. `docs/CHANGELOG-FORK.md`.
 >
 > 🖥 **Графика:** по умолчанию WebGPU с автоматическим откатом на WebGL2; `?webgl` — принудительно
-> WebGL2. Gaussian Splats (PLY / SOG / LOD) идут через unified GSplat pipeline движка:
-> GPU-сортировка на WebGPU, CPU-сортировка на WebGL.
+> WebGL2. Gaussian Splats (PLY / SOG / SPZ / LOD) идут через unified GSplat pipeline движка:
+> GPU-сортировка на WebGPU, CPU-сортировка на WebGL. SPZ декодируется во вьюере (движок его
+> не поддерживает) и передаётся движку как compressed PLY.
 
 ---
 

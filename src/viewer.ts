@@ -1,3 +1,4 @@
+import type { SpzModule } from '@adobe/spz';
 import { Observer } from '@playcanvas/observer';
 import {
     ADDRESS_CLAMP_TO_EDGE,
@@ -87,6 +88,7 @@ import {
     CameraComponent,
     platform
 } from 'playcanvas';
+import { serializeCompressedPly } from 'spz-js';
 
 import { App } from './app';
 import { CameraControls } from './camera-controls';
@@ -609,6 +611,9 @@ class Viewer {
     multiframe: Multiframe | null;
 
     multiframeBusy = false;
+
+    /** Lazily created SPZ codec (see getSpzCodec). */
+    private static spzCodec: Promise<SpzModule> | null = null;
 
     private isCapturingCoverImage = false;
 
@@ -3928,6 +3933,9 @@ class Viewer {
             if (oversizedBytes !== null) {
                 throw new Error(this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', url.filename ?? url.url ?? '', oversizedBytes));
             }
+            if (this.isSpzFilename(url.filename ?? url.url ?? '')) {
+                return this.loadSpzAsCompressedPly(url, onProgress);
+            }
             const urls: Record<string, string> = {};
             externalUrls.forEach((externalUrl) => {
                 urls[externalUrl.filename] = externalUrl.url;
@@ -3952,6 +3960,111 @@ class Viewer {
         });
     }
 
+    /**
+     * The SPZ codec instance, created on first use and shared afterwards (it carries a wasm
+     * instance, so building one per file would be wasteful).
+     *
+     * @returns The initialised codec module.
+     */
+    private static getSpzCodec() {
+        Viewer.spzCodec ??= import('@adobe/spz').then(module => module.default());
+        return Viewer.spzCodec;
+    }
+
+    /**
+     * Load an SPZ (Niantic) splat file by converting it to a compressed PLY in memory.
+     *
+     * The engine has no SPZ parser (checked through 2.22 beta), so instead of adding a second
+     * gsplat code path we decode SPZ here and hand the engine the format its own PlyParser
+     * already reads. The asset gets a `.compressed.ply` filename because the engine picks the
+     * parser from `asset.file.filename`, and the bytes are passed as `contents` so nothing is
+     * fetched twice.
+     *
+     * Decoding uses `@adobe/spz` — the same codec `@playcanvas/splat-transform` relies on, so it
+     * handles current SPZ versions (v3/v4 use zstd streams; the pure-JS `spz-js` decoder only
+     * understands the older gzip-based v1/v2). It is loaded lazily so the ~850 KB wasm bundle is
+     * only fetched when an SPZ file is actually opened. Serialization to compressed PLY comes from
+     * `spz-js`, which already encodes the PLY conventions (log scales, logit opacity, SH layout).
+     *
+     * SPZ stores RUB by design, PLY uses RDF, so the decode is asked for RDF — otherwise the scene
+     * would arrive rotated.
+     *
+     * Note this re-quantizes: the codec unpacks to float arrays and the compressed-PLY writer
+     * re-packs them into the engine's chunked layout. Fidelity is comparable to any other
+     * compressed-PLY scene, but it is not bit-identical to the source file.
+     *
+     * @param url - The file to load (remote URL or blob URL from drag & drop).
+     * @param onProgress - Download progress callback, 0..1.
+     * @returns The loaded gsplat asset.
+     */
+    private async loadSpzAsCompressedPly(url: File, onProgress?: (progress: number) => void): Promise<Asset> {
+        const source = url.filename ?? url.url ?? '';
+        const response = await fetch(url.url);
+        if (!response.ok) {
+            throw new Error(`Failed to load "${source}" (HTTP ${response.status})`);
+        }
+
+        const bytes = new Uint8Array(await this.readBodyWithProgress(response, onProgress));
+
+        const spz = await Viewer.getSpzCodec();
+        const cloud = spz.loadSpzFromBuffer(bytes, { to: spz.CoordinateSystem.RDF });
+        const ply = serializeCompressedPly(cloud);
+        onProgress?.(1);
+
+        const filename = `${source.replace(/\.spz$/i, '')}.compressed.ply`;
+        // `.slice()` gives a view backed by a plain ArrayBuffer, which is what Response accepts.
+        const contents = new Response(ply.slice(), {
+            headers: { 'content-length': String(ply.byteLength) }
+        });
+
+        return new Promise<Asset>((resolve, reject) => {
+            // The engine's PlyParser awaits `contents` and reads `.body` from it (see
+            // parsers/ply.js), i.e. it expects a Response — but the typings declare an
+            // ArrayBuffer, which is what the other handlers use. Hence the cast.
+            const file = { url: url.url, filename, contents: contents as unknown as ArrayBuffer };
+            const asset = new Asset(filename, 'gsplat', file);
+            asset.on('load', () => resolve(asset));
+            asset.on('error', (err: string) => reject(err));
+            this.app.assets.add(asset);
+            this.app.assets.load(asset);
+        });
+    }
+
+    /**
+     * Read a response body, reporting download progress when the server tells us the total size.
+     *
+     * @param response - The response to drain.
+     * @param onProgress - Progress callback, 0..1.
+     * @returns The full body.
+     */
+    private async readBodyWithProgress(response: Response, onProgress?: (progress: number) => void): Promise<ArrayBuffer> {
+        const total = Number(response.headers.get('content-length') ?? 0);
+        if (!onProgress || !response.body || !(total > 0)) {
+            return response.arrayBuffer();
+        }
+
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+        for (;;) {
+            // eslint-disable-next-line no-await-in-loop -- draining a stream is inherently sequential
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (!value) continue;
+            chunks.push(value);
+            received += value.byteLength;
+            onProgress(Math.min(1, received / total));
+        }
+
+        const body = new Uint8Array(received);
+        let offset = 0;
+        for (const chunk of chunks) {
+            body.set(chunk, offset);
+            offset += chunk.byteLength;
+        }
+        return body.buffer;
+    }
+
     // returns true if the filename has one of the recognized model extensions
     isModelFilename(filename: string) {
         const parts = filename.split('?')[0].split('/').pop().split('.');
@@ -3961,8 +4074,13 @@ class Viewer {
 
     isGSplatFilename(filename: string) {
         const parts = filename.split('?')[0].split('/').pop().split('.');
-        const result = parts.length > 0 && ['ply', 'json', 'sog'].includes(parts.pop().toLowerCase());
+        const result = parts.length > 0 && ['ply', 'json', 'sog', 'spz'].includes(parts.pop().toLowerCase());
         return result;
+    }
+
+    // SPZ needs decoding before the engine can read it — see loadSpzAsCompressedPly
+    private isSpzFilename(filename: string) {
+        return filename.split('?')[0].toLowerCase().endsWith('.spz');
     }
 
     private isViewerSettingsFilename(filename: string): boolean {
