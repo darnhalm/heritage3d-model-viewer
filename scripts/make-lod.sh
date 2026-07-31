@@ -120,16 +120,41 @@ case "$(echo "${SRC##*.}" | tr '[:upper:]' '[:lower:]')" in
 esac
 
 command -v npx >/dev/null || fail "нужен Node.js (npx не найден)"
+command -v python3 >/dev/null || fail "нужен python3 (используется для слага имени)"
 
-# Имя сцены → slug: без пробелов и скобок, иначе ссылку потом невозможно читать.
+# Имя сцены → slug: без пробелов, скобок и кириллицы, иначе ссылку потом
+# невозможно ни прочитать, ни собрать (пробелы в ?load= требуют двойного
+# кодирования). Кириллица транслитерируется, иначе от русского названия не
+# осталось бы ничего и разные сцены схлопнулись бы в одно имя.
 BASE="$(basename "$SRC")"
 BASE="${BASE%.*}"
 BASE="${BASE%.compressed}"
-SLUG="$(printf '%s' "$BASE" \
-    | tr '[:upper:]' '[:lower:]' \
-    | sed -e 's/[^a-z0-9]\+/-/g' -e 's/^-//' -e 's/-$//')"
+SLUG="$(printf '%s' "$BASE" | python3 -c '
+import re, sys, unicodedata
+
+RU = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya"
+}
+
+text = sys.stdin.read().strip().lower()
+text = "".join(RU.get(ch, ch) for ch in text)
+# остальные не-ASCII (умляуты, диакритика) — через разложение Unicode
+text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+print(re.sub(r"-{2,}", "-", re.sub(r"[^a-z0-9]+", "-", text)).strip("-"))
+')"
 [ -n "$SLUG" ] || SLUG="scene"
 DEST="${SLUG}-lod"
+
+# Слаг может совпасть у разных исходников — молча затирать чужую сцену нельзя.
+if [ "${FORCE:-0}" != 1 ] && [ "${DRY_RUN:-0}" != 1 ]; then
+    EXISTING="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 \
+        "${VIEWER_URL}/${PREFIX}/${DEST}/lod-meta.json" || echo 000)"
+    [ "$EXISTING" = 200 ] && fail "в бакете уже есть ${PREFIX}/${DEST}/ — перезапись только с FORCE=1"
+fi
 
 SRC_BYTES="$(stat -f%z "$SRC")"
 SRC_MB=$((SRC_BYTES / 1048576))

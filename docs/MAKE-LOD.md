@@ -39,9 +39,19 @@ scripts/make-lod.sh "path/to/[See the World] Sacrario Militare di Oslavia.sog"
    в `s3://<бакет>/<префикс>/<имя>-lod/`.
 4. Ссылка на вьюер копируется в буфер обмена.
 
-Имя сцены приводится к slug: `[See the World] Sacrario Militare di Oslavia.sog` →
-`see-the-world-sacrario-militare-di-oslavia-lod`. Это сделано намеренно: пробелы и скобки
-в URL приходится кодировать дважды (`%2520`), и ссылка становится нечитаемой.
+Имя сцены приводится к slug — пробелы и скобки в `?load=` пришлось бы кодировать дважды
+(`%2520`), и ссылка становится нечитаемой. Кириллица транслитерируется, иначе от русского
+названия не осталось бы ничего и разные сцены схлопнулись бы в одно имя:
+
+| Файл | Папка в бакете |
+|---|---|
+| `[See the World] Sacrario Militare di Oslavia.sog` | `see-the-world-sacrario-militare-di-oslavia-lod` |
+| `Сакрарий Ославия (2024).sog` | `sakrariy-oslaviya-2024-lod` |
+| `Ёлка на Щёлковском шоссе.ply` | `elka-na-schelkovskom-shosse-lod` |
+| `scene.compressed.ply` | `scene-lod` |
+
+Если слаг всё-таки совпал с уже существующей в бакете сценой, скрипт **откажется работать**:
+затирать чужие тайлы молча нельзя. Перезапись — только явным `FORCE=1`.
 
 ## Переменные окружения
 
@@ -56,6 +66,10 @@ scripts/make-lod.sh "path/to/[See the World] Sacrario Militare di Oslavia.sog"
 | `SPLAT_TRANSFORM_VER` | `3.1.7` | версия инструмента (тянется через `npx`) |
 | `DRY_RUN=1` | — | всё сконвертировать, но не заливать |
 | `KEEP_TEMP=1` | — | не удалять промежуточные файлы |
+| `FORCE=1` | — | перезаписать сцену, если такая папка в бакете уже есть |
+
+Требуется: Node.js (`npx`), `python3` (слаг с транслитерацией), `yc` CLI с активным
+профилем или `rclone`.
 
 ## Место на диске
 
