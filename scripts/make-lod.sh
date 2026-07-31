@@ -5,10 +5,15 @@
 #   scripts/make-lod.sh "путь/к/сцене.sog"
 #
 # Что делает:
+#   0. splat-transform: раскладывает источник в morton-порядке (быстрее читается дальше);
 #   1. splat-transform: прореживает источник на уровни детализации (промежуточные PLY);
 #   2. splat-transform: собирает уровни в lod-meta.json + тайлы;
 #   3. yc (или rclone, если установлен): заливает папку в бакет;
-#   4. кладёт ссылку на вьюер в буфер обмена.
+#   4. проверяет, что сцена в бакете читается, удаляет локальные файлы;
+#   5. кладёт ссылку на вьюер в буфер обмена и открывает её в браузере.
+#
+# Работает на том же диске, где лежит исходник (системный диск Mac обычно меньше
+# и его нечем освободить), в отдельном каталоге <слаг>-lod рядом со сценой.
 #
 # Стриминга во вьюере включать не нужно: он включается самим фактом загрузки
 # lod-meta.json в gsplat-компонент.
@@ -25,8 +30,12 @@
 #   FILTER_HARMONICS     0..3 — обрезать SH; пусто = оставить как есть
 #   LOD_CHUNK_COUNT      гауссиан на тайл, в тысячах  (по умолчанию решает splat-transform)
 #   SPLAT_TRANSFORM_VER  версия инструмента           (3.1.7)
-#   KEEP_TEMP=1          не удалять промежуточные PLY
+#   LOD_WORK_DIR         где работать                 (каталог исходника)
+#   MORTON=1             morton-prepass               (по умолчанию 0 — см. docs)
+#   KEEP_TEMP=1          ничего не удалять после себя
+#   NO_OPEN=1            не открывать браузер в конце
 #   DRY_RUN=1            всё сделать, но не заливать
+#   FORCE=1              перезаписать существующие каталог и сцену в бакете
 #
 set -euo pipefail
 
@@ -55,7 +64,9 @@ notify() {
     osascript -e "display notification \"${1//\"/}\" with title \"Heritage3D: Make LOD\"" >/dev/null 2>&1 || true
 }
 
+FAILED=0
 fail() {
+    FAILED=1
     say "ОШИБКА: $1"
     notify "Ошибка: $1"
     exit 1
@@ -160,21 +171,69 @@ SRC_BYTES="$(stat -f%z "$SRC")"
 SRC_MB=$((SRC_BYTES / 1048576))
 say "Сцена: $BASE (${SRC_MB} МБ) → ${DEST}/"
 
-# ---------------------------------------------------------------- место на диске
+# ------------------------------------------------------- рабочий каталог и место
+# Работаем на том диске, где лежит исходник: сцены живут на внешнем томе, а
+# системный диск Mac обычно и меньше, и забит — в $TMPDIR полтора гигабайта
+# промежуточных файлов может не влезть. Всё по одной модели складываем в
+# отдельный каталог <слаг>-lod, чтобы не сорить в каталоге с моделями.
+SRC_DIR="$(cd "$(dirname "$SRC")" && pwd)"
+WORK_ROOT="${LOD_WORK_DIR:-$SRC_DIR}"
+if [ ! -w "$WORK_ROOT" ]; then
+    say "каталог ${WORK_ROOT} недоступен на запись — работаем в ${TMPDIR:-/tmp}"
+    WORK_ROOT="${TMPDIR:-/tmp}"
+fi
+WORK="${WORK_ROOT%/}/${DEST}"
+
+# Каталог мы потом удаляем целиком, поэтому чужой не берём: либо его нет, либо он
+# пустой, либо явный FORCE=1.
+if [ -e "$WORK" ]; then
+    [ -d "$WORK" ] || fail "по пути ${WORK} лежит файл — уберите его"
+    if [ "${FORCE:-0}" = 1 ]; then
+        say "FORCE=1 — очищаем существующий ${WORK}"
+        rm -rf "$WORK"
+    elif [ -n "$(ls -A "$WORK" 2>/dev/null)" ]; then
+        fail "каталог ${WORK} уже существует и не пуст — удалите его или запустите с FORCE=1"
+    fi
+fi
+
+TMP_DIR="${WORK}/tmp"                       # промежуточные PLY и scratch инструмента
+OUT_DIR="${WORK}/tiles"                     # то, что уезжает в бакет как есть
+mkdir -p "$TMP_DIR" "$OUT_DIR"
+
 # Промежуточные PLY пишутся несжатыми: со сферическими гармониками это примерно
 # 15–20× от .sog. Требуем запас, иначе конвертация упадёт на середине.
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/make-lod-XXXXXX")"
 NEED_MB=$((SRC_MB * 20 + 512))
+# morton-копия — это полная сцена в несжатом PLY, ещё столько же
+[ "${MORTON:-0}" = 1 ] && NEED_MB=$((NEED_MB + SRC_MB * 20))
 FREE_MB="$(df -m "$WORK" | awk 'NR==2 {print $4}')"
+say "Работаем в ${WORK}"
 say "Нужно ~${NEED_MB} МБ на диске, свободно ${FREE_MB} МБ"
 [ "$FREE_MB" -gt "$NEED_MB" ] || fail "мало места: нужно ~${NEED_MB} МБ, свободно ${FREE_MB} МБ (уменьшить: FILTER_HARMONICS=0)"
 
+# Удаляем ровно свой каталог: путь обязан оканчиваться на -lod, иначе оставляем
+# как есть — лучше мусор на диске, чем rm -rf по чужой папке с моделями.
+drop_work() {
+    case "$WORK" in
+        */*-lod) rm -rf "$WORK" ;;
+        *) say "подозрительный путь, не удаляю: $WORK" ;;
+    esac
+}
+
 cleanup() {
-    if [ "${KEEP_TEMP:-0}" = 1 ]; then
-        say "промежуточные файлы оставлены: $WORK"
-    else
-        rm -rf "$WORK"
+    local status=$?
+    # bash при set -u (например, на пустом массиве) выходит мимо ERR-trap и молча —
+    # без этого пользователь не увидел бы вообще ничего
+    if [ "$status" != 0 ] && [ "$FAILED" = 0 ]; then
+        say "ОШИБКА: прервано (код ${status}) — подробности в $LOG"
+        notify "Ошибка: см. $LOG"
     fi
+    if [ "${KEEP_TEMP:-0}" = 1 ]; then
+        [ -d "$WORK" ] && say "файлы оставлены: $WORK"
+        return 0
+    fi
+    [ -d "$WORK" ] || return 0
+    drop_work
+    return 0
 }
 trap cleanup EXIT
 
@@ -185,32 +244,64 @@ COMMON_ARGS=(--filter-nan)
 LEVEL_COUNT=$(echo "$LOD_LEVELS" | wc -w | tr -d ' ')
 PHASES=$((LEVEL_COUNT + 1))                  # прореживания + сборка тайлов
 
+# --------------------------------------------------- шаг 0: morton-порядок (prepass)
+# splat-transform на неупорядоченном входе советует разовый --morton-order. По замерам
+# на Ославии он себя не окупает: этап уровня ускорился с 1:38 до 1:30, а сам prepass
+# стоил 13 с и 724 МБ на диске — и предупреждение о некогерентности инструмент всё
+# равно продолжает печатать уже на morton-копии. Поэтому по умолчанию выключен.
+# Когда включён, здесь же применяются фильтры — дальше по цепочке данные идут уже
+# отфильтрованными.
+MORTON_PHASE=0
+SOURCE="$SRC"
+if [ "${MORTON:-0}" = 1 ]; then
+    MORTON_PHASE=1
+    PHASES=$((PHASES + 1))
+    MORTON_PLY="${TMP_DIR}/source-morton.ply"
+    run_phase 0 "$PHASES" "Morton-порядок" \
+        "${ST[@]}" "$SRC" "${COMMON_ARGS[@]}" --morton-order "$MORTON_PLY"
+    SOURCE="$MORTON_PLY"
+    MORTON_MB="$(du -sm "$MORTON_PLY" | awk '{print $1}')"
+    say "Morton-копия: ${MORTON_MB} МБ"
+fi
+
 # ------------------------------------------------- шаг 1: прореженные уровни PLY
 # Прореживание обязано быть последним действием вызова и писать .ply — поэтому
 # уровни готовятся отдельными запусками, а собираются на шаге 2.
-LEVEL_ARGS=("$SRC" -l 0)
+LEVEL_ARGS=("$SOURCE" -l 0)
 LEVEL_NO=1
 for FRACTION in $LOD_LEVELS; do
-    OUT="${WORK}/lod${LEVEL_NO}.ply"
-    run_phase "$((LEVEL_NO - 1))" "$PHASES" "Уровень ${LEVEL_NO}/${LEVEL_COUNT} (${FRACTION})" \
-        "${ST[@]}" "$SRC" -d "$FRACTION" "$OUT" --scratch-dir "$WORK"
+    OUT="${TMP_DIR}/lod${LEVEL_NO}.ply"
+    # без prepass фильтры не применялись нигде до сборки — ставим их перед -d
+    # (сам -d обязан быть последним действием)
+    FILTER_ARGS=()
+    [ "$MORTON_PHASE" = 0 ] && FILTER_ARGS=("${COMMON_ARGS[@]}")
+    run_phase "$((LEVEL_NO - 1 + MORTON_PHASE))" "$PHASES" "Уровень ${LEVEL_NO}/${LEVEL_COUNT} (${FRACTION})" \
+        "${ST[@]}" "$SOURCE" ${FILTER_ARGS[@]+"${FILTER_ARGS[@]}"} -d "$FRACTION" "$OUT" --scratch-dir "$TMP_DIR"
     LEVEL_ARGS+=("$OUT" -l "$LEVEL_NO")
     LEVEL_NO=$((LEVEL_NO + 1))
 done
 
 # --------------------------------------------------- шаг 2: сборка в Streamed SOG
-OUT_DIR="${WORK}/${DEST}"
-mkdir -p "$OUT_DIR"
 CHUNK_ARGS=()
 [ -n "${LOD_CHUNK_COUNT:-}" ] && CHUNK_ARGS+=(--lod-chunk-count "$LOD_CHUNK_COUNT")
 
-run_phase "$LEVEL_COUNT" "$PHASES" "Сборка тайлов" \
-    "${ST[@]}" "${CHUNK_ARGS[@]}" "${LEVEL_ARGS[@]}" "${OUT_DIR}/lod-meta.json" "${COMMON_ARGS[@]}"
+# ${A[@]+"${A[@]}"} — иначе bash 3.2 с set -u ругается на пустой массив
+run_phase "$((LEVEL_COUNT + MORTON_PHASE))" "$PHASES" "Сборка тайлов" \
+    "${ST[@]}" ${CHUNK_ARGS[@]+"${CHUNK_ARGS[@]}"} "${LEVEL_ARGS[@]}" \
+    "${OUT_DIR}/lod-meta.json" "${COMMON_ARGS[@]}"
 
 FILES="$(find "$OUT_DIR" -type f | wc -l | tr -d ' ')"
 OUT_MB="$(du -sm "$OUT_DIR" | awk '{print $1}')"
 TILES="$(find "$OUT_DIR" -name 'meta.json' -not -name 'lod-meta.json' | wc -l | tr -d ' ')"
 say "Сконвертировано: ${TILES} тайлов, ${FILES} файлов, ${OUT_MB} МБ"
+
+# Промежуточные PLY больше не нужны — на них приходится почти весь занятый объём,
+# и держать его во время заливки незачем.
+if [ "${KEEP_TEMP:-0}" != 1 ] && [ -d "$TMP_DIR" ]; then
+    TMP_MB="$(du -sm "$TMP_DIR" | awk '{print $1}')"
+    rm -rf "$TMP_DIR"
+    say "Промежуточные файлы удалены, освобождено ${TMP_MB} МБ"
+fi
 
 # ------------------------------------------------------------------ шаг 3: заливка
 LOAD_PATH="${PREFIX}/${DEST}/lod-meta.json"
@@ -226,7 +317,7 @@ fi
 # Здесь прогресс честный: и yc, и rclone печатают строку на каждый залитый файл,
 # а общее число файлов нам уже известно.
 say "Заливка ${FILES} файлов в s3://${BUCKET}/${PREFIX}/${DEST}/"
-UP_LOG="${WORK}/upload.log"
+UP_LOG="${WORK}/upload.log"        # рядом с tiles/, а не внутри: иначе уедет в бакет
 : >"$UP_LOG"
 
 if command -v rclone >/dev/null; then
@@ -241,7 +332,10 @@ UP_PID=$!
 
 UP_START=$SECONDS
 while kill -0 "$UP_PID" 2>/dev/null; do
-    SENT="$(grep -c -E '^(upload:|Copied )' "$UP_LOG" 2>/dev/null || echo 0)"
+    # без совпадений grep печатает 0 и возвращает 1 — с `|| echo 0` в SENT
+    # попадало бы «0\n0», и дальше всё ломалось на арифметике
+    SENT="$(grep -c -E '^(upload:|Copied )' "$UP_LOG" 2>/dev/null || true)"
+    [ -n "$SENT" ] || SENT=0
     [ "$SENT" -gt "$FILES" ] && SENT=$FILES
     draw_bar $((SENT * 100 / FILES)) "Заливка" "${SENT}/${FILES}  $(fmt_time $((SECONDS - UP_START)))"
     sleep 0.3
@@ -251,7 +345,28 @@ draw_bar 100 "Заливка" "${FILES}/${FILES}  за $(fmt_time $((SECONDS - U
 [ "$TTY" = 1 ] && printf '\n' >&3
 cat "$UP_LOG" >>"$LOG" || true
 
+# ------------------------------------------------- шаг 4: проверка и чистка диска
+# Локальную копию удаляем только убедившись, что сцена читается из бакета: иначе
+# «успешная» заливка без результата унесла бы с собой часы конвертации.
+CHECK="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "${VIEWER_URL}/${LOAD_PATH}" || echo 000)"
+if [ "$CHECK" = 200 ]; then
+    if [ "${KEEP_TEMP:-0}" = 1 ]; then
+        say "KEEP_TEMP=1 — локальная копия оставлена: $WORK"
+    else
+        drop_work
+        say "Локальная копия удалена, освобождено ${OUT_MB} МБ"
+    fi
+else
+    KEEP_TEMP=1                          # cleanup на выходе тоже ничего не тронет
+    say "ВНИМАНИЕ: ${LOAD_PATH} в бакете не читается (HTTP ${CHECK}) — локальные файлы оставлены в ${WORK}"
+fi
+
 printf '%s' "$LINK" | pbcopy 2>/dev/null || true
 say "Готово. Ссылка скопирована в буфер обмена:"
 say "$LINK"
 notify "Готово: ${TILES} тайлов, ${OUT_MB} МБ. Ссылка в буфере обмена."
+
+# ------------------------------------------------------- шаг 5: открыть во вьюере
+if [ "${NO_OPEN:-0}" != 1 ]; then
+    open "$LINK" >/dev/null 2>&1 || say "не удалось открыть браузер — ссылка выше"
+fi
