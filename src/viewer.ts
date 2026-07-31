@@ -1317,6 +1317,19 @@ class Viewer {
         // (see GSplatWorld._enforceBudget) — so a budget here just bounds streaming memory/perf.
         gsplatParams.splatBudget = platform.mobile ? 1500000 : 3000000;
 
+        // Let detail drop behind the camera. The engine picks a LOD per octree node from its
+        // distance to the camera, and only applies a direction penalty when lodBehindPenalty > 1 —
+        // the default of 1 means the back of the scene streams in at the same detail as the part
+        // you are looking at. That is expensive here because the engine's loader is a plain FIFO
+        // with two concurrent requests and no distance priority (GSplatAssetLoader), so tiles
+        // behind you can occupy the queue ahead of the ones in view.
+        //
+        // lodUpdateAngle is needed alongside it: rotation-triggered LOD re-evaluation is off by
+        // default (0), so after turning around the tiles now in front would keep their coarse LOD
+        // until the camera also moved. Values match supersplat-viewer; both are safe to tune.
+        gsplatParams.lodBehindPenalty = 5;
+        gsplatParams.lodUpdateAngle = 90;
+
         // Sorting pipeline, chosen explicitly per backend as supersplat-viewer does, rather than
         // leaving GSPLAT_RENDERER_AUTO implicit: same resolution (WebGPU → GPU sort, WebGL → CPU
         // sort), but the choice is visible in code and easy to override.
