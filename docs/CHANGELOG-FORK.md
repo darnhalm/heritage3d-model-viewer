@@ -73,6 +73,7 @@
 | `docs/SCENE-SIZES.md` | Размеры сцены, единицы, zoom, camera, grid |
 | `docs/STATE-HIERARCHY.md` | Иерархия состояния observer для сохранения/загрузки |
 | `docs/UI-ELEMENTS.md` | Описание панелей и элементов UI (Camera, Sky, Light, Settings, View) |
+| `docs/MAKE-LOD.md` | Тайлы (Streamed SOG) для сплатов: `scripts/make-lod.sh` и быстрое действие Finder |
 | `docs/model-viewer-window-design.svg` | SVG-макет окна вьюера и элементов интерфейса |
 
 ---

@@ -11,6 +11,9 @@
 > WebGL2. Gaussian Splats (PLY / SOG / SPZ / LOD) идут через unified GSplat pipeline движка:
 > GPU-сортировка на WebGPU, CPU-сортировка на WebGL. SPZ декодируется во вьюере (движок его
 > не поддерживает) и передаётся движку как compressed PLY.
+>
+> 🧱 **Тяжёлые сцены:** `scripts/make-lod.sh` (и быстрое действие Finder) нарезает сплат на
+> тайлы Streamed SOG и заливает в бакет — см. [`docs/MAKE-LOD.md`](docs/MAKE-LOD.md).
 
 ---
 
