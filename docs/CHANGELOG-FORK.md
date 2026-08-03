@@ -74,6 +74,7 @@
 | `docs/STATE-HIERARCHY.md` | Иерархия состояния observer для сохранения/загрузки |
 | `docs/UI-ELEMENTS.md` | Описание панелей и элементов UI (Camera, Sky, Light, Settings, View) |
 | `docs/MAKE-LOD.md` | Тайлы (Streamed SOG) для сплатов: `scripts/make-lod.sh` и быстрое действие Finder |
+| `docs/GLB-TILING-PLAYCANVAS.md` | Тайлизация GLB через 3D Tiles: концепция, референс планировщика, состояние |
 | `docs/model-viewer-window-design.svg` | SVG-макет окна вьюера и элементов интерфейса |
 
 ---
