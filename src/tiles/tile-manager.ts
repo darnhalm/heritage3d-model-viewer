@@ -1,0 +1,838 @@
+/**
+ * Менеджер тайлов 3D Tiles: обход дерева, выбор уровня детализации, загрузка и выгрузка.
+ *
+ * Один менеджер обслуживает один тайлсет. Он владеет корневой entity, под которую вешается
+ * контент, и полностью отвечает за её содержимое: вьюер про отдельные тайлы не знает.
+ *
+ * Системы координат. Тайлсет живёт в системе Z-вверх (у больших наборов — ECEF, с
+ * координатами порядка 6.4e6), контент внутри тайлов — обычный glTF, то есть Y-вверх, а
+ * вьюер рисует в Y-вверх. Отсюда две разные поправки:
+ *
+ * - на корневой entity — поворот Z-вверх → Y-вверх и сдвиг, ставящий тайлсет к началу
+ *   координат (без него ECEF-набор оказался бы за 6400 км от камеры, где float32 в
+ *   вершинных данных и в матрицах уже не хватает);
+ * - на каждом контенте — обратный поворот Y-вверх → Z-вверх, потому что трансформации
+ *   тайлов заданы в системе тайлсета, а glTF под ними — нет.
+ *
+ * Для простого тайлсета без своих трансформаций две поправки схлопываются в единицу, и
+ * контент рисуется ровно так, как его сделал автор.
+ */
+
+import {
+    BoundingBox, Entity, Frustum, Mat4, Quat, Vec3,
+    type AppBase, type CameraComponent, type MeshInstance, type RenderComponent
+} from 'playcanvas';
+
+import { expandSubtree, loadSubtreeAt, readImplicitTiling } from './implicit-tiling';
+import { destroyTileContent, gltfUpAxisTransform, loadTileContent, type TileContentResult } from './tile-content';
+import { distanceToObb, makeWorldObb, screenSpaceError } from './tile-math';
+import { TileRequestQueue, compareTilePriority } from './tile-request-queue';
+import {
+    TILE_FAILED, TILE_LOADING, TILE_QUEUED, TILE_READY, TILE_UNLOADED,
+    type Tile, type TileStats
+} from './tile-types';
+import { buildTileTree, fetchTilesetJson, findTightBoundingBox, forEachTile, recomputeWorldVolumes } from './tileset-loader';
+
+export type TileManagerOptions = {
+    app: AppBase;
+    /** Камера, по которой считаются расстояния и фрустум. */
+    camera: Entity;
+    /** Узел, под который вешается корень тайлсета (у нас — `sceneContentRoot`). */
+    parent: Entity;
+    /** Позвать, когда картинка изменилась: у вьюера `app.autoRender === false`. */
+    onChange: () => void;
+    /** Порог экранной ошибки в пикселях. 16 — значение по умолчанию в 3DTilesRendererJS. */
+    errorTarget?: number;
+    /** Одновременных загрузок. */
+    maxConcurrent?: number;
+    /** Сколько готовых, но невидимых тайлов держать в памяти. */
+    maxCachedTiles?: number;
+    /** Куда писать предупреждения о неподдержанных частях формата. */
+    onWarning?: (message: string) => void;
+};
+
+const UP_AXIS_ROTATION = -90;
+
+/** Ширина зоны гистерезиса вокруг порога SSE, доля от порога. */
+const HYSTERESIS = 0.15;
+
+const tmpMat = new Mat4();
+const rotationMat = new Mat4();
+const tmpQuat = new Quat();
+const tmpVec = new Vec3();
+
+/**
+ * Разложить матрицу в позицию/поворот/масштаб и применить к entity.
+ *
+ * Своё разложение, а не `Quat.setFromMat4` напрямую: у тайлов бывает масштаб в
+ * трансформации, а извлекать поворот из ненормированного базиса нельзя.
+ *
+ * @param entity - Куда применить.
+ * @param m - Матрица в системе родителя.
+ */
+function setLocalFromMat4(entity: Entity, m: Mat4) {
+    const d = m.data;
+    const sx = Math.hypot(d[0], d[1], d[2]) || 1;
+    const sy = Math.hypot(d[4], d[5], d[6]) || 1;
+    const sz = Math.hypot(d[8], d[9], d[10]) || 1;
+
+    // Позиция снимается до того, как построен базис поворота: вызывающая сторона обычно
+    // передаёт сюда общий временный `Mat4`, и запись в него затёрла бы исходные данные.
+    entity.setLocalPosition(d[12], d[13], d[14]);
+    entity.setLocalScale(sx, sy, sz);
+
+    rotationMat.set([
+        d[0] / sx, d[1] / sx, d[2] / sx, 0,
+        d[4] / sy, d[5] / sy, d[6] / sy, 0,
+        d[8] / sz, d[9] / sz, d[10] / sz, 0,
+        0, 0, 0, 1
+    ]);
+    entity.setLocalRotation(tmpQuat.setFromMat4(rotationMat));
+}
+
+/**
+ * Ниже какого расстояния от начала координат тайлсет считается негеографическим.
+ *
+ * Земной радиус — 6.37e6, локальные наборы живут в единицах и сотнях. Промежуток между
+ * этими масштабами такой, что порог можно ставить грубо.
+ */
+const GEOREFERENCED_DISTANCE = 1e6;
+
+/**
+ * Поворот из ECEF в локальную систему «восток-север-верх» в заданной точке.
+ *
+ * Нужен, чтобы у георефересованного тайлсета вверх смотрела **местная** вертикаль, а не
+ * земная ось: иначе сцена оказывается завалена на угол, равный дополнению широты.
+ *
+ * @param ecefPosition - Точка привязки тайлсета в ECEF.
+ * @returns Матрица поворота; единичная, если точка не похожа на ECEF.
+ */
+function ecefToEnuRotation(ecefPosition: Vec3): Mat4 {
+    const rotation = new Mat4();
+    if (ecefPosition.length() < GEOREFERENCED_DISTANCE) {
+        return rotation;
+    }
+
+    const up = ecefPosition.clone().normalize();
+    // Восток — перпендикуляр к плоскости «земная ось / местная вертикаль». На самих
+    // полюсах он вырождается, там берём произвольное направление.
+    const east = new Vec3().cross(Vec3.BACK, up);
+    if (east.length() < 1e-6) {
+        east.set(1, 0, 0);
+    }
+    east.normalize();
+    const north = new Vec3().cross(up, east).normalize();
+
+    // Строки матрицы — базис ENU, то есть это транспонирование (и обращение) поворота
+    // «ENU → ECEF». Раскладка данных у Mat4 по столбцам.
+    rotation.set([
+        east.x, north.x, up.x, 0,
+        east.y, north.y, up.y, 0,
+        east.z, north.z, up.z, 0,
+        0, 0, 0, 1
+    ]);
+    return rotation;
+}
+
+export class TileManager {
+    private app: AppBase;
+
+    private camera: Entity;
+
+    private options: Required<Pick<TileManagerOptions, 'errorTarget' | 'maxConcurrent' | 'maxCachedTiles'>>;
+
+    private onChange: () => void;
+
+    private onWarning: (message: string) => void;
+
+    /** Корень тайлсета в сцене: несёт поворот осей и рецентровку. */
+    readonly root: Entity;
+
+    /** Корневой тайл. */
+    private rootTile: Tile | null = null;
+
+    /** Адрес tileset.json — база для шаблонов URI неявного дерева. */
+    private baseUrl = '';
+
+    private queue: TileRequestQueue;
+
+    private frustum = new Frustum();
+
+    private frame = 0;
+
+    /** Матрица «система тайлсета → мир». */
+    private tilesetToWorld = new Mat4();
+
+    /** Мировая матрица родителя на момент последнего пересчёта габаритов. */
+    private parentWorld = new Mat4();
+
+    /** Тайлы с загруженным контентом — кандидаты на вытеснение. */
+    private loaded = new Set<Tile>();
+
+    /** Выбранные в прошлом кадре — чтобы понять, изменилась ли картинка. */
+    private prevSelection: Tile[] = [];
+
+    /** Параметры камеры текущего кадра — обход читает их, а не таскает пятым аргументом. */
+    private view = { cameraPos: new Vec3(), sseDenominator: 1, viewportHeight: 1 };
+
+    private disposed = false;
+
+    private stats: TileStats = {
+        tiles: 0,
+        ready: 0,
+        loading: 0,
+        queued: 0,
+        failed: 0,
+        selected: 0,
+        bytes: 0,
+        maxSelectedDepth: 0
+    };
+
+    /** Габариты всего тайлсета в мировых координатах — стабильные, не зависят от LOD. */
+    readonly bounds = new BoundingBox();
+
+    /**
+     * «Плотные» габариты корня из метаданных, если тайлсет их сообщает.
+     *
+     * Кадрировать камеру по кубическому `boundingVolume` неявного дерева — значит увести
+     * её в разы дальше самой модели: у храма из ion куб 115 × 95 × 119 м на постройку
+     * вдвое меньше.
+     */
+    private tightRootBox: number[] | null = null;
+
+    constructor(options: TileManagerOptions) {
+        this.app = options.app;
+        this.camera = options.camera;
+        this.onChange = options.onChange;
+        this.onWarning = options.onWarning ?? (() => {});
+        this.options = {
+            errorTarget: options.errorTarget ?? 16,
+            maxConcurrent: options.maxConcurrent ?? 6,
+            maxCachedTiles: options.maxCachedTiles ?? 128
+        };
+
+        this.root = new Entity('tilesRoot', this.app);
+        options.parent.addChild(this.root);
+
+        this.queue = new TileRequestQueue(this.options.maxConcurrent);
+    }
+
+    /**
+     * Загрузить тайлсет и построить дерево.
+     *
+     * @param url - Адрес tileset.json.
+     */
+    async load(url: string) {
+        const json = await fetchTilesetJson(url);
+        if (this.disposed) {
+            return;
+        }
+
+        const warnings: string[] = [];
+
+        // Рецентровка считается по корневому тайлу ДО построения дерева: она входит в
+        // матрицу «тайлсет → мир», по которой считаются габариты всех тайлов.
+        this.setupRootTransform(json.root.transform, json.root.boundingVolume?.box, json.root.boundingVolume?.sphere);
+        this.updateTilesetToWorld();
+
+        this.baseUrl = url;
+        this.rootTile = buildTileTree(json.root, {
+            baseUrl: url,
+            tilesetToWorld: this.tilesetToWorld,
+            warnings
+        });
+
+        // Неявное дерево: тайлов в JSON нет, они разворачиваются из масок `.subtree`.
+        // Корневое поддерево грузится сразу — без него на экране не будет вообще ничего.
+        const implicit = readImplicitTiling(json.root, url, this.rootTile.refine);
+        if (implicit) {
+            this.rootTile.implicit = {
+                info: implicit,
+                coord: { level: 0, x: 0, y: 0, z: 0 },
+                expanded: false,
+                pending: false
+            };
+            // Шаблон контента корня — это шаблон, а не готовый URI: до масок неизвестно,
+            // есть ли у корневого тайла контент вообще.
+            this.rootTile.contentUris = [];
+            await this.expandImplicit(this.rootTile);
+        }
+
+        this.tightRootBox = findTightBoundingBox(json, json.root);
+
+        // Корневой геометрической ошибкой тайлсета (`json.geometricError`) считается ошибка
+        // «ничего не загружено»; на выбор LOD внутри дерева она не влияет, поэтому её
+        // достаточно запомнить для отладки.
+        this.computeBounds();
+
+        [...new Set(warnings)].forEach(w => this.onWarning(w));
+        this.onChange();
+    }
+
+    /**
+     * Поставить корневой entity поворот осей и сдвиг к началу координат.
+     *
+     * Итоговая матрица — `Rx(-90) * (ECEF → ENU) * T(-центр)`:
+     *
+     * 1. сдвиг ставит тайлсет в начало координат (иначе ECEF-координаты порядка 6.4e6 не
+     *    переживут float32 в матрицах и вершинах);
+     * 2. поворот ECEF → ENU ставит **локальную** вертикаль вверх. Без него «верхом» сцены
+     *    становится земная ось, и модель оказывается завалена на угол, равный дополнению
+     *    широты: у храма это 28°, и по наклонённому рельефу потом режет плоскость
+     *    shadow catcher'а;
+     * 3. `Rx(-90)` переводит Z-вверх (система тайлсета) в Y-вверх (система вьюера).
+     *
+     * У негеографических тайлсетов (координаты маленькие) шаг 2 пропускается.
+     *
+     * @param rootTransform - `transform` корневого тайла (16 чисел) или undefined.
+     * @param box - `boundingVolume.box` корневого тайла.
+     * @param sphere - `boundingVolume.sphere` корневого тайла.
+     */
+    private setupRootTransform(rootTransform: number[] | undefined, box?: number[], sphere?: number[]) {
+        const transform = new Mat4();
+        if (rootTransform?.length === 16) {
+            transform.set(rootTransform);
+        }
+
+        // Центр тайлсета в его собственной системе.
+        const center = new Vec3();
+        if (box && box.length >= 12) {
+            center.set(box[0], box[1], box[2]);
+        } else if (sphere && sphere.length >= 4) {
+            center.set(sphere[0], sphere[1], sphere[2]);
+        }
+        transform.transformPoint(center, center);
+
+        const matrix = new Mat4().mul2(
+            new Mat4().setFromAxisAngle(Vec3.RIGHT, UP_AXIS_ROTATION),
+            ecefToEnuRotation(center)
+        );
+        matrix.mul2(matrix, new Mat4().setTranslate(-center.x, -center.y, -center.z));
+        setLocalFromMat4(this.root, matrix);
+    }
+
+    /** Пересчитать матрицу «тайлсет → мир» из текущих трансформаций сцены. */
+    private updateTilesetToWorld() {
+        this.tilesetToWorld.copy(this.root.getWorldTransform());
+    }
+
+    /** Габариты тайлсета по корневому тайлу — стабильны и не зависят от загруженного. */
+    private computeBounds() {
+        if (!this.rootTile?.obb) {
+            this.bounds.center.set(0, 0, 0);
+            this.bounds.halfExtents.set(1, 1, 1);
+            return;
+        }
+        // Для кадрирования предпочитаем «плотные» габариты, если тайлсет их сообщил;
+        // на выбор уровня детализации и отсечение это не влияет — там свой объём тайла.
+        const worldMatrix = tmpMat.mul2(this.tilesetToWorld, this.rootTile.transform);
+        const tight = this.tightRootBox && makeWorldObb({ box: this.tightRootBox }, worldMatrix);
+        const obb = tight ?? this.rootTile.obb;
+        // Осеориентированная оболочка OBB: полуразмер по каждой оси — сумма модулей
+        // проекций полуосей.
+        const he = new Vec3();
+        obb.halfAxes.forEach((axis) => {
+            he.x += Math.abs(axis.x);
+            he.y += Math.abs(axis.y);
+            he.z += Math.abs(axis.z);
+        });
+        this.bounds.center.copy(obb.center);
+        this.bounds.halfExtents.copy(he);
+    }
+
+    /**
+     * Кадровое обновление: обход дерева, выбор тайлов, заявки на загрузку, вытеснение.
+     *
+     * Вызывается вьюером каждый кадр (в том числе когда рендера не будет — обход дешёвый,
+     * а решение «нужен ли кадр» принимается по изменению набора видимых тайлов).
+     */
+    update() {
+        if (!this.rootTile || this.disposed) {
+            return;
+        }
+
+        // Сцену можно двигать гизмо — тогда мировые габариты и ошибка устаревают.
+        const parentWorld = this.root.getWorldTransform();
+        if (!matricesEqual(parentWorld, this.parentWorld)) {
+            this.parentWorld.copy(parentWorld);
+            this.updateTilesetToWorld();
+            recomputeWorldVolumes(this.rootTile, this.tilesetToWorld);
+            this.computeBounds();
+        }
+
+        const cameraComponent = this.camera.camera;
+        if (!cameraComponent) {
+            return;
+        }
+
+        this.frame++;
+        this.queue.setFrame(this.frame);
+
+        tmpMat.mul2(cameraComponent.projectionMatrix, cameraComponent.viewMatrix);
+        this.frustum.setFromMat4(tmpMat);
+
+        this.view.cameraPos.copy(this.camera.getPosition());
+        this.view.viewportHeight = Math.max(1, this.app.graphicsDevice.height);
+        this.view.sseDenominator = 2 * Math.tan(0.5 * verticalFovRadians(cameraComponent));
+
+        const selection: Tile[] = [];
+        this.visit(this.rootTile, selection);
+
+        this.applySelection(selection);
+        this.evictStale();
+        this.queue.dispatch();
+        this.updateStats(selection);
+    }
+
+    /**
+     * Обойти тайл: посчитать метрики, заказать контент, выбрать что показывать.
+     *
+     * @param tile - Тайл.
+     * @param selection - Куда складывать выбранные для отрисовки тайлы.
+     * @returns `true`, если поддерево закрывает свою область (нечего показывать поверх).
+     */
+    private visit(tile: Tile, selection: Tile[]): boolean {
+        // Тайл без поддержанных габаритов (`region`) считаем видимым и бесконечно грубым:
+        // лучше показать лишнее, чем потерять геометрию.
+        tile.inFrustum = !tile.obb || this.frustum.containsSphere(tile.obb.sphere) !== 0;
+        if (!tile.inFrustum) {
+            return true;
+        }
+
+        tile.lastUsedFrame = this.frame;
+        tile.distance = tile.obb ? distanceToObb(tile.obb, this.view.cameraPos) : 0;
+        tile.error = tile.obb ?
+            screenSpaceError(tile.geometricError, tile.distance, this.view.sseDenominator, this.view.viewportHeight) :
+            Infinity;
+
+        if (tile.externalTilesetUri && !tile.externalRoot && tile.state === TILE_UNLOADED) {
+            this.requestExternalTileset(tile);
+        }
+
+        // Маски неявного узла грузятся по факту того, что обход до него дошёл, — а не по
+        // его экранной ошибке. До масок про узел не известно вообще ничего: ни есть ли у
+        // него контент, ни есть ли дети. При этом лишнего не качается: сюда попадают
+        // только узлы, в которые родитель решил углубиться.
+        if (tile.implicit && !tile.implicit.expanded) {
+            this.expandImplicit(tile);
+        }
+
+        this.requestContent(tile);
+
+        const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
+
+        // Гистерезис: чтобы на границе порога уровень не мигал туда-сюда каждый кадр,
+        // начинать уточнение дороже, чем его продолжать.
+        const threshold = this.options.errorTarget * (tile.wasRefined ? 1 - HYSTERESIS : 1 + HYSTERESIS);
+        const needsDetail = tile.error > threshold;
+
+        const refine = children.length > 0 && needsDetail;
+        tile.wasRefined = refine;
+
+        if (!refine) {
+            return this.selectSelf(tile, selection);
+        }
+
+        if (tile.refine === 'ADD') {
+            // ADD: родитель остаётся на экране, дети добавляются поверх.
+            const selfCovered = this.selectSelf(tile, selection);
+            children.forEach(child => this.visit(child, selection));
+            return selfCovered;
+        }
+
+        // REPLACE: детей показываем только все разом. Иначе на месте недогруженного
+        // ребёнка появится дыра — а родитель ещё на экране и закрывает её целиком.
+        const sub: Tile[] = [];
+        let covered = true;
+        for (const child of children) {
+            covered = this.visit(child, sub) && covered;
+        }
+        if (covered) {
+            selection.push(...sub);
+            return true;
+        }
+        // Своим контентом закрываем дыру только если он вообще есть. У тайлсетов с пустым
+        // корнем (Obj2Tiles умеет так — `--no-root-content`) закрывать нечем, и ждать
+        // готовности всех детей значило бы держать пустой экран вместо постепенного
+        // проявления сцены.
+        if (tile.contentUris.length > 0 && this.selectSelf(tile, selection)) {
+            return true;
+        }
+        // Ни дети, ни родитель не готовы — показываем то, что есть.
+        selection.push(...sub);
+        return false;
+    }
+
+    /**
+     * Попробовать выбрать контент самого тайла.
+     *
+     * @param tile - Тайл.
+     * @param selection - Список выбранных для отрисовки.
+     * @returns `true`, если тайл нечего ждать: контент готов, его нет вовсе или он упал.
+     */
+    private selectSelf(tile: Tile, selection: Tile[]): boolean {
+        // Неявный узел без загруженных масок — это «пока не знаю»: считать его пустым и
+        // закрывающим нельзя, иначе родитель снимет свой контент и на его месте до
+        // прихода масок будет дыра.
+        if (tile.implicit && !tile.implicit.expanded) {
+            return false;
+        }
+        if (tile.contentUris.length === 0) {
+            return true;
+        }
+        if (tile.state === TILE_READY) {
+            selection.push(tile);
+            return true;
+        }
+        // Упавший контент не ждём вечно — иначе родитель навсегда останется на экране.
+        return tile.state === TILE_FAILED;
+    }
+
+    /**
+     * Поставить контент тайла в очередь загрузки.
+     *
+     * @param tile - Тайл.
+     */
+    private requestContent(tile: Tile) {
+        if (tile.contentUris.length === 0 || tile.state !== TILE_UNLOADED) {
+            return;
+        }
+
+        tile.state = TILE_QUEUED;
+        const token = { cancelled: false, controller: new AbortController() };
+        tile.loadToken = token;
+
+        this.queue.push({
+            tile,
+            run: async () => {
+                if (token.cancelled) {
+                    tile.state = TILE_UNLOADED;
+                    return;
+                }
+                tile.state = TILE_LOADING;
+                try {
+                    const content = await loadTileContent(this.app, tile.contentUris, token);
+                    this.attachContent(tile, content);
+                } catch (err) {
+                    // Отменённая загрузка — не ошибка: тайл просто снова «не загружен» и
+                    // будет заказан заново, если понадобится.
+                    tile.state = token.cancelled ? TILE_UNLOADED : TILE_FAILED;
+                    if (!token.cancelled) {
+                        console.warn(`Тайл не загрузился: ${tile.contentUris.join(', ')}`, err);
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Привязать загруженный контент к сцене.
+     *
+     * Вынесено из асинхронной функции намеренно: все поля тайла меняются здесь, в одном
+     * синхронном блоке, и между проверкой «контент ещё нужен» и его установкой ничего
+     * произойти не может.
+     *
+     * @param tile - Тайл.
+     * @param content - Результат загрузки или `null`, если её отменили.
+     */
+    private attachContent(tile: Tile, content: TileContentResult | null) {
+        if (!content || this.disposed) {
+            tile.state = TILE_UNLOADED;
+            return;
+        }
+
+        tile.entity = content.entity;
+        tile.assets = content.assets;
+        tile.bytes = content.bytes;
+
+        // Трансформация тайла задана в системе тайлсета (Z-вверх), а контент под ней —
+        // glTF (Y-вверх), отсюда поправка справа.
+        tmpMat.mul2(tile.transform, gltfUpAxisTransform());
+        setLocalFromMat4(tile.entity, tmpMat);
+        tile.entity.enabled = false;
+        this.root.addChild(tile.entity);
+
+        tile.state = TILE_READY;
+        this.loaded.add(tile);
+        this.onChange();
+    }
+
+    /**
+     * Развернуть неявное поддерево тайла: загрузить маски и создать по ним детей.
+     *
+     * Ленивость здесь принципиальна: у тайлсета из Cesium ion 185 файлов масок на 552
+     * тайла, и грузить их разом значило бы 185 запросов до первой картинки.
+     *
+     * @param tile - Тайл, за которым стоит неявное поддерево.
+     */
+    private async expandImplicit(tile: Tile) {
+        const implicit = tile.implicit;
+        if (!implicit || implicit.expanded || implicit.pending) {
+            return;
+        }
+        implicit.pending = true;
+
+        try {
+            const subtree = await loadSubtreeAt(implicit.info, implicit.coord);
+            if (this.disposed || this.rootTile === null) {
+                return;
+            }
+
+            const warnings: string[] = [];
+            const deferred = expandSubtree(tile, implicit.coord, subtree, implicit.info, {
+                tilesetToWorld: this.tilesetToWorld,
+                parentTransform: tile.transform,
+                baseUrl: this.baseUrl,
+                warnings
+            });
+
+            // Заглушки на границе поддерева: их маски загрузятся, когда обход дойдёт.
+            deferred.forEach(({ tile: child, coord }) => {
+                child.implicit = { info: implicit.info, coord, expanded: false, pending: false };
+            });
+
+            implicit.expanded = true;
+            [...new Set(warnings)].forEach(w => this.onWarning(w));
+            this.onChange();
+        } catch (err) {
+            console.warn('Не удалось развернуть неявное поддерево', implicit.coord, err);
+            // Больше не пробуем: иначе обход будет долбить один и тот же битый файл.
+            this.finishImplicit(implicit, true);
+            return;
+        }
+        this.finishImplicit(implicit, false);
+    }
+
+    /**
+     * Снять пометку «маски грузятся» одним синхронным шагом.
+     *
+     * Вынесено из асинхронного метода намеренно — те же соображения, что и у
+     * `attachContent`: между проверкой и записью полей не должно быть точки ожидания.
+     *
+     * @param implicit - Состояние неявного узла.
+     * @param failed - Помечать ли узел развёрнутым из-за ошибки.
+     */
+    private finishImplicit(implicit: NonNullable<Tile['implicit']>, failed: boolean) {
+        implicit.pending = false;
+        if (failed) {
+            implicit.expanded = true;
+        }
+    }
+
+    /**
+     * Подгрузить внешний тайлсет и подставить его корень вместо детей тайла.
+     *
+     * @param tile - Тайл, у которого контент — `tileset.json`.
+     */
+    private requestExternalTileset(tile: Tile) {
+        const uri = tile.externalTilesetUri;
+        tile.state = TILE_LOADING;
+        fetchTilesetJson(uri)
+        .then((json) => {
+            if (this.disposed) {
+                return;
+            }
+            const warnings: string[] = [];
+            tile.externalRoot = buildTileTree(json.root, {
+                baseUrl: uri,
+                parentTransform: tile.transform,
+                tilesetToWorld: this.tilesetToWorld,
+                parent: tile,
+                warnings
+            });
+            tile.state = TILE_READY;
+            [...new Set(warnings)].forEach(w => this.onWarning(w));
+            this.onChange();
+        })
+        .catch((err) => {
+            tile.state = TILE_FAILED;
+            console.warn(`Внешний тайлсет не загрузился: ${uri}`, err);
+        });
+    }
+
+    /**
+     * Показать выбранные тайлы, спрятать остальные.
+     *
+     * Кадр запрашивается только если набор изменился: при `autoRender === false` лишний
+     * `renderNextFrame` — это лишний кадр каждые 16 мс на неподвижной сцене.
+     *
+     * @param selection - Тайлы, выбранные обходом этого кадра.
+     */
+    private applySelection(selection: Tile[]) {
+        const changed = selection.length !== this.prevSelection.length ||
+            selection.some((tile, i) => this.prevSelection[i] !== tile);
+
+        if (!changed) {
+            return;
+        }
+
+        this.prevSelection.forEach((tile) => {
+            tile.selected = false;
+            if (tile.entity) {
+                tile.entity.enabled = false;
+            }
+        });
+
+        selection.forEach((tile) => {
+            tile.selected = true;
+            if (tile.entity) {
+                tile.entity.enabled = true;
+            }
+        });
+
+        this.prevSelection = selection.slice();
+        this.onChange();
+    }
+
+    /**
+     * Вытеснить лишнее из памяти.
+     *
+     * Порядок вытеснения — та же лестница приоритетов, что и у загрузки, только с конца:
+     * первым уходит то, что грузилось бы последним. Видимый сейчас тайл не выгружается
+     * никогда.
+     */
+    private evictStale() {
+        if (this.loaded.size <= this.options.maxCachedTiles) {
+            return;
+        }
+
+        const candidates = [...this.loaded].filter(tile => !tile.selected && tile.lastUsedFrame !== this.frame);
+        candidates.sort((a, b) => compareTilePriority(b, a, this.frame));
+
+        let excess = this.loaded.size - this.options.maxCachedTiles;
+        for (const tile of candidates) {
+            if (excess <= 0) {
+                break;
+            }
+            this.unloadTile(tile);
+            excess--;
+        }
+    }
+
+    private unloadTile(tile: Tile) {
+        if (tile.loadToken) {
+            tile.loadToken.cancelled = true;
+            tile.loadToken.controller?.abort();
+            tile.loadToken = null;
+        }
+        destroyTileContent(this.app, tile.entity, tile.assets as never[]);
+        tile.entity = null;
+        tile.assets = [];
+        tile.bytes = 0;
+        tile.state = TILE_UNLOADED;
+        tile.selected = false;
+        this.loaded.delete(tile);
+    }
+
+    private updateStats(selection: Tile[]) {
+        const stats: TileStats = {
+            tiles: 0,
+            ready: 0,
+            loading: 0,
+            queued: 0,
+            failed: 0,
+            selected: selection.length,
+            bytes: 0,
+            maxSelectedDepth: 0
+        };
+
+        if (this.rootTile) {
+            forEachTile(this.rootTile, (tile) => {
+                stats.tiles++;
+                stats.bytes += tile.bytes;
+                if (tile.state === TILE_READY) stats.ready++;
+                else if (tile.state === TILE_LOADING) stats.loading++;
+                else if (tile.state === TILE_QUEUED) stats.queued++;
+                else if (tile.state === TILE_FAILED) stats.failed++;
+            });
+        }
+        selection.forEach((tile) => {
+            stats.maxSelectedDepth = Math.max(stats.maxSelectedDepth, tile.depth);
+        });
+
+        this.stats = stats;
+    }
+
+    /**
+     * Мешы видимых сейчас тайлов.
+     *
+     * Нужны инструментам вьюера (выделение, измерения, точки интереса): они работают по
+     * списку `MeshInstance`, а не по графу сцены, и статический список, собранный при
+     * загрузке модели, для тайлов не подходит — набор видимого меняется каждый кадр.
+     *
+     * @returns Меши выбранных обходом тайлов.
+     */
+    getVisibleMeshInstances(): MeshInstance[] {
+        const result: MeshInstance[] = [];
+        this.prevSelection.forEach((tile) => {
+            if (!tile.entity?.enabled) {
+                return;
+            }
+            (tile.entity.findComponents('render') as RenderComponent[]).forEach((component) => {
+                result.push(...component.meshInstances);
+            });
+        });
+        return result;
+    }
+
+    /**
+     * Текущая статистика — для отладочной панели и тестов.
+     *
+     * @returns Копия статистики; счётчик очереди дополняется ещё не выданными заявками.
+     */
+    getStats(): TileStats {
+        return { ...this.stats, queued: this.stats.queued + this.queue.pending };
+    }
+
+    /** Снять тайлсет со сцены и освободить всё, что он занимал. */
+    destroy() {
+        this.disposed = true;
+        this.queue.clear();
+        if (this.rootTile) {
+            forEachTile(this.rootTile, (tile) => {
+                if (tile.state !== TILE_UNLOADED) {
+                    this.unloadTile(tile);
+                }
+                if (tile.externalRoot) {
+                    forEachTile(tile.externalRoot, child => this.unloadTile(child));
+                }
+            });
+        }
+        this.rootTile = null;
+        this.loaded.clear();
+        this.prevSelection = [];
+        this.root.destroy();
+    }
+}
+
+/**
+ * Вертикальный угол обзора камеры в радианах, с учётом режима `horizontalFov`.
+ *
+ * @param camera - Компонент камеры.
+ * @returns Угол в радианах.
+ */
+function verticalFovRadians(camera: CameraComponent): number {
+    const fov = camera.fov * Math.PI / 180;
+    if (!camera.horizontalFov) {
+        return fov;
+    }
+    // При горизонтальном FOV вертикальный получается через соотношение сторон.
+    const aspect = camera.aspectRatio || 1;
+    return 2 * Math.atan(Math.tan(fov * 0.5) / aspect);
+}
+
+/**
+ * Совпадают ли матрицы с точностью до 1e-6.
+ *
+ * @param a - Первая.
+ * @param b - Вторая.
+ * @returns true, если различий нет.
+ */
+function matricesEqual(a: Mat4, b: Mat4): boolean {
+    for (let i = 0; i < 16; ++i) {
+        if (Math.abs(a.data[i] - b.data[i]) > 1e-6) {
+            return false;
+        }
+    }
+    return true;
+}

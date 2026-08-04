@@ -2,6 +2,10 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
     testDir: './tests',
+    // Репозиторий лежит на внешнем томе, где macOS кладёт рядом с каждым файлом
+    // AppleDouble-спутник `._имя`. Без этого фильтра Playwright пытается разобрать их как
+    // тесты и падает на первом же.
+    testIgnore: '**/._*',
     timeout: 30000,
     retries: 0,
     use: {

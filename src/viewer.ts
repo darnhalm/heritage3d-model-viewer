@@ -99,6 +99,7 @@ import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
 import { ShadowCatcher } from './shadow-catcher';
+import { TileManager } from './tiles/tile-manager';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
@@ -455,6 +456,13 @@ class Viewer {
     sceneRoot: Entity;
 
     sceneContentRoot: Entity;
+
+    /**
+     * Активный слой 3D Tiles. Живёт отдельно от `entities`: тайлы появляются и исчезают
+     * каждый кадр, и складывать их в общий список сцены нельзя — от него зависят габариты,
+     * статистика и все инструменты, которые ждут статичного набора мешей.
+     */
+    tileManager: TileManager | null;
 
     sceneTransform: { position: [number, number, number]; rotation: [number, number, number]; scale: [number, number, number]; pivotOffset: [number, number, number] };
 
@@ -918,6 +926,7 @@ class Viewer {
         this.helperEntities = new Map();
         this.activeHelperId = null;
         this.debugRoot = debugRoot;
+        this.tileManager = null;
         this.entities = [];
         this.entityAssets = [];
         this.assets = [];
@@ -1194,7 +1203,7 @@ class Viewer {
             canvas: this.canvas,
             observer: this.observer,
             picker: this.picker,
-            getMeshInstances: () => this.meshInstances,
+            getMeshInstances: () => this.getPickableMeshInstances(),
             getPickRay: this.getPickRay.bind(this),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
@@ -1202,7 +1211,7 @@ class Viewer {
             canvas: this.canvas,
             observer: this.observer,
             picker: this.picker,
-            getMeshInstances: () => this.meshInstances,
+            getMeshInstances: () => this.getPickableMeshInstances(),
             getPickRay: this.getPickRay.bind(this),
             getCameraView: () => ({
                 position: (() => {
@@ -1228,7 +1237,7 @@ class Viewer {
             observer: this.observer,
             picker: this.picker,
             selectionHighlightMaterial: this.selectionHighlightMaterial,
-            getMeshInstances: () => this.meshInstances,
+            getMeshInstances: () => this.getPickableMeshInstances(),
             getCameraPosition: () => this.camera.getPosition(),
             getPickRay: this.getPickRay.bind(this),
             getSelectedNode: () => this.selectedNode,
@@ -2036,6 +2045,8 @@ class Viewer {
         }
         this.sceneCameras = [];
 
+        this.destroyTileManager();
+
         this.entities.forEach((entity) => {
             this.sceneContentRoot.removeChild(entity);
             this.shadowCatcher.onEntityRemoved(entity);
@@ -2087,6 +2098,10 @@ class Viewer {
         this.observer.set('scene.texelDensitySummary', '');
         this.observer.set('scene.texelDensityReport', '[]');
         this.observer.set('scene.hasGsplat', false);
+        // Пустая иерархия снова прячет нижний ряд экранных кнопок (`#popup.empty`). Для
+        // обычной модели её тут же перезапишет `postSceneLoad`; для тайлсета — свой узел
+        // ставит `loadTileset`. Без сброса узел удалённого тайлсета остался бы висеть.
+        this.observer.set('scene.nodes', '[]');
     }
 
     private updateMaterialChannelInfo() {
@@ -4097,6 +4112,23 @@ class Viewer {
         return result;
     }
 
+    /**
+     * Это тайлсет 3D Tiles?
+     *
+     * Распознаём по имени, а не по содержимому: `.json` во вьюере уже занят сплатовым
+     * `lod-meta.json`, и решать по расширению нельзя, а читать файл до `loadFiles` — значит
+     * делать лишний запрос на каждый перетащенный JSON. Имя `tileset.json` — соглашение
+     * спецификации и его придерживаются все известные конвертеры; суффикс `-tileset.json`
+     * добавлен для наборов, где рядом лежит несколько тайлсетов.
+     *
+     * @param filename - Имя или URL.
+     * @returns true, если файл нужно грузить тайловым слоем.
+     */
+    isTilesetFilename(filename: string): boolean {
+        const name = filename.split('?')[0].split('/').pop()?.toLowerCase() ?? '';
+        return name === 'tileset.json' || name.endsWith('-tileset.json');
+    }
+
     // SPZ needs decoding before the engine can read it — see loadSpzAsCompressedPly
     private isSpzFilename(filename: string) {
         return filename.split('?')[0].toLowerCase().endsWith('.spz');
@@ -4233,6 +4265,14 @@ class Viewer {
         // convert single url to list
         if (!Array.isArray(files)) {
             files = [files];
+        }
+
+        // 3D Tiles — отдельный конвейер: у тайлсета нет «одного ассета», который можно
+        // добавить в сцену, вместо этого сценой управляет TileManager.
+        const tilesetFile = files.find(f => this.isTilesetFilename(f.filename ?? f.url ?? ''));
+        if (tilesetFile) {
+            this.loadTileset(tilesetFile, resetScene);
+            return true;
         }
 
         const rejectedFiles: string[] = [];
@@ -4432,6 +4472,130 @@ class Viewer {
 
         // return true if a model/scene was loaded and false otherwise
         return hasModelFilename;
+    }
+
+    /**
+     * Загрузить тайлсет 3D Tiles.
+     *
+     * Отличий от обычной модели два, и оба принципиальные. Во-первых, к моменту, когда
+     * загрузка «закончилась», на экране нет ничего: `tileset.json` — это только дерево, а
+     * геометрия придёт тайлами, по мере того как их запросит обход. Индикатор поэтому
+     * гасится по факту разбора дерева, а не по появлению картинки. Во-вторых, кадрировать
+     * камеру можно сразу: габариты известны из корневого bounding volume.
+     *
+     * @param file - Файл tileset.json.
+     * @param resetScene - Очистить сцену перед загрузкой.
+     */
+    private async loadTileset(file: File, resetScene: boolean) {
+        if (resetScene) {
+            this.resetScene();
+        }
+        this.destroyTileManager();
+
+        const url = file.url ?? file.filename;
+        const warnings: string[] = [];
+
+        this.resetViewerSettingsToDefaults();
+        this.observer.set('ui.spinner', true);
+        this.observer.set('ui.loadProgress', 0);
+        this.observer.set('ui.error', null);
+        this.observer.set('ui.warnings', []);
+        this.clearCta();
+
+        // Ловитель теней — горизонтальная плоскость по низу габаритов сцены. Под одиночной
+        // моделью он на месте, а тайлсет приносит собственный рельеф: плоскость режет его
+        // и закрывает половину сцены чёрным. Настройка остаётся, пользователь может
+        // включить её обратно.
+        this.observer.set('shadowCatcher.enabled', false);
+
+        const manager = new TileManager({
+            app: this.app,
+            camera: this.camera,
+            parent: this.sceneContentRoot,
+            onChange: () => this.renderNextFrame(),
+            onWarning: message => warnings.push(message)
+        });
+        this.tileManager = manager;
+
+        try {
+            await manager.load(url);
+
+            // Пока грузился тайлсет, сцену могли сменить.
+            if (this.tileManager !== manager) {
+                return;
+            }
+
+            this.loadTimestamp = Date.now();
+            this.lastModelFile = file;
+            this.observer.set('scene.urls', [url]);
+            const sceneName = (file.filename ?? url).split('/').pop();
+            this.observer.set('scene.filenames', [sceneName]);
+
+            // Нижний ряд экранных кнопок (Инфо, «Кадрировать сцену», HD, измерения,
+            // полный экран) прячется классом `empty`, когда `scene.nodes === '[]'` (см.
+            // popup-panel и `#popup.empty` в style.scss). У тайлсета своей статичной
+            // иерархии нет — набор тайлов меняется каждый кадр, — поэтому кладём один
+            // корневой узел: этого достаточно, чтобы панель показалась и работали
+            // кадрирование камеры, инфо и полноэкранный режим.
+            this.observer.set('scene.nodes', JSON.stringify([{
+                name: sceneName ?? 'tileset',
+                path: '',
+                children: []
+            }]));
+
+            // Габариты нужны до кадрирования, причём оба набора: `frameScene` считает по
+            // `sceneBounds`, а плоскости отсечения — по `dynamicSceneBounds`, который
+            // обычно пересчитывается только в `onPrerender`, то есть уже после.
+            this.dirtyBounds = true;
+            this.calcSceneBounds(this.sceneBounds);
+            this.calcSceneBounds(this.dynamicSceneBounds);
+            this.frameScene();
+
+            if (warnings.length > 0) {
+                warnings.forEach(w => console.warn(`3D Tiles: ${w}`));
+                this.observer.set('ui.warnings', warnings);
+            }
+        } catch (err) {
+            console.error(err);
+            this.observer.set('ui.error', err?.toString() ?? String(err));
+            this.destroyTileManager();
+        } finally {
+            this.observer.set('ui.loadProgress', 100);
+            this.observer.set('ui.spinner', false);
+            this.observer.set('ui.loadingBackgroundReady', false);
+            this.renderNextFrame();
+        }
+    }
+
+    /**
+     * Мешы, по которым работают инструменты: выделение, измерения, точки интереса.
+     *
+     * Обычная модель даёт статический `meshInstances`, собранный после загрузки. У тайлов
+     * такого списка быть не может — видимый набор меняется каждый кадр, поэтому мешы
+     * видимых тайлов добавляются на лету.
+     *
+     * @returns Мешы сцены плюс мешы видимых сейчас тайлов.
+     */
+    private getPickableMeshInstances(): MeshInstance[] {
+        const tileMeshInstances = this.tileManager?.getVisibleMeshInstances();
+        if (!tileMeshInstances?.length) {
+            return this.meshInstances;
+        }
+        return this.meshInstances.concat(tileMeshInstances);
+    }
+
+    private destroyTileManager() {
+        this.tileManager?.destroy();
+        this.tileManager = null;
+    }
+
+    /**
+     * Статистика тайлового слоя — для отладки из консоли и автотестов.
+     *
+     * @returns Счётчики тайлов или `null`, если тайлсет не загружен.
+     */
+    getTileStats() {
+        return this.tileManager?.getStats() ?? null;
     }
 
     // set the currently selected track
@@ -5084,6 +5248,11 @@ class Viewer {
 
         this.setRotationSnap(!!this.rotateGizmo?.enabled && this.app.keyboard.isPressed(KEY_CONTROL));
 
+        // Обход дерева тайлов идёт каждый кадр, даже когда рендера не будет: он дешёвый, а
+        // решение «нужен ли кадр» принимает сам менеджер — по изменению набора видимых
+        // тайлов (у приложения `autoRender === false`).
+        this.tileManager?.update();
+
         const maxdiff = (a: Mat4, b: Mat4) => {
             let result = 0;
             for (let i = 0; i < 16; ++i) {
@@ -5403,6 +5572,18 @@ class Viewer {
                 } else {
                     result.add(bbox);
                 }
+            }
+        }
+
+        // Габариты тайлсета берутся из корневого bounding volume, а не из загруженных
+        // тайлов: набор видимых тайлов меняется каждый кадр, и если считать по ним, камера
+        // и кадрирование будут прыгать при каждом переключении уровня детализации.
+        if (!root && this.tileManager) {
+            if (first) {
+                result.copy(this.tileManager.bounds);
+                first = false;
+            } else {
+                result.add(this.tileManager.bounds);
             }
         }
 
