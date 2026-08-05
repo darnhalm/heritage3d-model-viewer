@@ -377,6 +377,19 @@ class SettingsService {
         o.set('debug.normals', 0);
         o.set('debug.selectedUvSet', 0);
         o.set('debug.texelDensityHeatmap', false);
+        // Tiles Debug — сессионный инструмент разработчика. Никогда не переносим его
+        // активное состояние на следующую модель или в публичный просмотр.
+        o.set('debug.tileDebug', false);
+        o.set('debug.tileDebugMode', 'state');
+        o.set('debug.tileLineThickness', 2);
+        o.set('debug.tileLineStyle', 'checker');
+        o.set('debug.tileCheckerFill', false);
+        o.set('debug.tilePick', false);
+        o.set('debug.tileIsolatePick', false);
+        o.set('debug.tileFreeze', false);
+        o.set('debug.tilePaused', false);
+        o.set('debug.tileLodLock', false);
+        o.set('debug.tileLodLevel', 0);
         o.set('measure.enabled', false);
         o.set('measure.unit', 'm');
         o.set('measure.referenceRuler', false);
@@ -474,6 +487,13 @@ class SettingsService {
             // умолчанию, не восстанавливаем активность из настроек (иначе утекает
             // из админки в публичный плеер).
             if (path === 'measure.enabled') {
+                this.observer.set(path, false);
+                return;
+            }
+            // Сохранённый проект не должен включать инструменты разработчика в публичном
+            // плеере. Визуальные предпочтения можно восстановить, активные режимы — нет.
+            if (['debug.tileDebug', 'debug.tileCheckerFill', 'debug.tilePick', 'debug.tileIsolatePick',
+                'debug.tileFreeze', 'debug.tilePaused', 'debug.tileLodLock'].indexOf(path) !== -1) {
                 this.observer.set(path, false);
                 return;
             }

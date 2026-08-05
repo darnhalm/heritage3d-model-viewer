@@ -133,26 +133,6 @@ export class TileRequestQueue {
     }
 
     /**
-     * Запустить ровно одну — самую приоритетную — задачу, даже на паузе (пошаговый режим).
-     *
-     * @returns `true`, если было что запустить.
-     */
-    step(): boolean {
-        if (this.entries.length === 0 || this.active >= this.maxConcurrent) {
-            return false;
-        }
-        this.entries.sort((a, b) => compareTilePriority(a.tile, b.tile, this.frame));
-        const entry = this.entries.shift();
-        this.active++;
-        entry.run().catch(() => {}).finally(() => {
-            this.active--;
-            // На паузе это no-op — шаг не запускает каскад; без паузы очередь поедет дальше.
-            this.dispatch();
-        });
-        return true;
-    }
-
-    /**
      * Запустить столько задач, сколько позволяет лимит, начиная с самых приоритетных.
      * Сортировка именно здесь — по свежим данным камеры.
      */

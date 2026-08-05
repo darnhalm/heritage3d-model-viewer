@@ -37,6 +37,30 @@ import { buildTileTree, fetchTilesetJson, findTightBoundingBox, forEachTile, rec
 /** Режим раскраски отладочных OBB тайлов. */
 export type TileDebugMode = 'state' | 'lod';
 
+export type TileDebugStyle = {
+    lineThickness: number;
+    /** `true` — шахматное чередование яркости; `false` — ровный цвет текущего State/LOD. */
+    checker: boolean;
+    /** Полупрозрачная заливка OBB в шахматном режиме. */
+    checkerFill: boolean;
+};
+
+/** Данные выбранного кликом тайла для HUD и внешних инструментов отладки. */
+export type TileDebugInfo = {
+    urls: string[];
+    depth: number;
+    geometricError: number;
+    screenSpaceError: number;
+    distance: number;
+    state: string;
+    bytes: number;
+    contentCount: number;
+    triangles: number;
+    refine: 'ADD' | 'REPLACE';
+    selected: boolean;
+    inFrustum: boolean;
+};
+
 /** Цвета состояний тайла для отладки, формат 0xAABBGGRR. */
 const STATE_COLORS: Record<string, number> = {
     [TILE_QUEUED]: 0xff00ffff, // жёлтый — в очереди
@@ -46,6 +70,8 @@ const STATE_COLORS: Record<string, number> = {
 };
 /** Ярко-голубой — тайл выбран обходом для отрисовки (перекрывает цвет состояния). */
 const SELECTED_COLOR = 0xffffff00;
+/** Белый контур — тайл, выбранный кликом в инспекторе. */
+const PICKED_COLOR = 0xffffffff;
 /** Палитра LOD по глубине (0xAABBGGRR), циклится по модулю. */
 const LOD_COLORS = [
     0xff4444ff, // 0 — красный
@@ -58,8 +84,8 @@ const LOD_COLORS = [
     0xffff44ff // 7 — розовый
 ];
 
-/** Полуширина контурных лент тайлов в долях расстояния до камеры (~постоянная в пикселях). */
-const EDGE_WIDTH = 0.002;
+/** Единица полуширины контурных лент в долях расстояния до камеры. Значение UI 2 = прежние 0.002. */
+const EDGE_WIDTH_UNIT = 0.001;
 
 /**
  * Индекс тайла вдоль его полуоси в единицах полного размера бокса — для шахматной чётности.
@@ -91,6 +117,17 @@ function dimColor(clr: number, factor: number): number {
     const b = Math.round(((clr >> 16) & 0xff) * factor);
     const a = (clr >>> 24) & 0xff;
     return ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
+}
+
+/**
+ * Заменить альфа-канал цвета 0xAABBGGRR.
+ *
+ * @param clr - Исходный упакованный цвет.
+ * @param alpha - Новый альфа-канал 0..255.
+ * @returns Цвет с заменённой альфой.
+ */
+function withAlpha(clr: number, alpha: number): number {
+    return (((alpha & 0xff) << 24) | (clr & 0x00ffffff)) >>> 0;
 }
 
 export type TileManagerOptions = {
@@ -245,6 +282,15 @@ export class TileManager {
 
     /** Выбранные в прошлом кадре — чтобы понять, изменилась ли картинка. */
     private prevSelection: Tile[] = [];
+
+    /** Обратная карта для точного клика по поверхности контента. */
+    private meshToTile = new WeakMap<MeshInstance, Tile>();
+
+    /** Тайл, выбранный кликом в режиме инспектора. */
+    private debugPickedTile: Tile | null = null;
+
+    /** Показывать только контент выбранного кликом тайла. */
+    private debugIsolatePicked = false;
 
     /** Параметры камеры текущего кадра — обход читает их, а не таскает пятым аргументом. */
     private view = { cameraPos: new Vec3(), sseDenominator: 1, viewportHeight: 1 };
@@ -640,6 +686,8 @@ export class TileManager {
         tile.entity.enabled = false;
         this.root.addChild(tile.entity);
 
+        this.getTileMeshInstances(tile).forEach(meshInstance => this.meshToTile.set(meshInstance, tile));
+
         tile.state = TILE_READY;
         this.loaded.add(tile);
         this.onChange();
@@ -750,26 +798,29 @@ export class TileManager {
         const changed = selection.length !== this.prevSelection.length ||
             selection.some((tile, i) => this.prevSelection[i] !== tile);
 
-        if (!changed) {
-            return;
-        }
+        if (!changed) return;
 
         this.prevSelection.forEach((tile) => {
             tile.selected = false;
-            if (tile.entity) {
-                tile.entity.enabled = false;
-            }
         });
 
         selection.forEach((tile) => {
             tile.selected = true;
-            if (tile.entity) {
-                tile.entity.enabled = true;
-            }
         });
 
         this.prevSelection = selection.slice();
+        this.applyDebugVisibility();
         this.onChange();
+    }
+
+    /** Применить обычный LOD-срез либо оставить только выбранный кликом тайл. */
+    private applyDebugVisibility() {
+        const isolated = this.debugIsolatePicked ? this.debugPickedTile : null;
+        this.loaded.forEach((tile) => {
+            if (tile.entity) {
+                tile.entity.enabled = isolated ? tile === isolated : tile.selected;
+            }
+        });
     }
 
     /**
@@ -784,7 +835,8 @@ export class TileManager {
             return;
         }
 
-        const candidates = [...this.loaded].filter(tile => !tile.selected && tile.lastUsedFrame !== this.frame);
+        const candidates = [...this.loaded].filter(tile =>
+            tile !== this.debugPickedTile && !tile.selected && tile.lastUsedFrame !== this.frame);
         candidates.sort((a, b) => compareTilePriority(b, a, this.frame));
 
         let excess = this.loaded.size - this.options.maxCachedTiles;
@@ -802,6 +854,10 @@ export class TileManager {
             tile.loadToken.cancelled = true;
             tile.loadToken.controller?.abort();
             tile.loadToken = null;
+        }
+        this.getTileMeshInstances(tile).forEach(meshInstance => this.meshToTile.delete(meshInstance));
+        if (this.debugPickedTile === tile) {
+            this.debugPickedTile = null;
         }
         destroyTileContent(this.app, tile.entity, tile.assets as never[]);
         tile.entity = null;
@@ -852,15 +908,83 @@ export class TileManager {
      */
     getVisibleMeshInstances(): MeshInstance[] {
         const result: MeshInstance[] = [];
-        this.prevSelection.forEach((tile) => {
+        const visibleTiles = this.debugIsolatePicked && this.debugPickedTile ?
+            [this.debugPickedTile] : this.prevSelection;
+        visibleTiles.forEach((tile) => {
             if (!tile.entity?.enabled) {
                 return;
             }
-            (tile.entity.findComponents('render') as RenderComponent[]).forEach((component) => {
-                result.push(...component.meshInstances);
-            });
+            result.push(...this.getTileMeshInstances(tile));
         });
         return result;
+    }
+
+    /**
+     * Все меши контента одного тайла.
+     *
+     * @param tile - Тайл, меши которого нужны.
+     * @returns Меши всех render-компонентов контента.
+     */
+    private getTileMeshInstances(tile: Tile): MeshInstance[] {
+        if (!tile.entity) {
+            return [];
+        }
+        return (tile.entity.findComponents('render') as RenderComponent[])
+        .flatMap(component => component.meshInstances);
+    }
+
+    /**
+     * Выбрать тайл по мешу, найденному raycast'ом; `null` очищает выбор.
+     *
+     * @param meshInstance - Меш выбранной поверхности или `null`.
+     * @returns Данные выбранного тайла или `null`.
+     */
+    setDebugPickedMeshInstance(meshInstance: MeshInstance | null): TileDebugInfo | null {
+        this.debugPickedTile = meshInstance ? (this.meshToTile.get(meshInstance) ?? null) : null;
+        this.applyDebugVisibility();
+        return this.getDebugPickedTileInfo();
+    }
+
+    /**
+     * Изолировать выбранный кликом тайл. До первого выбора сохраняется обычный LOD-срез.
+     *
+     * @param value - Включить изоляцию.
+     */
+    setDebugIsolatePicked(value: boolean) {
+        this.debugIsolatePicked = value;
+        this.applyDebugVisibility();
+        this.onChange();
+    }
+
+    /**
+     * Актуальные данные выбранного кликом тайла.
+     *
+     * @returns Снимок данных тайла или `null`.
+     */
+    getDebugPickedTileInfo(): TileDebugInfo | null {
+        const tile = this.debugPickedTile;
+        if (!tile) {
+            return null;
+        }
+        const triangles = this.getTileMeshInstances(tile).reduce((sum, meshInstance) => {
+            const primitives = meshInstance.mesh?.primitive ?? [];
+            return sum + primitives.reduce((primitiveSum, primitive) => primitiveSum +
+                Math.floor((primitive.count ?? 0) / 3), 0);
+        }, 0);
+        return {
+            urls: tile.contentUris.slice(),
+            depth: tile.depth,
+            geometricError: tile.geometricError,
+            screenSpaceError: tile.error,
+            distance: tile.distance,
+            state: tile.state,
+            bytes: tile.bytes,
+            contentCount: tile.contentUris.length,
+            triangles,
+            refine: tile.refine,
+            selected: tile.selected,
+            inFrustum: tile.inFrustum
+        };
     }
 
     /**
@@ -937,15 +1061,6 @@ export class TileManager {
     }
 
     /**
-     * Запустить одну самую приоритетную загрузку (пошаговый режим на паузе).
-     *
-     * @returns `true`, если было что запустить.
-     */
-    stepLoad(): boolean {
-        return this.queue.step();
-    }
-
-    /**
      * Нарисовать OBB активных тайлов в переданный буфер отладочных линий.
      *
      * «Активные» — те, у кого есть контент в работе или на экране (`state !== unloaded`)
@@ -957,9 +1072,11 @@ export class TileManager {
      *
      * @param lines - Буфер отладочных линий для рёбер (уже очищен вызывающим).
      * @param solid - Буфер полупрозрачной заливки граней (уже очищен вызывающим).
+     * @param fill - Буфер опциональной полупрозрачной заливки.
      * @param mode - `state` — цвет по состоянию загрузки; `lod` — по глубине в дереве.
+     * @param style - Толщина, цвет и шахматный режим.
      */
-    debugDraw(lines: DebugLines, solid: DebugSolid, mode: TileDebugMode) {
+    debugDraw(lines: DebugLines, solid: DebugSolid, fill: DebugSolid, mode: TileDebugMode, style: TileDebugStyle) {
         if (!this.rootTile || this.disposed) {
             return;
         }
@@ -975,12 +1092,17 @@ export class TileManager {
             // Рисуем ТОЛЬКО выбранные тайлы — это текущий срез LOD, который выдаёт сам механизм
             // тайлизации (по мере приближения он углубляется). Родительские/грузящиеся боксы не
             // показываем: их наложение превращало оверлей в нечитаемую кашу линий.
-            if (!tile.obb || !tile.selected) {
+            const picked = tile === this.debugPickedTile;
+            if (this.debugIsolatePicked && this.debugPickedTile && !picked) {
                 continue;
             }
-            const color = mode === 'lod' ?
+            if (!tile.obb || (!tile.selected && !picked)) {
+                continue;
+            }
+            const schemeColor = mode === 'lod' ?
                 LOD_COLORS[tile.depth % LOD_COLORS.length] :
                 SELECTED_COLOR;
+            const color = picked ? PICKED_COLOR : schemeColor;
             const { center, halfAxes } = tile.obb;
 
             // Контуры блока толстыми лентами (без заливки — она в ближнем приближении не
@@ -991,14 +1113,28 @@ export class TileManager {
                 Math.round(gridIndex(center, halfAxes[1])) +
                 Math.round(gridIndex(center, halfAxes[2]))
             ) & 1;
-            const edge = parity ? color : dimColor(color, 0.55);
-            solid.obbEdgesThick(center, halfAxes[0], halfAxes[1], halfAxes[2], cameraPos, EDGE_WIDTH, edge);
+            const edge = picked || !style.checker || parity ? color : dimColor(color, 0.55);
+            const width = Math.min(8, Math.max(0.5, style.lineThickness)) * EDGE_WIDTH_UNIT * (picked ? 1.6 : 1);
+            solid.obbEdgesThick(center, halfAxes[0], halfAxes[1], halfAxes[2], cameraPos, width, edge);
+            // Шахматная заливка акцентирует только затемнённые клетки: чёрный с opacity 20%.
+            // Светлые клетки остаются полностью без заливки, чтобы модель не мутнела целиком.
+            if (style.checker && style.checkerFill && tile.selected && !parity) {
+                fill.obbFaces(
+                    center,
+                    halfAxes[0],
+                    halfAxes[1],
+                    halfAxes[2],
+                    withAlpha(0x00000000, 0x33)
+                );
+            }
         }
     }
 
     /** Снять тайлсет со сцены и освободить всё, что он занимал. */
     destroy() {
         this.disposed = true;
+        this.debugPickedTile = null;
+        this.debugIsolatePicked = false;
         this.queue.clear();
         if (this.rootTile) {
             forEachTile(this.rootTile, (tile) => {

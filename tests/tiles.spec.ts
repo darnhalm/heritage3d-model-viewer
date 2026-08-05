@@ -122,6 +122,25 @@ test('загружает тайлсет 1.1 с несколькими конте
     expect(rendered.enabled).toBeGreaterThan(0);
     expect(rendered.meshInstances).toBeGreaterThan(0);
 
+    // Изоляция оставляет включённой entity выбранного тайла и полностью восстанавливает
+    // текущий LOD-срез после выключения.
+    const isolation = await page.evaluate(() => {
+        const manager = (window as any).viewer.tileManager;
+        const enabledCount = () => [...manager.loaded].filter((tile: any) => tile.entity?.enabled).length;
+        const before = enabledCount();
+        const firstMesh = manager.getVisibleMeshInstances()[0];
+        manager.setDebugPickedMeshInstance(firstMesh);
+        manager.setDebugIsolatePicked(true);
+        const isolated = enabledCount();
+        manager.setDebugIsolatePicked(false);
+        const restored = enabledCount();
+        manager.setDebugPickedMeshInstance(null);
+        return { before, isolated, restored };
+    });
+    expect(isolation.before).toBeGreaterThan(1);
+    expect(isolation.isolated).toBe(1);
+    expect(isolation.restored).toBe(isolation.before);
+
     expect(pageErrors).toEqual([]);
 });
 
@@ -255,12 +274,22 @@ const tileDebugState = (page: Page) => page.evaluate(() => {
     const viewer = (window as any).viewer;
     const dl = viewer.debugTiles;
     const solid = viewer.debugTilesSolid;
+    const fill = viewer.debugTilesFill;
     const hud = document.getElementById('tile-debug-hud');
     return {
         visible: !!dl.meshInstances[0].visible,
         lineCount: dl.mesh.primitive[0].count,
         solidVisible: !!solid.meshInstance.visible,
         solidCount: solid.mesh.primitive[0].count,
+        edgeColor: solid.colorData[3] >>> 0,
+        fillVisible: !!fill.meshInstance.visible,
+        fillCount: fill.mesh.primitive[0].count,
+        fillColor: fill.colorData[3] >>> 0,
+        ribbonWidth: Math.hypot(
+            solid.vertexData[0] - solid.vertexData[20],
+            solid.vertexData[1] - solid.vertexData[21],
+            solid.vertexData[2] - solid.vertexData[22]
+        ),
         viewCubeDisplay: viewer.viewCube ? getComputedStyle(viewer.viewCube.dom).display : 'absent',
         hudDisplay: hud ? getComputedStyle(hud).display : 'absent',
         hudText: hud?.textContent ?? ''
@@ -287,6 +316,40 @@ test('отладочный оверлей тайлов: OBB активных т�
     expect(off.visible).toBe(false);
     expect(off.hudDisplay).toBe('absent');
 
+    // Debug-инструмент не должен утекать в production из сохранённых настроек проекта.
+    const productionDefaults = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.applyViewerSettings({
+            debug: {
+                tileDebug: true,
+                tileCheckerFill: true,
+                tilePick: true,
+                tileIsolatePick: true,
+                tileFreeze: true,
+                tilePaused: true,
+                tileLodLock: true
+            }
+        });
+        return {
+            tileDebug: viewer.observer.get('debug.tileDebug'),
+            tileCheckerFill: viewer.observer.get('debug.tileCheckerFill'),
+            tilePick: viewer.observer.get('debug.tilePick'),
+            tileIsolatePick: viewer.observer.get('debug.tileIsolatePick'),
+            tileFreeze: viewer.observer.get('debug.tileFreeze'),
+            tilePaused: viewer.observer.get('debug.tilePaused'),
+            tileLodLock: viewer.observer.get('debug.tileLodLock')
+        };
+    });
+    expect(productionDefaults).toEqual({
+        tileDebug: false,
+        tileCheckerFill: false,
+        tilePick: false,
+        tileIsolatePick: false,
+        tileFreeze: false,
+        tilePaused: false,
+        tileLodLock: false
+    });
+
     // Вплотную — есть и выбранный уровень (заливка), и загруженные грубые уровни, не попавшие
     // в выбор (каркас-контекст): так проверяем обе части оверлея.
     await placeCamera(page, 900);
@@ -299,6 +362,7 @@ test('отладочный оверлей тайлов: OBB активных т�
     // Контуры выбранных тайлов рисуются толстыми лентами в solid-буфере (треугольники).
     expect(onState.solidVisible).toBe(true);
     expect(onState.solidCount).toBeGreaterThan(0);
+    expect(onState.fillVisible).toBe(false);
     // Навигационный куб доступен прямо в инструменте визуализации тайлов.
     expect(onState.viewCubeDisplay).not.toBe('none');
     expect(onState.hudDisplay).toBe('block');
@@ -314,6 +378,77 @@ test('отладочный оверлей тайлов: OBB активных т�
     expect(onLod.solidVisible).toBe(true);
     expect(onLod.solidCount).toBeGreaterThan(0);
     expect(onLod.hudText).toContain('mode: lod');
+
+    // Ползунок меняет геометрическую ширину ленты без изменения числа контуров.
+    await page.evaluate(() => (window as any).viewer.observer.set('debug.tileLineThickness', 8));
+    await pumpFrames(page, 5);
+    const thick = await tileDebugState(page);
+    expect(thick.solidCount).toBe(onLod.solidCount);
+    expect(thick.ribbonWidth).toBeGreaterThan(onLod.ribbonWidth * 3);
+
+    // Ровный каркас убирает шахматное затемнение, но сохраняет палитру выбранного LOD.
+    await page.evaluate(() => (window as any).viewer.observer.set('debug.tileLineStyle', 'solid'));
+    await pumpFrames(page, 5);
+    const uniform = await tileDebugState(page);
+    const uniformDepth = (await getStats(page)).maxSelectedDepth;
+    const lodColors = [
+        0xff4444ff, 0xff44aaff, 0xff44ffff, 0xff44ff44,
+        0xffffaa44, 0xffff4444, 0xffff44aa, 0xffff44ff
+    ];
+    expect(uniform.edgeColor).toBe(lodColors[uniformDepth % lodColors.length]);
+    expect(uniform.fillVisible).toBe(false);
+
+    // В шахматном режиме заливка включается отдельно и не влияет на число рёбер.
+    await page.evaluate(() => {
+        const observer = (window as any).viewer.observer;
+        observer.set('debug.tileLineStyle', 'checker');
+        observer.set('debug.tileCheckerFill', true);
+    });
+    await pumpFrames(page, 5);
+    const checkerFilled = await tileDebugState(page);
+    expect(checkerFilled.fillVisible).toBe(true);
+    expect(checkerFilled.fillCount).toBeGreaterThan(0);
+    expect(checkerFilled.fillColor).toBe(0x33000000);
+    expect(checkerFilled.solidCount).toBe(uniform.solidCount);
+
+    await page.evaluate(() => (window as any).viewer.observer.set('debug.tileCheckerFill', false));
+    await pumpFrames(page, 5);
+    expect((await tileDebugState(page)).fillVisible).toBe(false);
+
+    // Режим инспекции взаимоисключающий с измерениями и выбирает тайл точным raycast'ом
+    // по поверхности. Выбранный тайл получает усиленный белый OBB и карточку в HUD.
+    const pickMode = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.observer.set('measure.enabled', true);
+        viewer.observer.set('debug.tilePick', true);
+        return {
+            measure: viewer.observer.get('measure.enabled'),
+            cursor: viewer.canvas.style.cursor
+        };
+    });
+    expect(pickMode.measure).toBe(false);
+    expect(pickMode.cursor).toBe('crosshair');
+
+    const canvas = page.locator('#application-canvas');
+    const canvasBox = await canvas.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    await page.mouse.click(canvasBox!.x + canvasBox!.width / 2, canvasBox!.y + canvasBox!.height / 2);
+    await pumpFrames(page, 5);
+
+    const picked = await page.evaluate(() => (window as any).viewer.getPickedTileInfo());
+    expect(picked).not.toBeNull();
+    expect(picked.depth).toBeGreaterThanOrEqual(0);
+    expect(picked.screenSpaceError).toBeGreaterThanOrEqual(0);
+    expect(picked.geometricError).toBeGreaterThanOrEqual(0);
+    expect(picked.distance).toBeGreaterThanOrEqual(0);
+    expect(picked.bytes).toBeGreaterThan(0);
+    expect(picked.triangles).toBeGreaterThan(0);
+    expect(picked.urls.length).toBeGreaterThan(0);
+
+    const pickedOverlay = await tileDebugState(page);
+    expect(pickedOverlay.ribbonWidth).toBeGreaterThan(thick.ribbonWidth * 1.5);
+    expect(pickedOverlay.hudText).toContain('PICKED TILE');
+    expect(pickedOverlay.hudText).toContain('triangles');
 
     // Выключение прячет контуры и HUD.
     await page.evaluate(() => (window as any).viewer.observer.set('debug.tileDebug', false));
@@ -408,7 +543,7 @@ test('Фаза 2: заморозка фрустума фиксирует отб�
     expect(pageErrors).toEqual([]);
 });
 
-test('Фаза 2: пауза останавливает загрузку, шаг запускает по одной', async ({ page }) => {
+test('Фаза 2: пауза останавливает загрузку, снятие паузы продолжает её', async ({ page }) => {
     test.skip(!await samplesAvailable(page, DISCRETE_LOD),
         'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
 
@@ -436,16 +571,6 @@ test('Фаза 2: пауза останавливает загрузку, шаг
     expect(stillPaused.ready).toBe(paused.ready);
     expect(stillPaused.loading).toBe(0);
     expect(stillPaused.queued).toBeGreaterThan(0);
-
-    // Три шага запускают ровно свои загрузки; после прокрутки кадров готовых становится больше.
-    const readyBefore = stillPaused.ready;
-    await page.evaluate(() => {
-        const v = (window as any).viewer;
-        for (let i = 0; i < 3; i++) v.stepTileLoading();
-    });
-    await pumpFrames(page, 60);
-    const stepped = await getStats(page);
-    expect(stepped.ready).toBeGreaterThan(readyBefore);
 
     // Снятие паузы догоняет очередь до конца.
     await setFlag(page, 'debug.tilePaused', false);

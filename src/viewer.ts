@@ -99,10 +99,10 @@ import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
 import { ShadowCatcher } from './shadow-catcher';
-import { TileManager, type TileDebugMode } from './tiles/tile-manager';
+import { TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, type SceneHelperEntry } from './viewer/controllers';
-import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
+import { CachedMeshGeometry, getCachedMeshGeometry, intersectMeshTriangles } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
 import { MeshoptDecoder } from '../lib/meshopt_decoder.module.js';
 
@@ -608,6 +608,9 @@ class Viewer {
     /** Толстые контуры OBB выбранных тайлов. */
     debugTilesSolid: DebugSolid;
 
+    /** Опциональная полупрозрачная шахматная заливка OBB. */
+    debugTilesFill: DebugSolid;
+
     /** Каркас, оси и сетка замороженной камеры отбора тайлов. */
     debugTileCamera: DebugLines;
 
@@ -618,6 +621,37 @@ class Viewer {
 
     /** DOM-оверлей со статистикой тайлов; создаётся лениво при первом включении. */
     private tileHud: HTMLDivElement | null = null;
+
+    private tilePickDown: { clientX: number; clientY: number; canvasX: number; canvasY: number } | null = null;
+
+    private tilePickIsClick = false;
+
+    private readonly onTilePickMouseDown = (event: MouseEvent) => {
+        if (event.button !== 0 || event.target !== this.canvas || !this.observer.get('debug.tilePick')) return;
+        const rect = this.canvas.getBoundingClientRect();
+        this.tilePickDown = {
+            clientX: event.clientX,
+            clientY: event.clientY,
+            canvasX: event.clientX - rect.left,
+            canvasY: event.clientY - rect.top
+        };
+        this.tilePickIsClick = true;
+    };
+
+    private readonly onTilePickMouseMove = (event: MouseEvent) => {
+        if (!this.tilePickIsClick || !this.tilePickDown) return;
+        if (Math.hypot(event.clientX - this.tilePickDown.clientX, event.clientY - this.tilePickDown.clientY) > 5) {
+            this.tilePickIsClick = false;
+        }
+    };
+
+    private readonly onTilePickMouseUp = (event: MouseEvent) => {
+        if (event.button === 0 && this.tilePickIsClick && this.tilePickDown && this.observer.get('debug.tilePick')) {
+            this.pickDebugTileAt(this.tilePickDown.canvasX, this.tilePickDown.canvasY);
+        }
+        this.tilePickDown = null;
+        this.tilePickIsClick = false;
+    };
 
     // Навигационный куб (как в 3ds Max) + иконка орто/перспектива для выравнивания и Tiles Debug.
     private viewCube: ViewCube | null = null;
@@ -1100,6 +1134,9 @@ class Viewer {
         this.debugRuler = new DebugLines(app, camera, false);
         // Задний слой включён: боксы тайлов за геометрией видны приглушённо.
         this.debugTiles = new DebugLines(app, camera);
+        // Заливку регистрируем раньше контуров: в общем прозрачном debug-слое контуры
+        // должны рисоваться последними и оставаться чёткими.
+        this.debugTilesFill = new DebugSolid(app, camera, false);
         this.debugTilesSolid = new DebugSolid(app, camera);
         this.debugTileCamera = new DebugLines(app, camera);
         this.debugTileCameraSolid = new DebugSolid(app, camera);
@@ -1280,6 +1317,9 @@ class Viewer {
             resetSelectionHighlightMeshes: this.resetSelectionHighlightMeshes.bind(this),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
+        this.canvas.addEventListener('mousedown', this.onTilePickMouseDown);
+        document.addEventListener('mousemove', this.onTilePickMouseMove);
+        document.addEventListener('mouseup', this.onTilePickMouseUp);
 
         // ripple container over canvas (pointer-events: none)
         const wrapper = this.canvas.parentElement;
@@ -1297,13 +1337,13 @@ class Viewer {
 
         // double click: pick → ripple → after 380ms center camera
         canvas.addEventListener('dblclick', (event: MouseEvent) => {
-            if (this.observer.get('measure.enabled')) return;
+            if (this.observer.get('measure.enabled') || this.observer.get('debug.tilePick')) return;
             this._pickAndCenterAt(event.offsetX, event.offsetY);
         });
 
         // double tap (mobile): same as dblclick when second tap within delay and radius
         canvas.addEventListener('touchend', (event: TouchEvent) => {
-            if (this.observer.get('measure.enabled')) return;
+            if (this.observer.get('measure.enabled') || this.observer.get('debug.tilePick')) return;
             if (event.changedTouches.length !== 1) return;
             const touch = event.changedTouches[0];
             const rect = canvas.getBoundingClientRect();
@@ -1441,6 +1481,48 @@ class Viewer {
         return { origin, direction };
     }
 
+    /**
+     * Точный клик по видимой геометрии тайлов; координаты заданы в CSS-пикселях canvas.
+     *
+     * @param x - Горизонтальная координата внутри canvas.
+     * @param y - Вертикальная координата внутри canvas.
+     * @returns Данные выбранного тайла или `null`.
+     */
+    pickDebugTileAt(x: number, y: number): TileDebugInfo | null {
+        const manager = this.tileManager;
+        if (!manager) {
+            return null;
+        }
+        const { origin, direction } = this.getPickRay(x, y);
+        let bestMesh: MeshInstance | null = null;
+        let bestDistance = Number.POSITIVE_INFINITY;
+        manager.getVisibleMeshInstances().forEach((meshInstance) => {
+            const distance = intersectMeshTriangles(
+                meshInstance,
+                origin,
+                direction,
+                bestDistance,
+                this.meshGeometryCache
+            );
+            if (distance !== null && distance < bestDistance) {
+                bestDistance = distance;
+                bestMesh = meshInstance;
+            }
+        });
+        const info = manager.setDebugPickedMeshInstance(bestMesh);
+        this.renderNextFrame();
+        return info;
+    }
+
+    /**
+     * Информация о выбранном кликом тайле для консоли, HUD и автотестов.
+     *
+     * @returns Актуальные данные выбранного тайла или `null`.
+     */
+    getPickedTileInfo(): TileDebugInfo | null {
+        return this.tileManager?.getDebugPickedTileInfo() ?? null;
+    }
+
     clearMeasurement() {
         if (this.measurementController) {
             this.measurementController.clearMeasurement();
@@ -1458,6 +1540,9 @@ class Viewer {
         this.poiController?.dispose?.();
         this.selectionController?.dispose?.();
         this.microphoneController?.dispose?.();
+        this.canvas.removeEventListener('mousedown', this.onTilePickMouseDown);
+        document.removeEventListener('mousemove', this.onTilePickMouseMove);
+        document.removeEventListener('mouseup', this.onTilePickMouseUp);
     }
 
     /** Camera that actually draws the viewport (glTF scene camera or viewer camera). */
@@ -1723,11 +1808,35 @@ class Viewer {
             'debug.renderMode': this.setRenderMode.bind(this),
             // Отладка тайлов: отрисовка не gated dirty-флагом (onPrerender читает флаги живьём),
             // поэтому достаточно попросить кадр — там оверлей либо нарисуется, либо очистится.
-            'debug.tileDebug': () => {
+            'debug.tileDebug': (enabled: boolean) => {
+                if (!enabled && this.observer.get('debug.tilePick')) {
+                    this.observer.set('debug.tilePick', false);
+                }
                 this.updateViewCubeVisibility();
                 this.renderNextFrame();
             },
             'debug.tileDebugMode': () => this.renderNextFrame(),
+            'debug.tileLineThickness': () => this.renderNextFrame(),
+            'debug.tileLineStyle': () => this.renderNextFrame(),
+            'debug.tileCheckerFill': () => this.renderNextFrame(),
+            'debug.tilePick': (enabled: boolean) => {
+                if (enabled) {
+                    if (this.observer.get('measure.enabled')) this.observer.set('measure.enabled', false);
+                    if (this.observer.get('poi.enabled')) this.observer.set('poi.enabled', false);
+                    if (this.observer.get('debug.withTextureOnly')) this.observer.set('debug.withTextureOnly', false);
+                } else {
+                    if (this.observer.get('debug.tileIsolatePick')) {
+                        this.observer.set('debug.tileIsolatePick', false);
+                    }
+                    this.tileManager?.setDebugPickedMeshInstance(null);
+                }
+                this.canvas.style.cursor = enabled ? 'crosshair' : '';
+                this.renderNextFrame();
+            },
+            'debug.tileIsolatePick': (enabled: boolean) => {
+                this.tileManager?.setDebugIsolatePicked(enabled);
+                this.renderNextFrame();
+            },
             'debug.tileFreeze': (value: boolean) => {
                 if (value) {
                     this.captureFrozenTileCamera(true);
@@ -1738,6 +1847,7 @@ class Viewer {
                     this.tileManager?.setFrozen(false);
                     this.captureFrozenTileCamera(false);
                 }
+                this.updateViewCubeVisibility();
                 this.renderNextFrame();
             },
             'debug.tilePaused': (value: boolean) => {
@@ -3817,10 +3927,11 @@ class Viewer {
         if (visible) this.updateOrthoButton();
     }
 
-    /** Куб ориентации нужен в выравнивании и при активной визуализации 3D Tiles. */
+    /** Куб ориентации нужен в выравнивании, визуализации тайлов и инспекторе камеры. */
     private updateViewCubeVisibility() {
         const visible = !!this.observer.get('debug.alignmentMode') ||
-            (!!this.observer.get('scene.isTileset') && !!this.observer.get('debug.tileDebug'));
+            (!!this.observer.get('scene.isTileset') &&
+                (!!this.observer.get('debug.tileDebug') || !!this.observer.get('debug.tileFreeze')));
         this.setViewCubeVisible(visible);
     }
 
@@ -4582,11 +4693,15 @@ class Viewer {
         // (см. `handleTileChange`). Панель по этому флагу подписывает «Final Render (lit)».
         this.observer.set('scene.tilesetLit', null);
 
-        // Отладочные заморозка/пауза/зажим LOD относятся к прошлому тайлсету — сбрасываем,
-        // иначе новый грузился бы на паузе, от чужой замороженной камеры или с чужим зажимом.
+        // Tiles Debug — сессионный инструмент. Новый тайлсет всегда открывается в чистом
+        // production-виде, даже если на предыдущем были включены контуры или заливка.
+        this.observer.set('debug.tileDebug', false);
+        this.observer.set('debug.tileCheckerFill', false);
         this.observer.set('debug.tileFreeze', false);
         this.observer.set('debug.tilePaused', false);
         this.observer.set('debug.tileLodLock', false);
+        this.observer.set('debug.tilePick', false);
+        this.observer.set('debug.tileIsolatePick', false);
         this.observer.set('scene.tilesetMaxDepth', 0);
 
         const manager = new TileManager({
@@ -4697,6 +4812,9 @@ class Viewer {
     }
 
     private destroyTileManager() {
+        if (this.observer.get('debug.tilePick')) {
+            this.observer.set('debug.tilePick', false);
+        }
         this.tileManager?.destroy();
         this.tileManager = null;
         this.updateViewCubeVisibility();
@@ -4876,17 +4994,6 @@ class Viewer {
         this.debugTileCameraSolid.frustumFaces(nearCorners, farCorners);
         this.debugTileCamera.update();
         this.debugTileCameraSolid.update();
-    }
-
-    /**
-     * Пошаговая загрузка тайлов: запустить одну заявку из очереди (Фаза 2 отладки).
-     *
-     * @returns `true`, если было что запустить.
-     */
-    stepTileLoading(): boolean {
-        const stepped = this.tileManager?.stepLoad() ?? false;
-        this.renderNextFrame();
-        return stepped;
     }
 
     // set the currently selected track
@@ -6272,11 +6379,18 @@ class Viewer {
         // Не gated dirty-флагом: набор и состояния тайлов при стриминге меняются каждый кадр.
         this.debugTiles.clear();
         this.debugTilesSolid.clear();
+        this.debugTilesFill.clear();
         if (this.tileManager && this.observer.get('debug.tileDebug')) {
             const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'state';
-            this.tileManager.debugDraw(this.debugTiles, this.debugTilesSolid, mode);
+            const style: TileDebugStyle = {
+                lineThickness: Number(this.observer.get('debug.tileLineThickness') ?? 2),
+                checker: this.observer.get('debug.tileLineStyle') !== 'solid',
+                checkerFill: !!this.observer.get('debug.tileCheckerFill')
+            };
+            this.tileManager.debugDraw(this.debugTiles, this.debugTilesSolid, this.debugTilesFill, mode, style);
         }
         this.debugTiles.update();
+        this.debugTilesFill.update();
         this.debugTilesSolid.update();
         this.updateTileHud();
         this.drawFrozenTileCamera();
@@ -6332,6 +6446,29 @@ class Viewer {
             `TILES ${s.tiles}   mode: ${mode}${flags ? `   ${flags}` : ''}\n` +
             `ready ${s.ready}  loading ${s.loading}  queued ${s.queued}  failed ${s.failed}\n` +
             `selected ${s.selected}   depth ${s.maxSelectedDepth}   ${mb} MB`;
+
+        const picked = this.tileManager.getDebugPickedTileInfo();
+        if (picked) {
+            const pickedMb = (picked.bytes / (1024 * 1024)).toFixed(2);
+            const primaryUrl = picked.urls[0] ?? '(no content URL)';
+            let displayUrl = primaryUrl;
+            try {
+                const parsed = new URL(primaryUrl, window.location.href);
+                displayUrl = `${parsed.pathname}${parsed.search}`;
+            } catch {
+                // Оставляем исходную строку: URL нужен для диагностики даже если он некорректен.
+            }
+            if (displayUrl.length > 76) {
+                displayUrl = `…${displayUrl.slice(-75)}`;
+            }
+            this.tileHud.textContent +=
+                `\n\nPICKED TILE   LOD ${picked.depth}   ${picked.state.toUpperCase()}   ${picked.refine}\n` +
+                `SSE ${picked.screenSpaceError.toFixed(2)} px   error ${picked.geometricError.toFixed(2)}   distance ${picked.distance.toFixed(2)}\n` +
+                `content ${picked.contentCount}   ${pickedMb} MB   triangles ${picked.triangles.toLocaleString()}\n` +
+                `${displayUrl}`;
+        } else if (this.observer.get('debug.tilePick')) {
+            this.tileHud.textContent += '\n\nPICK TILE: click model surface';
+        }
     }
 
     private drawReferenceRuler() {

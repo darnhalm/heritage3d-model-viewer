@@ -63,7 +63,6 @@ type ViewerApi = {
     updatePoiAnimTo?: (id: string, value: number | null) => void;
     updatePoiAnimFps?: (id: string, value: number | null) => void;
     removePoi?: (id: string) => void;
-    stepTileLoading?: () => boolean;
 };
 
 const getViewer = (): ViewerApi | undefined => (window as Window & { viewer?: ViewerApi }).viewer;
@@ -1231,49 +1230,90 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         >
                                             {t('Tile Bounds (OBB)', lang)}
                                         </button>
-                                        {observerData?.debug?.tileDebug && (
-                                            <div className='materials-layer-normals-row'>
-                                                <button
-                                                    type='button'
-                                                    className={`materials-layer-item${(observerData?.debug?.tileDebugMode ?? 'state') !== 'lod' ? ' selected' : ''}`}
-                                                    onClick={() => setProperty('debug.tileDebugMode', 'state')}
-                                                >
-                                                    {t('By State', lang)}
-                                                </button>
-                                                <button
-                                                    type='button'
-                                                    className={`materials-layer-item${observerData?.debug?.tileDebugMode === 'lod' ? ' selected' : ''}`}
-                                                    onClick={() => setProperty('debug.tileDebugMode', 'lod')}
-                                                >
-                                                    {t('By LOD', lang)}
-                                                </button>
-                                            </div>
-                                        )}
+                                        <button
+                                            type='button'
+                                            className={`materials-layer-item${observerData?.debug?.tileFreeze ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.tileFreeze', !observerData?.debug?.tileFreeze)}
+                                        >
+                                            {t('Freeze Camera + FOV', lang)}
+                                        </button>
+                                        <button
+                                            type='button'
+                                            className={`materials-layer-item${observerData?.debug?.tilePaused ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.tilePaused', !observerData?.debug?.tilePaused)}
+                                        >
+                                            {t('Pause Loading', lang)}
+                                        </button>
                                         {observerData?.debug?.tileDebug && (
                                             <>
-                                                <button
-                                                    type='button'
-                                                    className={`materials-layer-item${observerData?.debug?.tileFreeze ? ' selected' : ''}`}
-                                                    onClick={() => setProperty('debug.tileFreeze', !observerData?.debug?.tileFreeze)}
-                                                >
-                                                    {t('Freeze Camera + FOV', lang)}
-                                                </button>
                                                 <div className='materials-layer-normals-row'>
                                                     <button
                                                         type='button'
-                                                        className={`materials-layer-item${observerData?.debug?.tilePaused ? ' selected' : ''}`}
-                                                        onClick={() => setProperty('debug.tilePaused', !observerData?.debug?.tilePaused)}
+                                                        className={`materials-layer-item${observerData?.debug?.tileLineStyle === 'solid' ? ' selected' : ''}`}
+                                                        onClick={() => setProperty('debug.tileLineStyle', 'solid')}
                                                     >
-                                                        {t('Pause Loading', lang)}
+                                                        {t('Solid Frame', lang)}
                                                     </button>
                                                     <button
                                                         type='button'
-                                                        className='materials-layer-item'
-                                                        onClick={() => getViewer()?.stepTileLoading?.()}
+                                                        className={`materials-layer-item${observerData?.debug?.tileLineStyle !== 'solid' ? ' selected' : ''}`}
+                                                        onClick={() => setProperty('debug.tileLineStyle', 'checker')}
                                                     >
-                                                        {t('Step', lang)}
+                                                        {t('Checker Frame', lang)}
                                                     </button>
                                                 </div>
+                                                <div className='materials-layer-normals-row'>
+                                                    <button
+                                                        type='button'
+                                                        className={`materials-layer-item${(observerData?.debug?.tileDebugMode ?? 'state') !== 'lod' ? ' selected' : ''}`}
+                                                        onClick={() => setProperty('debug.tileDebugMode', 'state')}
+                                                    >
+                                                        {t('By State', lang)}
+                                                    </button>
+                                                    <button
+                                                        type='button'
+                                                        className={`materials-layer-item${observerData?.debug?.tileDebugMode === 'lod' ? ' selected' : ''}`}
+                                                        onClick={() => setProperty('debug.tileDebugMode', 'lod')}
+                                                    >
+                                                        {t('By LOD', lang)}
+                                                    </button>
+                                                </div>
+                                                {observerData?.debug?.tileLineStyle !== 'solid' && (
+                                                    <>
+                                                        <button
+                                                            type='button'
+                                                            className={`materials-layer-item${observerData?.debug?.tileCheckerFill ? ' selected' : ''}`}
+                                                            onClick={() => setProperty('debug.tileCheckerFill', !observerData?.debug?.tileCheckerFill)}
+                                                        >
+                                                            {t('Checker Fill', lang)}
+                                                        </button>
+                                                    </>
+                                                )}
+                                                <Slider
+                                                    label={t('Line Thickness', lang)}
+                                                    precision={1}
+                                                    min={0.5}
+                                                    max={8}
+                                                    step={0.5}
+                                                    value={observerData?.debug?.tileLineThickness ?? 2}
+                                                    setProperty={(value: number) => setProperty('debug.tileLineThickness', value)}
+                                                />
+                                                <button
+                                                    type='button'
+                                                    className={`materials-layer-item${observerData?.debug?.tilePick ? ' selected' : ''}`}
+                                                    onClick={() => setProperty('debug.tilePick', !observerData?.debug?.tilePick)}
+                                                >
+                                                    {t('Pick Tile', lang)}
+                                                </button>
+                                                {observerData?.debug?.tilePick && (
+                                                    <button
+                                                        type='button'
+                                                        className={`materials-layer-item${observerData?.debug?.tileIsolatePick ? ' selected' : ''}`}
+                                                        onClick={() => setProperty('debug.tileIsolatePick', !observerData?.debug?.tileIsolatePick)}
+                                                    >
+                                                        {t('Isolate Picked Tile', lang)}
+                                                    </button>
+                                                )}
                                             </>
                                         )}
                                     </div>

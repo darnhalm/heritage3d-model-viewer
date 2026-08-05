@@ -533,7 +533,7 @@ class DebugSolid {
 
     colorData: Uint32Array;
 
-    constructor(app: App, camera: Entity) {
+    constructor(app: App, camera: Entity, overlay = true) {
         const device = app.graphicsDevice;
 
         ensureDebugLayers(app, camera);
@@ -552,12 +552,14 @@ class DebugSolid {
 
         const material = new ShaderMaterial(debugShaderArgs('debug-solid'));
         material.setParameter('uColor', [1, 1, 1, 1]);
-        // Толстые контуры-ленты рисуем ПОВЕРХ модели: тест глубины отключён (`FUNC_ALWAYS`),
-        // запись глубины тоже — иначе bounding-боксы (крупнее геометрии) уходили за модель и
-        // контуры пропадали. Нормальный бленд, обе стороны (лента повёрнута к камере).
+        // Контуры рисуем поверх модели, а опциональную заливку — с обычным тестом глубины.
+        // Запись глубины в обоих случаях выключена: прозрачная геометрия не должна менять
+        // видимость модели и следующих отладочных примитивов.
         material.blendType = BLEND_NORMAL;
         material.cull = CULLFACE_NONE;
-        material.depthState.func = FUNC_ALWAYS;
+        if (overlay) {
+            material.depthState.func = FUNC_ALWAYS;
+        }
         material.depthState.write = false;
         material.update();
 
