@@ -123,6 +123,18 @@ const doubleTapDelay = 400;
 const doubleTapRadius = 45;
 const RIPPLE_CAMERA_DELAY_MS = 380;
 const RIPPLE_REMOVE_MS = 900;
+
+type FrozenTileCamera = {
+    world: Mat4;
+    focus: Vec3;
+    fov: number;
+    horizontalFov: boolean;
+    aspect: number;
+    nearClip: number;
+    farClip: number;
+    orthographic: boolean;
+    orthoHeight: number;
+};
 type TextureAssetFile = { filename?: string };
 type TextureLike = {
     name?: string;
@@ -595,6 +607,14 @@ class Viewer {
 
     /** Толстые контуры OBB выбранных тайлов. */
     debugTilesSolid: DebugSolid;
+
+    /** Каркас, оси и сетка замороженной камеры отбора тайлов. */
+    debugTileCamera: DebugLines;
+
+    /** Полупрозрачный объём FOV замороженной камеры. */
+    debugTileCameraSolid: DebugSolid;
+
+    private frozenTileCamera: FrozenTileCamera | null = null;
 
     /** DOM-оверлей со статистикой тайлов; создаётся лениво при первом включении. */
     private tileHud: HTMLDivElement | null = null;
@@ -1081,6 +1101,8 @@ class Viewer {
         // Задний слой включён: боксы тайлов за геометрией видны приглушённо.
         this.debugTiles = new DebugLines(app, camera);
         this.debugTilesSolid = new DebugSolid(app, camera);
+        this.debugTileCamera = new DebugLines(app, camera);
+        this.debugTileCameraSolid = new DebugSolid(app, camera);
 
         // construct ministats, default off
         this.miniStats = new MiniStats(app);
@@ -1707,7 +1729,15 @@ class Viewer {
             },
             'debug.tileDebugMode': () => this.renderNextFrame(),
             'debug.tileFreeze': (value: boolean) => {
-                this.tileManager?.setFrozen(value);
+                if (value) {
+                    this.captureFrozenTileCamera(true);
+                    this.tileManager?.setFrozen(true);
+                    this.enterFrozenTileCameraInspector();
+                } else {
+                    this.restoreFrozenTileCameraView();
+                    this.tileManager?.setFrozen(false);
+                    this.captureFrozenTileCamera(false);
+                }
                 this.renderNextFrame();
             },
             'debug.tilePaused': (value: boolean) => {
@@ -4690,6 +4720,165 @@ class Viewer {
     }
 
     /**
+     * Сохранить позу и оптику камеры в момент Freeze. После этого живая камера свободно
+     * двигается как инспектор, а менеджер тайлов продолжает считать выбор от того же вида.
+     *
+     * @param enabled - Создать или удалить снимок камеры.
+     */
+    private captureFrozenTileCamera(enabled: boolean) {
+        if (!enabled || !this.tileManager) {
+            this.frozenTileCamera = null;
+            return;
+        }
+        const camera = this.camera.camera;
+        this.frozenTileCamera = {
+            world: this.camera.getWorldTransform().clone(),
+            focus: this.cameraControls.getFocus().clone(),
+            fov: camera.fov,
+            horizontalFov: camera.horizontalFov,
+            aspect: camera.aspectRatio || 1,
+            nearClip: camera.nearClip,
+            farClip: camera.farClip,
+            orthographic: camera.projection === 1,
+            orthoHeight: camera.orthoHeight
+        };
+    }
+
+    /** Перевести живую камеру в боковой ракурс, где одновременно видны сцена и камера отбора. */
+    private enterFrozenTileCameraInspector() {
+        const frozen = this.frozenTileCamera;
+        if (!frozen) return;
+
+        const origin = new Vec3();
+        frozen.world.getTranslation(origin);
+        const focus = frozen.focus;
+        const radius = Math.max(this.sceneBounds.halfExtents.length(), 0.01);
+        const span = Math.max(origin.distance(focus) + radius, radius * 2, 1);
+        const viewDirection = new Vec3().sub2(focus, origin).normalize();
+        const side = new Vec3().cross(viewDirection, Vec3.UP);
+        if (side.lengthSq() < 1e-8) {
+            side.copy(Vec3.RIGHT);
+        } else {
+            side.normalize();
+        }
+        const target = new Vec3(
+            origin.x + (focus.x - origin.x) * 0.55,
+            origin.y + (focus.y - origin.y) * 0.55,
+            origin.z + (focus.z - origin.z) * 0.55
+        );
+        const observerPosition = target.clone()
+        .add(side.mulScalar(span * 0.82))
+        .add(new Vec3(0, span * 0.38, 0));
+        this.cameraControls.reset(target, observerPosition);
+        this.fitCameraClipPlanes();
+    }
+
+    /** Вернуть рабочую камеру в сохранённый вид при выходе из inspector-режима. */
+    private restoreFrozenTileCameraView() {
+        const frozen = this.frozenTileCamera;
+        if (!frozen) return;
+
+        const position = new Vec3();
+        frozen.world.getTranslation(position);
+        const camera = this.camera.camera;
+        camera.fov = frozen.fov;
+        camera.horizontalFov = frozen.horizontalFov;
+        camera.projection = frozen.orthographic ? 1 : 0;
+        camera.orthoHeight = frozen.orthoHeight;
+        this.cameraControls.reset(frozen.focus, position);
+        this.fitCameraClipPlanes();
+    }
+
+    /** Нарисовать замороженную камеру: RGB-оси, каркас/сетку и полупрозрачный объём FOV. */
+    private drawFrozenTileCamera() {
+        this.debugTileCamera.clear();
+        this.debugTileCameraSolid.clear();
+
+        const frozen = this.frozenTileCamera;
+        if (!frozen || !this.observer.get('debug.tileFreeze')) {
+            this.debugTileCamera.update();
+            this.debugTileCameraSolid.update();
+            return;
+        }
+
+        const origin = new Vec3();
+        frozen.world.getTranslation(origin);
+        const radius = Math.max(this.sceneBounds.halfExtents.length(), 0.01);
+        const distanceToScene = origin.distance(this.sceneBounds.center);
+        const desiredLength = Math.max(radius * 1.5, distanceToScene + radius * 0.35, 0.5);
+        const farDistance = Math.max(
+            frozen.nearClip * 2,
+            Math.min(frozen.farClip, desiredLength)
+        );
+        const nearDistance = Math.min(
+            farDistance * 0.25,
+            Math.max(frozen.nearClip, farDistance * 0.025)
+        );
+
+        let verticalFov = frozen.fov * math.DEG_TO_RAD;
+        if (frozen.horizontalFov) {
+            verticalFov = 2 * Math.atan(Math.tan(verticalFov * 0.5) / frozen.aspect);
+        }
+
+        const cornersAt = (distance: number) => {
+            const halfHeight = frozen.orthographic ?
+                frozen.orthoHeight :
+                Math.tan(verticalFov * 0.5) * distance;
+            const halfWidth = halfHeight * frozen.aspect;
+            return [
+                new Vec3(-halfWidth, halfHeight, -distance),
+                new Vec3(halfWidth, halfHeight, -distance),
+                new Vec3(halfWidth, -halfHeight, -distance),
+                new Vec3(-halfWidth, -halfHeight, -distance)
+            ].map(point => frozen.world.transformPoint(point, point));
+        };
+        const nearCorners = cornersAt(nearDistance);
+        const farCorners = cornersAt(farDistance);
+
+        // Оси камеры: X красный, Y зелёный, Z синий. Жёлтая линия показывает направление -Z.
+        const axisSize = Math.max(radius * 0.08, farDistance * 0.04, 0.05);
+        this.debugTileCamera.axis(frozen.world, axisSize);
+        const farCenter = new Vec3();
+        frozen.world.transformPoint(new Vec3(0, 0, -farDistance), farCenter);
+        this.debugTileCamera.line(origin, farCenter, 0xff00ffff);
+
+        for (let i = 0; i < 4; ++i) {
+            const next = (i + 1) % 4;
+            this.debugTileCamera.line(nearCorners[i], nearCorners[next], 0xffffffff);
+            this.debugTileCamera.line(farCorners[i], farCorners[next], 0xff00ffff);
+            this.debugTileCamera.line(
+                frozen.orthographic ? nearCorners[i] : origin,
+                farCorners[i],
+                0xffffff00
+            );
+        }
+
+        // Сетка дальнего сечения делает угол/аспект FOV читаемыми со стороны.
+        const interpolate = (a: Vec3, b: Vec3, t: number) => new Vec3(
+            a.x + (b.x - a.x) * t,
+            a.y + (b.y - a.y) * t,
+            a.z + (b.z - a.z) * t
+        );
+        for (let i = 1; i < 4; ++i) {
+            const t = i / 4;
+            this.debugTileCamera.line(
+                interpolate(farCorners[0], farCorners[1], t),
+                interpolate(farCorners[3], farCorners[2], t),
+                0x8000ffff
+            );
+            this.debugTileCamera.line(
+                interpolate(farCorners[0], farCorners[3], t),
+                interpolate(farCorners[1], farCorners[2], t),
+                0x8000ffff
+            );
+        }
+
+        this.debugTileCameraSolid.frustumFaces(nearCorners, farCorners);
+        this.debugTileCamera.update();
+        this.debugTileCameraSolid.update();
+    }
+
+    /**
      * Пошаговая загрузка тайлов: запустить одну заявку из очереди (Фаза 2 отладки).
      *
      * @returns `true`, если было что запустить.
@@ -6090,6 +6279,7 @@ class Viewer {
         this.debugTiles.update();
         this.debugTilesSolid.update();
         this.updateTileHud();
+        this.drawFrozenTileCamera();
 
         // measurement overlays (thick 2D SVG line + crosses)
         // keep DebugLines buffer empty so measurements are always overlay-only (never depth-tested / occluded by mesh)

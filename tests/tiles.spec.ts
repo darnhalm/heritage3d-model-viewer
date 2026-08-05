@@ -348,14 +348,60 @@ test('Фаза 2: заморозка фрустума фиксирует отб�
     // Замораживаем и подлетаем вплотную: отбор считается от «дальней» камеры, поэтому
     // уровень детализации не должен измениться, хотя камера уехала.
     await setFlag(page, 'debug.tileFreeze', true);
+    await pumpFrames(page, 5);
+    const automaticInspector = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const frozen = viewer.frozenTileCamera.world.data;
+        const live = viewer.camera.getPosition();
+        return Math.hypot(live.x - frozen[12], live.y - frozen[13], live.z - frozen[14]);
+    });
+    expect(automaticInspector).toBeGreaterThan(1000);
     await placeCamera(page, 900);
     const frozen = await getStats(page);
     expect(frozen.maxSelectedDepth).toBe(far.maxSelectedDepth);
     expect(frozen.selected).toBe(far.selected);
-
-    // Разморозка — обход снова считает от живой (близкой) камеры, уровень углубляется.
+    const inspector = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const frozenWorld = viewer.frozenTileCamera?.world?.data;
+        const live = viewer.camera.getPosition();
+        return {
+            lineVisible: viewer.debugTileCamera.meshInstances[0].visible,
+            lineCount: viewer.debugTileCamera.mesh.primitive[0].count,
+            solidVisible: viewer.debugTileCameraSolid.meshInstance.visible,
+            solidCount: viewer.debugTileCameraSolid.mesh.primitive[0].count,
+            frozenPosition: frozenWorld ? [frozenWorld[12], frozenWorld[13], frozenWorld[14]] : null,
+            livePosition: [live.x, live.y, live.z]
+        };
+    });
+    expect(inspector.lineVisible).toBe(true);
+    expect(inspector.lineCount).toBeGreaterThan(20);
+    expect(inspector.solidVisible).toBe(true);
+    expect(inspector.solidCount).toBeGreaterThan(0);
+    expect(inspector.frozenPosition).not.toBeNull();
+    expect(Math.hypot(
+        inspector.livePosition[0] - (inspector.frozenPosition?.[0] ?? 0),
+        inspector.livePosition[1] - (inspector.frozenPosition?.[1] ?? 0),
+        inspector.livePosition[2] - (inspector.frozenPosition?.[2] ?? 0)
+    )).toBeGreaterThan(1000);
+    // Разморозка возвращает рабочую камеру в сохранённую позу; после нового подлёта обход
+    // снова считается от живой камеры и уровень углубляется.
     await setFlag(page, 'debug.tileFreeze', false);
-    await pumpFrames(page, 120);
+    await pumpFrames(page, 10);
+    const restored = await getStats(page);
+    expect(restored.maxSelectedDepth).toBe(frozen.maxSelectedDepth);
+    const inspectorOff = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        return {
+            lineVisible: viewer.debugTileCamera.meshInstances[0].visible,
+            solidVisible: viewer.debugTileCameraSolid.meshInstance.visible,
+            snapshot: viewer.frozenTileCamera
+        };
+    });
+    expect(inspectorOff.lineVisible).toBe(false);
+    expect(inspectorOff.solidVisible).toBe(false);
+    expect(inspectorOff.snapshot).toBeNull();
+
+    await placeCamera(page, 900);
     const live = await getStats(page);
     expect(live.maxSelectedDepth).toBeGreaterThan(frozen.maxSelectedDepth);
 

@@ -644,6 +644,26 @@ class DebugSolid {
         }
     }
 
+    /**
+     * Полупрозрачные грани усечённой пирамиды/ортографического фрустума камеры.
+     * Углы идут по кругу: верх-лево, верх-право, низ-право, низ-лево.
+     *
+     * @param nearCorners - Четыре угла ближнего сечения.
+     * @param farCorners - Четыре угла дальнего сечения.
+     * @param sideClr - Цвет боковых граней (0xAABBGGRR).
+     * @param capClr - Цвет дальнего сечения (0xAABBGGRR).
+     */
+    frustumFaces(nearCorners: Vec3[], farCorners: Vec3[], sideClr = 0x12ffff00, capClr = 0x0800ffff): void {
+        if (nearCorners.length < 4 || farCorners.length < 4) {
+            return;
+        }
+        for (let i = 0; i < 4; ++i) {
+            const next = (i + 1) % 4;
+            this.quad(nearCorners[i], nearCorners[next], farCorners[next], farCorners[i], sideClr);
+        }
+        this.quad(farCorners[0], farCorners[1], farCorners[2], farCorners[3], capClr);
+    }
+
     // Толстая линия p0→p1 как повёрнутая к камере лента шириной ~`width·dist` (постоянная в
     // пикселях). Ширина растёт с расстоянием, поэтому на экране толщина примерно одинаковая.
     private thickLine(p0: Vec3, p1: Vec3, camPos: Vec3, width: number, clr: number): void {

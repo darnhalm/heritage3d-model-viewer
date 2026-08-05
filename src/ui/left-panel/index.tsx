@@ -1256,7 +1256,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     className={`materials-layer-item${observerData?.debug?.tileFreeze ? ' selected' : ''}`}
                                                     onClick={() => setProperty('debug.tileFreeze', !observerData?.debug?.tileFreeze)}
                                                 >
-                                                    {t('Freeze Frustum', lang)}
+                                                    {t('Freeze Camera + FOV', lang)}
                                                 </button>
                                                 <div className='materials-layer-normals-row'>
                                                     <button

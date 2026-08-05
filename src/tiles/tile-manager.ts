@@ -880,6 +880,18 @@ export class TileManager {
      * @param value - Замораживать ли.
      */
     setFrozen(value: boolean) {
+        // Снимок делаем непосредственно в момент нажатия, а не полагаемся на данные
+        // предыдущего кадра: визуализируемая камера и источник LOD должны совпадать точно.
+        if (value && !this.frozen) {
+            const camera = this.camera.camera;
+            if (camera) {
+                tmpMat.mul2(camera.projectionMatrix, camera.viewMatrix);
+                this.frustum.setFromMat4(tmpMat);
+                this.view.cameraPos.copy(this.camera.getPosition());
+                this.view.viewportHeight = Math.max(1, this.app.graphicsDevice.height);
+                this.view.sseDenominator = 2 * Math.tan(0.5 * verticalFovRadians(camera));
+            }
+        }
         this.frozen = value;
     }
 
