@@ -202,7 +202,11 @@ const observerData: ObserverData = {
         withTextureOnly: false,
         texelDensityHeatmap: false,
         tileDebug: false,
-        tileDebugMode: 'state'
+        tileDebugMode: 'state',
+        tileFreeze: false,
+        tilePaused: false,
+        tileLodLock: false,
+        tileLodLevel: 0
     },
     animation: {
         playing: false,
@@ -270,7 +274,8 @@ const observerData: ObserverData = {
         selectedCamera: '',
         hasGsplat: false,
         isTileset: false,
-        tilesetLit: null
+        tilesetLit: null,
+        tilesetMaxDepth: 0
     },
     runtime: {
         activeDeviceType: '',

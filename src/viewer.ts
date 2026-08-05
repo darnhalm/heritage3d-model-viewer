@@ -92,7 +92,7 @@ import { serializeCompressedPly } from 'spz-js';
 
 import { App } from './app';
 import { CameraControls } from './camera-controls';
-import { DebugLines } from './debug-lines';
+import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { t } from './i18n/translations';
 import { Multiframe } from './multiframe';
@@ -590,14 +590,18 @@ class Viewer {
 
     debugRuler: DebugLines;
 
-    /** Отладочные OBB тайлов (Фаза 1 визуализации тайлового слоя). */
+    /** Отладочные OBB тайлов — рёбра (Фаза 1 визуализации тайлового слоя). */
     debugTiles: DebugLines;
+
+    /** Толстые контуры OBB выбранных тайлов. */
+    debugTilesSolid: DebugSolid;
 
     /** DOM-оверлей со статистикой тайлов; создаётся лениво при первом включении. */
     private tileHud: HTMLDivElement | null = null;
 
-    // Навигационный куб (как в 3ds Max) + иконка орто/перспектива — видны только в режиме выравнивания.
+    // Навигационный куб (как в 3ds Max) + иконка орто/перспектива для выравнивания и Tiles Debug.
     private viewCube: ViewCube | null = null;
+
     private orthoButton: HTMLButtonElement | null = null;
 
     miniStats: MiniStats;
@@ -1076,6 +1080,7 @@ class Viewer {
         this.debugRuler = new DebugLines(app, camera, false);
         // Задний слой включён: боксы тайлов за геометрией видны приглушённо.
         this.debugTiles = new DebugLines(app, camera);
+        this.debugTilesSolid = new DebugSolid(app, camera);
 
         // construct ministats, default off
         this.miniStats = new MiniStats(app);
@@ -1696,8 +1701,21 @@ class Viewer {
             'debug.renderMode': this.setRenderMode.bind(this),
             // Отладка тайлов: отрисовка не gated dirty-флагом (onPrerender читает флаги живьём),
             // поэтому достаточно попросить кадр — там оверлей либо нарисуется, либо очистится.
-            'debug.tileDebug': () => this.renderNextFrame(),
+            'debug.tileDebug': () => {
+                this.updateViewCubeVisibility();
+                this.renderNextFrame();
+            },
             'debug.tileDebugMode': () => this.renderNextFrame(),
+            'debug.tileFreeze': (value: boolean) => {
+                this.tileManager?.setFrozen(value);
+                this.renderNextFrame();
+            },
+            'debug.tilePaused': (value: boolean) => {
+                this.tileManager?.setPaused(value);
+                this.renderNextFrame();
+            },
+            'debug.tileLodLock': () => this.applyTileLodIsolate(),
+            'debug.tileLodLevel': () => this.applyTileLodIsolate(),
 
             // animation
             'animation.playing': (playing: boolean) => {
@@ -2111,6 +2129,7 @@ class Viewer {
         this.observer.set('scene.texelDensityReport', '[]');
         this.observer.set('scene.hasGsplat', false);
         this.observer.set('scene.isTileset', false);
+        this.updateViewCubeVisibility();
         this.observer.set('scene.tilesetLit', null);
         // Пустая иерархия снова прячет нижний ряд экранных кнопок (`#popup.empty`). Для
         // обычной модели её тут же перезапишет `postSceneLoad`; для тайлсета — свой узел
@@ -3761,11 +3780,18 @@ class Viewer {
         this.orthoButton.title = ortho ? 'Проекция: ортогональная (клик → перспектива)' : 'Проекция: перспектива (клик → ортогональная)';
     }
 
-    /** Показать/скрыть навигационный куб и иконку проекции (режим выравнивания). */
+    /** Показать/скрыть навигационный куб и иконку проекции. */
     setViewCubeVisible(visible: boolean) {
         if (this.viewCube) this.viewCube.dom.style.display = visible ? '' : 'none';
         if (this.orthoButton) this.orthoButton.style.display = visible ? '' : 'none';
         if (visible) this.updateOrthoButton();
+    }
+
+    /** Куб ориентации нужен в выравнивании и при активной визуализации 3D Tiles. */
+    private updateViewCubeVisibility() {
+        const visible = !!this.observer.get('debug.alignmentMode') ||
+            (!!this.observer.get('scene.isTileset') && !!this.observer.get('debug.tileDebug'));
+        this.setViewCubeVisible(visible);
     }
 
     /** Выровнять камеру по направлению (от ViewCube): сохраняем дистанцию орбиты. */
@@ -4526,6 +4552,13 @@ class Viewer {
         // (см. `handleTileChange`). Панель по этому флагу подписывает «Final Render (lit)».
         this.observer.set('scene.tilesetLit', null);
 
+        // Отладочные заморозка/пауза/зажим LOD относятся к прошлому тайлсету — сбрасываем,
+        // иначе новый грузился бы на паузе, от чужой замороженной камеры или с чужим зажимом.
+        this.observer.set('debug.tileFreeze', false);
+        this.observer.set('debug.tilePaused', false);
+        this.observer.set('debug.tileLodLock', false);
+        this.observer.set('scene.tilesetMaxDepth', 0);
+
         const manager = new TileManager({
             app: this.app,
             camera: this.camera,
@@ -4564,6 +4597,10 @@ class Viewer {
             // работают (UV-раскладки строятся из статического `meshInstances`, а он пуст),
             // и переключатель «по объектам».
             this.observer.set('scene.isTileset', true);
+            this.updateViewCubeVisibility();
+            // Верх ползунка LOD — глубина уже загруженного дерева (растёт по мере
+            // разворачивания неявного дерева, см. handleTileChange).
+            this.observer.set('scene.tilesetMaxDepth', manager.getTreeDepth());
 
             // Габариты нужны до кадрирования, причём оба набора: `frameScene` считает по
             // `sceneBounds`, а плоскости отсечения — по `dynamicSceneBounds`, который
@@ -4620,11 +4657,19 @@ class Viewer {
                 this.observer.set('scene.tilesetLit', material.useLighting !== false);
             }
         }
+        // Неявное дерево разворачивается по мере зума — верх ползунка LOD растёт вместе с ним.
+        if (this.tileManager) {
+            const depth = this.tileManager.getTreeDepth();
+            if (depth > Number(this.observer.get('scene.tilesetMaxDepth') ?? 0)) {
+                this.observer.set('scene.tilesetMaxDepth', depth);
+            }
+        }
     }
 
     private destroyTileManager() {
         this.tileManager?.destroy();
         this.tileManager = null;
+        this.updateViewCubeVisibility();
     }
 
     /**
@@ -4634,6 +4679,25 @@ class Viewer {
      */
     getTileStats() {
         return this.tileManager?.getStats() ?? null;
+    }
+
+    /** Применить к менеджеру текущую изоляцию уровня LOD из observer. */
+    private applyTileLodIsolate() {
+        const locked = !!this.observer.get('debug.tileLodLock');
+        const level = Number(this.observer.get('debug.tileLodLevel') ?? 0);
+        this.tileManager?.setLodIsolate(locked ? level : null);
+        this.renderNextFrame();
+    }
+
+    /**
+     * Пошаговая загрузка тайлов: запустить одну заявку из очереди (Фаза 2 отладки).
+     *
+     * @returns `true`, если было что запустить.
+     */
+    stepTileLoading(): boolean {
+        const stepped = this.tileManager?.stepLoad() ?? false;
+        this.renderNextFrame();
+        return stepped;
     }
 
     // set the currently selected track
@@ -4991,9 +5055,9 @@ class Viewer {
 
         this.rotateGizmo.enabled = false;
         this.translateGizmo.enabled = false;
-        // Навигационный куб + иконка проекции — инструменты «песочницы» выравнивания:
-        // показываем при входе, прячем при выходе.
-        this.setViewCubeVisible(enabled);
+        // Куб используется и выравниванием, и инспектором тайлов; выход из одного режима
+        // не должен прятать инструмент, пока второй остаётся активным.
+        this.updateViewCubeVisibility();
         if (enabled) {
             this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
         } else {
@@ -6018,11 +6082,13 @@ class Viewer {
         // debug tiles overlay (Фаза 1): OBB активных тайлов + живой HUD.
         // Не gated dirty-флагом: набор и состояния тайлов при стриминге меняются каждый кадр.
         this.debugTiles.clear();
+        this.debugTilesSolid.clear();
         if (this.tileManager && this.observer.get('debug.tileDebug')) {
             const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'state';
-            this.tileManager.debugDraw(this.debugTiles, mode);
+            this.tileManager.debugDraw(this.debugTiles, this.debugTilesSolid, mode);
         }
         this.debugTiles.update();
+        this.debugTilesSolid.update();
         this.updateTileHud();
 
         // measurement overlays (thick 2D SVG line + crosses)
@@ -6068,8 +6134,12 @@ class Viewer {
         const s = this.tileManager.getStats();
         const mb = (s.bytes / (1024 * 1024)).toFixed(1);
         const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'state';
+        const flags = [
+            this.observer.get('debug.tileFreeze') ? 'FROZEN' : '',
+            this.observer.get('debug.tilePaused') ? 'PAUSED' : ''
+        ].filter(Boolean).join(' ');
         this.tileHud.textContent =
-            `TILES ${s.tiles}   mode: ${mode}\n` +
+            `TILES ${s.tiles}   mode: ${mode}${flags ? `   ${flags}` : ''}\n` +
             `ready ${s.ready}  loading ${s.loading}  queued ${s.queued}  failed ${s.failed}\n` +
             `selected ${s.selected}   depth ${s.maxSelectedDepth}   ${mb} MB`;
     }

@@ -63,6 +63,7 @@ type ViewerApi = {
     updatePoiAnimTo?: (id: string, value: number | null) => void;
     updatePoiAnimFps?: (id: string, value: number | null) => void;
     removePoi?: (id: string) => void;
+    stepTileLoading?: () => boolean;
 };
 
 const getViewer = (): ViewerApi | undefined => (window as Window & { viewer?: ViewerApi }).viewer;
@@ -721,7 +722,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'graphicsBackend', 'ui.language', 'animation.list'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.isTileset', 'scene.tilesetMaxDepth', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'graphicsBackend', 'ui.language', 'animation.list'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) ||
@@ -1200,11 +1201,29 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         </div>
                                     </div>
                                 )}
-                                {/* Отладка тайлов: OBB активных тайлов + живой HUD. Только для
+                                {/* Отладка тайлов: OBB-контуры + HUD. Только для
                                     тайлсетов — вешаем в слот, где для них скрыты UV/Geometry. */}
                                 {observerData?.scene?.isTileset && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Tiles Debug', lang)} (1)</div>
+                                        <button
+                                            type='button'
+                                            className={`materials-layer-item${observerData?.debug?.tileLodLock ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.tileLodLock', !observerData?.debug?.tileLodLock)}
+                                        >
+                                            {t('Isolate LOD Level', lang)}
+                                        </button>
+                                        {observerData?.debug?.tileLodLock && (
+                                            <Slider
+                                                label={t('LOD Level', lang)}
+                                                precision={0}
+                                                min={0}
+                                                max={Math.max(0, observerData?.scene?.tilesetMaxDepth ?? 0)}
+                                                step={1}
+                                                value={Math.min(observerData?.debug?.tileLodLevel ?? 0, observerData?.scene?.tilesetMaxDepth ?? 0)}
+                                                setProperty={(value: number) => setProperty('debug.tileLodLevel', value)}
+                                            />
+                                        )}
                                         <button
                                             type='button'
                                             className={`materials-layer-item${observerData?.debug?.tileDebug ? ' selected' : ''}`}
@@ -1229,6 +1248,33 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     {t('By LOD', lang)}
                                                 </button>
                                             </div>
+                                        )}
+                                        {observerData?.debug?.tileDebug && (
+                                            <>
+                                                <button
+                                                    type='button'
+                                                    className={`materials-layer-item${observerData?.debug?.tileFreeze ? ' selected' : ''}`}
+                                                    onClick={() => setProperty('debug.tileFreeze', !observerData?.debug?.tileFreeze)}
+                                                >
+                                                    {t('Freeze Frustum', lang)}
+                                                </button>
+                                                <div className='materials-layer-normals-row'>
+                                                    <button
+                                                        type='button'
+                                                        className={`materials-layer-item${observerData?.debug?.tilePaused ? ' selected' : ''}`}
+                                                        onClick={() => setProperty('debug.tilePaused', !observerData?.debug?.tilePaused)}
+                                                    >
+                                                        {t('Pause Loading', lang)}
+                                                    </button>
+                                                    <button
+                                                        type='button'
+                                                        className='materials-layer-item'
+                                                        onClick={() => getViewer()?.stepTileLoading?.()}
+                                                    >
+                                                        {t('Step', lang)}
+                                                    </button>
+                                                </div>
+                                            </>
                                         )}
                                     </div>
                                 )}

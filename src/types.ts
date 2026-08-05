@@ -124,7 +124,15 @@ export interface ObserverData {
         /** Отладочный оверлей тайлов: OBB активных тайлов + живой HUD. */
         tileDebug?: boolean,
         /** Раскраска OBB: по состоянию загрузки или по глубине LOD. */
-        tileDebugMode?: 'state' | 'lod'
+        tileDebugMode?: 'state' | 'lod',
+        /** Заморозка отбора: LOD считается от камеры на момент заморозки. */
+        tileFreeze?: boolean,
+        /** Пауза загрузки тайлов (пошаговый режим через кнопку «шаг»). */
+        tilePaused?: boolean,
+        /** Зажим уровня LOD: показывать не глубже выбранной глубины. */
+        tileLodLock?: boolean,
+        /** Выбранная глубина LOD при зажиме. */
+        tileLodLevel?: number
     },
     animation: {
         playing: boolean,
@@ -200,7 +208,9 @@ export interface ObserverData {
         selectedCamera: string,
         hasGsplat?: boolean,
         isTileset?: boolean,
-        tilesetLit?: boolean | null
+        tilesetLit?: boolean | null,
+        /** Глубина дерева тайлов — верх ползунка LOD в панели. */
+        tilesetMaxDepth?: number
     },
     morphs?: Record<string, {
         name: string,

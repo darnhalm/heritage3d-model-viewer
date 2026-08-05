@@ -1,8 +1,11 @@
 import {
     BLEND_NORMAL,
     BUFFER_DYNAMIC,
+    CULLFACE_NONE,
+    FUNC_ALWAYS,
     FUNC_GREATER,
     PRIMITIVE_LINES,
+    PRIMITIVE_TRIANGLES,
     SEMANTIC_BLENDINDICES,
     SEMANTIC_BLENDWEIGHT,
     SEMANTIC_NORMAL,
@@ -42,6 +45,22 @@ const obbEdges: [number, number][] = [
     [0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3],
     [2, 6], [3, 7], [4, 5], [4, 6], [5, 7], [6, 7]
 ];
+// Шесть граней OBB для шахматной заливки: (полуось A в плоскости, B в плоскости, нормаль N,
+// знак нормали). Ячейки грани строятся из A и B, положение грани — из sign·N.
+const obbFaceAxes: [0 | 1 | 2, 0 | 1 | 2, 0 | 1 | 2, 1 | -1][] = [
+    [0, 1, 2, 1], [0, 1, 2, -1],
+    [1, 2, 0, 1], [1, 2, 0, -1],
+    [2, 0, 1, 1], [2, 0, 1, -1]
+];
+// Скретч для граней/лент — без аллокаций в кадре (vertex() копирует значения сразу).
+const sp0 = new Vec3();
+const sp1 = new Vec3();
+const sp2 = new Vec3();
+const sp3 = new Vec3();
+const sedge = new Vec3();
+const sview = new Vec3();
+const sperp = new Vec3();
+const smid = new Vec3();
 const unitBone = [
     [[0,    0,   0], [-0.5, 0, 0.3]],
     [[0,    0,   0], [0.5,  0, 0.3]],
@@ -139,6 +158,65 @@ fn fragmentMain(input: FragmentInput) -> FragmentOutput {
 }
 `;
 
+/**
+ * Создать (однократно) отладочные слои — задний и передний — и подключить их к камере.
+ * Общие для линий и заливки, чтобы отладка рисовалась одним проходом поверх сцены.
+ *
+ * @param app - Приложение.
+ * @param camera - Камера, к которой подключаются слои.
+ */
+function ensureDebugLayers(app: App, camera: Entity): void {
+    if (debugLayerFront) {
+        return;
+    }
+    debugLayerBack = new Layer({
+        enabled: true,
+        name: 'Debug Layer Behind',
+        opaqueSortMode: SORTMODE_NONE,
+        transparentSortMode: SORTMODE_NONE,
+        passThrough: true,
+        overrideClear: true
+    });
+
+    debugLayerFront = new Layer({
+        enabled: true,
+        name: 'Debug Layer',
+        opaqueSortMode: SORTMODE_NONE,
+        transparentSortMode: SORTMODE_NONE,
+        passThrough: true,
+        overrideClear: true
+    });
+
+    const layers = app.scene.layers;
+    const worldLayer = layers.getLayerByName('World');
+    const idx = layers.getTransparentIndex(worldLayer);
+
+    layers.insert(debugLayerBack, idx);
+    layers.insert(debugLayerFront, idx + 1);
+
+    camera.camera.layers = camera.camera.layers.concat([debugLayerBack.id, debugLayerFront.id]);
+}
+
+/**
+ * Аргументы шейдера отладочной геометрии (позиция + цвет вершины). Общие для линий и заливки.
+ *
+ * @param uniqueName - Уникальное имя для кеша шейдеров движка.
+ * @returns Объект аргументов для `ShaderMaterial`.
+ */
+function debugShaderArgs(uniqueName: string) {
+    return {
+        uniqueName,
+        attributes: {
+            vertex_position: SEMANTIC_POSITION,
+            vertex_color: SEMANTIC_COLOR
+        },
+        vertexGLSL,
+        fragmentGLSL,
+        vertexWGSL,
+        fragmentWGSL
+    };
+}
+
 class DebugLines {
     app: App;
 
@@ -159,35 +237,7 @@ class DebugLines {
     constructor(app: App, camera: Entity, backLayer = true) {
         const device = app.graphicsDevice;
 
-        if (!debugLayerFront) {
-            // construct the debug layer
-            debugLayerBack = new Layer({
-                enabled: true,
-                name: 'Debug Layer Behind',
-                opaqueSortMode: SORTMODE_NONE,
-                transparentSortMode: SORTMODE_NONE,
-                passThrough: true,
-                overrideClear: true
-            });
-
-            debugLayerFront = new Layer({
-                enabled: true,
-                name: 'Debug Layer',
-                opaqueSortMode: SORTMODE_NONE,
-                transparentSortMode: SORTMODE_NONE,
-                passThrough: true,
-                overrideClear: true
-            });
-
-            const layers = app.scene.layers;
-            const worldLayer = layers.getLayerByName('World');
-            const idx = layers.getTransparentIndex(worldLayer);
-
-            layers.insert(debugLayerBack, idx);
-            layers.insert(debugLayerFront, idx + 1);
-
-            camera.camera.layers = camera.camera.layers.concat([debugLayerBack.id, debugLayerFront.id]);
-        }
+        ensureDebugLayers(app, camera);
 
         const vertexFormat = new VertexFormat(device, [
             { semantic: SEMANTIC_POSITION, components: 3, type: TYPE_FLOAT32 },
@@ -202,17 +252,7 @@ class DebugLines {
         mesh.primitive[0].indexed = false;
         mesh.primitive[0].count = 0;
 
-        const shaderArgs = {
-            uniqueName: 'debug-lines',
-            attributes: {
-                vertex_position: SEMANTIC_POSITION,
-                vertex_color: SEMANTIC_COLOR
-            },
-            vertexGLSL: vertexGLSL,
-            fragmentGLSL: fragmentGLSL,
-            vertexWGSL: vertexWGSL,
-            fragmentWGSL: fragmentWGSL
-        };
+        const shaderArgs = debugShaderArgs('debug-lines');
 
         const frontMaterial = new ShaderMaterial(shaderArgs);
         frontMaterial.setParameter('uColor', [1, 1, 1, 0.7]);
@@ -471,6 +511,207 @@ class DebugLines {
     }
 }
 
+/**
+ * Полупрозрачная заливка отладочных объёмов треугольниками с additive-блендом.
+ *
+ * В отличие от `DebugLines` (каркас), рисует грани: пересечения объёмов складываются и
+ * становятся ярче — получается «плотностный» вид, где вложенные боксы не сливаются в кашу
+ * из рёбер. Аддитивный бленд не зависит от порядка отрисовки (сортировка не нужна), глубина
+ * не пишется (боксы не перекрывают друг друга), но тестируется — реальная геометрия сцены
+ * закрывает грани за собой.
+ */
+class DebugSolid {
+    app: App;
+
+    mesh: Mesh;
+
+    meshInstance: MeshInstance;
+
+    vertexCursor: number;
+
+    vertexData: Float32Array;
+
+    colorData: Uint32Array;
+
+    constructor(app: App, camera: Entity) {
+        const device = app.graphicsDevice;
+
+        ensureDebugLayers(app, camera);
+
+        const vertexFormat = new VertexFormat(device, [
+            { semantic: SEMANTIC_POSITION, components: 3, type: TYPE_FLOAT32 },
+            { semantic: SEMANTIC_COLOR, components: 4, type: TYPE_UINT8, normalize: true }
+        ]);
+
+        const mesh = new Mesh(device);
+        mesh.vertexBuffer = new VertexBuffer(device, vertexFormat, 8192, { usage: BUFFER_DYNAMIC });
+        mesh.primitive[0].type = PRIMITIVE_TRIANGLES;
+        mesh.primitive[0].base = 0;
+        mesh.primitive[0].indexed = false;
+        mesh.primitive[0].count = 0;
+
+        const material = new ShaderMaterial(debugShaderArgs('debug-solid'));
+        material.setParameter('uColor', [1, 1, 1, 1]);
+        // Толстые контуры-ленты рисуем ПОВЕРХ модели: тест глубины отключён (`FUNC_ALWAYS`),
+        // запись глубины тоже — иначе bounding-боксы (крупнее геометрии) уходили за модель и
+        // контуры пропадали. Нормальный бленд, обе стороны (лента повёрнута к камере).
+        material.blendType = BLEND_NORMAL;
+        material.cull = CULLFACE_NONE;
+        material.depthState.func = FUNC_ALWAYS;
+        material.depthState.write = false;
+        material.update();
+
+        const instance = new MeshInstance(mesh, material, new GraphNode());
+        instance.cull = false;
+        instance.visible = false;
+        debugLayerFront.addMeshInstances([instance], true);
+
+        this.app = app;
+        this.mesh = mesh;
+        this.meshInstance = instance;
+        this.vertexCursor = 0;
+        this.vertexData = new Float32Array(mesh.vertexBuffer.lock());
+        this.colorData = new Uint32Array(mesh.vertexBuffer.lock());
+    }
+
+    clear(): void {
+        this.vertexCursor = 0;
+    }
+
+    // Записать одну вершину (позиция + цвет 0xAABBGGRR), при нехватке места удвоив буфер.
+    private vertex(p: Vec3, clr: number): void {
+        if (this.vertexCursor >= this.vertexData.length / 4) {
+            const oldVBuffer = this.mesh.vertexBuffer;
+            const byteSize = oldVBuffer.lock().byteLength * 2;
+            const arrayBuffer = new ArrayBuffer(byteSize);
+
+            this.mesh.vertexBuffer = new VertexBuffer(
+                this.app.graphicsDevice,
+                oldVBuffer.getFormat(),
+                oldVBuffer.getNumVertices() * 2,
+                { usage: BUFFER_DYNAMIC, data: arrayBuffer }
+            );
+            this.vertexData = new Float32Array(arrayBuffer);
+            this.colorData = new Uint32Array(arrayBuffer);
+            this.colorData.set(new Uint32Array(oldVBuffer.lock()));
+        }
+
+        const i = this.vertexCursor * 4;
+        this.vertexData[i] = p.x;
+        this.vertexData[i + 1] = p.y;
+        this.vertexData[i + 2] = p.z;
+        this.colorData[i + 3] = clr;
+        this.vertexCursor++;
+    }
+
+    // Прямоугольник из двух треугольников (углы по кругу a→b→c→d).
+    private quad(a: Vec3, b: Vec3, c: Vec3, d: Vec3, clr: number): void {
+        this.vertex(a, clr);
+        this.vertex(b, clr);
+        this.vertex(c, clr);
+        this.vertex(a, clr);
+        this.vertex(c, clr);
+        this.vertex(d, clr);
+    }
+
+    /**
+     * Залить шесть граней OBB сплошняком. Интенсивность (альфа `clr`) задаёт вызывающий —
+     * шахматное чередование альфы у соседних блоков делает границу между ними читаемой.
+     *
+     * @param center - Центр бокса.
+     * @param ax - Первая полуось.
+     * @param ay - Вторая полуось.
+     * @param az - Третья полуось.
+     * @param clr - Цвет граней (0xAABBGGRR); альфа в старшем байте задаёт интенсивность.
+     */
+    obbFaces(center: Vec3, ax: Vec3, ay: Vec3, az: Vec3, clr = 0x40ffffff): void {
+        const axes = [ax, ay, az];
+        for (let f = 0; f < obbFaceAxes.length; ++f) {
+            const face = obbFaceAxes[f];
+            const a = axes[face[0]];
+            const b = axes[face[1]];
+            const n = axes[face[2]];
+            const sign = face[3];
+            const cx = center.x + sign * n.x;
+            const cy = center.y + sign * n.y;
+            const cz = center.z + sign * n.z;
+            // Четыре угла грани: центр грани ± A ± B.
+            sp0.set(cx - a.x - b.x, cy - a.y - b.y, cz - a.z - b.z);
+            sp1.set(cx + a.x - b.x, cy + a.y - b.y, cz + a.z - b.z);
+            sp2.set(cx + a.x + b.x, cy + a.y + b.y, cz + a.z + b.z);
+            sp3.set(cx - a.x + b.x, cy - a.y + b.y, cz - a.z + b.z);
+            this.quad(sp0, sp1, sp2, sp3, clr);
+        }
+    }
+
+    // Толстая линия p0→p1 как повёрнутая к камере лента шириной ~`width·dist` (постоянная в
+    // пикселях). Ширина растёт с расстоянием, поэтому на экране толщина примерно одинаковая.
+    private thickLine(p0: Vec3, p1: Vec3, camPos: Vec3, width: number, clr: number): void {
+        smid.set((p0.x + p1.x) * 0.5, (p0.y + p1.y) * 0.5, (p0.z + p1.z) * 0.5);
+        sview.sub2(camPos, smid);
+        const dist = sview.length() || 1;
+        sview.mulScalar(1 / dist);
+        sedge.sub2(p1, p0);
+        if (sedge.lengthSq() < 1e-12) {
+            return;
+        }
+        sedge.normalize();
+        sperp.cross(sedge, sview);
+        const plen = sperp.length();
+        if (plen < 1e-6) {
+            return;
+        }
+        sperp.mulScalar((width * dist) / plen);
+        sp0.set(p0.x - sperp.x, p0.y - sperp.y, p0.z - sperp.z);
+        sp1.set(p1.x - sperp.x, p1.y - sperp.y, p1.z - sperp.z);
+        sp2.set(p1.x + sperp.x, p1.y + sperp.y, p1.z + sperp.z);
+        sp3.set(p0.x + sperp.x, p0.y + sperp.y, p0.z + sperp.z);
+        this.quad(sp0, sp1, sp2, sp3, clr);
+    }
+
+    /**
+     * 12 рёбер OBB толстыми лентами, повёрнутыми к камере (контуры блока).
+     *
+     * @param center - Центр бокса.
+     * @param ax - Первая полуось.
+     * @param ay - Вторая полуось.
+     * @param az - Третья полуось.
+     * @param camPos - Позиция камеры (для ориентации лент).
+     * @param width - Полуширина в долях расстояния (~постоянная толщина в пикселях).
+     * @param clr - Цвет (0xAABBGGRR).
+     */
+    obbEdgesThick(center: Vec3, ax: Vec3, ay: Vec3, az: Vec3, camPos: Vec3, width: number, clr: number): void {
+        let i = 0;
+        for (let sx = -1; sx <= 1; sx += 2) {
+            for (let sy = -1; sy <= 1; sy += 2) {
+                for (let sz = -1; sz <= 1; sz += 2) {
+                    obbCorners[i].set(
+                        center.x + sx * ax.x + sy * ay.x + sz * az.x,
+                        center.y + sx * ax.y + sy * ay.y + sz * az.y,
+                        center.z + sx * ax.z + sy * ay.z + sz * az.z
+                    );
+                    i++;
+                }
+            }
+        }
+        for (let e = 0; e < obbEdges.length; ++e) {
+            this.thickLine(obbCorners[obbEdges[e][0]], obbCorners[obbEdges[e][1]], camPos, width, clr);
+        }
+    }
+
+    update(): void {
+        if (this.vertexCursor === 0) {
+            this.meshInstance.visible = false;
+            return;
+        }
+        this.meshInstance.visible = true;
+        this.mesh.vertexBuffer.unlock();
+        this.mesh.primitive[0].count = this.vertexCursor;
+        this.vertexCursor = 0;
+    }
+}
+
 export {
-    DebugLines
+    DebugLines,
+    DebugSolid
 };

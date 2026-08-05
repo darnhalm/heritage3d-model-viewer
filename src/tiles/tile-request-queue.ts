@@ -64,6 +64,9 @@ export class TileRequestQueue {
 
     private frame = 0;
 
+    /** На паузе новые загрузки не стартуют; уже идущие доигрываются (см. `dispatch`). */
+    private paused = false;
+
     /**
      * @param maxConcurrent - Сколько загрузок идёт одновременно. Значение по умолчанию —
      * начальная гипотеза из документа (6 для десктопа); мобильному профилю нужно меньше.
@@ -113,10 +116,50 @@ export class TileRequestQueue {
     }
 
     /**
+     * Пауза загрузки: на паузе `dispatch` не стартует новые задачи. Снятие паузы сразу
+     * догоняет очередь.
+     *
+     * @param value - Ставить ли на паузу.
+     */
+    setPaused(value: boolean) {
+        this.paused = value;
+        if (!value) {
+            this.dispatch();
+        }
+    }
+
+    get isPaused(): boolean {
+        return this.paused;
+    }
+
+    /**
+     * Запустить ровно одну — самую приоритетную — задачу, даже на паузе (пошаговый режим).
+     *
+     * @returns `true`, если было что запустить.
+     */
+    step(): boolean {
+        if (this.entries.length === 0 || this.active >= this.maxConcurrent) {
+            return false;
+        }
+        this.entries.sort((a, b) => compareTilePriority(a.tile, b.tile, this.frame));
+        const entry = this.entries.shift();
+        this.active++;
+        entry.run().catch(() => {}).finally(() => {
+            this.active--;
+            // На паузе это no-op — шаг не запускает каскад; без паузы очередь поедет дальше.
+            this.dispatch();
+        });
+        return true;
+    }
+
+    /**
      * Запустить столько задач, сколько позволяет лимит, начиная с самых приоритетных.
      * Сортировка именно здесь — по свежим данным камеры.
      */
     dispatch() {
+        if (this.paused) {
+            return;
+        }
         if (this.entries.length === 0) {
             if (this.active === 0) {
                 this.onIdle?.();

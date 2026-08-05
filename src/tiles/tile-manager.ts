@@ -23,7 +23,7 @@ import {
     type AppBase, type CameraComponent, type MeshInstance, type RenderComponent
 } from 'playcanvas';
 
-import type { DebugLines } from '../debug-lines';
+import type { DebugLines, DebugSolid } from '../debug-lines';
 import { expandSubtree, loadSubtreeAt, readImplicitTiling } from './implicit-tiling';
 import { destroyTileContent, gltfUpAxisTransform, loadTileContent, type TileContentResult } from './tile-content';
 import { distanceToObb, makeWorldObb, screenSpaceError } from './tile-math';
@@ -57,6 +57,41 @@ const LOD_COLORS = [
     0xffff44aa, // 6 — фиолетовый
     0xffff44ff // 7 — розовый
 ];
+
+/** Полуширина контурных лент тайлов в долях расстояния до камеры (~постоянная в пикселях). */
+const EDGE_WIDTH = 0.002;
+
+/**
+ * Индекс тайла вдоль его полуоси в единицах полного размера бокса — для шахматной чётности.
+ * Сосед, смещённый на целый бокс вдоль оси, меняет индекс ровно на 1.
+ *
+ * @param center - Центр бокса (мировые координаты).
+ * @param axis - Полуось бокса.
+ * @returns Дробный индекс вдоль оси (вызывающий округляет).
+ */
+function gridIndex(center: Vec3, axis: Vec3): number {
+    const lenSq = axis.lengthSq();
+    if (lenSq < 1e-12) {
+        return 0;
+    }
+    return (center.x * axis.x + center.y * axis.y + center.z * axis.z) / (2 * lenSq);
+}
+
+/**
+ * Затемнить RGB цвета 0xAABBGGRR, сохранив альфу — для шахматного чередования яркости
+ * контуров у соседних блоков.
+ *
+ * @param clr - Исходный цвет.
+ * @param factor - Множитель яркости (0..1).
+ * @returns Затемнённый цвет.
+ */
+function dimColor(clr: number, factor: number): number {
+    const r = Math.round((clr & 0xff) * factor);
+    const g = Math.round(((clr >> 8) & 0xff) * factor);
+    const b = Math.round(((clr >> 16) & 0xff) * factor);
+    const a = (clr >>> 24) & 0xff;
+    return ((a << 24) | (b << 16) | (g << 8) | r) >>> 0;
+}
 
 export type TileManagerOptions = {
     app: AppBase;
@@ -182,6 +217,20 @@ export class TileManager {
     private queue: TileRequestQueue;
 
     private frustum = new Frustum();
+
+    /**
+     * Заморозка отбора: пока `true`, фрустум и параметры камеры в `update` не
+     * пересчитываются — LOD и выбор тайлов считаются от камеры на момент заморозки, а живую
+     * можно свободно двигать и смотреть, что выбрала «первая» (Фаза 2 отладки).
+     */
+    private frozen = false;
+
+    /**
+     * Отладочная изоляция уровня LOD: если не `null`, показываются тайлы только этой глубины.
+     * Обход уточняется по экранной ошибке, но не глубже неё, — далёкие фрагменты, до которых
+     * SSE не дотягивает, не грузятся, а видны только достигнутые тайлы уровня.
+     */
+    private lodIsolate: number | null = null;
 
     private frame = 0;
 
@@ -393,12 +442,16 @@ export class TileManager {
         this.frame++;
         this.queue.setFrame(this.frame);
 
-        tmpMat.mul2(cameraComponent.projectionMatrix, cameraComponent.viewMatrix);
-        this.frustum.setFromMat4(tmpMat);
+        // На заморозке держим фрустум и параметры камеры с момента заморозки: обход считает
+        // ошибку и отбор от «первой» камеры, а живую можно свободно двигать.
+        if (!this.frozen) {
+            tmpMat.mul2(cameraComponent.projectionMatrix, cameraComponent.viewMatrix);
+            this.frustum.setFromMat4(tmpMat);
 
-        this.view.cameraPos.copy(this.camera.getPosition());
-        this.view.viewportHeight = Math.max(1, this.app.graphicsDevice.height);
-        this.view.sseDenominator = 2 * Math.tan(0.5 * verticalFovRadians(cameraComponent));
+            this.view.cameraPos.copy(this.camera.getPosition());
+            this.view.viewportHeight = Math.max(1, this.app.graphicsDevice.height);
+            this.view.sseDenominator = 2 * Math.tan(0.5 * verticalFovRadians(cameraComponent));
+        }
 
         const selection: Tile[] = [];
         this.visit(this.rootTile, selection);
@@ -451,7 +504,12 @@ export class TileManager {
         const threshold = this.options.errorTarget * (tile.wasRefined ? 1 - HYSTERESIS : 1 + HYSTERESIS);
         const needsDetail = tile.error > threshold;
 
-        const refine = children.length > 0 && needsDetail;
+        // Уточняем по экранной ошибке (near/крупные — раньше), но при изоляции не глубже
+        // выбранного уровня. Так на больших сценах далёкие/мелкие фрагменты не грузятся
+        // (SSE их не требует), а показываются только те тайлы уровня D, до которых обход
+        // реально дошёл — то есть видимые вблизи фрагменты, а не весь уровень целиком.
+        const refine = children.length > 0 && needsDetail &&
+            (this.lodIsolate === null || tile.depth < this.lodIsolate);
         tile.wasRefined = refine;
 
         if (!refine) {
@@ -496,6 +554,11 @@ export class TileManager {
      * @returns `true`, если тайл нечего ждать: контент готов, его нет вовсе или он упал.
      */
     private selectSelf(tile: Tile, selection: Tile[]): boolean {
+        // Изоляция уровня: тайлы не своей глубины не выбираем и не считаем «закрывающими»
+        // (false), чтобы уже готовые тайлы целевого уровня из `sub` не отбрасывались.
+        if (this.lodIsolate !== null && tile.depth !== this.lodIsolate) {
+            return false;
+        }
         // Неявный узел без загруженных масок — это «пока не знаю»: считать его пустым и
         // закрывающим нельзя, иначе родитель снимет свой контент и на его месте до
         // прихода масок будет дыра.
@@ -810,6 +873,67 @@ export class TileManager {
     }
 
     /**
+     * Заморозить/разморозить отбор тайлов (Фаза 2 отладки). На заморозке фрустум и параметры
+     * камеры фиксируются на текущем значении — обход продолжает выбирать то же, что «первая»
+     * камера, пока живую двигают.
+     *
+     * @param value - Замораживать ли.
+     */
+    setFrozen(value: boolean) {
+        this.frozen = value;
+    }
+
+    /**
+     * Изолировать уровень LOD (Фаза 2 отладки): показывать тайлы только глубины `depth`,
+     * прочие скрыть. Обход уточняется по экранной ошибке, но не глубже `depth`, поэтому на
+     * больших сценах грузятся и показываются только видимые вблизи фрагменты уровня.
+     *
+     * @param depth - Глубина изолируемого уровня, или `null` — снять изоляцию.
+     */
+    setLodIsolate(depth: number | null) {
+        this.lodIsolate = depth;
+    }
+
+    /**
+     * Максимальная глубина в дереве тайлов (включая внешние тайлсеты). Нужна панели, чтобы
+     * задать верх ползунка LOD.
+     *
+     * @returns Наибольшая `depth` среди всех узлов, либо 0.
+     */
+    getTreeDepth(): number {
+        let max = 0;
+        const walk = (tile: Tile) => {
+            max = Math.max(max, tile.depth);
+            const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
+            for (let i = 0; i < children.length; ++i) {
+                walk(children[i]);
+            }
+        };
+        if (this.rootTile) {
+            walk(this.rootTile);
+        }
+        return max;
+    }
+
+    /**
+     * Пауза загрузки: новые заявки не стартуют, идущие доигрывают. Снятие догоняет очередь.
+     *
+     * @param value - Ставить ли на паузу.
+     */
+    setPaused(value: boolean) {
+        this.queue.setPaused(value);
+    }
+
+    /**
+     * Запустить одну самую приоритетную загрузку (пошаговый режим на паузе).
+     *
+     * @returns `true`, если было что запустить.
+     */
+    stepLoad(): boolean {
+        return this.queue.step();
+    }
+
+    /**
      * Нарисовать OBB активных тайлов в переданный буфер отладочных линий.
      *
      * «Активные» — те, у кого есть контент в работе или на экране (`state !== unloaded`)
@@ -819,13 +943,15 @@ export class TileManager {
      * Обход идёт по тому же принципу, что и `visit`: у тайла с внешним тайлсетом детьми
      * считается его корень.
      *
-     * @param lines - Буфер отладочных линий (уже очищенный вызывающим).
+     * @param lines - Буфер отладочных линий для рёбер (уже очищен вызывающим).
+     * @param solid - Буфер полупрозрачной заливки граней (уже очищен вызывающим).
      * @param mode - `state` — цвет по состоянию загрузки; `lod` — по глубине в дереве.
      */
-    debugDraw(lines: DebugLines, mode: TileDebugMode) {
+    debugDraw(lines: DebugLines, solid: DebugSolid, mode: TileDebugMode) {
         if (!this.rootTile || this.disposed) {
             return;
         }
+        const cameraPos = this.camera.getPosition();
         const stack: Tile[] = [this.rootTile];
         while (stack.length > 0) {
             const tile = stack.pop() as Tile;
@@ -834,14 +960,27 @@ export class TileManager {
                 stack.push(children[i]);
             }
 
-            if (!tile.obb || (tile.state === TILE_UNLOADED && !tile.selected)) {
+            // Рисуем ТОЛЬКО выбранные тайлы — это текущий срез LOD, который выдаёт сам механизм
+            // тайлизации (по мере приближения он углубляется). Родительские/грузящиеся боксы не
+            // показываем: их наложение превращало оверлей в нечитаемую кашу линий.
+            if (!tile.obb || !tile.selected) {
                 continue;
             }
             const color = mode === 'lod' ?
                 LOD_COLORS[tile.depth % LOD_COLORS.length] :
-                (tile.selected ? SELECTED_COLOR : (STATE_COLORS[tile.state] ?? SELECTED_COLOR));
+                SELECTED_COLOR;
             const { center, halfAxes } = tile.obb;
-            lines.obb(center, halfAxes[0], halfAxes[1], halfAxes[2], color);
+
+            // Контуры блока толстыми лентами (без заливки — она в ближнем приближении не
+            // читалась). Соседние блоки чередуют яркость ребра — граница между «кубиками» видна;
+            // чётность из индекса тайла в сетке по трём осям (сосед со сдвигом на бокс меняет её).
+            const parity = (
+                Math.round(gridIndex(center, halfAxes[0])) +
+                Math.round(gridIndex(center, halfAxes[1])) +
+                Math.round(gridIndex(center, halfAxes[2]))
+            ) & 1;
+            const edge = parity ? color : dimColor(color, 0.55);
+            solid.obbEdgesThick(center, halfAxes[0], halfAxes[1], halfAxes[2], cameraPos, EDGE_WIDTH, edge);
         }
     }
 
