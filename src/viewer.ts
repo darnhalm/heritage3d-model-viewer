@@ -99,7 +99,7 @@ import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
 import { ShadowCatcher } from './shadow-catcher';
-import { TileManager } from './tiles/tile-manager';
+import { TileManager, type TileDebugMode } from './tiles/tile-manager';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry } from './viewer/controllers/mesh-raycast';
@@ -590,6 +590,12 @@ class Viewer {
 
     debugRuler: DebugLines;
 
+    /** Отладочные OBB тайлов (Фаза 1 визуализации тайлового слоя). */
+    debugTiles: DebugLines;
+
+    /** DOM-оверлей со статистикой тайлов; создаётся лениво при первом включении. */
+    private tileHud: HTMLDivElement | null = null;
+
     // Навигационный куб (как в 3ds Max) + иконка орто/перспектива — видны только в режиме выравнивания.
     private viewCube: ViewCube | null = null;
     private orthoButton: HTMLButtonElement | null = null;
@@ -1068,6 +1074,8 @@ class Viewer {
         this.debugNormals = new DebugLines(app, camera, false);
         this.debugMeasure = new DebugLines(app, camera, false);
         this.debugRuler = new DebugLines(app, camera, false);
+        // Задний слой включён: боксы тайлов за геометрией видны приглушённо.
+        this.debugTiles = new DebugLines(app, camera);
 
         // construct ministats, default off
         this.miniStats = new MiniStats(app);
@@ -1686,6 +1694,10 @@ class Viewer {
                 this.renderNextFrame();
             },
             'debug.renderMode': this.setRenderMode.bind(this),
+            // Отладка тайлов: отрисовка не gated dirty-флагом (onPrerender читает флаги живьём),
+            // поэтому достаточно попросить кадр — там оверлей либо нарисуется, либо очистится.
+            'debug.tileDebug': () => this.renderNextFrame(),
+            'debug.tileDebugMode': () => this.renderNextFrame(),
 
             // animation
             'animation.playing': (playing: boolean) => {
@@ -2098,6 +2110,8 @@ class Viewer {
         this.observer.set('scene.texelDensitySummary', '');
         this.observer.set('scene.texelDensityReport', '[]');
         this.observer.set('scene.hasGsplat', false);
+        this.observer.set('scene.isTileset', false);
+        this.observer.set('scene.tilesetLit', null);
         // Пустая иерархия снова прячет нижний ряд экранных кнопок (`#popup.empty`). Для
         // обычной модели её тут же перезапишет `postSceneLoad`; для тайлсета — свой узел
         // ставит `loadTileset`. Без сброса узел удалённого тайлсета остался бы висеть.
@@ -4508,11 +4522,15 @@ class Viewer {
         // включить её обратно.
         this.observer.set('shadowCatcher.enabled', false);
 
+        // Освещённость контента пока неизвестна — определим по первому пришедшему тайлу
+        // (см. `handleTileChange`). Панель по этому флагу подписывает «Final Render (lit)».
+        this.observer.set('scene.tilesetLit', null);
+
         const manager = new TileManager({
             app: this.app,
             camera: this.camera,
             parent: this.sceneContentRoot,
-            onChange: () => this.renderNextFrame(),
+            onChange: () => this.handleTileChange(),
             onWarning: message => warnings.push(message)
         });
         this.tileManager = manager;
@@ -4542,6 +4560,10 @@ class Viewer {
                 path: '',
                 children: []
             }]));
+            // Признак тайлсета: UI прячет по нему режимы, которые на потоковых тайлах не
+            // работают (UV-раскладки строятся из статического `meshInstances`, а он пуст),
+            // и переключатель «по объектам».
+            this.observer.set('scene.isTileset', true);
 
             // Габариты нужны до кадрирования, причём оба набора: `frameScene` считает по
             // `sceneBounds`, а плоскости отсечения — по `dynamicSceneBounds`, который
@@ -4582,6 +4604,22 @@ class Viewer {
             return this.meshInstances;
         }
         return this.meshInstances.concat(tileMeshInstances);
+    }
+
+    /**
+     * Реакция на изменение набора видимых тайлов: перерисовать кадр и, пока не определено,
+     * выяснить, освещён ли контент (unlit-сплаты из фотограмметрии vs лит-PBR). Флаг
+     * читает панель, чтобы подписать режим и убрать неприменимые каналы.
+     */
+    private handleTileChange() {
+        this.renderNextFrame();
+        if (this.observer.get('scene.tilesetLit') === null && this.tileManager) {
+            const meshInstance = this.tileManager.getVisibleMeshInstances()[0];
+            const material = meshInstance?.material as { useLighting?: boolean } | undefined;
+            if (material) {
+                this.observer.set('scene.tilesetLit', material.useLighting !== false);
+            }
+        }
     }
 
     private destroyTileManager() {
@@ -5977,6 +6015,16 @@ class Viewer {
             this.debugGrid.update();
         }
 
+        // debug tiles overlay (Фаза 1): OBB активных тайлов + живой HUD.
+        // Не gated dirty-флагом: набор и состояния тайлов при стриминге меняются каждый кадр.
+        this.debugTiles.clear();
+        if (this.tileManager && this.observer.get('debug.tileDebug')) {
+            const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'state';
+            this.tileManager.debugDraw(this.debugTiles, mode);
+        }
+        this.debugTiles.update();
+        this.updateTileHud();
+
         // measurement overlays (thick 2D SVG line + crosses)
         // keep DebugLines buffer empty so measurements are always overlay-only (never depth-tested / occluded by mesh)
         this.debugMeasure.clear();
@@ -5994,6 +6042,36 @@ class Viewer {
         if (this.perfEnabled) {
             this.perfOnPrerenderTotalMs += performance.now() - perfStart;
         }
+    }
+
+    /** Живой DOM-оверлей со статистикой тайлов; создаётся лениво, прячется когда выключен. */
+    private updateTileHud() {
+        const enabled = !!this.tileManager && !!this.observer.get('debug.tileDebug');
+        if (!enabled) {
+            if (this.tileHud) {
+                this.tileHud.style.display = 'none';
+            }
+            return;
+        }
+        if (!this.tileHud) {
+            const el = document.createElement('div');
+            el.id = 'tile-debug-hud';
+            el.style.cssText = 'position:absolute;left:8px;bottom:8px;z-index:100;pointer-events:none;' +
+                'font:11px/1.45 ui-monospace,Menlo,monospace;color:#e8e8e8;background:rgba(0,0,0,0.62);' +
+                'padding:6px 9px;border-radius:5px;white-space:pre;letter-spacing:0.2px;';
+            const canvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+            (canvas.parentElement ?? document.body).appendChild(el);
+            this.tileHud = el;
+        }
+        this.tileHud.style.display = 'block';
+
+        const s = this.tileManager.getStats();
+        const mb = (s.bytes / (1024 * 1024)).toFixed(1);
+        const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'state';
+        this.tileHud.textContent =
+            `TILES ${s.tiles}   mode: ${mode}\n` +
+            `ready ${s.ready}  loading ${s.loading}  queued ${s.queued}  failed ${s.failed}\n` +
+            `selected ${s.selected}   depth ${s.maxSelectedDepth}   ${mb} MB`;
     }
 
     private drawReferenceRuler() {

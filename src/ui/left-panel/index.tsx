@@ -431,25 +431,31 @@ class LightPanel extends React.Component <{ observerData: ObserverData, setPrope
                     label={t('Cast Shadow', lang)}
                     value={light?.shadow ?? true}
                     setProperty={(value: boolean) => props.setProperty('light.shadow', value)} />
-                <Toggle
-                    label={t('Shadow Catcher', lang)}
-                    value={shadowCatcher?.enabled ?? true}
-                    setProperty={(value: boolean) => props.setProperty('shadowCatcher.enabled', value)} />
-                <Slider
-                    label={t('Catcher Intensity', lang)}
-                    precision={2}
-                    min={0}
-                    max={1}
-                    value={shadowCatcher?.intensity ?? 0.4}
-                    setProperty={(value: number) => props.setProperty('shadowCatcher.intensity', value)} />
-                <Slider
-                    label={t('Catcher Height', lang)}
-                    precision={2}
-                    min={-10}
-                    max={10}
-                    value={shadowCatcher?.heightOffset ?? 0}
-                    setProperty={(value: number) => props.setProperty('shadowCatcher.heightOffset', value)}
-                    enabled={shadowCatcher?.enabled ?? true} />
+                {/* Ловушка теней — горизонтальная плоскость по низу сцены. У тайлсета свой
+                    рельеф, плоскость его режет, поэтому для тайлсетов её прячем целиком. */}
+                {!props.observerData?.scene?.isTileset && (
+                    <>
+                        <Toggle
+                            label={t('Shadow Catcher', lang)}
+                            value={shadowCatcher?.enabled ?? true}
+                            setProperty={(value: boolean) => props.setProperty('shadowCatcher.enabled', value)} />
+                        <Slider
+                            label={t('Catcher Intensity', lang)}
+                            precision={2}
+                            min={0}
+                            max={1}
+                            value={shadowCatcher?.intensity ?? 0.4}
+                            setProperty={(value: number) => props.setProperty('shadowCatcher.intensity', value)} />
+                        <Slider
+                            label={t('Catcher Height', lang)}
+                            precision={2}
+                            min={-10}
+                            max={10}
+                            value={shadowCatcher?.heightOffset ?? 0}
+                            setProperty={(value: number) => props.setProperty('shadowCatcher.heightOffset', value)}
+                            enabled={shadowCatcher?.enabled ?? true} />
+                    </>
+                )}
             </Panel>
         );
     }
@@ -1028,12 +1034,22 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                     new Set(parseStringArray(observerData?.scene?.materialChannelsWithTextures)),
                                     observerData?.debug?.withTextureOnly ?? false,
                                     parseStringRecord(observerData?.scene?.materialChannelFilenames)
-                                ).map((cat, ci) => (
+                                )
+                                // На тайлсете прячем категорию UV: её раскладки строятся из
+                                // статического `meshInstances`, которого у потоковых тайлов нет.
+                                .filter(cat => !(observerData?.scene?.isTileset && cat.title === 'UV'))
+                                // У «запечённого» (unlit) контента — фотограмметрия из ion —
+                                // каналы материала бессмысленны (свет и цвет запечены в
+                                // текстуру), поэтому их прячем и подписываем режим «(lit)».
+                                // У настоящего PBR (`tilesetLit === true`, как у брони) каналы
+                                // осмысленны и остаются.
+                                .filter(cat => !(observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false && cat.title === 'MATERIAL CHANNELS'))
+                                .map((cat, ci) => (
                                     <div key={ci} className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>
                                             {cat.title} ({cat.items.length})
                                         </div>
-                                        {cat.title === 'MATERIAL CHANNELS' && (
+                                        {cat.title === 'MATERIAL CHANNELS' && !observerData?.scene?.isTileset && (
                                             <Toggle
                                                 label={t('By objects', lang)}
                                                 value={observerData?.debug?.withTextureOnly ?? false}
@@ -1048,7 +1064,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     onClick={() => setProperty('debug.renderMode', item.value)}
                                                 >
                                                     <span className='materials-layer-item-label'>
-                                                        {item.label}
+                                                        {item.value === 'default' && observerData?.scene?.isTileset
+                                                            ? `${item.label} (${observerData?.scene?.tilesetLit ? 'pbr' : 'lit'})`
+                                                            : item.label}
                                                         {observerData?.debug?.withTextureOnly && item.filename ? <span className='materials-layer-item-filename' title={item.filename}> {item.filename}</span> : null}
                                                     </span>
                                                 </button>
@@ -1147,38 +1165,75 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         )}
                                     </div>
                                 ))}
-                                <div className='materials-layer-category'>
-                                    <div className='materials-layer-category-title'>{t('Geometry', lang)} (2)</div>
-                                    <button
-                                        type='button'
-                                        className={`materials-layer-item materials-layer-item-wireframe${observerData?.debug?.wireframe ? ' selected' : ''}`}
-                                        onClick={() => setProperty('debug.wireframe', !observerData?.debug?.wireframe)}
-                                    >
-                                        {t('Wireframe', lang)}
-                                    </button>
-                                    <div className='materials-layer-normals-row'>
+                                {/* Каркас и нормали вершин строятся из статического
+                                    `meshInstances` — у потоковых тайлов он пуст, поэтому для
+                                    тайлсета вся геометрическая категория скрыта. */}
+                                {!observerData?.scene?.isTileset && (
+                                    <div className='materials-layer-category'>
+                                        <div className='materials-layer-category-title'>{t('Geometry', lang)} (2)</div>
                                         <button
                                             type='button'
-                                            className={`materials-layer-item materials-layer-item-vertex-normals${(observerData?.debug?.normals ?? 0) > 0 ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 0.2)}
+                                            className={`materials-layer-item materials-layer-item-wireframe${observerData?.debug?.wireframe ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.wireframe', !observerData?.debug?.wireframe)}
                                         >
-                                            {t('Vertex Normals', lang)}
+                                            {t('Wireframe', lang)}
                                         </button>
-                                        {(observerData?.debug?.normals ?? 0) > 0 && (
-                                            <div className='materials-layer-normals-slider'>
-                                                <Slider
-                                                    label=''
-                                                    precision={2}
-                                                    min={0}
-                                                    max={1}
-                                                    value={observerData?.debug?.normals ?? 0}
-                                                    setProperty={(value: number) => setProperty('debug.normals', value)} />
+                                        <div className='materials-layer-normals-row'>
+                                            <button
+                                                type='button'
+                                                className={`materials-layer-item materials-layer-item-vertex-normals${(observerData?.debug?.normals ?? 0) > 0 ? ' selected' : ''}`}
+                                                onClick={() => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 0.2)}
+                                            >
+                                                {t('Vertex Normals', lang)}
+                                            </button>
+                                            {(observerData?.debug?.normals ?? 0) > 0 && (
+                                                <div className='materials-layer-normals-slider'>
+                                                    <Slider
+                                                        label=''
+                                                        precision={2}
+                                                        min={0}
+                                                        max={1}
+                                                        value={observerData?.debug?.normals ?? 0}
+                                                        setProperty={(value: number) => setProperty('debug.normals', value)} />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                                {/* Отладка тайлов: OBB активных тайлов + живой HUD. Только для
+                                    тайлсетов — вешаем в слот, где для них скрыты UV/Geometry. */}
+                                {observerData?.scene?.isTileset && (
+                                    <div className='materials-layer-category'>
+                                        <div className='materials-layer-category-title'>{t('Tiles Debug', lang)} (1)</div>
+                                        <button
+                                            type='button'
+                                            className={`materials-layer-item${observerData?.debug?.tileDebug ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.tileDebug', !observerData?.debug?.tileDebug)}
+                                        >
+                                            {t('Tile Bounds (OBB)', lang)}
+                                        </button>
+                                        {observerData?.debug?.tileDebug && (
+                                            <div className='materials-layer-normals-row'>
+                                                <button
+                                                    type='button'
+                                                    className={`materials-layer-item${(observerData?.debug?.tileDebugMode ?? 'state') !== 'lod' ? ' selected' : ''}`}
+                                                    onClick={() => setProperty('debug.tileDebugMode', 'state')}
+                                                >
+                                                    {t('By State', lang)}
+                                                </button>
+                                                <button
+                                                    type='button'
+                                                    className={`materials-layer-item${observerData?.debug?.tileDebugMode === 'lod' ? ' selected' : ''}`}
+                                                    onClick={() => setProperty('debug.tileDebugMode', 'lod')}
+                                                >
+                                                    {t('By LOD', lang)}
+                                                </button>
                                             </div>
                                         )}
                                     </div>
-                                </div>
+                                )}
                             </div>
-                            {observerData?.debug?.wireframe && (
+                            {!observerData?.scene?.isTileset && observerData?.debug?.wireframe && (
                                 <ColorPickerControl
                                     label={t('Wireframe Color', lang)}
                                     value={rgbToArr(observerData?.debug?.wireframeColor ?? { r: 0, g: 0, b: 0 })}

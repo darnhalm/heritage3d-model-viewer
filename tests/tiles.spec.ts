@@ -249,3 +249,67 @@ test('убирает тайлсет из сцены при её сбросе', a
     // весь загруженный тайлсет.
     expect(after.assets).toBeLessThan(before.assets);
 });
+
+/** Состояние отладочного оверлея тайлов: рисуются ли линии и виден ли HUD. */
+const tileDebugState = (page: Page) => page.evaluate(() => {
+    const viewer = (window as any).viewer;
+    const dl = viewer.debugTiles;
+    const hud = document.getElementById('tile-debug-hud');
+    return {
+        visible: !!dl.meshInstances[0].visible,
+        lineCount: dl.mesh.primitive[0].count,
+        hudDisplay: hud ? getComputedStyle(hud).display : 'absent',
+        hudText: hud?.textContent ?? ''
+    };
+});
+
+test('отладочный оверлей тайлов: OBB активных тайлов + живой HUD', async ({ page }) => {
+    test.skip(!await samplesAvailable(page, DISCRETE_LOD),
+        'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
+
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+
+    await page.goto(`/?load=${encodeURIComponent(DISCRETE_LOD)}`);
+    await waitForViewer(page);
+    await waitForTiles(page);
+
+    // Тайлсет распознан — под него и заведена категория UI.
+    const isTileset = await page.evaluate(() => (window as any).viewer.observer.get('scene.isTileset'));
+    expect(isTileset).toBe(true);
+
+    // По умолчанию оверлей выключен: линий нет, HUD не создан.
+    const off = await tileDebugState(page);
+    expect(off.visible).toBe(false);
+    expect(off.hudDisplay).toBe('absent');
+
+    // Включаем через observer (то же, что делает кнопка в панели), режим по умолчанию — state.
+    await page.evaluate(() => (window as any).viewer.observer.set('debug.tileDebug', true));
+    await pumpFrames(page, 5);
+
+    const onState = await tileDebugState(page);
+    expect(onState.visible).toBe(true);
+    expect(onState.lineCount).toBeGreaterThan(0);
+    expect(onState.hudDisplay).toBe('block');
+    // HUD показывает счётчики: заголовок и число выбранных тайлов из getStats().
+    expect(onState.hudText).toContain('TILES');
+    const selected = (await getStats(page)).selected;
+    expect(onState.hudText).toContain(`selected ${selected}`);
+
+    // Переключение на LOD-раскраску: боксы по-прежнему рисуются, HUD помечает режим.
+    await page.evaluate(() => (window as any).viewer.observer.set('debug.tileDebugMode', 'lod'));
+    await pumpFrames(page, 5);
+    const onLod = await tileDebugState(page);
+    expect(onLod.visible).toBe(true);
+    expect(onLod.lineCount).toBeGreaterThan(0);
+    expect(onLod.hudText).toContain('mode: lod');
+
+    // Выключение прячет и линии, и HUD.
+    await page.evaluate(() => (window as any).viewer.observer.set('debug.tileDebug', false));
+    await pumpFrames(page, 5);
+    const disabled = await tileDebugState(page);
+    expect(disabled.visible).toBe(false);
+    expect(disabled.hudDisplay).toBe('none');
+
+    expect(pageErrors).toEqual([]);
+});

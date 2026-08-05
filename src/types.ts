@@ -120,7 +120,11 @@ export interface ObserverData {
         uvCheckerScale: number,
         selectedUvSet: number,
         withTextureOnly: boolean,
-        texelDensityHeatmap?: boolean
+        texelDensityHeatmap?: boolean,
+        /** Отладочный оверлей тайлов: OBB активных тайлов + живой HUD. */
+        tileDebug?: boolean,
+        /** Раскраска OBB: по состоянию загрузки или по глубине LOD. */
+        tileDebugMode?: 'state' | 'lod'
     },
     animation: {
         playing: boolean,
@@ -194,7 +198,9 @@ export interface ObserverData {
         loadTime?: number,
         cameras: string,
         selectedCamera: string,
-        hasGsplat?: boolean
+        hasGsplat?: boolean,
+        isTileset?: boolean,
+        tilesetLit?: boolean | null
     },
     morphs?: Record<string, {
         name: string,

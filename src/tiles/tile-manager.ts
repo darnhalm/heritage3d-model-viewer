@@ -23,6 +23,7 @@ import {
     type AppBase, type CameraComponent, type MeshInstance, type RenderComponent
 } from 'playcanvas';
 
+import type { DebugLines } from '../debug-lines';
 import { expandSubtree, loadSubtreeAt, readImplicitTiling } from './implicit-tiling';
 import { destroyTileContent, gltfUpAxisTransform, loadTileContent, type TileContentResult } from './tile-content';
 import { distanceToObb, makeWorldObb, screenSpaceError } from './tile-math';
@@ -32,6 +33,30 @@ import {
     type Tile, type TileStats
 } from './tile-types';
 import { buildTileTree, fetchTilesetJson, findTightBoundingBox, forEachTile, recomputeWorldVolumes } from './tileset-loader';
+
+/** Режим раскраски отладочных OBB тайлов. */
+export type TileDebugMode = 'state' | 'lod';
+
+/** Цвета состояний тайла для отладки, формат 0xAABBGGRR. */
+const STATE_COLORS: Record<string, number> = {
+    [TILE_QUEUED]: 0xff00ffff, // жёлтый — в очереди
+    [TILE_LOADING]: 0xff0080ff, // оранжевый — грузится
+    [TILE_READY]: 0xff00ff00, // зелёный — готов
+    [TILE_FAILED]: 0xff0000ff // красный — ошибка
+};
+/** Ярко-голубой — тайл выбран обходом для отрисовки (перекрывает цвет состояния). */
+const SELECTED_COLOR = 0xffffff00;
+/** Палитра LOD по глубине (0xAABBGGRR), циклится по модулю. */
+const LOD_COLORS = [
+    0xff4444ff, // 0 — красный
+    0xff44aaff, // 1 — оранжевый
+    0xff44ffff, // 2 — жёлтый
+    0xff44ff44, // 3 — зелёный
+    0xffffaa44, // 4 — голубой
+    0xffff4444, // 5 — синий
+    0xffff44aa, // 6 — фиолетовый
+    0xffff44ff // 7 — розовый
+];
 
 export type TileManagerOptions = {
     app: AppBase;
@@ -782,6 +807,42 @@ export class TileManager {
      */
     getStats(): TileStats {
         return { ...this.stats, queued: this.stats.queued + this.queue.pending };
+    }
+
+    /**
+     * Нарисовать OBB активных тайлов в переданный буфер отладочных линий.
+     *
+     * «Активные» — те, у кого есть контент в работе или на экране (`state !== unloaded`)
+     * либо выбранные обходом. Полностью выгруженные узлы не рисуются, иначе на большом
+     * тайлсете дерево тонет в сетке пустых боксов.
+     *
+     * Обход идёт по тому же принципу, что и `visit`: у тайла с внешним тайлсетом детьми
+     * считается его корень.
+     *
+     * @param lines - Буфер отладочных линий (уже очищенный вызывающим).
+     * @param mode - `state` — цвет по состоянию загрузки; `lod` — по глубине в дереве.
+     */
+    debugDraw(lines: DebugLines, mode: TileDebugMode) {
+        if (!this.rootTile || this.disposed) {
+            return;
+        }
+        const stack: Tile[] = [this.rootTile];
+        while (stack.length > 0) {
+            const tile = stack.pop() as Tile;
+            const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
+            for (let i = 0; i < children.length; ++i) {
+                stack.push(children[i]);
+            }
+
+            if (!tile.obb || (tile.state === TILE_UNLOADED && !tile.selected)) {
+                continue;
+            }
+            const color = mode === 'lod' ?
+                LOD_COLORS[tile.depth % LOD_COLORS.length] :
+                (tile.selected ? SELECTED_COLOR : (STATE_COLORS[tile.state] ?? SELECTED_COLOR));
+            const { center, halfAxes } = tile.obb;
+            lines.obb(center, halfAxes[0], halfAxes[1], halfAxes[2], color);
+        }
     }
 
     /** Снять тайлсет со сцены и освободить всё, что он занимал. */

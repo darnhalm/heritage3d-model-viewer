@@ -35,6 +35,13 @@ const v1 = new Vec3();
 const v2 = new Vec3();
 const up = new Vec3(0, 1, 0);
 const mat = new Mat4();
+// Восемь углов OBB — переиспользуются между вызовами (line() копирует значения сразу).
+const obbCorners = [new Vec3(), new Vec3(), new Vec3(), new Vec3(), new Vec3(), new Vec3(), new Vec3(), new Vec3()];
+// 12 рёбер куба: пары углов, различающиеся ровно одним битом знака (bit2=X, bit1=Y, bit0=Z).
+const obbEdges: [number, number][] = [
+    [0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3],
+    [2, 6], [3, 7], [4, 5], [4, 6], [5, 7], [6, 7]
+];
 const unitBone = [
     [[0,    0,   0], [-0.5, 0, 0.3]],
     [[0,    0,   0], [0.5,  0, 0.3]],
@@ -274,6 +281,34 @@ class DebugLines {
         this.line(new Vec3(max.x, min.y, min.z), new Vec3(max.x, max.y, min.z), clr);
         this.line(new Vec3(max.x, min.y, max.z), new Vec3(max.x, max.y, max.z), clr);
         this.line(new Vec3(min.x, min.y, max.z), new Vec3(min.x, max.y, max.z), clr);
+    }
+
+    /**
+     * Ориентированный габаритный ящик по центру и трём полуосям (не обязательно ортогональным).
+     *
+     * @param center - Центр ящика в мировых координатах.
+     * @param ax - Первая полуось (длина = половина размера вдоль неё).
+     * @param ay - Вторая полуось.
+     * @param az - Третья полуось.
+     * @param clr - Цвет рёбер в формате 0xAABBGGRR.
+     */
+    obb(center: Vec3, ax: Vec3, ay: Vec3, az: Vec3, clr = 0xffffffff): void {
+        let i = 0;
+        for (let sx = -1; sx <= 1; sx += 2) {
+            for (let sy = -1; sy <= 1; sy += 2) {
+                for (let sz = -1; sz <= 1; sz += 2) {
+                    obbCorners[i].set(
+                        center.x + sx * ax.x + sy * ay.x + sz * az.x,
+                        center.y + sx * ax.y + sy * ay.y + sz * az.y,
+                        center.z + sx * ax.z + sy * ay.z + sz * az.z
+                    );
+                    i++;
+                }
+            }
+        }
+        for (let e = 0; e < obbEdges.length; ++e) {
+            this.line(obbCorners[obbEdges[e][0]], obbCorners[obbEdges[e][1]], clr);
+        }
     }
 
     line(v0: Vec3, v1: Vec3, clr = 0xffffffff): void {

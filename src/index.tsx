@@ -200,7 +200,9 @@ const observerData: ObserverData = {
         uvCheckerScale: 16,
         selectedUvSet: 0,
         withTextureOnly: false,
-        texelDensityHeatmap: false
+        texelDensityHeatmap: false,
+        tileDebug: false,
+        tileDebugMode: 'state'
     },
     animation: {
         playing: false,
@@ -266,7 +268,9 @@ const observerData: ObserverData = {
         loadTime: null,
         cameras: '[]',
         selectedCamera: '',
-        hasGsplat: false
+        hasGsplat: false,
+        isTileset: false,
+        tilesetLit: null
     },
     runtime: {
         activeDeviceType: '',
