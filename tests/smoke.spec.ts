@@ -252,7 +252,28 @@ test('alignment tab toggles alignment mode safely without runtime errors', async
     await centerObjectButton.click();
     const centerPivotButton = page.locator('.alignment-pivot-center-button');
     await expect(centerPivotButton).toHaveText('Pivot Point → Object Center');
+
+    const pivotBefore = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.sceneTransform.position = [3, 4, 5];
+        viewer.setCenterScene(false);
+        viewer.calcSceneBounds(viewer.sceneBounds);
+        return {
+            center: [viewer.sceneBounds.center.x, viewer.sceneBounds.center.y, viewer.sceneBounds.center.z],
+            contentTransform: Array.from(viewer.sceneContentRoot.getWorldTransform().data)
+        };
+    });
     await centerPivotButton.click();
+    const pivotAfter = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const pivot = viewer.sceneRoot.getPosition();
+        return {
+            pivot: [pivot.x, pivot.y, pivot.z],
+            contentTransform: Array.from(viewer.sceneContentRoot.getWorldTransform().data)
+        };
+    });
+    pivotAfter.pivot.forEach((value, index) => expect(value).toBeCloseTo(pivotBefore.center[index], 5));
+    pivotAfter.contentTransform.forEach((value, index) => expect(value).toBeCloseTo(pivotBefore.contentTransform[index], 5));
 
     await page.evaluate(() => {
         const viewer = (window as any).viewer;

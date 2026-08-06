@@ -137,7 +137,7 @@ export type TileManagerOptions = {
     /** Узел, под который вешается корень тайлсета (у нас — `sceneContentRoot`). */
     parent: Entity;
     /** Позвать, когда картинка изменилась: у вьюера `app.autoRender === false`. */
-    onChange: () => void;
+    onChange: (transformChanged?: boolean) => void;
     /** Порог экранной ошибки в пикселях. 16 — значение по умолчанию в 3DTilesRendererJS. */
     errorTarget?: number;
     /** Одновременных загрузок. */
@@ -238,7 +238,7 @@ export class TileManager {
 
     private options: Required<Pick<TileManagerOptions, 'errorTarget' | 'maxConcurrent' | 'maxCachedTiles'>>;
 
-    private onChange: () => void;
+    private onChange: (transformChanged?: boolean) => void;
 
     private onWarning: (message: string) => void;
 
@@ -436,6 +436,27 @@ export class TileManager {
         this.tilesetToWorld.copy(this.root.getWorldTransform());
     }
 
+    /**
+     * Синхронизировать мировые bounding volumes с текущей иерархией сцены.
+     *
+     * @returns `true`, если трансформ тайлсета изменился.
+     */
+    syncTransform(): boolean {
+        if (!this.rootTile || this.disposed) {
+            return false;
+        }
+        const rootWorld = this.root.getWorldTransform();
+        if (matricesEqual(rootWorld, this.parentWorld)) {
+            return false;
+        }
+        this.parentWorld.copy(rootWorld);
+        this.updateTilesetToWorld();
+        recomputeWorldVolumes(this.rootTile, this.tilesetToWorld);
+        this.computeBounds();
+        this.onChange(true);
+        return true;
+    }
+
     /** Габариты тайлсета по корневому тайлу — стабильны и не зависят от загруженного. */
     private computeBounds() {
         if (!this.rootTile?.obb) {
@@ -472,13 +493,7 @@ export class TileManager {
         }
 
         // Сцену можно двигать гизмо — тогда мировые габариты и ошибка устаревают.
-        const parentWorld = this.root.getWorldTransform();
-        if (!matricesEqual(parentWorld, this.parentWorld)) {
-            this.parentWorld.copy(parentWorld);
-            this.updateTilesetToWorld();
-            recomputeWorldVolumes(this.rootTile, this.tilesetToWorld);
-            this.computeBounds();
-        }
+        this.syncTransform();
 
         const cameraComponent = this.camera.camera;
         if (!cameraComponent) {
@@ -917,6 +932,31 @@ export class TileManager {
             result.push(...this.getTileMeshInstances(tile));
         });
         return result;
+    }
+
+    /**
+     * Габариты реально загруженной геометрии, а не служебных tile bounding volumes.
+     *
+     * Кэшированные LOD могут дублировать одни и те же участки, но объединённый
+     * AABB от этого не меняется. Эти габариты нужны для object pivot; для LOD по-прежнему
+     * используются объёмы из tileset.json.
+     *
+     * @param result - BoundingBox, в который записать результат.
+     * @returns `true`, если найден хотя бы один меш.
+     */
+    getGeometryBounds(result: BoundingBox): boolean {
+        let first = true;
+        this.loaded.forEach((tile) => {
+            this.getTileMeshInstances(tile).forEach((meshInstance) => {
+                if (first) {
+                    result.copy(meshInstance.aabb);
+                    first = false;
+                } else {
+                    result.add(meshInstance.aabb);
+                }
+            });
+        });
+        return !first;
     }
 
     /**

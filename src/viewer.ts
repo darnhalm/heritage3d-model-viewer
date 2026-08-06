@@ -3608,7 +3608,10 @@ class Viewer {
 
     setObjectToCenter() {
         const previousTransform = this.captureSceneContentTransform();
-        this.calcSceneBounds(this.sceneBounds);
+        this.tileManager?.syncTransform();
+        if (!this.tileManager?.getGeometryBounds(this.sceneBounds)) {
+            this.calcSceneBounds(this.sceneBounds);
+        }
         const center = this.sceneBounds.center;
         const position = this.sceneTransform.position;
         this.sceneTransform = {
@@ -3632,21 +3635,48 @@ class Viewer {
     setObjectPivotToCenter() {
         const previousTransform = this.captureSceneContentTransform();
         const centered = this.observer.get('centerScene');
-        const positionOffset = this.sceneTransform.position;
-        this.sceneRoot.setLocalPosition(positionOffset[0], positionOffset[1], positionOffset[2]);
-        this.sceneRoot.setLocalEulerAngles(this.sceneTransform.rotation[0], this.sceneTransform.rotation[1], this.sceneTransform.rotation[2]);
-        this.sceneRoot.setLocalScale(this.sceneTransform.scale[0], this.sceneTransform.scale[1], this.sceneTransform.scale[2]);
-        this.sceneContentRoot.setLocalPosition(0, 0, 0);
-        this.calcSceneBounds(this.sceneBounds);
+        this.tileManager?.syncTransform();
+        if (!this.tileManager?.getGeometryBounds(this.sceneBounds)) {
+            this.calcSceneBounds(this.sceneBounds);
+        }
+        const pivotWorldPosition = this.sceneBounds.center.clone();
+        const contentWorldPosition = this.sceneContentRoot.getPosition().clone();
+
+        // sceneRoot is the transform gizmo pivot. Move it to the geometry center,
+        // then compensate on sceneContentRoot so the geometry stays in place.
+        this.sceneRoot.setPosition(pivotWorldPosition);
+        this.sceneContentRoot.setPosition(contentWorldPosition);
+
+        const rootPosition = this.sceneRoot.getLocalPosition();
+        const contentPosition = this.sceneContentRoot.getLocalPosition().clone();
+        let pivotOffset: [number, number, number] = [
+            -contentPosition.x,
+            -contentPosition.y,
+            -contentPosition.z
+        ];
+
+        // Preserve the same hierarchy if automatic scene centering is enabled and
+        // setCenterScene() reconstructs the transform later.
+        if (centered) {
+            this.sceneContentRoot.setLocalPosition(0, 0, 0);
+            this.calcSceneBounds(this.sceneBounds);
+            pivotOffset = [
+                -this.sceneBounds.center.x - contentPosition.x,
+                -this.sceneBounds.getMin().y - contentPosition.y,
+                -this.sceneBounds.center.z - contentPosition.z
+            ];
+            this.sceneContentRoot.setLocalPosition(contentPosition);
+        }
 
         this.sceneTransform = {
             ...this.sceneTransform,
-            pivotOffset: centered ?
-                [0, this.sceneBounds.center.y - this.sceneBounds.getMin().y, 0] :
-                [this.sceneBounds.center.x, this.sceneBounds.center.y, this.sceneBounds.center.z]
+            position: [rootPosition.x, rootPosition.y, rootPosition.z],
+            pivotOffset
         };
-        this.setCenterScene(centered);
+        this.dirtyBounds = true;
         this.transformPoisBetween(previousTransform, this.captureSceneContentTransform());
+        this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
+        this.renderNextFrame();
     }
 
     resetObjectPivot() {
@@ -4731,7 +4761,7 @@ class Viewer {
             app: this.app,
             camera: this.camera,
             parent: this.sceneContentRoot,
-            onChange: () => this.handleTileChange(),
+            onChange: transformChanged => this.handleTileChange(transformChanged),
             onWarning: message => warnings.push(message)
         });
         this.tileManager = manager;
@@ -4816,7 +4846,13 @@ class Viewer {
      * выяснить, освещён ли контент (unlit-сплаты из фотограмметрии vs лит-PBR). Флаг
      * читает панель, чтобы подписать режим и убрать неприменимые каналы.
      */
-    private handleTileChange() {
+    private handleTileChange(transformChanged = false) {
+        if (transformChanged && this.tileManager) {
+            this.sceneBounds.copy(this.tileManager.bounds);
+            this.dynamicSceneBounds.copy(this.tileManager.bounds);
+            this.dirtyBounds = true;
+            this.fitCameraClipPlanes();
+        }
         this.renderNextFrame();
         if (this.observer.get('scene.tilesetLit') === null && this.tileManager) {
             const meshInstance = this.tileManager.getVisibleMeshInstances()[0];
@@ -5222,6 +5258,7 @@ class Viewer {
         this.sceneContentRoot.setLocalPosition(0, 0, 0);
 
         // calculate scene bounds after first render in order to get accurate morph target and skinned bounds
+        this.tileManager?.syncTransform();
         this.calcSceneBounds(this.sceneBounds);
 
         // offset scene geometry to place it at the origin
@@ -5237,6 +5274,10 @@ class Viewer {
         this.sceneContentRoot.setLocalPosition(contentX, contentY, contentZ);
 
         this.dirtyBounds = true;
+
+        // 3D Tiles select LOD in world space; keep their OBB/SSE transform in lockstep
+        // with the hierarchy instead of waiting for the next frame.
+        this.tileManager?.syncTransform();
 
         this.renderNextFrame();
     }

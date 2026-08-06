@@ -29,6 +29,11 @@ type CameraControlsState = {
 const tmpV1 = new Vec3();
 const tmpV2 = new Vec3();
 
+/** Keyboard fly speed: normal WASD is precise, Shift restores the former cruising speed. */
+const FLY_KEYBOARD_SPEED = 1 / 3;
+const FLY_KEYBOARD_BOOST_SPEED = 1;
+const FLY_KEYBOARD_PRECISE_SPEED = FLY_KEYBOARD_SPEED * 0.5;
+
 const pose = new Pose();
 
 const frame = new InputFrame({
@@ -304,7 +309,10 @@ class CameraControls {
         // desktop move
         const v = tmpV1.set(0, 0, 0);
         const keyMove = this._state.axis.clone().normalize();
-        v.add(keyMove.mulScalar(fly * this.moveSpeed * (this._state.shift ? 2 : this._state.ctrl ? 0.5 : 1) * dt));
+        const keyboardSpeed = this._state.shift ?
+            FLY_KEYBOARD_BOOST_SPEED :
+            (this._state.ctrl ? FLY_KEYBOARD_PRECISE_SPEED : FLY_KEYBOARD_SPEED);
+        v.add(keyMove.mulScalar(fly * this.moveSpeed * keyboardSpeed * dt));
         const panMove = screenToWorld(this._camera, mouse[0], mouse[1], distance);
         v.add(panMove.mulScalar(pan));
         const wheelMove = new Vec3(0, 0, -wheel[0]);

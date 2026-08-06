@@ -180,6 +180,71 @@ test('переключает уровни детализации по экран
     expect(pageErrors).toEqual([]);
 });
 
+test('отбор LOD следует за pivot, переносом и поворотом тайлсета', async ({ page }) => {
+    test.skip(!await samplesAvailable(page, DISCRETE_LOD),
+        'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
+
+    await page.goto(`/?load=${encodeURIComponent(DISCRETE_LOD)}`);
+    await waitForViewer(page);
+    await waitForTiles(page);
+
+    const pivot = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const geometryBounds = new viewer.sceneBounds.constructor();
+        const hasGeometry = viewer.tileManager.getGeometryBounds(geometryBounds);
+        viewer.setObjectPivotToCenter();
+        const pivot = viewer.sceneRoot.getPosition();
+        const pivotPosition = [pivot.x, pivot.y, pivot.z];
+        viewer.sceneTransform = {
+            ...viewer.sceneTransform,
+            position: [4200, 350, -2700],
+            rotation: [12, 47, -8]
+        };
+        viewer.setCenterScene(false);
+        return {
+            hasGeometry,
+            geometryCenter: [geometryBounds.center.x, geometryBounds.center.y, geometryBounds.center.z],
+            pivotPosition
+        };
+    });
+    await pumpFrames(page, 10);
+
+    const transformed = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const manager = viewer.tileManager;
+        const root = manager.rootTile;
+        const center = manager.bounds.center;
+        const Vec3 = viewer.camera.getPosition().constructor;
+        const offset = 900 / Math.sqrt(3);
+        viewer.cameraControls.reset(
+            new Vec3(center.x, center.y, center.z),
+            new Vec3(center.x + offset, center.y + offset, center.z + offset)
+        );
+        viewer.fitCameraClipPlanes();
+        return {
+            managerCenter: [center.x, center.y, center.z],
+            rootObbCenter: [root.obb.center.x, root.obb.center.y, root.obb.center.z]
+        };
+    });
+    await pumpFrames(page, 90);
+
+    const stats = await getStats(page);
+    const viewerBoundsCenter = await page.evaluate(() => {
+        const raw = String((window as any).viewer.observer.get('scene.boundsCenter'));
+        return (raw.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi) ?? []).slice(0, 3).map(Number);
+    });
+    expect(pivot.hasGeometry).toBe(true);
+    pivot.pivotPosition.forEach((value, index) =>
+        expect(value).toBeCloseTo(pivot.geometryCenter[index], 5));
+    expect(transformed.managerCenter[0]).toBeGreaterThan(3000);
+    transformed.rootObbCenter.forEach((value, index) =>
+        expect(value).toBeCloseTo(transformed.managerCenter[index], 4));
+    viewerBoundsCenter.forEach((value, index) =>
+        expect(value).toBeCloseTo(transformed.managerCenter[index], 4));
+    expect(stats.selected).toBeGreaterThan(0);
+    expect(stats.maxSelectedDepth).toBeGreaterThan(0);
+});
+
 test('тайлы попадают в выбор и в измерения (глубинный picker)', async ({ page }) => {
     test.skip(!await samplesAvailable(page, DISCRETE_LOD),
         'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
@@ -232,11 +297,27 @@ test('разворачивает неявное дерево (implicit tiling, C
     await placeCameraAtScene(page, 4);
     const near = await getStats(page);
 
+    const pivot = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const geometryBounds = new viewer.sceneBounds.constructor();
+        const hasGeometry = viewer.tileManager.getGeometryBounds(geometryBounds);
+        viewer.setObjectPivotToCenter();
+        const position = viewer.sceneRoot.getPosition();
+        return {
+            hasGeometry,
+            geometryCenter: [geometryBounds.center.x, geometryBounds.center.y, geometryBounds.center.z],
+            pivotPosition: [position.x, position.y, position.z]
+        };
+    });
+
     expect(near.maxSelectedDepth).toBeGreaterThan(far.maxSelectedDepth);
     expect(near.maxSelectedDepth).toBeGreaterThanOrEqual(5);
     // Разворачивание вложенных поддеревьев добавляет узлы в дерево на ходу.
     expect(near.tiles).toBeGreaterThan(initial.tiles);
     expect(near.failed).toBe(0);
+    expect(pivot.hasGeometry).toBe(true);
+    pivot.pivotPosition.forEach((value, index) =>
+        expect(value).toBeCloseTo(pivot.geometryCenter[index], 4));
     expect(pageErrors).toEqual([]);
 });
 

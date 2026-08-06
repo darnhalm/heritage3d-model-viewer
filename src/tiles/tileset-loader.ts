@@ -177,6 +177,9 @@ export function recomputeWorldVolumes(tile: Tile, tilesetToWorld: Mat4) {
     }
     tile.geometricError = (tile.json.geometricError ?? 0) * maxScaleOfMat4(worldMatrix);
     tile.children.forEach(child => recomputeWorldVolumes(child, tilesetToWorld));
+    if (tile.externalRoot) {
+        recomputeWorldVolumes(tile.externalRoot, tilesetToWorld);
+    }
 }
 
 /**
