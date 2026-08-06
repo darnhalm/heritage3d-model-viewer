@@ -3606,6 +3606,29 @@ class Viewer {
         this.transformPoisBetween(previousTransform, this.captureSceneContentTransform());
     }
 
+    setObjectToCenter() {
+        const previousTransform = this.captureSceneContentTransform();
+        this.calcSceneBounds(this.sceneBounds);
+        const center = this.sceneBounds.center;
+        const position = this.sceneTransform.position;
+        this.sceneTransform = {
+            ...this.sceneTransform,
+            position: [
+                position[0] - center.x,
+                position[1] - center.y,
+                position[2] - center.z
+            ]
+        };
+        this.sceneRoot.setLocalPosition(
+            this.sceneTransform.position[0],
+            this.sceneTransform.position[1],
+            this.sceneTransform.position[2]
+        );
+        this.dirtyBounds = true;
+        this.transformPoisBetween(previousTransform, this.captureSceneContentTransform());
+        this.renderNextFrame();
+    }
+
     setObjectPivotToCenter() {
         const previousTransform = this.captureSceneContentTransform();
         const centered = this.observer.get('centerScene');

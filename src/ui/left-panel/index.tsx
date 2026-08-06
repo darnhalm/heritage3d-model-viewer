@@ -37,6 +37,7 @@ type ViewerApi = {
         getPosition: () => { x: number; y: number; z: number };
         getFocus: () => { x: number; y: number; z: number };
     };
+    setObjectToCenter?: () => void;
     setObjectPivotToCenter?: () => void;
     resetObjectTransform?: () => void;
     frameScene?: () => void;
@@ -613,13 +614,20 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                         onClick={() => props.setProperty('debug.alignmentGizmoMode', 'rotate')}
                     />
                 </Container>
+                <Container class={['alignment-action-row', 'alignment-single-row']}>
+                    <Button
+                        class={['secondary', 'alignment-object-center-button']}
+                        text={t('Object to Center', lang)}
+                        onClick={() => getViewer()?.setObjectToCenter?.()}
+                    />
+                </Container>
                 <Container class='alignment-section-header'>
                     <Label class='panel-label' text={t('Object Pivot', lang)} />
                 </Container>
                 <Container class={['alignment-action-row', 'alignment-single-row']}>
                     <Button
-                        class={['secondary', 'alignment-object-center-button']}
-                        text={t('Object to Center', lang)}
+                        class={['secondary', 'alignment-pivot-center-button']}
+                        text={t('Pivot Point: Center to Object', lang)}
                         onClick={() => getViewer()?.setObjectPivotToCenter?.()}
                     />
                 </Container>

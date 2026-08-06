@@ -247,12 +247,17 @@ test('alignment tab toggles alignment mode safely without runtime errors', async
 
     await page.locator('.left-panel-tab-alignment').click();
     await expect(page.locator('#alignment-panel')).toBeVisible();
+    const centerObjectButton = page.locator('.alignment-object-center-button');
+    await expect(centerObjectButton).toHaveText('Object to Center');
+    await centerObjectButton.click();
+    const centerPivotButton = page.locator('.alignment-pivot-center-button');
+    await expect(centerPivotButton).toHaveText('Pivot Point → Object Center');
+    await centerPivotButton.click();
 
     await page.evaluate(() => {
         const viewer = (window as any).viewer;
         viewer?.observer?.set('debug.alignmentGizmoMode', 'move');
         viewer?.observer?.set('debug.alignmentGizmoMode', 'rotate');
-        viewer?.setObjectPivotToCenter?.();
         viewer?.resetObjectTransform?.();
         viewer?.frameScene?.();
     });
