@@ -1048,8 +1048,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 .filter(cat => !(observerData?.scene?.isTileset && cat.title === 'UV'))
                                 // У «запечённого» (unlit) контента — фотограмметрия из ion —
                                 // каналы материала бессмысленны (свет и цвет запечены в
-                                // текстуру), поэтому их прячем и подписываем режим «(lit)».
-                                // У настоящего PBR (`tilesetLit === true`, как у брони) каналы
+                                // текстуру), поэтому их прячем и подписываем режим Unlit.
+                                // У освещаемого PBR (`tilesetLit === true`, как у брони) каналы
                                 // осмысленны и остаются.
                                 .filter(cat => !(observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false && cat.title === 'MATERIAL CHANNELS'))
                                 .map((cat, ci) => (
@@ -1073,7 +1073,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 >
                                                     <span className='materials-layer-item-label'>
                                                         {item.value === 'default' && observerData?.scene?.isTileset
-                                                            ? `${item.label} (${observerData?.scene?.tilesetLit ? 'pbr' : 'lit'})`
+                                                            ? `${item.label} — ${observerData?.scene?.tilesetLit === true ? 'Lit (PBR)' :
+                                                                (observerData?.scene?.tilesetLit === false ? 'Unlit' : 'Detecting…')}`
                                                             : item.label}
                                                         {observerData?.debug?.withTextureOnly && item.filename ? <span className='materials-layer-item-filename' title={item.filename}> {item.filename}</span> : null}
                                                     </span>

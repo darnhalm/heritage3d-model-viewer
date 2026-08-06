@@ -673,7 +673,7 @@ class SettingsService {
         });
     }
 
-    tryFetchAndApplySettings(firstModelUrl: string, allFiles?: ModelFile[]): Promise<void> {
+    tryFetchAndApplySettings(firstModelUrl: string, allFiles?: ModelFile[]): Promise<boolean> {
         const firstModelFilename = allFiles?.find(f => (f.filename && this.isModelFilename(f.filename)) || (f.filename && this.isGSplatFilename(f.filename))
         )?.filename;
         const baseName = firstModelFilename ? firstModelFilename.replace(/\.[^/.]+$/, '').split('/').pop() || '' : '';
@@ -714,10 +714,12 @@ class SettingsService {
                 if (r) {
                     this.applyViewerSettings(r.data);
                     this.syncSkyboxAndLightFromObserver();
+                    return true;
                 } else {
                     this.observer.set('camera.position', null);
                     this.observer.set('camera.focus', null);
                     this.resetViewerSettingsToDefaults();
+                    return false;
                 }
             });
         }
@@ -751,7 +753,7 @@ class SettingsService {
                 this.observer.set('camera.position', null);
                 this.observer.set('camera.focus', null);
                 this.resetViewerSettingsToDefaults();
-                return;
+                return false;
             }
             const best = ok.reduce((a, b) => (a.version >= b.version ? a : b));
             if (cacheKey && canUseMissCache) {
@@ -762,6 +764,7 @@ class SettingsService {
             if (typeof console !== 'undefined' && console.debug) {
                 console.debug('[model-viewer] Applied settings from file (version', best.version, ')');
             }
+            return true;
         })
         .catch((err) => {
             if (typeof console !== 'undefined' && console.warn) {
@@ -770,6 +773,7 @@ class SettingsService {
             this.observer.set('camera.position', null);
             this.observer.set('camera.focus', null);
             this.resetViewerSettingsToDefaults();
+            return false;
         })
         .finally(() => clearTimeout(timeoutId));
     }

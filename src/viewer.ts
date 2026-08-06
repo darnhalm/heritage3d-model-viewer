@@ -1839,6 +1839,12 @@ class Viewer {
             },
             'debug.tileFreeze': (value: boolean) => {
                 if (value) {
+                    // Freeze is intended as an inspectable snapshot: stop dispatching new
+                    // tile requests by default. Pause remains independent afterwards, so
+                    // the user can resume loading while keeping the frozen camera.
+                    if (!this.observer.get('debug.tilePaused')) {
+                        this.observer.set('debug.tilePaused', true);
+                    }
                     this.captureFrozenTileCamera(true);
                     this.tileManager?.setFrozen(true);
                     this.enterFrozenTileCameraInspector();
@@ -3449,7 +3455,7 @@ class Viewer {
      * @param allFiles - Optional list of all dropped or loaded files.
      * @returns Promise resolved after settings lookup completes.
      */
-    private tryFetchAndApplySettings(firstModelUrl: string, allFiles?: Array<{ url: string; filename?: string }>): Promise<void> {
+    private tryFetchAndApplySettings(firstModelUrl: string, allFiles?: Array<{ url: string; filename?: string }>): Promise<boolean> {
         return this.settingsService.tryFetchAndApplySettings(firstModelUrl, allFiles);
     }
 
@@ -4735,6 +4741,7 @@ class Viewer {
         this.observer.set('ui.error', null);
         this.observer.set('ui.warnings', []);
         this.clearCta();
+        this.preloadLoadingBackgroundFromSettings(url, [file]).catch(() => {});
 
         // Ловитель теней — горизонтальная плоскость по низу габаритов сцены. Под одиночной
         // моделью он на месте, а тайлсет приносит собственный рельеф: плоскость режет его
@@ -4743,7 +4750,7 @@ class Viewer {
         this.observer.set('shadowCatcher.enabled', false);
 
         // Освещённость контента пока неизвестна — определим по первому пришедшему тайлу
-        // (см. `handleTileChange`). Панель по этому флагу подписывает «Final Render (lit)».
+        // (см. `handleTileChange`). Панель по этому флагу подписывает Lit (PBR) или Unlit.
         this.observer.set('scene.tilesetLit', null);
 
         // Tiles Debug — сессионный инструмент. Новый тайлсет всегда открывается в чистом
@@ -4800,13 +4807,26 @@ class Viewer {
             // разворачивания неявного дерева, см. handleTileChange).
             this.observer.set('scene.tilesetMaxDepth', manager.getTreeDepth());
 
+            // 3D Tiles use the same sidecar convention as regular models:
+            // `tileset.model-viewer-settings.json` beside `tileset.json`.
+            const settingsApplied = await this.tryFetchAndApplySettings(url, [file]);
+            if (this.tileManager !== manager) {
+                return;
+            }
+            // Missing settings reset common viewer defaults, where the shadow catcher is
+            // enabled. Keep the safe tileset default unless a sidecar explicitly overrides it.
+            if (!settingsApplied) {
+                this.observer.set('shadowCatcher.enabled', false);
+            }
+
             // Габариты нужны до кадрирования, причём оба набора: `frameScene` считает по
             // `sceneBounds`, а плоскости отсечения — по `dynamicSceneBounds`, который
             // обычно пересчитывается только в `onPrerender`, то есть уже после.
             this.dirtyBounds = true;
             this.calcSceneBounds(this.sceneBounds);
             this.calcSceneBounds(this.dynamicSceneBounds);
-            this.frameScene();
+            this.focus(true);
+            this.fitCameraClipPlanes();
 
             if (warnings.length > 0) {
                 warnings.forEach(w => console.warn(`3D Tiles: ${w}`));

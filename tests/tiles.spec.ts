@@ -82,6 +82,63 @@ const placeCameraAtScene = async (page: Page, distance: number) => {
     await pumpFrames(page, 120);
 };
 
+test('автоматически применяет tileset.model-viewer-settings.json', async ({ page }) => {
+    test.skip(!await samplesAvailable(page, DISCRETE_LOD),
+        'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
+
+    let settingsRequests = 0;
+    await page.route('**/tileset.model-viewer-settings.json', async (route) => {
+        settingsRequests++;
+        await route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                camera: {
+                    fov: 57,
+                    position: [2100, 2200, 2300],
+                    focus: [10, 20, 30]
+                },
+                light: { intensity: 2.4 },
+                shadowCatcher: { enabled: true },
+                sceneTransform: {
+                    position: [10, 20, 30],
+                    rotation: [0, 15, 0],
+                    scale: [1, 1, 1],
+                    pivotOffset: [0, 0, 0]
+                }
+            })
+        });
+    });
+
+    await page.goto(`/?load=${encodeURIComponent(DISCRETE_LOD)}`);
+    await waitForViewer(page);
+    await page.waitForFunction(() => {
+        const viewer = (window as any).viewer;
+        return viewer.observer.get('camera.fov') === 57 && viewer.sceneTransform.position[0] === 10;
+    });
+
+    const applied = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const position = viewer.cameraControls.getPosition();
+        const focus = viewer.cameraControls.getFocus();
+        return {
+            fov: viewer.camera.camera.fov,
+            lightIntensity: viewer.observer.get('light.intensity'),
+            shadowCatcher: viewer.observer.get('shadowCatcher.enabled'),
+            scenePosition: viewer.sceneTransform.position,
+            position: [position.x, position.y, position.z],
+            focus: [focus.x, focus.y, focus.z]
+        };
+    });
+
+    expect(settingsRequests).toBeGreaterThan(0);
+    expect(applied.fov).toBe(57);
+    expect(applied.lightIntensity).toBe(2.4);
+    expect(applied.shadowCatcher).toBe(true);
+    expect(applied.scenePosition).toEqual([10, 20, 30]);
+    applied.position.forEach((value, index) => expect(value).toBeCloseTo([2100, 2200, 2300][index], 5));
+    applied.focus.forEach((value, index) => expect(value).toBeCloseTo([10, 20, 30][index], 5));
+});
+
 test('загружает тайлсет 1.1 с несколькими контентами на тайл', async ({ page }) => {
     test.skip(!await samplesAvailable(page, METADATA_GRANULARITIES),
         'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
@@ -100,6 +157,7 @@ test('загружает тайлсет 1.1 с несколькими конте
     expect(stats.failed).toBe(0);
     expect(stats.ready).toBeGreaterThan(0);
     expect(stats.bytes).toBeGreaterThan(0);
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('shadowCatcher.enabled'))).toBe(false);
 
     // Габариты берутся из корневого bounding volume, а не из загруженного, — они должны
     // быть осмысленными сразу.
@@ -121,6 +179,14 @@ test('загружает тайлсет 1.1 с несколькими конте
     });
     expect(rendered.enabled).toBeGreaterThan(0);
     expect(rendered.meshInstances).toBeGreaterThan(0);
+
+    // Lit/Unlit — термины про участие в освещении; PBR — освещаемый тип материала.
+    await page.evaluate(() => document.getElementById('panel-left')?.classList.add('expanded'));
+    await page.locator('.left-panel-tab-materials').click();
+    await setFlag(page, 'scene.tilesetLit', true);
+    await expect(page.locator('.materials-layer-item-final-render')).toContainText('Final Render — Lit (PBR)');
+    await setFlag(page, 'scene.tilesetLit', false);
+    await expect(page.locator('.materials-layer-item-final-render')).toContainText('Final Render — Unlit');
 
     // Изоляция оставляет включённой entity выбранного тайла и полностью восстанавливает
     // текущий LOD-срез после выключения.
@@ -565,6 +631,7 @@ test('Фаза 2: заморозка фрустума фиксирует отб�
     // уровень детализации не должен измениться, хотя камера уехала.
     await setFlag(page, 'debug.tileFreeze', true);
     await pumpFrames(page, 5);
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('debug.tilePaused'))).toBe(true);
     const automaticInspector = await page.evaluate(() => {
         const viewer = (window as any).viewer;
         const frozen = viewer.frozenTileCamera.world.data;
@@ -603,6 +670,8 @@ test('Фаза 2: заморозка фрустума фиксирует отб�
     // снова считается от живой камеры и уровень углубляется.
     await setFlag(page, 'debug.tileFreeze', false);
     await pumpFrames(page, 10);
+    // Freeze автоматически включает Pause, но не управляет ею при выключении.
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('debug.tilePaused'))).toBe(true);
     const restored = await getStats(page);
     expect(restored.maxSelectedDepth).toBe(frozen.maxSelectedDepth);
     const inspectorOff = await page.evaluate(() => {
@@ -617,6 +686,7 @@ test('Фаза 2: заморозка фрустума фиксирует отб�
     expect(inspectorOff.solidVisible).toBe(false);
     expect(inspectorOff.snapshot).toBeNull();
 
+    await setFlag(page, 'debug.tilePaused', false);
     await placeCamera(page, 900);
     const live = await getStats(page);
     expect(live.maxSelectedDepth).toBeGreaterThan(frozen.maxSelectedDepth);
