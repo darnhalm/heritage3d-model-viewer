@@ -4672,16 +4672,18 @@ class Viewer {
                     }
 
                     // НЕ гасим индикатор здесь: ассет скачан, но модель ещё не
-                    // отрисована (впереди применение настроек + postSceneLoad + первый
+                    // отрисована (впереди postSceneLoad + первый
                     // кадр). Бар продолжает ползти к 98 и гаснет на ПЕРВОМ КАДРЕ модели
                     // (onPostrender/firstFrame) — иначе была пауза «пусто» после бара.
 
-                    // Настройки (камера/свет/небо) догружаем В ФОНЕ — не блокируют индикатор.
+                    // Настройки (камера/свет/небо) догружаем действительно в фоне. Отсутствующий
+                    // sidecar или медленный сервер настроек не должны блокировать первый кадр.
                     const firstModelUrl = modelFiles[0]?.url;
-                    return this.tryFetchAndApplySettings(firstModelUrl, files);
-                })
-                .then(() => {
                     this.postSceneLoad();
+
+                    this.tryFetchAndApplySettings(firstModelUrl, files)
+                    .then(() => this.renderNextFrame())
+                    .catch(err => console.warn('[model-viewer] Background settings apply failed:', err));
                 })
                 .catch((err) => {
                     console.log(err);
@@ -5935,10 +5937,12 @@ class Viewer {
         this.dirtySelectionHighlight = true;
         this.dirtyWireframe = this.dirtyBounds = this.dirtySkeleton = this.dirtyGrid = this.dirtyNormals = true;
 
-        this.renderNextFrame();
-
         // we perform some special processing on the first frame
         this.firstFrame = true;
+
+        // Schedule the frame only after the flag is set. This guarantees that even
+        // engines which consume renderNextFrame immediately will run first-frame cleanup.
+        this.renderNextFrame();
 
         // re-apply skybox/light from observer (in case anything in postSceneLoad used defaults)
         this.syncSkyboxAndLightFromObserver();

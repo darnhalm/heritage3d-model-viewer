@@ -275,11 +275,8 @@ export interface ObserverData {
         group: string,
         activeId?: string
     },
-    /**
-     * Preferred graphics backend. 'auto' = WebGPU when the browser supports it, WebGL2 otherwise
-     * (the engine performs the fallback); 'webgl' = force WebGL2. Replaces the old boolean
-     * `enableWebGPU`, whose stored `false` could not be told apart from the old default.
-     */
+    /** Legacy observer field kept for state compatibility. Runtime selection is always automatic;
+     * `?webgl` is the only supported override. */
     graphicsBackend: 'auto' | 'webgl',
     centerScene: boolean,
     /**

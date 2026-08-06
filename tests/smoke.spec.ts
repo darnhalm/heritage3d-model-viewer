@@ -21,6 +21,12 @@ test('boots the viewer shell', async ({ page }) => {
 });
 
 test('loads a model and auto-applies nearby settings safely', async ({ page }) => {
+    const dialogs: string[] = [];
+    page.on('dialog', async (dialog) => {
+        dialogs.push(dialog.message());
+        await dialog.dismiss();
+    });
+
     await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
 
@@ -37,6 +43,8 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
             observer?.get('measure.unitScale') === 0.01 &&
             observer?.get('measure.knownDistance') === 1.25;
     });
+
+    await page.waitForFunction(() => (window as any).viewer?.observer?.get('ui.spinner') === false);
 
     await page.evaluate(() => {
         const viewer = (window as any).viewer;
@@ -63,6 +71,7 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
         exposure: (window as any).viewer.observer.get('skybox.exposure'),
         unitScale: (window as any).viewer.observer.get('measure.unitScale'),
         knownDistance: (window as any).viewer.observer.get('measure.knownDistance'),
+        graphicsBackend: (window as any).viewer.observer.get('graphicsBackend'),
         grid: (window as any).viewer.observer.get('debug.grid'),
         materialFactors: (window as any).viewer.observer.get('scene.selectedMaterialFactors'),
         firstMaterial: (() => {
@@ -82,6 +91,8 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
     expect(state.exposure).toBe(6);
     expect(state.unitScale).toBe(0.01);
     expect(state.knownDistance).toBe(1.25);
+    expect(state.graphicsBackend).toBe('auto');
+    expect(dialogs).toEqual([]);
     expect(state.grid).toBe(true);
     expect(state.firstMaterial).not.toBeNull();
     expect(state.firstMaterial.metalness).toBeCloseTo(0.2, 3);

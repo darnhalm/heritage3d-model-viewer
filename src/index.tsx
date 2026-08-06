@@ -342,17 +342,15 @@ const saveOptions = (observer: Observer, name: string) => {
         shadowCatcher: options.shadowCatcher,
         measure: options.measure,
         dimensionBox: options.dimensionBox,
-        graphicsBackend: options.graphicsBackend,
         metadata: options.metadata ?? {},
         ui: { language: options.ui?.language }
     }));
 };
 
 const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, string>) => {
-    // `enableWebGPU` is a legacy key: it stored `false` both when the user opted out and simply
-    // because that used to be the default, so it cannot be honoured now that WebGPU is the default.
-    // Backend preference lives in `graphicsBackend` instead.
-    const filter = ['skybox.options', 'debug.renderMode', 'debug.alignmentMode', 'enableWebGPU'];
+    // The backend is a runtime capability, not a scene/user preference. Ignore both the old and
+    // current persisted keys so stale storage can never override automatic device selection.
+    const filter = ['skybox.options', 'debug.renderMode', 'debug.alignmentMode', 'enableWebGPU', 'graphicsBackend'];
 
     const loadRec = (path: string, value: unknown) => {
         if (filter.indexOf(path) !== -1) {
@@ -510,10 +508,9 @@ const main = () => {
     // to whatever we request, so an unsupported or failing WebGPU device degrades to WebGL2 instead
     // of rejecting — no manual feature detection or try/catch orchestration needed here.
     //
-    // Precedence: ?webgl (force WebGL, for diagnostics) > ?webgpu (kept for existing links; same as
-    // the default now) > the saved `graphicsBackend` preference.
-    const forceWebGL = url.searchParams.has('webgl') ||
-        (!url.searchParams.has('webgpu') && observer.get('graphicsBackend') === 'webgl');
+    // WebGPU is tried first and the engine falls back to WebGL2 automatically. `?webgl` remains
+    // available only as an explicit diagnostic override; models and localStorage cannot force it.
+    const forceWebGL = url.searchParams.has('webgl') && !url.searchParams.has('webgpu');
 
     // create the graphics device
     createGraphicsDevice(canvas, {

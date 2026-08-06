@@ -12,6 +12,8 @@
   "debug": {
     "grid": true
   },
+  "graphicsBackend": "webgl",
+  "enableWebGPU": false,
   "__proto__": {
     "polluted": true
   }
