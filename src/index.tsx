@@ -11,6 +11,7 @@ import {
     revision as engineRevision
 } from 'playcanvas';
 
+import { resolveRequestedBackend, persistRequestedBackend } from './graphics-backend';
 import { initMaterials } from './material';
 import { ObserverData, File as ViewerFile } from './types';
 import initializeUI from './ui';
@@ -225,6 +226,7 @@ const observerData: ObserverData = {
     scene: {
         urls: [],
         filenames: [],
+        twinId: null,
         nodes: '[]',
         selectedNode: {
             path: '',
@@ -284,6 +286,7 @@ const observerData: ObserverData = {
     },
     runtime: {
         activeDeviceType: '',
+        requestedBackend: 'auto',
         gsplatRenderer: '',
         viewportWidth: 0,
         viewportHeight: 0
@@ -494,6 +497,18 @@ const main = () => {
         observer.set('ui.language', forcedLang);
     }
 
+    // Graphics backend selection. The requested backend is a device-local preference
+    // (URL param > localStorage > 'auto'), never read from the model settings JSON.
+    // Set it BEFORE initializeUI so the React state's initial snapshot reflects the real
+    // preference (the UI's '*:set' bridge would otherwise miss a set fired mid-mount).
+    // `createGraphicsDevice` appends its own WebGL2/null fallbacks to whatever we request,
+    // so an unsupported or failing WebGPU device degrades to WebGL2 instead of rejecting.
+    //
+    // - 'auto' / 'webgpu' → request WebGPU first (WebGL2 fallback is automatic).
+    // - 'webgl'           → force WebGL 2 (diagnostics / driver workarounds / render comparison).
+    const requestedBackend = resolveRequestedBackend(url);
+    observer.set('runtime.requestedBackend', requestedBackend);
+
     // create react ui
     initializeUI(observer);
 
@@ -504,13 +519,7 @@ const main = () => {
     // create the canvas
     const canvas = document.getElementById('application-canvas') as HTMLCanvasElement;
 
-    // Graphics backend: WebGPU-first. `createGraphicsDevice` appends its own WebGL2/null fallbacks
-    // to whatever we request, so an unsupported or failing WebGPU device degrades to WebGL2 instead
-    // of rejecting — no manual feature detection or try/catch orchestration needed here.
-    //
-    // WebGPU is tried first and the engine falls back to WebGL2 automatically. `?webgl` remains
-    // available only as an explicit diagnostic override; models and localStorage cannot force it.
-    const forceWebGL = url.searchParams.has('webgl') && !url.searchParams.has('webgpu');
+    const forceWebGL = requestedBackend === 'webgl';
 
     // create the graphics device
     createGraphicsDevice(canvas, {
@@ -521,6 +530,10 @@ const main = () => {
         powerPreference: 'high-performance'
     }).then((device) => {
         observer.set('runtime.activeDeviceType', device.deviceType);
+        // Device started fine — clear any prior fallback-recovery guard.
+        try {
+            window.sessionStorage?.removeItem('mv:backend-recovered');
+        } catch { /* ignore */ }
 
         // create viewer instance
         const viewer = new Viewer(canvas, device, observer, skyboxUrls);
@@ -948,6 +961,26 @@ const main = () => {
                 }
             }
         });
+    }).catch((err) => {
+        // `createGraphicsDevice` normally degrades to WebGL2/null instead of rejecting, so a
+        // rejection here means even the fallback failed. If a manual backend override was in
+        // effect, drop it and reload once into Auto so the user is never left on a blank screen.
+        // The sessionStorage guard prevents a reload loop if Auto also fails.
+        console.error('Failed to create graphics device:', err);
+        const alreadyRecovered = (() => {
+            try {
+                return window.sessionStorage?.getItem('mv:backend-recovered') === '1';
+            } catch {
+                return false;
+            }
+        })();
+        if (requestedBackend !== 'auto' && !alreadyRecovered) {
+            persistRequestedBackend('auto');
+            try {
+                window.sessionStorage?.setItem('mv:backend-recovered', '1');
+            } catch { /* ignore */ }
+            window.location.reload();
+        }
     });
 };
 

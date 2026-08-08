@@ -2,14 +2,13 @@ import { Button } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import AnimationControls from './animation-controls';
-import { MeasurementsPanel, ViewPanel, InfoPanel, IDPanel } from './panels';
+import { MeasurementsPanel, ViewPanel, InfoPanel } from './panels';
 import { addEventListenerOnClickOnly } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData } from '../../types';
 
 const PopupPanelControls = (props: { observerData: ObserverData, setProperty: SetProperty }) => {
     return (<>
-        <IDPanel setProperty={props.setProperty} observerData={props.observerData} />
         <InfoPanel setProperty={props.setProperty} observerData={props.observerData} />
         <MeasurementsPanel setProperty={props.setProperty} observerData={props.observerData} />
         <ViewPanel setProperty={props.setProperty} sceneData={props.observerData.scene} uiData={props.observerData.ui} runtimeData={props.observerData.runtime}/>
@@ -113,15 +112,6 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                                 this.props.setProperty('measure.enabled', true);
                             }
                         }}
-                    />
-                ))}
-                {!embed?.enabled && wrap(t('ID', lang), (
-                    <Button
-                        class={buildClass('id').concat('id-button')}
-                        id='id-button'
-                        width={40}
-                        height={40}
-                        onClick={() => this.handleClick('id')}
                     />
                 ))}
                 {!embed?.enabled && wrap(t('View & share', lang), (

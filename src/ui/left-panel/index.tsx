@@ -1,6 +1,7 @@
 import { Panel, Container, Button, Label, TextInput } from '@playcanvas/pcui/react';
 import React from 'react';
 
+import { persistRequestedBackend, GraphicsBackend } from '../../graphics-backend';
 import { extract } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData, Option } from '../../types';
@@ -31,6 +32,7 @@ type SceneCameraOption = {
 
 type ViewerApi = {
     exportViewerSettings?: () => void;
+    graphicsBackend?: 'webgpu' | 'webgl';
     observer?: { get?: (path: string) => unknown };
     cameraControls?: {
         mode?: string;
@@ -331,7 +333,7 @@ class SkyboxPanel extends React.Component <{ observerData: ObserverData, setProp
         return (
             <Panel headerText={t('Sky', lang)} id='sky-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
                 <Select
-                    label={t('Environment', lang)}
+                    label={t('Environment Map', lang)}
                     type='string'
                     options={parseOptions(skybox?.options)}
                     value={skybox?.value}
@@ -496,18 +498,40 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>): boolean {
         return JSON.stringify(nextProps.observerData.debug) !== JSON.stringify(this.props.observerData.debug) ||
                nextProps.observerData.runtime?.activeDeviceType !== this.props.observerData.runtime?.activeDeviceType ||
+               nextProps.observerData.runtime?.requestedBackend !== this.props.observerData.runtime?.requestedBackend ||
                nextProps.observerData?.ui?.language !== this.props.observerData?.ui?.language;
     }
 
     render() {
         const props = this.props;
         const debugData = props.observerData.debug;
-        const activeDevice = props.observerData.runtime?.activeDeviceType;
+        // WebGPU support is roughly gated by the presence of navigator.gpu; disable that side otherwise.
+        const webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
+        // Position the switch automatically to whatever backend is actually running. Read it live
+        // from the viewer (runtime.activeDeviceType isn't reliably mirrored into React state);
+        // before the device exists, fall back to the requested preference.
+        const running = getViewer()?.graphicsBackend;
+        const requested: GraphicsBackend = props.observerData.runtime?.requestedBackend ?? 'auto';
+        const active: GraphicsBackend = running ??
+            (requested === 'webgl' || !webgpuAvailable ? 'webgl' : 'webgpu');
 
         const lang = props.observerData?.ui?.language;
+
+        // One switch, two positions. Switching the graphics backend restarts the device, so we
+        // persist the device-local preference (never in settings JSON) and reload the viewer.
+        const switchTo = (backend: GraphicsBackend) => {
+            if (backend === active) return;
+            persistRequestedBackend(backend);
+            props.setProperty('runtime.requestedBackend', backend);
+            window.location.reload();
+        };
+
         return (
             <Panel headerText={t('Settings', lang)} id='settings-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
-                <Detail label={t('Current Device', lang)} value={activeDevice === 'webgpu' ? 'WebGPU' : 'WebGL 2'} />
+                <Toggle
+                    label='WebGPU / WebGL 2'
+                    value={active === 'webgl'}
+                    setProperty={(value: boolean) => switchTo(value ? 'webgl' : 'webgpu')} />
                 <Toggle
                     label={t('Grid', lang)}
                     value={debugData?.grid ?? false}
@@ -529,8 +553,25 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
     }
 }
 
-class AlignmentPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty, setAlignmentMode: (value: boolean) => void }> {
-    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; setAlignmentMode: (value: boolean) => void }>): boolean {
+class AlignmentPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty, setAlignmentMode: (value: boolean) => void }, { flashLabel: string }> {
+    state = { flashLabel: '' };
+
+    private flashTimer: ReturnType<typeof setTimeout> | null = null;
+
+    componentWillUnmount() {
+        if (this.flashTimer) clearTimeout(this.flashTimer);
+        this.flashTimer = null;
+    }
+
+    // Touch devices have no hover, so briefly surface the tool name after a tap.
+    private flash = (label: string) => {
+        this.setState({ flashLabel: label });
+        if (this.flashTimer) clearTimeout(this.flashTimer);
+        this.flashTimer = setTimeout(() => this.setState({ flashLabel: '' }), 1600);
+    };
+
+    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; setAlignmentMode: (value: boolean) => void }>, nextState: Readonly<{ flashLabel: string }>): boolean {
+        if (nextState?.flashLabel !== this.state?.flashLabel) return true;
         const keys = ['debug', 'scene.selectedNode', 'scene.bounds', 'scene.boundsCenter', 'measure.unit', 'measure.unitScale', 'dimensionBox', 'helpers', 'ui.language'];
         return JSON.stringify(extract(nextProps.observerData, keys)) !== JSON.stringify(extract(this.props.observerData, keys));
     }
@@ -559,69 +600,107 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
         };
         const lang = props.observerData?.ui?.language;
 
+        // Справка по размерам показывается только в tooltip, без постоянной подписи снизу.
+        // Различаем текущий (возможно изменённый) размер бокса и исходные границы модели.
+        const currentBoxTip = `${t('Current Box Size', lang)}: ${formatDimension(Number(boxSize[0]) || 1)} × ${formatDimension(Number(boxSize[1]) || 1)} × ${formatDimension(Number(boxSize[2]) || 1)}`;
+        const modelBoundsTip = sceneBoundsSize ?
+            `${t('Original Model Bounds', lang)}: ${formatDimension(sceneBoundsSize[0])} × ${formatDimension(sceneBoundsSize[1])} × ${formatDimension(sceneBoundsSize[2])}` :
+            '';
+        const dimensionFieldsTip = modelBoundsTip ? `${currentBoxTip}\n${modelBoundsTip}` : currentBoxTip;
+
+        const target = debugData?.alignmentTarget ?? 'model';
+        const gizmoMode = debugData?.alignmentGizmoMode ?? 'rotate';
+
+        // Compact icon button — a pcui Button; the name lives in a tooltip (span title, per the
+        // popup-panel convention) and a tap also flashes the name below the toolbar for touch.
+        const toolBtn = (opts: {
+            icon: string;
+            label: string;
+            onClick: () => void;
+            active?: boolean;
+            extraClass?: string;
+        }) => (
+            <span title={opts.label} style={{ display: 'contents' }}>
+                <Button
+                    class={[
+                        'secondary', 'alignment-icon-btn', opts.icon,
+                        ...(opts.active ? ['active'] : []),
+                        ...(opts.extraClass ? [opts.extraClass] : [])
+                    ]}
+                    onClick={() => {
+                        this.flash(opts.label);
+                        opts.onClick();
+                    }} />
+            </span>
+        );
+
         return (
             <Container id='alignment-panel' class='tab-panel'>
-                <Container class='alignment-section-header'>
-                    <Label class='panel-label' text='Target' />
+                <Container class='alignment-toolbar'>
+                    <Container class='alignment-toolbar-group'>
+                        {toolBtn({
+                            icon: 'align-icon-model',
+                            label: t('Model', lang),
+                            active: target === 'model',
+                            onClick: () => props.setProperty('debug.alignmentTarget', 'model')
+                        })}
+                        {toolBtn({
+                            icon: 'align-icon-helper',
+                            label: t('Helper', lang),
+                            active: target === 'helper',
+                            onClick: () => {
+                                props.setProperty('debug.alignmentTarget', 'helper');
+                                props.setProperty('debug.alignmentGizmoMode', 'move');
+                            }
+                        })}
+                    </Container>
+                    <Container class='alignment-toolbar-sep' />
+                    <Container class='alignment-toolbar-group'>
+                        {toolBtn({
+                            icon: 'align-icon-move',
+                            label: t('Move', lang),
+                            active: gizmoMode === 'move',
+                            onClick: () => props.setProperty('debug.alignmentGizmoMode', 'move')
+                        })}
+                        {toolBtn({
+                            icon: 'align-icon-rotate',
+                            label: t('Rotate', lang),
+                            active: gizmoMode === 'rotate',
+                            onClick: () => props.setProperty('debug.alignmentGizmoMode', 'rotate')
+                        })}
+                    </Container>
+                    <Container class='alignment-toolbar-sep' />
+                    <Container class='alignment-toolbar-group'>
+                        {toolBtn({
+                            icon: 'align-icon-object-center',
+                            label: t('Object to Center', lang),
+                            onClick: () => getViewer()?.setObjectToCenter?.()
+                        })}
+                        {toolBtn({
+                            icon: 'align-icon-pivot-center',
+                            label: t('Pivot Point: Center to Object', lang),
+                            onClick: () => getViewer()?.setObjectPivotToCenter?.()
+                        })}
+                        {toolBtn({
+                            icon: 'align-icon-fit',
+                            label: t('Fit to Screen', lang),
+                            onClick: () => getViewer()?.frameScene?.()
+                        })}
+                    </Container>
+                    <Container class={['alignment-toolbar-sep', 'alignment-toolbar-sep-reset']} />
+                    <Container class={['alignment-toolbar-group', 'alignment-toolbar-group-reset']}>
+                        {toolBtn({
+                            icon: 'align-icon-reset',
+                            label: t('Reset Object', lang),
+                            extraClass: 'alignment-reset',
+                            onClick: () => getViewer()?.resetObjectTransform?.()
+                        })}
+                    </Container>
                 </Container>
-                <Container class={['alignment-action-row', 'alignment-dual-row']}>
-                    <Button
-                        class={['secondary', ...((debugData?.alignmentTarget ?? 'model') === 'model' ? ['active'] : [])]}
-                        text='Model'
-                        onClick={() => props.setProperty('debug.alignmentTarget', 'model')}
-                    />
-                    <Button
-                        class={['secondary', ...((debugData?.alignmentTarget ?? 'model') === 'helper' ? ['active'] : [])]}
-                        text='Helper'
-                        onClick={() => {
-                            props.setProperty('debug.alignmentTarget', 'helper');
-                            props.setProperty('debug.alignmentGizmoMode', 'move');
-                        }}
-                    />
-                </Container>
-                <Container class={['alignment-action-row', 'alignment-dual-row']}>
-                    <Button
-                        class={['secondary', 'alignment-move-button', ...((debugData?.alignmentGizmoMode ?? 'rotate') === 'move' ? ['active'] : [])]}
-                        text={t('Move', lang)}
-                        onClick={() => props.setProperty('debug.alignmentGizmoMode', 'move')}
-                    />
-                    <Button
-                        class={['secondary', 'alignment-rotate-button', ...((debugData?.alignmentGizmoMode ?? 'rotate') === 'rotate' ? ['active'] : [])]}
-                        text='Rotate'
-                        onClick={() => props.setProperty('debug.alignmentGizmoMode', 'rotate')}
-                    />
-                </Container>
-                <Container class={['alignment-action-row', 'alignment-single-row']}>
-                    <Button
-                        class={['secondary', 'alignment-object-center-button']}
-                        text={t('Object to Center', lang)}
-                        onClick={() => getViewer()?.setObjectToCenter?.()}
-                    />
-                </Container>
-                <Container class='alignment-section-header'>
-                    <Label class='panel-label' text={t('Object Pivot', lang)} />
-                </Container>
-                <Container class={['alignment-action-row', 'alignment-single-row']}>
-                    <Button
-                        class={['secondary', 'alignment-pivot-center-button']}
-                        text={t('Pivot Point: Center to Object', lang)}
-                        onClick={() => getViewer()?.setObjectPivotToCenter?.()}
-                    />
-                </Container>
-                <Container class={['alignment-action-row', 'alignment-single-row']}>
-                    <Button
-                        class={['secondary', 'alignment-reset-object-button']}
-                        text={t('Reset Object', lang)}
-                        onClick={() => getViewer()?.resetObjectTransform?.()}
-                    />
-                </Container>
-                <Container class={['alignment-action-row', 'alignment-single-row']}>
-                    <Button
-                        class={['secondary', 'alignment-fit-button']}
-                        text={t('Fit to Screen', lang)}
-                        onClick={() => getViewer()?.frameScene?.()}
-                    />
-                </Container>
+                {/* Ternary → null (not `&&` → '') so pcui Container never receives a falsy child. */}
+                {this.state.flashLabel ?
+                    <Label class='alignment-tool-caption' text={this.state.flashLabel} /> :
+                    null}
                 <Container class='alignment-section-header'>
                     <Label class='panel-label' text={t('Dimension Box', lang)} />
                 </Container>
@@ -633,6 +712,7 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                     <button
                         type='button'
                         className='pcui-button secondary alignment-box-button'
+                        title={modelBoundsTip || undefined}
                         onClick={() => {
                             if (sceneBoundsSize) {
                                 props.setProperty('dimensionBox.size', sceneBoundsSize);
@@ -649,32 +729,29 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                         {t('Box from Model Bounds', lang)}
                     </button>
                 </Container>
-                <Numeric
-                    label={`${t('Width', lang)}, ${unit}`}
-                    value={sceneToDisplaySize(Number(boxSize[0]) || 1, unitScale, unit)}
-                    min={0.001}
-                    max={1000000000}
-                    enabled={dimensionBox?.enabled ?? false}
-                    setProperty={(value: number) => setBoxAxis(0, value)} />
-                <Numeric
-                    label={`${t('Height', lang)}, ${unit}`}
-                    value={sceneToDisplaySize(Number(boxSize[1]) || 1, unitScale, unit)}
-                    min={0.001}
-                    max={1000000000}
-                    enabled={dimensionBox?.enabled ?? false}
-                    setProperty={(value: number) => setBoxAxis(1, value)} />
-                <Numeric
-                    label={`${t('Depth', lang)}, ${unit}`}
-                    value={sceneToDisplaySize(Number(boxSize[2]) || 1, unitScale, unit)}
-                    min={0.001}
-                    max={1000000000}
-                    enabled={dimensionBox?.enabled ?? false}
-                    setProperty={(value: number) => setBoxAxis(2, value)} />
-                {sceneBoundsSize &&
-                    <Container class='alignment-dimension-summary'>
-                        <Label class='panel-label' text={`${t('Model Bounds', lang)}: ${formatDimension(sceneBoundsSize[0])} × ${formatDimension(sceneBoundsSize[1])} × ${formatDimension(sceneBoundsSize[2])}`} />
-                    </Container>
-                }
+                <span title={dimensionFieldsTip} style={{ display: 'contents' }}>
+                    <Numeric
+                        label={`${t('Width', lang)}, ${unit}`}
+                        value={sceneToDisplaySize(Number(boxSize[0]) || 1, unitScale, unit)}
+                        min={0.001}
+                        max={1000000000}
+                        enabled={dimensionBox?.enabled ?? false}
+                        setProperty={(value: number) => setBoxAxis(0, value)} />
+                    <Numeric
+                        label={`${t('Height', lang)}, ${unit}`}
+                        value={sceneToDisplaySize(Number(boxSize[1]) || 1, unitScale, unit)}
+                        min={0.001}
+                        max={1000000000}
+                        enabled={dimensionBox?.enabled ?? false}
+                        setProperty={(value: number) => setBoxAxis(1, value)} />
+                    <Numeric
+                        label={`${t('Depth', lang)}, ${unit}`}
+                        value={sceneToDisplaySize(Number(boxSize[2]) || 1, unitScale, unit)}
+                        min={0.001}
+                        max={1000000000}
+                        enabled={dimensionBox?.enabled ?? false}
+                        setProperty={(value: number) => setBoxAxis(2, value)} />
+                </span>
             </Container>
         );
     }

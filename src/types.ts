@@ -156,6 +156,10 @@ export interface ObserverData {
     scene: {
         urls: string[],
         filenames: string[],
+        // Постоянный глобально уникальный идентификатор цифрового двойника.
+        // Read-only: назначается согласованным источником сайта/API, не генерируется
+        // локально. При отсутствии показывается состояние «не назначен».
+        twinId?: string | null,
         nodes: string,
         selectedNode: {
             path: string,
@@ -228,6 +232,8 @@ export interface ObserverData {
     }>,
     runtime: {
         activeDeviceType: string,
+        // User-requested graphics backend: 'auto' | 'webgpu' | 'webgl'. Device-local, never stored in model settings.
+        requestedBackend: 'auto' | 'webgpu' | 'webgl',
         /** Resolved gsplat renderer, e.g. 'GPU sort' / 'CPU sort'. Debug/diagnostics only. */
         gsplatRenderer: string,
         viewportWidth: number,
