@@ -1414,6 +1414,13 @@ class Viewer {
         gsplatParams.lodBehindPenalty = 5;
         gsplatParams.lodUpdateAngle = 90;
 
+        // Prefer an already available coarser representation while the camera-optimal LOD is
+        // still loading. Streamed SOG has no single renderable root proxy like a REPLACE GLB
+        // tileset, so without underfill individual leaf blocks appear at their final LOD as their
+        // files arrive. A deliberately high limit means "allow the coarsest available level";
+        // the engine clamps it to the actual number of LODs in each scene.
+        gsplatParams.lodUnderfillLimit = 32;
+
         // Sorting pipeline, chosen explicitly per backend as supersplat-viewer does, rather than
         // leaving GSPLAT_RENDERER_AUTO implicit: same resolution (WebGPU → GPU sort, WebGL → CPU
         // sort), but the choice is visible in code and easy to override.

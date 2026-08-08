@@ -9,6 +9,9 @@ Object Storage. Нужен потому, что монолитную сцену 
 Во вьюере ничего включать не надо: стриминг активируется самим фактом загрузки
 `lod-meta.json` в gsplat-компонент.
 
+План переноса Tiles Debug на Streamed SOG зафиксирован отдельно:
+[`GSPLAT-TILE-DEBUGGING.md`](GSPLAT-TILE-DEBUGGING.md).
+
 ## Установка быстрого действия
 
 ```bash
