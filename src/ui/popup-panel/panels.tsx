@@ -454,6 +454,10 @@ class InfoPanel extends React.Component <{
                             <div className='about-description'>
                                 {t('Flags: flag-icons', lang)} — <a href='https://github.com/lipis/flag-icons' target='_blank' rel='noopener noreferrer' className='about-link'>github.com/lipis/flag-icons</a>
                             </div>
+                            <div className='about-description'>
+                                {t('Tile streaming architecture inspired by NASA-AMMOS/3DTilesRendererJS (Apache License 2.0):', lang)}
+                            </div>
+                            <a href='https://github.com/NASA-AMMOS/3DTilesRendererJS' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/NASA-AMMOS/3DTilesRendererJS</a>
                         </div>
                     )}
                 </Container>
