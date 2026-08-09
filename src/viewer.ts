@@ -5771,7 +5771,7 @@ class Viewer {
     setBackgroundColor(color: { r: number; g: number; b: number } | null | undefined) {
         // null/битый цвет (испорченный localStorage или sidecar-настройки) не должен
         // валить вьюер на старте — молча берём дефолтный фон.
-        const safe = Viewer.sanitizeRgb(color, { r: 134 / 255, g: 152 / 255, b: 174 / 255 });
+        const safe = Viewer.sanitizeRgb(color, { r: 128 / 255, g: 128 / 255, b: 128 / 255 });
         const cnv = (value: number) => Math.max(0, Math.min(255, Math.floor(value * 255)));
         document.getElementById('canvas-wrapper').style.backgroundColor = `rgb(${cnv(safe.r)}, ${cnv(safe.g)}, ${cnv(
             safe.b

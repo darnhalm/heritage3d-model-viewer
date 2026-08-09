@@ -1,5 +1,12 @@
 @use '../node_modules/@playcanvas/pcui/dist/pcui-theme-grey.scss' as *;
 
+:root {
+    --theme-primary: rgb(200 200 200);
+    --theme-primary-rgb: 200, 200, 200;
+    --theme-bright: rgb(218 218 218);
+    --theme-bright-rgb: 218, 218, 218;
+}
+
 /* Flag icons (EN, RU, CN) from flag-icons - https://github.com/lipis/flag-icons */
 .fi {
     display: inline-block;
@@ -34,12 +41,12 @@
     }
 }
 .pcui-boolean-input-toggle.pcui-boolean-input-ticked::after {
-    background-color: #88bce8 !important;
+    background-color: var(--theme-primary) !important;
 }
 .pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-boolean-input-ticked:hover::after,
 .pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-boolean-input-ticked:focus::after,
 .pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-boolean-input-ticked.pcui-focus::after {
-    background-color: #88bce8 !important;
+    background-color: var(--theme-primary) !important;
 }
 
 /* Keep toggle focus/hover consistent with other controls (no orange accent) */
@@ -200,8 +207,8 @@ select {
 .poi-player-progress-fill {
     height: 100%;
     width: 0%;
-    background: rgba(96, 160, 224, 0.28);
-    border-right: 1px solid rgba(140, 190, 236, 0.55);
+    background: rgba(var(--theme-primary-rgb), 0.28);
+    border-right: 1px solid rgba(var(--theme-bright-rgb), 0.72);
     transition: width 90ms linear;
 }
 
@@ -325,7 +332,7 @@ body:not(.ui-ready) #panel-left {
 #panel-toggle:hover::before,
 #panel-toggle:active::before,
 #panel-left.expanded #panel-toggle::before {
-    color: #88bce8;
+    color: var(--theme-primary);
 }
 
 #camera-panel > .pcui-panel-content,
@@ -540,9 +547,9 @@ body:not(.ui-ready) #panel-left {
     }
 
     &.selected {
-        background-color: rgba(136, 188, 232, 0.25);
+        background-color: rgba(var(--theme-primary-rgb), 0.25);
         color: #fff;
-        border-left: 3px solid #88bce8;
+        border-left: 3px solid var(--theme-primary);
     }
 }
 
@@ -694,14 +701,22 @@ body:not(.ui-ready) #panel-left {
 }
 
 .poi-list-item.poi-list-item-drop-target {
-    box-shadow: inset 0 0 0 1px rgba(136, 188, 232, 0.9);
+    box-shadow: inset 0 0 0 1px rgba(var(--theme-primary-rgb), 0.9);
 }
 
 .poi-list-placeholder {
     height: 72px;
     border-radius: 6px;
-    background: rgba(136, 188, 232, 0.12);
-    box-shadow: inset 0 0 0 1px rgba(136, 188, 232, 0.75);
+    background: rgba(var(--theme-primary-rgb), 0.12);
+    box-shadow: inset 0 0 0 1px rgba(var(--theme-primary-rgb), 0.75);
+}
+
+.poi-progress-transition {
+    background-color: rgba(var(--theme-primary-rgb), 0.25);
+}
+
+.poi-progress-hold {
+    background-color: rgba(var(--theme-bright-rgb), 0.3);
 }
 
 .poi-list-row {
@@ -1047,7 +1062,7 @@ body:not(.ui-ready) #panel-left {
 }
 
 .measure-line {
-    stroke: rgba(120, 255, 255, 0.95);
+    stroke: rgba(var(--theme-bright-rgb), 0.95);
     stroke-width: 4;
     stroke-linecap: round;
     stroke-linejoin: round;
@@ -1056,22 +1071,22 @@ body:not(.ui-ready) #panel-left {
 }
 
 .measure-line.measure-completed {
-    stroke: rgba(120, 255, 255, 0.75);
+    stroke: rgba(var(--theme-bright-rgb), 0.75);
     stroke-width: 3;
 }
 
 .measure-polygon {
-    stroke: rgba(120, 255, 255, 0.95);
+    stroke: rgba(var(--theme-bright-rgb), 0.95);
     stroke-width: 3;
     stroke-linecap: round;
     stroke-linejoin: round;
-    fill: rgba(120, 255, 255, 0.15);
+    fill: rgba(var(--theme-primary-rgb), 0.15);
     pointer-events: none;
 }
 
 .measure-polygon.measure-completed {
-    stroke: rgba(120, 255, 255, 0.7);
-    fill: rgba(120, 255, 255, 0.1);
+    stroke: rgba(var(--theme-bright-rgb), 0.7);
+    fill: rgba(var(--theme-primary-rgb), 0.1);
 }
 
 .measure-cross {
@@ -1087,7 +1102,7 @@ body:not(.ui-ready) #panel-left {
 
 .measure-handle {
     fill: rgba(255, 255, 255, 0.001);
-    stroke: rgba(120, 255, 255, 0.0);
+    stroke: rgba(var(--theme-bright-rgb), 0);
     stroke-width: 2;
     pointer-events: all;
     cursor: grab;
@@ -1095,13 +1110,13 @@ body:not(.ui-ready) #panel-left {
 }
 
 .measure-handle:hover {
-    stroke: rgba(120, 255, 255, 0.9);
-    fill: rgba(120, 255, 255, 0.15);
+    stroke: rgba(var(--theme-bright-rgb), 0.9);
+    fill: rgba(var(--theme-primary-rgb), 0.15);
 }
 
 .measure-handle.dragging {
-    stroke: rgba(120, 255, 255, 1);
-    fill: rgba(120, 255, 255, 0.25);
+    stroke: var(--theme-bright);
+    fill: rgba(var(--theme-primary-rgb), 0.25);
     cursor: grabbing;
 }
 
@@ -1168,7 +1183,7 @@ body:not(.ui-ready) #panel-left {
 }
 
 .measure-export-button:hover {
-    background: rgba(120, 200, 255, 0.18);
+    background: rgba(var(--theme-primary-rgb), 0.18);
 }
 
 .measure-export-button .material-symbols-outlined {
@@ -1211,14 +1226,14 @@ body:not(.ui-ready) #panel-left {
 }
 
 .measure-mode-btn.active {
-    background-color: rgba(34, 163, 98, 0.92);
-    border-color: rgba(142, 255, 198, 0.55);
-    box-shadow: 0 0 0 1px rgba(142, 255, 198, 0.55), 0 0 10px rgba(34, 163, 98, 0.45);
-    color: #ffffff;
+    background-color: var(--theme-bright);
+    border-color: rgba(var(--theme-bright-rgb), 0.85);
+    box-shadow: 0 0 0 1px rgba(var(--theme-bright-rgb), 0.7), 0 0 10px rgba(var(--theme-primary-rgb), 0.5);
+    color: #101820;
 }
 
 .measure-mode-btn.active:hover {
-    background-color: rgba(34, 163, 98, 1);
+    background-color: var(--theme-bright);
 }
 
 .ripple-element {
@@ -1536,7 +1551,7 @@ input {
     &.active {
         background: rgba(70, 70, 70, 0.95);
         color: #fff;
-        border-color: #88bce8;
+        border-color: var(--theme-primary);
     }
 }
 
@@ -1721,7 +1736,7 @@ input {
     .about-link {
         display: block;
         margin-bottom: 12px;
-        color: #88bce8;
+        color: var(--theme-primary);
         text-decoration: none;
         word-break: break-all;
 
@@ -1750,7 +1765,7 @@ input {
     &.active {
         background: rgba(70, 70, 70, 0.95);
         color: #fff;
-        border-color: #88bce8;
+        border-color: var(--theme-primary);
     }
 }
 
@@ -1787,15 +1802,15 @@ input {
 }
 
 .measurement-button.measure-enabled {
-    background-color: rgba(34, 163, 98, 0.92) !important;
-    box-shadow: 0 0 0 1px rgba(142, 255, 198, 0.55), 0 0 12px rgba(34, 163, 98, 0.45) !important;
+    background-color: var(--theme-bright) !important;
+    box-shadow: 0 0 0 1px rgba(var(--theme-bright-rgb), 0.75), 0 0 12px rgba(var(--theme-primary-rgb), 0.5) !important;
 }
 
 .measurement-button.measure-enabled:hover,
 .measurement-button.measure-enabled.pcui-focus,
 .measurement-button.measure-enabled.selected {
-    background-color: rgba(34, 163, 98, 1) !important;
-    box-shadow: 0 0 0 1px rgba(186, 255, 221, 0.75), 0 0 14px rgba(34, 163, 98, 0.6) !important;
+    background-color: var(--theme-bright) !important;
+    box-shadow: 0 0 0 1px var(--theme-bright), 0 0 14px rgba(var(--theme-primary-rgb), 0.65) !important;
 }
 
 .view-button {
@@ -1834,8 +1849,8 @@ input {
 
     &.hd-mode {
         background-image: url(./static/icons/hd-icon.svg);
-        background-color: rgba(136, 188, 232, 0.2);
-        border-color: #88bce8;
+        background-color: rgba(var(--theme-primary-rgb), 0.2);
+        border-color: var(--theme-primary);
     }
 
     &.sd-mode {
@@ -1917,13 +1932,13 @@ input {
     &.active {
         background-color: rgba(70, 70, 70, 0.95);
         color: #fff;
-        border-color: #88bce8;
+        border-color: var(--theme-primary);
     }
 
     &.tool-active {
-        background-color: rgba(56, 120, 68, 0.95);
-        color: #fff;
-        border-color: #6ddc84;
+        background-color: var(--theme-bright);
+        color: #101820;
+        border-color: var(--theme-bright);
     }
 
     &.left-panel-tab-scene {
@@ -2092,11 +2107,10 @@ input {
     pointer-events: none;
 }
 
-/* Active toggle state: accent-blue fill + ring so it reads without relying on color alone
-   (secondary buttons force black text/icon via !important, legible on this blue). */
+/* Active tool state: bright theme fill + primary ring, readable without color alone. */
 #alignment-panel .alignment-icon-btn.active {
-    background-color: #88bce8;
-    box-shadow: inset 0 0 0 2px #3f7fb0;
+    background-color: var(--theme-bright);
+    box-shadow: inset 0 0 0 2px var(--theme-primary);
 }
 
 #alignment-panel .alignment-icon-btn.alignment-reset {
@@ -2203,8 +2217,8 @@ input {
     margin: 0 0 12px 0;
     padding: 8px 10px;
     border-radius: 8px;
-    border: 1px solid rgba(96, 160, 224, 0.45);
-    background-color: rgba(96, 160, 224, 0.10);
+    border: 1px solid rgba(var(--theme-primary-rgb), 0.45);
+    background-color: rgba(var(--theme-primary-rgb), 0.10);
 
     .twin-id-info {
         display: flex;
@@ -2219,7 +2233,7 @@ input {
         font-size: 11px;
         letter-spacing: 0.06em;
         text-transform: uppercase;
-        color: #7fb2e8;
+        color: var(--theme-primary);
     }
 
     .twin-id-value {
@@ -2328,7 +2342,7 @@ input {
 }
 
 .metadata-saved-feedback {
-    color: #88bce8;
+    color: var(--theme-primary);
     font-size: 12px;
 }
 
@@ -2956,13 +2970,13 @@ input {
 
 // Primary action emphasis for the embed copy button.
 #copy-embed-button {
-    background: rgba(96, 160, 224, 0.9);
+    background: rgba(var(--theme-primary-rgb), 0.9);
     color: #06121f;
     font-weight: 700;
 }
 
 #copy-embed-button:hover {
-    background: rgba(120, 180, 236, 1);
+    background: var(--theme-bright);
 }
 
 // View & Share: two related controls side by side (Embed type + Preset, W×H).
@@ -3041,17 +3055,17 @@ input {
     font-size: 10px;
     line-height: 1.1;
     text-align: center;
-    color: #cfe3f7;
+    color: #fff;
     word-break: break-word;
 }
 
 .share-flag.on {
-    border-color: rgba(96, 160, 224, 0.7);
-    background: rgba(96, 160, 224, 0.16);
+    border-color: rgba(var(--theme-primary-rgb), 0.7);
+    background: rgba(var(--theme-primary-rgb), 0.16);
 }
 
 .share-flag.on:hover {
-    background: rgba(96, 160, 224, 0.24);
+    background: rgba(var(--theme-primary-rgb), 0.24);
 }
 
 // Off state: dimmed icon + diagonal strike-through (readable without color).
@@ -3105,7 +3119,7 @@ input {
     display: inline-block;
     width: 12px;
     font-size: 11px;
-    color: #8ab4e0;
+    color: var(--theme-primary);
 }
 
 .share-advanced {
@@ -3156,14 +3170,14 @@ input {
         background: #fff !important;
         background: linear-gradient(
             135deg,
-            rgba(255, 255, 255, 1) 0%,
-            rgba(255, 255, 255, 1) 25%,
-            rgba(255, 255, 255, 0.7) 26%,
-            rgba(255, 255, 255, 0.7) 50%,
-            rgba(255, 255, 255, 1) 51%,
-            rgba(255, 255, 255, 1) 75%,
-            rgba(255, 255, 255, 0.7) 76%,
-            rgba(255, 255, 255, 0.7) 100%
+            var(--theme-bright) 0%,
+            var(--theme-bright) 25%,
+            rgba(var(--theme-primary-rgb), 0.88) 26%,
+            rgba(var(--theme-primary-rgb), 0.88) 50%,
+            var(--theme-bright) 51%,
+            var(--theme-bright) 75%,
+            rgba(var(--theme-primary-rgb), 0.88) 76%,
+            rgba(var(--theme-primary-rgb), 0.88) 100%
         ) !important;
     }
 }
@@ -3264,7 +3278,21 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
     }
 }
 
-/* Same focus/hover effect for inputs as buttons (no orange) */
+/* Progress is explicitly theme-colored; native PCUI fields keep their original palette. */
+.pcui-progress:not(.pcui-error) .pcui-progress-inner {
+    background: linear-gradient(
+        135deg,
+        var(--theme-bright) 0%,
+        var(--theme-bright) 25%,
+        var(--theme-primary) 26%,
+        var(--theme-primary) 50%,
+        var(--theme-bright) 51%,
+        var(--theme-bright) 75%,
+        var(--theme-primary) 76%,
+        var(--theme-primary) 100%
+    );
+}
+
 .pcui-input-element:not(.pcui-disabled):not(.pcui-readonly):not(.pcui-error):hover,
 .pcui-input-element:not(.pcui-disabled):not(.pcui-readonly).pcui-focus {
     box-shadow: $panel-focus-shadow;
@@ -3406,7 +3434,7 @@ $panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
     align-items: center;
     gap: 5px;
     padding: 4px 8px;
-    border: 2px solid var(--helper-color, rgba(136, 188, 232, 0.9));
+    border: 2px solid var(--helper-color, var(--theme-primary));
     border-radius: 20px;
     background: rgba(13, 27, 42, 0.9);
     color: #ffffff;

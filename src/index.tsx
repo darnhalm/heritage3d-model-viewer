@@ -14,6 +14,7 @@ import {
 import { resolveRequestedBackend, persistRequestedBackend } from './graphics-backend';
 import { isTrustedViewerMessage, postToViewerParent } from './embed-messaging';
 import { initMaterials } from './material';
+import { applyThemeColor, DEFAULT_THEME_COLOR } from './theme';
 import { ObserverData, File as ViewerFile } from './types';
 import initializeUI from './ui';
 import Viewer from './viewer';
@@ -123,6 +124,9 @@ const skyboxes = [
 ];
 
 const observerData: ObserverData = {
+    theme: {
+        primaryColor: { ...DEFAULT_THEME_COLOR }
+    },
     ui: {
         fullscreen: false,
         active: null,
@@ -171,7 +175,7 @@ const observerData: ObserverData = {
         exposure: 0,
         rotation: 0,
         background: 'Solid Color',
-        backgroundColor: { r: 134 / 255, g: 152 / 255, b: 174 / 255 },
+        backgroundColor: { r: 128 / 255, g: 128 / 255, b: 128 / 255 },
         blur: 1,
         domeProjection: {
             domeRadius: 20,
@@ -350,6 +354,7 @@ const saveOptions = (observer: Observer, name: string) => {
         shadowCatcher: options.shadowCatcher,
         measure: options.measure,
         dimensionBox: options.dimensionBox,
+        theme: options.theme,
         metadata: options.metadata ?? {},
         ui: { language: options.ui?.language }
     }));
@@ -494,6 +499,25 @@ const main = () => {
             saveOptions(observer, 'uistate');
         });
     }
+
+    // One-time migration for browsers that persisted the former blue default before
+    // the configurable theme shipped. A deliberately chosen blue remains available
+    // after this migration marker has been written.
+    try {
+        const migrationKey = 'mv:theme-default-c8-v1';
+        if (!window.localStorage.getItem(migrationKey)) {
+            const color = observer.get('theme.primaryColor') as { r?: number; g?: number; b?: number } | undefined;
+            const legacy = [136 / 255, 188 / 255, 232 / 255];
+            const channels = [Number(color?.r), Number(color?.g), Number(color?.b)];
+            if (channels.every((channel, index) => Math.abs(channel - legacy[index]) < 1e-6)) {
+                observer.set('theme.primaryColor', { ...DEFAULT_THEME_COLOR });
+            }
+            window.localStorage.setItem(migrationKey, '1');
+        }
+    } catch { /* storage unavailable */ }
+
+    applyThemeColor(observer.get('theme.primaryColor'));
+    observer.on('theme.primaryColor:set', (color: unknown) => applyThemeColor(color));
 
     observer.set('ui.embed', embedConfig);
     if (embedConfig.enabled) {

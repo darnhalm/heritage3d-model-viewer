@@ -29,9 +29,9 @@ const THEME_CSS = `
 }
 .driver-popover.h3d-tour-popover .driver-popover-footer button:hover,
 .driver-popover.h3d-tour-popover .driver-popover-footer button:focus {
-    background-color: #88bce8;
+    background-color: var(--theme-primary);
     color: #0d1520;
-    border-color: #88bce8;
+    border-color: var(--theme-primary);
 }
 .driver-popover.h3d-tour-popover .driver-popover-close-btn {
     color: #9ba4b3;
@@ -61,7 +61,7 @@ const THEME_CSS = `
     margin-left: 4px;
     border-radius: 50%;
     background-color: rgba(136, 188, 232, 0.15);
-    color: #88bce8;
+    color: var(--theme-primary);
     font-size: 13px;
     font-weight: 700;
     cursor: pointer;
@@ -70,7 +70,7 @@ const THEME_CSS = `
 }
 .left-panel-tour-button:hover,
 .left-panel-tour-button:focus {
-    background-color: #88bce8;
+    background-color: var(--theme-primary);
     color: #0d1520;
 }
 `;

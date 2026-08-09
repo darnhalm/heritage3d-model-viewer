@@ -364,7 +364,7 @@ class SkyboxPanel extends React.Component <{ observerData: ObserverData, setProp
                     enabled={skybox?.value !== 'None'} />
                 <ColorPickerControl
                     label={t('Background Color', lang)}
-                    value={rgbToArr(skybox?.backgroundColor ?? { r: 0.5, g: 0.6, b: 0.68 })}
+                    value={rgbToArr(skybox?.backgroundColor ?? { r: 128 / 255, g: 128 / 255, b: 128 / 255 })}
                     setProperty={(value: number[]) => props.setProperty('skybox.backgroundColor', arrToRgb(value))}
                     enabled={skybox?.value === 'None' || skybox?.background === 'Solid Color'} />
                 <Slider
@@ -498,6 +498,7 @@ const renderModeCategories = (
 class SettingsPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>): boolean {
         return JSON.stringify(nextProps.observerData.debug) !== JSON.stringify(this.props.observerData.debug) ||
+               JSON.stringify(nextProps.observerData.theme) !== JSON.stringify(this.props.observerData.theme) ||
                nextProps.observerData.runtime?.activeDeviceType !== this.props.observerData.runtime?.activeDeviceType ||
                nextProps.observerData.runtime?.requestedBackend !== this.props.observerData.runtime?.requestedBackend ||
                nextProps.observerData?.ui?.language !== this.props.observerData?.ui?.language;
@@ -529,6 +530,10 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
 
         return (
             <Panel headerText={t('Settings', lang)} id='settings-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
+                <ColorPickerControl
+                    label={t('Theme color', lang)}
+                    value={rgbToArr(props.observerData.theme?.primaryColor ?? { r: 200 / 255, g: 200 / 255, b: 200 / 255 })}
+                    setProperty={(value: number[]) => props.setProperty('theme.primaryColor', arrToRgb(value))} />
                 <Toggle
                     label='WebGPU / WebGL 2'
                     value={active === 'webgl'}
@@ -1547,7 +1552,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                             <img src='static/icons/poi-transition.svg' alt='' className='poi-list-duration-icon' style={{ margin: 0 }} />
                                                         </span>
                                                         <div style={{ position: 'relative', width: 120 }}>
-                                                            <div id={`poi-progress-transition-${String(poi.id)}`} className='poi-progress-transition' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', backgroundColor: 'rgba(50, 200, 255, 0.25)', pointerEvents: 'none', borderRadius: 2 }} />
+                                                            <div id={`poi-progress-transition-${String(poi.id)}`} className='poi-progress-transition' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', pointerEvents: 'none', borderRadius: 2 }} />
                                                             <NakedSlider
                                                                 class='poi-list-duration-slider'
                                                                 width={120}
@@ -1564,7 +1569,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                             <img src='static/icons/poi-duration.svg' alt='' className='poi-list-duration-icon' style={{ margin: 0 }} />
                                                         </span>
                                                         <div style={{ position: 'relative', width: 120 }}>
-                                                            <div id={`poi-progress-hold-${String(poi.id)}`} className='poi-progress-hold' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', backgroundColor: 'rgba(50, 255, 150, 0.25)', pointerEvents: 'none', borderRadius: 2 }} />
+                                                            <div id={`poi-progress-hold-${String(poi.id)}`} className='poi-progress-hold' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', pointerEvents: 'none', borderRadius: 2 }} />
                                                             <NakedSlider
                                                                 class='poi-list-duration-slider'
                                                                 width={120}

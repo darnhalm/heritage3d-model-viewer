@@ -32,7 +32,7 @@ type SettingsServiceArgs = {
 };
 
 class SettingsService {
-    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi'];
+    private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'theme', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi'];
 
     private static readonly SETTINGS_FILTER_PATHS = ['skybox.options', 'debug.renderMode'];
 
@@ -270,6 +270,7 @@ class SettingsService {
         const options = this.observer.json() as Record<string, unknown>;
         const skybox = (options.skybox && typeof options.skybox === 'object') ? { ...(options.skybox as Record<string, unknown>) } : {};
         const light = (options.light && typeof options.light === 'object') ? { ...(options.light as Record<string, unknown>) } : {};
+        const theme = (options.theme && typeof options.theme === 'object') ? { ...(options.theme as Record<string, unknown>) } : {};
         if (skybox.backgroundColor && typeof skybox.backgroundColor === 'object' && !Array.isArray(skybox.backgroundColor)) {
             const c = skybox.backgroundColor as { r?: number; g?: number; b?: number };
             skybox.backgroundColor = SettingsService.rgbToHex(Number(c.r ?? 0), Number(c.g ?? 0), Number(c.b ?? 0));
@@ -278,11 +279,16 @@ class SettingsService {
             const c = light.color as { r?: number; g?: number; b?: number };
             light.color = SettingsService.rgbToHex(Number(c.r ?? 0), Number(c.g ?? 0), Number(c.b ?? 0));
         }
+        if (theme.primaryColor && typeof theme.primaryColor === 'object' && !Array.isArray(theme.primaryColor)) {
+            const c = theme.primaryColor as { r?: number; g?: number; b?: number };
+            theme.primaryColor = SettingsService.rgbToHex(Number(c.r ?? 0), Number(c.g ?? 0), Number(c.b ?? 0));
+        }
         const data: Record<string, unknown> = {
             modelViewerSettingsVersion: 1,
             camera: options.camera,
             skybox,
             light,
+            theme,
             debug: options.debug,
             shadowCatcher: options.shadowCatcher,
             measure: (() => {
@@ -350,11 +356,12 @@ class SettingsService {
         o.set('camera.hq', true);
         o.set('camera.mode', 'orbit');
         o.set('camera.flySpeed', 1);
+        o.set('theme.primaryColor', { r: 200 / 255, g: 200 / 255, b: 200 / 255 });
         o.set('skybox.value', this.skyboxUrls.has('Paul Lobe Haus') ? 'Paul Lobe Haus' : 'None');
         o.set('skybox.exposure', 0);
         o.set('skybox.rotation', 0);
         o.set('skybox.background', 'Solid Color');
-        o.set('skybox.backgroundColor', { r: 134 / 255, g: 152 / 255, b: 174 / 255 });
+        o.set('skybox.backgroundColor', { r: 128 / 255, g: 128 / 255, b: 128 / 255 });
         o.set('skybox.blur', 1);
         o.set('skybox.domeProjection.domeRadius', 20);
         o.set('skybox.domeProjection.tripodOffset', 0.1);
@@ -416,7 +423,7 @@ class SettingsService {
     applyViewerSettings(data: Record<string, unknown>) {
         const filter = SettingsService.SETTINGS_FILTER_PATHS;
         const blockedKeys = new Set(['__proto__', 'constructor', 'prototype']);
-        const colorPaths = ['skybox.backgroundColor', 'light.color', 'debug.wireframeColor'];
+        const colorPaths = ['skybox.backgroundColor', 'light.color', 'theme.primaryColor', 'debug.wireframeColor'];
         const numericPaths = new Set(['measure.unitScale', 'measure.knownDistance', 'camera.fov', 'camera.flySpeed', 'skybox.exposure', 'debug.selectedUvSet']);
         const clampFinite = (value: unknown, min: number, max: number): number | null => {
             const n = Number(value);

@@ -27,6 +27,13 @@ export interface SceneCamera {
 }
 
 export interface ObserverData {
+    theme: {
+        primaryColor: {
+            r: number,
+            g: number,
+            b: number
+        }
+    },
     ui: {
         fullscreen: boolean,
         active?: string,

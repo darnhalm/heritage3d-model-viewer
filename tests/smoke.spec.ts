@@ -48,6 +48,56 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
     });
 });
 
+test('theme color drives blue accents, active tools, progress colors and settings export', async ({ page }) => {
+    await page.goto('/?webgl');
+    await waitForViewer(page);
+    await expect(page.locator('#settings-panel')).toContainText('Theme color');
+    const defaultTheme = await page.evaluate(() => ({
+        color: (window as any).viewer.observer.get('theme.primaryColor'),
+        backgroundColor: (window as any).viewer.observer.get('skybox.backgroundColor'),
+        css: getComputedStyle(document.documentElement).getPropertyValue('--theme-primary').trim()
+    }));
+    expect(defaultTheme.color).toEqual({ r: 200 / 255, g: 200 / 255, b: 200 / 255 });
+    expect(defaultTheme.backgroundColor).toEqual({ r: 128 / 255, g: 128 / 255, b: 128 / 255 });
+    expect(defaultTheme.css).toBe('rgb(200 200 200)');
+
+    const themed = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.observer.set('theme.primaryColor', { r: 0.2, g: 0.4, b: 0.6 });
+
+        const fixture = document.createElement('div');
+        fixture.innerHTML = `
+            <button class="measure-mode-btn active"></button>
+            <div id="alignment-panel"><button class="alignment-icon-btn active"></button></div>
+            <div class="pcui-progress"><div class="pcui-progress-inner"></div></div>
+        `;
+        document.body.appendChild(fixture);
+        const measure = fixture.querySelector('.measure-mode-btn') as HTMLElement;
+        const alignment = fixture.querySelector('.alignment-icon-btn') as HTMLElement;
+        const progress = fixture.querySelector('.pcui-progress-inner') as HTMLElement;
+        const result = {
+            primary: getComputedStyle(document.documentElement).getPropertyValue('--theme-primary').trim(),
+            bright: getComputedStyle(document.documentElement).getPropertyValue('--theme-bright').trim(),
+            measureBackground: getComputedStyle(measure).backgroundColor,
+            alignmentBackground: getComputedStyle(alignment).backgroundColor,
+            progressBackground: getComputedStyle(progress).backgroundImage,
+            savedColor: viewer.settingsService.getSettingsData().theme.primaryColor,
+            localColor: JSON.parse(localStorage.getItem('model-viewer-uistate') || '{}').theme?.primaryColor
+        };
+        fixture.remove();
+        return result;
+    });
+
+    expect(themed.primary).toBe('rgb(51 102 153)');
+    expect(themed.bright).toBe('rgb(116 151 186)');
+    expect(themed.measureBackground).toBe('rgb(116, 151, 186)');
+    expect(themed.alignmentBackground).toBe('rgb(116, 151, 186)');
+    expect(themed.progressBackground).toContain('rgb(116, 151, 186)');
+    expect(themed.progressBackground).toContain('rgb(51, 102, 153)');
+    expect(themed.savedColor).toBe('#336699');
+    expect(themed.localColor).toEqual({ r: 0.2, g: 0.4, b: 0.6 });
+});
+
 test('loads a model and auto-applies nearby settings safely', async ({ page }) => {
     const dialogs: string[] = [];
     page.on('dialog', async (dialog) => {
@@ -162,6 +212,7 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
     await expect(page.locator('.share-flag[aria-label^="View & share:"]')).toHaveCount(1);
     await expect(page.locator('.share-flag[aria-label^="Camera mode:"]')).toHaveCount(1);
     await expect(page.locator('.share-flag[aria-label^="Animation controls:"]')).toHaveCount(1);
+    await expect(page.locator('.share-flag-label').first()).toHaveCSS('color', 'rgb(255, 255, 255)');
 });
 
 test('none embed preset hides every configurable interface element', async ({ page }) => {
