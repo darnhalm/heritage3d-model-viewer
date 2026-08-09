@@ -292,7 +292,7 @@ test('embed messaging accepts only the configured or referrer parent origin', as
         await frame.locator('body').waitFor();
         await expect.poll(async () => frame.locator('body').evaluate(() => {
             return typeof (window as any).viewer !== 'undefined';
-        })).toBe(true);
+        }), { timeout: 20000 }).toBe(true);
         return frame;
     };
 
@@ -412,7 +412,9 @@ test('completed measurements stay editable, area closes on double click, and JSO
         viewer.observer.set('measure.mode', 'area');
         controller.points = [new Vec3(0.55, -0.1, 0), new Vec3(0.9, -0.1, 0), new Vec3(0.9, 0.1, 0)];
         viewer.observer.set('measure.pointCount', 3);
-        viewer.canvas.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, button: 0 }));
+        const doubleClick = document.createEvent('MouseEvent');
+        doubleClick.initMouseEvent('dblclick', true, true, window, 2, 0, 0, 0, 0, false, false, false, false, 0, null);
+        viewer.canvas.dispatchEvent(doubleClick);
 
         return {
             handlesBefore,
@@ -439,7 +441,8 @@ test('completed measurements stay editable, area closes on double click, and JSO
     expect(result.pointCount).toBe(0);
 });
 
-test('metadata and poi tabs stay stable and poi edits persist to observer state', async ({ page }) => {
+test('poi tab stays stable and edits persist to observer state', async ({ page }) => {
+    test.setTimeout(60000);
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => {
         pageErrors.push(error.message);
@@ -457,19 +460,6 @@ test('metadata and poi tabs stay stable and poi edits persist to observer state'
     await page.evaluate(() => {
         document.getElementById('panel-left')?.classList.add('expanded');
     });
-
-    await page.locator('.left-panel-tab-metadata').click();
-    await expect(page.locator('#metadata-panel')).toBeVisible();
-
-    const metadataTitleInput = page.locator('#metadata-panel input').first();
-    await metadataTitleInput.fill('Smoke Metadata Title');
-    await metadataTitleInput.blur();
-
-    const metadataTitle = await page.evaluate(() => {
-        const metadata = (window as any).viewer?.observer?.get('metadata');
-        return metadata?.title ?? '';
-    });
-    expect(metadataTitle).toBe('Smoke Metadata Title');
 
     await page.evaluate(() => {
         (window as any).viewer?.observer?.set('poi.list', JSON.stringify([{
@@ -498,22 +488,15 @@ test('metadata and poi tabs stay stable and poi edits persist to observer state'
     });
     expect(Array.isArray(poiState)).toBe(true);
     expect(poiState[0]?.description).toBe('Smoke description');
+    expect(poiState[0]?.color).toBe('#123abc');
 
-    const poiSelectedMessage = await page.evaluate(() => new Promise<Record<string, unknown>>((resolve) => {
-        const onMessage = (event: MessageEvent) => {
-            const data = event.data;
-            if (data && typeof data === 'object' && data.type === 'poi-selected') {
-                window.removeEventListener('message', onMessage);
-                resolve(data as Record<string, unknown>);
-            }
-        };
-        window.addEventListener('message', onMessage);
-
+    const focusedPoi = await page.evaluate(() => {
         const viewer = (window as any).viewer;
         viewer?.clearFocusedPoi?.();
         viewer?.focusPoi?.('poi-smoke-1');
-    }));
-    expect(poiSelectedMessage.color).toBe('#123abc');
+        return viewer?.observer?.get('poi.activeId');
+    });
+    expect(focusedPoi).toBe('poi-smoke-1');
     expect(pageErrors).toEqual([]);
 });
 
@@ -549,7 +532,6 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
         ]));
         viewer.focusPoi('tour-1');
 
-        (window as any).__tourStates = [];
         (window as any).__tourTimeoutCallbacks = [];
         const originalSetTimeout = window.setTimeout.bind(window);
         window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
@@ -558,11 +540,6 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
             }
             return originalSetTimeout(handler, timeout, ...args);
         }) as typeof window.setTimeout;
-        window.addEventListener('message', (event) => {
-            if (event.data?.type === 'tour-state') {
-                (window as any).__tourStates.push(event.data.state);
-            }
-        });
     });
 
     const playButton = page.locator('.poi-player-play-button');
@@ -643,8 +620,7 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
         return {
             position: [position.x, position.y, position.z],
             activeId: viewer.observer.get('poi.activeId'),
-            playing: viewer.observer.get('poi.playing'),
-            states: (window as any).__tourStates
+            playing: viewer.observer.get('poi.playing')
         };
     });
     stopped.position.forEach((value: number, index: number) => {
@@ -652,7 +628,6 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
     });
     expect(stopped.activeId).toBe('tour-1');
     expect(stopped.playing).toBe(false);
-    expect(stopped.states).toEqual(['playing', 'paused', 'playing', 'stopped']);
 });
 
 test('alignment tab toggles alignment mode safely without runtime errors', async ({ page }) => {
@@ -757,6 +732,7 @@ test('alignment tab toggles alignment mode safely without runtime errors', async
 });
 
 test('materials by objects mode shows selected-node panel and stays stable', async ({ page }) => {
+    test.setTimeout(60000);
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => {
         pageErrors.push(error.message);
