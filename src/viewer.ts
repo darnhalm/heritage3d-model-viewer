@@ -3991,17 +3991,10 @@ class Viewer {
             this.cameraControls.moveSpeed = sceneSize * 2.5;
             this.cameraControls.zoomRange = new Vec2(ZOOM_SCALE_MIN, 10 * sceneSize);
             this.cameraControls.reset(center, start);
-        } else if (this.observer.get('dimensionBox.initialized')) {
-            this.syncDimensionBoxEntityFromObserver();
-            const center = this.dimensionBoxEntity.getPosition().clone();
-            const size = this.dimensionBoxEntity.getLocalScale();
-            const sceneSize = Math.max(0.00001, size.length() * 0.5);
-            const zoom = this.calcZoom(sceneSize);
-            const start = this.camera.forward.clone().mulScalar(-zoom).add(center);
-            this.cameraControls.moveSpeed = sceneSize * 2.5;
-            this.cameraControls.zoomRange = new Vec2(ZOOM_SCALE_MIN, 10 * sceneSize);
-            this.cameraControls.reset(center, start);
         } else {
+            // Кадрируем по реальной геометрии сцены (calcSceneBounds внутри focus),
+            // а не по регулируемому alignment-боксу — так «вписать в экран» центрируется
+            // на самой модели.
             this.focus(false);
         }
         this.fitCameraClipPlanes();
