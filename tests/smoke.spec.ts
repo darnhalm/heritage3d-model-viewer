@@ -72,6 +72,7 @@ test('theme color drives blue accents, active tools, progress colors and setting
             <div class="twin-id-row"><button class="twin-id-copy"></button></div>
             <div class="selected-object-block"><button class="selected-object-copy"></button></div>
             <button class="left-panel-tour-button"></button>
+            <div id="popup-buttons-parent"><button class="pcui-button popup-button pcui-focus"></button></div>
             <div class="pcui-progress"><div class="pcui-progress-inner"></div></div>
         `;
         document.body.appendChild(fixture);
@@ -80,15 +81,18 @@ test('theme color drives blue accents, active tools, progress colors and setting
         const twinIdCopy = fixture.querySelector('.twin-id-copy') as HTMLElement;
         const selectedObjectCopy = fixture.querySelector('.selected-object-copy') as HTMLElement;
         const tourButton = fixture.querySelector('.left-panel-tour-button') as HTMLElement;
+        const centralButton = fixture.querySelector('.popup-button') as HTMLElement;
         const progress = fixture.querySelector('.pcui-progress-inner') as HTMLElement;
         const result = {
             primary: getComputedStyle(document.documentElement).getPropertyValue('--theme-primary').trim(),
             bright: getComputedStyle(document.documentElement).getPropertyValue('--theme-bright').trim(),
+            glow: getComputedStyle(document.documentElement).getPropertyValue('--theme-glow').trim(),
             measureBackground: getComputedStyle(measure).backgroundColor,
             alignmentBackground: getComputedStyle(alignment).backgroundColor,
             twinIdCopyColor: getComputedStyle(twinIdCopy).color,
             selectedObjectCopyColor: getComputedStyle(selectedObjectCopy).color,
             tourButtonBackground: getComputedStyle(tourButton).backgroundColor,
+            centralButtonShadow: getComputedStyle(centralButton).boxShadow,
             progressBackground: getComputedStyle(progress).backgroundImage,
             savedColor: viewer.settingsService.getSettingsData().theme.primaryColor,
             localColor: JSON.parse(localStorage.getItem('model-viewer-uistate') || '{}').theme?.primaryColor
@@ -99,11 +103,14 @@ test('theme color drives blue accents, active tools, progress colors and setting
 
     expect(themed.primary).toBe('rgb(51 102 153)');
     expect(themed.bright).toBe('rgb(116 151 186)');
+    expect(themed.glow).toBe('rgb(218 227 237)');
     expect(themed.measureBackground).toBe('rgb(116, 151, 186)');
     expect(themed.alignmentBackground).toBe('rgb(116, 151, 186)');
     expect(themed.twinIdCopyColor).toBe('rgb(51, 102, 153)');
     expect(themed.selectedObjectCopyColor).toBe('rgb(51, 102, 153)');
     expect(themed.tourButtonBackground).toBe('rgba(51, 102, 153, 0.15)');
+    expect(themed.centralButtonShadow).toContain('rgba(218, 227, 237, 0.34)');
+    expect(themed.centralButtonShadow).toContain('rgba(218, 227, 237, 0.24)');
     expect(themed.progressBackground).toContain('rgb(116, 151, 186)');
     expect(themed.progressBackground).toContain('rgb(51, 102, 153)');
     expect(themed.savedColor).toBe('#336699');

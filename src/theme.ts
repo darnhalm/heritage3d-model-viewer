@@ -22,13 +22,17 @@ const applyThemeColor = (value: unknown) => {
     if (typeof document === 'undefined') return;
     const color = normalizeThemeColor(value);
     const brighten = (channel: number) => channel + (1 - channel) * 0.32;
+    const softenForGlow = (channel: number) => channel + (1 - channel) * 0.82;
     const primary = [toByte(color.r), toByte(color.g), toByte(color.b)];
     const bright = [toByte(brighten(color.r)), toByte(brighten(color.g)), toByte(brighten(color.b))];
+    const glow = [toByte(softenForGlow(color.r)), toByte(softenForGlow(color.g)), toByte(softenForGlow(color.b))];
     const style = document.documentElement.style;
     style.setProperty('--theme-primary', `rgb(${primary.join(' ')})`);
     style.setProperty('--theme-primary-rgb', primary.join(', '));
     style.setProperty('--theme-bright', `rgb(${bright.join(' ')})`);
     style.setProperty('--theme-bright-rgb', bright.join(', '));
+    style.setProperty('--theme-glow', `rgb(${glow.join(' ')})`);
+    style.setProperty('--theme-glow-rgb', glow.join(', '));
 };
 
 export { DEFAULT_THEME_COLOR, applyThemeColor, normalizeThemeColor };

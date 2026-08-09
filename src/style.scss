@@ -5,6 +5,8 @@
     --theme-primary-rgb: 200, 200, 200;
     --theme-bright: rgb(218 218 218);
     --theme-bright-rgb: 218, 218, 218;
+    --theme-glow: rgb(245 245 245);
+    --theme-glow-rgb: 245, 245, 245;
 }
 
 /* Flag icons (EN, RU, CN) from flag-icons - https://github.com/lipis/flag-icons */
@@ -53,7 +55,7 @@
 .pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly):hover,
 .pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly):focus,
 .pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly).pcui-focus {
-    box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+    box-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
 }
 
 .pcui-boolean-input-toggle:not(.pcui-disabled, .pcui-readonly):hover::after,
@@ -1466,7 +1468,9 @@ input {
 
     .pcui-button:hover,
     .pcui-button.pcui-focus {
-        box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+        box-shadow:
+            0 0 0 1px rgba(var(--theme-glow-rgb), 0.34),
+            0 0 8px 1px rgba(var(--theme-glow-rgb), 0.24) !important;
     }
 }
 
@@ -1480,7 +1484,9 @@ input {
 
     &:hover,
     &.pcui-focus {
-        box-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+        box-shadow:
+            0 0 0 1px rgba(var(--theme-glow-rgb), 0.34),
+            0 0 8px 1px rgba(var(--theme-glow-rgb), 0.24) !important;
     }
 }
 
@@ -3295,7 +3301,7 @@ input {
     font-style: normal;
 }
 
-$panel-focus-shadow: 0 0 2px 1px rgba(255, 255, 255, 0.4) !important;
+$panel-focus-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
 
 .pcui-button {
     border-radius: 6px !important;
