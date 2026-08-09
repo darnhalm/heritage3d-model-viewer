@@ -76,6 +76,9 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
         const showShareButton = !(embed?.enabled) || embed.share;
         const showCameraModeButton = !(embed?.enabled) || embed.cameraMode;
         const showFragmentButton = !!this.props.observerData.scene.isTileset && (!(embed?.enabled) || embed.fragment);
+        const fragmentActive = this.props.observerData.fragment.selecting ||
+            this.props.observerData.fragment.initialized ||
+            this.props.observerData.fragment.enabled;
         const wrap = (titleText: string, btn: React.ReactNode) => (
             <span title={titleText} style={{ display: 'contents' }}>{btn}</span>
         );
@@ -125,7 +128,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                     <Button
                         class={buildClass('fragment')
                         .concat('fragment-button')
-                        .concat(this.props.observerData.fragment.enabled ? 'fragment-enabled' : [])}
+                        .concat(fragmentActive ? 'fragment-enabled' : [])}
                         id='fragment-button'
                         width={40}
                         height={40}

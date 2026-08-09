@@ -1864,13 +1864,19 @@ input {
     box-shadow: 0 0 0 1px rgba(var(--theme-bright-rgb), 0.75), 0 0 12px rgba(var(--theme-primary-rgb), 0.5) !important;
 }
 
+.fragment-button.fragment-enabled:hover,
+.fragment-button.fragment-enabled.pcui-focus,
+.fragment-button.fragment-enabled.selected {
+    background-color: var(--theme-bright) !important;
+    box-shadow: 0 0 0 1px var(--theme-bright), 0 0 14px rgba(var(--theme-primary-rgb), 0.65) !important;
+}
+
 .fragment-panel {
     width: 360px;
     gap: 8px;
 }
 
 .fragment-panel.fragment-selecting {
-    pointer-events: none;
     opacity: 0.82;
 }
 

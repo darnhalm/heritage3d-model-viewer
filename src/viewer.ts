@@ -12,6 +12,7 @@ import {
     EVENT_KEYUP,
     FILTER_NEAREST,
     KEY_CONTROL,
+    KEY_ESCAPE,
     KEY_F,
     KEY_R,
     LAYERID_DEPTH,
@@ -1077,6 +1078,17 @@ class Viewer {
                 return;
             }
             switch (event.key) {
+                case KEY_ESCAPE: {
+                    if (this.observer.get('fragment.selecting') ||
+                        this.observer.get('fragment.initialized') ||
+                        this.observer.get('fragment.enabled')) {
+                        this.resetFragmentView();
+                        if (this.observer.get('ui.active') === 'fragment') {
+                            this.observer.set('ui.active', null);
+                        }
+                    }
+                    break;
+                }
                 case KEY_F: {
                     this.frameScene();
                     break;
@@ -1699,6 +1711,18 @@ class Viewer {
         this.observer.set('ui.active', 'fragment');
     }
 
+    /** Toggle fragment picking, removing a pending green box when cancelled. */
+    toggleFragmentSelection() {
+        const selectionActive = this.observer.get('fragment.selecting') ||
+            (this.observer.get('fragment.initialized') && !this.observer.get('fragment.enabled'));
+        if (selectionActive) {
+            this.resetFragmentView();
+            this.observer.set('ui.active', null);
+        } else {
+            this.beginFragmentSelection();
+        }
+    }
+
     /** Remove the fragment box and restore the complete model. */
     resetFragmentView() {
         this.observer.set('fragment.enabled', false);
@@ -1711,7 +1735,11 @@ class Viewer {
     /** Toggle isolation using the live observer value at click time. */
     toggleFragmentIsolation() {
         if (!this.observer.get('fragment.initialized')) return;
-        this.observer.set('fragment.enabled', !this.observer.get('fragment.enabled'));
+        if (this.observer.get('fragment.enabled')) {
+            this.resetFragmentView();
+        } else {
+            this.observer.set('fragment.enabled', true);
+        }
     }
 
     /**

@@ -1051,6 +1051,7 @@ class ViewPanel extends React.Component <{
 export const FragmentPanel = (props: { observerData: ObserverData, setProperty: SetProperty }) => {
     const data = props.observerData.fragment;
     const lang = props.observerData.ui.language;
+    const selectionActive = data.selecting || (data.initialized && !data.enabled);
 
     return (
         <div className='popup-panel-parent' hidden={props.observerData.ui.active !== 'fragment'}>
@@ -1058,9 +1059,9 @@ export const FragmentPanel = (props: { observerData: ObserverData, setProperty: 
                 <Label text={t('Fragment view', lang)} class='popup-panel-heading' />
                 <Container class='fragment-primary-actions'>
                     <Button
-                        class={['secondary', 'fragment-primary-button'].concat(data.selecting ? ['selected'] : [])}
+                        class={['secondary', 'fragment-primary-button'].concat(selectionActive ? ['selected'] : [])}
                         text={t('SELECT FRAGMENT', lang)}
-                        onClick={() => window.viewer?.beginFragmentSelection?.()}
+                        onClick={() => window.viewer?.toggleFragmentSelection?.()}
                     />
                     <Button
                         class={['secondary', 'fragment-primary-button', 'fragment-isolate-button'].concat(data.enabled ? ['active'] : [])}
