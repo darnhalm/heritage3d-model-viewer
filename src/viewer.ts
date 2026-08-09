@@ -104,6 +104,7 @@ import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
 import { ShadowCatcher } from './shadow-catcher';
+import { normalizeThemeColor } from './theme';
 import { TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, type SceneHelperEntry } from './viewer/controllers';
@@ -1777,14 +1778,31 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    /** Toggle isolation using the live observer value at click time. */
+    /**
+     * Toggle isolation using the live observer value at click time. Exiting isolation
+     * only turns clipping off and KEEPS the box, so the user can tweak it or re-isolate;
+     * dropping the box entirely is done via the SELECT FRAGMENT toggle (resetFragmentView).
+     */
     toggleFragmentIsolation() {
         if (!this.observer.get('fragment.initialized')) return;
         if (this.observer.get('fragment.enabled')) {
-            this.resetFragmentView();
+            this.observer.set('fragment.enabled', false);
+            this.updateFragmentGizmo();
+            this.renderNextFrame();
         } else {
             this.observer.set('fragment.enabled', true);
         }
+    }
+
+    /** Soft translucent fill for the fragment box, tinted with the active theme accent.
+     *  DebugSolid packs colors as 0xAABBGGRR, so bytes are laid out A,B,G,R. */
+    private fragmentFillColor(): number {
+        const color = normalizeThemeColor(this.observer.get('theme.primaryColor'));
+        const r = Math.round(color.r * 255) & 0xff;
+        const g = Math.round(color.g * 255) & 0xff;
+        const b = Math.round(color.b * 255) & 0xff;
+        const alpha = 0x30;
+        return ((alpha << 24) | (b << 16) | (g << 8) | r) >>> 0;
     }
 
     /**
@@ -4431,6 +4449,119 @@ class Viewer {
         this.observer.set('dimensionBox.size', size);
         this.observer.set('dimensionBox.center', center);
         this.observer.set('dimensionBox.rotation', [0, 0, 0]);
+        this.observer.set('dimensionBox.initialized', true);
+        this.observer.set('dimensionBox.enabled', true);
+        this.syncDimensionBoxEntityFromObserver();
+        this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
+        postToViewerParent({ type: 'dimensionbox-changed' });
+        this.dirtyBounds = true;
+        this.renderNextFrame();
+    }
+
+    /**
+     * Углы AABB всей загруженной геометрии в мировых координатах — облако точек для
+     * подгонки ориентированного бокса. Для тайлсета берутся все `loaded` тайлы, для
+     * обычной модели — её mesh instances.
+     */
+    private collectGeometryCorners(): Vec3[] {
+        const points: Vec3[] = [];
+        const addAabb = (aabb: BoundingBox) => {
+            const c = aabb.center;
+            const h = aabb.halfExtents;
+            for (let sx = -1; sx <= 1; sx += 2) {
+                for (let sy = -1; sy <= 1; sy += 2) {
+                    for (let sz = -1; sz <= 1; sz += 2) {
+                        points.push(new Vec3(c.x + sx * h.x, c.y + sy * h.y, c.z + sz * h.z));
+                    }
+                }
+            }
+        };
+        const meshInstances = this.tileManager ?
+            this.tileManager.getLoadedMeshInstances() :
+            this.meshInstances;
+        meshInstances.forEach(mi => addAabb(mi.aabb));
+        return points;
+    }
+
+    /**
+     * Обтянуть alignment-бокс по контуру модели: бокс остаётся вертикальным (up = Y),
+     * но разворачивается вокруг Y так, чтобы аккуратно встать по широкой стороне модели.
+     * Ориентация берётся из PCA горизонтальной проекции (XZ), затем считаются плотные
+     * габариты вдоль повёрнутых осей. Если геометрия ещё не загрузилась — откат на
+     * осевой бокс по границам модели.
+     */
+    setDimensionBoxFittedToModel() {
+        this.tileManager?.syncTransform();
+        const points = this.collectGeometryCorners();
+        if (points.length < 2) {
+            this.setDimensionBoxFromModelBounds();
+            return;
+        }
+
+        const n = points.length;
+        let cx = 0;
+        let cz = 0;
+        for (const p of points) {
+            cx += p.x;
+            cz += p.z;
+        }
+        cx /= n;
+        cz /= n;
+
+        // Ковариация горизонтальной проекции → угол главной оси (широкой стороны).
+        let sxx = 0;
+        let sxz = 0;
+        let szz = 0;
+        for (const p of points) {
+            const dx = p.x - cx;
+            const dz = p.z - cz;
+            sxx += dx * dx;
+            sxz += dx * dz;
+            szz += dz * dz;
+        }
+        const theta = 0.5 * Math.atan2(2 * sxz, sxx - szz);
+        const cos = Math.cos(theta);
+        const sin = Math.sin(theta);
+
+        // Плотные габариты вдоль повёрнутых осей u (главная) / v и вертикали Y.
+        let uMin = Infinity;
+        let uMax = -Infinity;
+        let vMin = Infinity;
+        let vMax = -Infinity;
+        let yMin = Infinity;
+        let yMax = -Infinity;
+        for (const p of points) {
+            const dx = p.x - cx;
+            const dz = p.z - cz;
+            const u = dx * cos + dz * sin;
+            const v = -dx * sin + dz * cos;
+            if (u < uMin) uMin = u;
+            if (u > uMax) uMax = u;
+            if (v < vMin) vMin = v;
+            if (v > vMax) vMax = v;
+            if (p.y < yMin) yMin = p.y;
+            if (p.y > yMax) yMax = p.y;
+        }
+
+        const uc = (uMin + uMax) * 0.5;
+        const vc = (vMin + vMax) * 0.5;
+        const center: [number, number, number] = [
+            cx + uc * cos - vc * sin,
+            (yMin + yMax) * 0.5,
+            cz + uc * sin + vc * cos
+        ];
+        const size: [number, number, number] = [
+            Math.max(0.000001, uMax - uMin),
+            Math.max(0.000001, yMax - yMin),
+            Math.max(0.000001, vMax - vMin)
+        ];
+        // Euler-Y для right-handed Y-up: локальная +X = (cos a, 0, -sin a); чтобы она
+        // совпала с осью u = (cos θ, 0, sin θ), берём a = -θ.
+        const rotationY = -theta * math.RAD_TO_DEG;
+
+        this.observer.set('dimensionBox.size', size);
+        this.observer.set('dimensionBox.center', center);
+        this.observer.set('dimensionBox.rotation', [0, rotationY, 0]);
         this.observer.set('dimensionBox.initialized', true);
         this.observer.set('dimensionBox.enabled', true);
         this.syncDimensionBoxEntityFromObserver();
@@ -7252,7 +7383,7 @@ class Viewer {
             const ay = transform.transformVector(new Vec3(0, 0.5, 0));
             const az = transform.transformVector(new Vec3(0, 0, 0.5));
             if (!this.observer.get('fragment.enabled')) {
-                this.debugFragmentBoxSolid.obbFaces(center, ax, ay, az, 0x3000ff00);
+                this.debugFragmentBoxSolid.obbFaces(center, ax, ay, az, this.fragmentFillColor());
             }
             this.debugFragmentBoxSolid.obbEdgesThick(
                 center,

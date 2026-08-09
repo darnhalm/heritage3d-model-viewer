@@ -2402,6 +2402,11 @@ input {
     mask: url('static/icons/fit-screen-icon.svg') no-repeat center / contain;
 }
 
+#alignment-panel .align-icon-box-fit::before {
+    -webkit-mask: url('static/icons/alignment-box-fit-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/alignment-box-fit-icon.svg') no-repeat center / contain;
+}
+
 #alignment-panel .align-icon-reset::before {
     -webkit-mask: url('static/icons/alignment-reset-object-icon.svg') no-repeat center / contain;
     mask: url('static/icons/alignment-reset-object-icon.svg') no-repeat center / contain;

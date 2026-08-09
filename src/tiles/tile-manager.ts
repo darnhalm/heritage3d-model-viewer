@@ -1001,6 +1001,20 @@ export class TileManager {
      * @param result - BoundingBox, в который записать результат.
      * @returns `true`, если найден хотя бы один меш.
      */
+    /**
+     * Меши всей реально загруженной геометрии (по всем `loaded` тайлам, а не только
+     * попавшим в кадр). Нужны для подгонки бокса по контуру модели.
+     *
+     * @returns Плоский список mesh instances загруженного контента.
+     */
+    getLoadedMeshInstances(): MeshInstance[] {
+        const result: MeshInstance[] = [];
+        this.loaded.forEach((tile) => {
+            result.push(...this.getTileMeshInstances(tile));
+        });
+        return result;
+    }
+
     getGeometryBounds(result: BoundingBox): boolean {
         let first = true;
         this.loaded.forEach((tile) => {

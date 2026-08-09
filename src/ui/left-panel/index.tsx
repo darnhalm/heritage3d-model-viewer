@@ -45,6 +45,7 @@ type ViewerApi = {
     resetObjectTransform?: () => void;
     frameScene?: () => void;
     setDimensionBoxFromModelBounds?: () => void;
+    setDimensionBoxFittedToModel?: () => void;
     setStandardView?: (view: string) => void;
     setCameraProjection?: (ortho: boolean) => void;
     isOrthographic?: () => boolean;
@@ -688,6 +689,11 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                             label: t('Fit to Screen', lang),
                             onClick: () => getViewer()?.frameScene?.()
                         })}
+                        {target === 'box' ? toolBtn({
+                            icon: 'align-icon-box-fit',
+                            label: t('Fit Box to Model', lang),
+                            onClick: () => getViewer()?.setDimensionBoxFittedToModel?.()
+                        }) : null}
                     </Container>
                     <Container class={['alignment-toolbar-sep', 'alignment-toolbar-sep-reset']} />
                     <Container class={['alignment-toolbar-group', 'alignment-toolbar-group-reset']}>
