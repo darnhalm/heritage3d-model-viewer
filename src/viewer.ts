@@ -2584,7 +2584,15 @@ class Viewer {
         }
 
         // calculate scene bounding box
-        this.calcSceneBounds(bbox, this.selectedNode as Entity);
+        // Для тайлсета кадрируем по реальной загруженной геометрии, а не по корневому
+        // bounding volume: у 3D Tiles корневой объём обычно заметно больше и смещён
+        // относительно самой модели, из-за чего «вписать в экран» загоняло геометрию
+        // в угол. Явное кадрирование (F) — разовое действие, поэтому «прыганья» камеры
+        // при стриминге LOD, ради которого calcSceneBounds берёт корневой объём, здесь нет.
+        this.tileManager?.syncTransform();
+        if (!(!this.selectedNode && this.tileManager?.getGeometryBounds(bbox))) {
+            this.calcSceneBounds(bbox, this.selectedNode as Entity);
+        }
 
         // calculate scene size
         const sceneSize = bbox.halfExtents.length();
