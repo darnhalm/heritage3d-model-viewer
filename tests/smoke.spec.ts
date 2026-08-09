@@ -20,6 +20,34 @@ test('boots the viewer shell', async ({ page }) => {
     expect(state.active).toBe(null);
 });
 
+test('fly movement speed is configurable from the Controls menu and saved', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.observer?.get('ui.spinner') === false);
+
+    await page.locator('#info-button').click();
+    await expect(page.locator('.fly-speed-control')).toBeVisible();
+    await expect(page.locator('.fly-speed-control')).toContainText('Movement speed');
+
+    const state = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.observer.set('camera.flySpeed', 2.5);
+        const settings = viewer.settingsService.getSettingsData();
+        return {
+            observerSpeed: viewer.observer.get('camera.flySpeed'),
+            controllerSpeed: viewer.cameraControls.flySpeed,
+            savedSpeed: settings.camera.flySpeed
+        };
+    });
+
+    expect(state).toEqual({
+        observerSpeed: 2.5,
+        controllerSpeed: 2.5,
+        savedSpeed: 2.5
+    });
+});
+
 test('loads a model and auto-applies nearby settings safely', async ({ page }) => {
     const dialogs: string[] = [];
     page.on('dialog', async (dialog) => {
@@ -102,7 +130,8 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
 });
 
 test('encodes model URLs in the embed generator', async ({ page }) => {
-    await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
+    test.setTimeout(60000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
 
     await page.waitForFunction(() => {
@@ -116,11 +145,33 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
     });
 
     await page.locator('#view-button').click();
+    await page.getByRole('button', { name: 'Show embed code' }).click();
 
     const embedCode = page.locator('#embed-code-wrapper textarea');
     await expect(embedCode).toBeVisible();
     await expect(embedCode).toHaveValue(/load=https%3A%2F%2Fexample\.com%2Fmodel\.glb%3Fx%3D1%26y%3D2/);
     await expect(embedCode).toHaveValue(/embed=1/);
+    await expect(embedCode).toHaveValue(/hd=1/);
+    await expect(embedCode).toHaveValue(/share=1/);
+    await expect(embedCode).toHaveValue(/cameraMode=1/);
+    await expect(embedCode).toHaveValue(/animControls=1/);
+    await expect(page.locator('.share-flag[aria-label^="HD / SD:"]')).toHaveCount(1);
+    await expect(page.locator('.share-flag[aria-label^="View & share:"]')).toHaveCount(1);
+    await expect(page.locator('.share-flag[aria-label^="Camera mode:"]')).toHaveCount(1);
+    await expect(page.locator('.share-flag[aria-label^="Animation controls:"]')).toHaveCount(1);
+});
+
+test('none embed preset hides every configurable interface element', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto('/?webgl&embed=1&ui=none');
+    await waitForViewer(page);
+    await expect(page.locator('#panel-left')).toHaveCount(0);
+    await expect(page.locator('#popup-buttons-parent').locator('button')).toHaveCount(0);
+    const embed = await page.evaluate(() => (window as any).viewer.observer.get('ui.embed'));
+    expect(embed.preset).toBe('none');
+    for (const key of ['panel', 'poi', 'tour', 'measure', 'info', 'modelInfo', 'controls', 'hd', 'share', 'cameraMode', 'fullscreen', 'fit', 'reset', 'animControls']) {
+        expect(embed[key]).toBe(false);
+    }
 });
 
 test('raycast helpers hit secondary mesh primitives for selection and measurement', async ({ page }) => {
@@ -152,6 +203,82 @@ test('raycast helpers hit secondary mesh primitives for selection and measuremen
     expect(result.surface.x).toBeGreaterThan(0.5);
     expect(Math.abs(result.surface.y)).toBeLessThan(0.1);
     expect(Math.abs(result.surface.z)).toBeLessThan(0.1);
+});
+
+test('completed measurements stay editable, area closes on double click, and JSON keeps control points', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FMultiPrimitive.gltf');
+    await waitForViewer(page);
+    await page.waitForFunction(() => {
+        const filenames = (window as any).viewer?.observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('MultiPrimitive.gltf');
+    });
+
+    const result = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const controller = viewer.measurementController as any;
+        const Vec3 = viewer.camera.getPosition().constructor;
+        viewer.observer.set('measure.enabled', true);
+        viewer.observer.set('measure.unit', 'cm');
+        viewer.observer.set('measure.unitScale', 0.01);
+        controller.completedMeasurements = [
+            { id: 1, mode: 'distance', points: [new Vec3(0.55, 0, 0), new Vec3(0.9, 0, 0)], distance: 0.0035 },
+            { id: 2, mode: 'angle', points: [new Vec3(0.55, 0, 0), new Vec3(0.7, 0, 0), new Vec3(0.7, 0.15, 0)], angle: 90 },
+            { id: 3, mode: 'area', points: [new Vec3(0.55, -0.1, 0), new Vec3(0.9, -0.1, 0), new Vec3(0.9, 0.1, 0)], area: 0.00035, areaPlanarity: 0 }
+        ];
+        controller.nextMeasurementId = 4;
+        controller.updateOverlay((point: any) => viewer.camera.camera.worldToScreen(point));
+
+        const handlesBefore = document.querySelectorAll('.measure-completed-handle').length;
+        const firstHandle = document.querySelector('.measure-completed-handle') as SVGCircleElement;
+        const targetScreen = viewer.camera.camera.worldToScreen(new Vec3(0.7, 0, 0));
+        const rect = viewer.canvas.getBoundingClientRect();
+        firstHandle.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true,
+            button: 0,
+            pointerId: 7,
+            clientX: rect.left + Number(firstHandle.getAttribute('cx')),
+            clientY: rect.top + Number(firstHandle.getAttribute('cy'))
+        }));
+        document.dispatchEvent(new PointerEvent('pointermove', {
+            bubbles: true,
+            pointerId: 7,
+            clientX: rect.left + targetScreen.x,
+            clientY: rect.top + targetScreen.y
+        }));
+        document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 7 }));
+
+        const movedX = controller.completedMeasurements[0].points[0].x;
+        const exportData = controller.getMeasurementsExportData();
+
+        viewer.observer.set('measure.mode', 'area');
+        controller.points = [new Vec3(0.55, -0.1, 0), new Vec3(0.9, -0.1, 0), new Vec3(0.9, 0.1, 0)];
+        viewer.observer.set('measure.pointCount', 3);
+        viewer.canvas.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, button: 0 }));
+
+        return {
+            handlesBefore,
+            movedX,
+            exportData,
+            completedCount: controller.completedMeasurements.length,
+            draftCount: controller.points.length,
+            pointCount: viewer.observer.get('measure.pointCount')
+        };
+    });
+
+    expect(result.handlesBefore).toBe(8);
+    expect(result.movedX).toBeCloseTo(0.7, 1);
+    expect(result.exportData.sceneUnits).toEqual({
+        coordinateUnit: 'scene-unit',
+        metersPerSceneUnit: 0.01,
+        displayUnit: 'cm'
+    });
+    expect(result.exportData.measurements.map((entry: any) => entry.type)).toEqual(['distance', 'angle', 'area']);
+    expect(result.exportData.measurements[0].controlPoints[0].index).toBe(1);
+    expect(result.exportData.measurements[0].controlPoints[0].scene.x).toBeCloseTo(0.7, 1);
+    expect(result.completedCount).toBe(4);
+    expect(result.draftCount).toBe(0);
+    expect(result.pointCount).toBe(0);
 });
 
 test('metadata and poi tabs stay stable and poi edits persist to observer state', async ({ page }) => {
@@ -232,13 +359,152 @@ test('metadata and poi tabs stay stable and poi edits persist to observer state'
     expect(pageErrors).toEqual([]);
 });
 
+test('poi tour pauses immediately, resumes, stops, and ignores stale advances', async ({ page }) => {
+    test.setTimeout(60000);
+    // WebGL keeps this timing-sensitive state-machine test deterministic on software CI GPUs.
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => {
+        const filenames = (window as any).viewer?.observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
+    });
+
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const observer = viewer.observer;
+        const position = viewer.cameraControls.getPosition();
+        const focus = viewer.cameraControls.getFocus();
+        const firstCamera = {
+            position: [position.x, position.y, position.z],
+            focus: [focus.x, focus.y, focus.z],
+            fov: viewer.camera.camera.fov
+        };
+        const secondCamera = {
+            position: [position.x + 10, position.y + 2, position.z],
+            focus: [focus.x + 2, focus.y, focus.z],
+            fov: viewer.camera.camera.fov
+        };
+        observer.set('poi.list', JSON.stringify([
+            { id: 'tour-1', number: 1, title: 'Tour 1', duration: 5, holdTime: 0.2, camera: firstCamera },
+            { id: 'tour-2', number: 2, title: 'Tour 2', duration: 5, holdTime: 0.2, camera: secondCamera },
+            { id: 'tour-trigger', number: 3, title: 'Trigger', trigger: true, duration: 10, holdTime: 10 }
+        ]));
+        viewer.focusPoi('tour-1');
+
+        (window as any).__tourStates = [];
+        (window as any).__tourTimeoutCallbacks = [];
+        const originalSetTimeout = window.setTimeout.bind(window);
+        window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
+            if (typeof handler === 'function' && Number(timeout) >= 5000) {
+                (window as any).__tourTimeoutCallbacks.push(handler);
+            }
+            return originalSetTimeout(handler, timeout, ...args);
+        }) as typeof window.setTimeout;
+        window.addEventListener('message', (event) => {
+            if (event.data?.type === 'tour-state') {
+                (window as any).__tourStates.push(event.data.state);
+            }
+        });
+    });
+
+    const playButton = page.locator('.poi-player-play-button');
+    const clickTourButton = async (selector: string) => page.evaluate((buttonSelector) => {
+        (document.querySelector(buttonSelector) as HTMLButtonElement | null)?.click();
+    }, selector);
+    await expect(page.locator('.poi-player-title')).toHaveText('Tour 1');
+
+    await clickTourButton('.poi-player-play-button');
+    await clickTourButton('#poi-player-overlay button[aria-label="Next POI"]');
+    await expect(page.locator('.poi-player-title')).toHaveText('Tour 2');
+    await page.waitForTimeout(150);
+
+    await clickTourButton('.poi-player-play-button');
+    await expect(playButton).toHaveAttribute('aria-label', 'Play');
+
+    const paused = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const position = viewer.cameraControls.getPosition();
+        return {
+            position: [position.x, position.y, position.z],
+            progress: parseFloat(document.getElementById('poi-player-progress-fill')?.style.width || '0'),
+            activeId: viewer.observer.get('poi.activeId')
+        };
+    });
+
+    // Force callbacks captured from the pre-pause sessions: their tokens must reject them.
+    await page.evaluate(() => {
+        for (const callback of (window as any).__tourTimeoutCallbacks) callback();
+    });
+    await page.waitForTimeout(800);
+    const stillPaused = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const position = viewer.cameraControls.getPosition();
+        return {
+            position: [position.x, position.y, position.z],
+            progress: parseFloat(document.getElementById('poi-player-progress-fill')?.style.width || '0'),
+            activeId: viewer.observer.get('poi.activeId')
+        };
+    });
+    expect(stillPaused.activeId).toBe('tour-2');
+    stillPaused.position.forEach((value: number, index: number) => {
+        expect(value).toBeCloseTo(paused.position[index], 10);
+    });
+    expect(stillPaused.progress).toBeCloseTo(paused.progress, 3);
+    expect(paused.progress).toBeGreaterThan(50);
+
+    await clickTourButton('.poi-player-play-button');
+    await expect(playButton).toHaveAttribute('aria-label', 'Pause');
+    await page.waitForFunction((pausedPosition) => {
+        const position = (window as any).viewer.cameraControls.getPosition();
+        return Math.hypot(
+            position.x - pausedPosition[0],
+            position.y - pausedPosition[1],
+            position.z - pausedPosition[2]
+        ) > 0.001;
+    }, paused.position);
+    const resumedPosition = await page.evaluate(() => {
+        const position = (window as any).viewer.cameraControls.getPosition();
+        return [position.x, position.y, position.z];
+    });
+    const resumedDistance = Math.hypot(...resumedPosition.map((value, index) => value - paused.position[index]));
+    expect(resumedDistance).toBeGreaterThan(0.001);
+
+    await clickTourButton('#poi-player-overlay button[aria-label="Stop"]');
+    await expect(page.locator('.poi-player-title')).toHaveText('Tour 1');
+    await expect(playButton).toHaveAttribute('aria-label', 'Play');
+    await expect(page.locator('#poi-player-progress-fill')).toHaveAttribute('style', /width:\s*0%/);
+
+    const stoppedPosition = await page.evaluate(() => {
+        const position = (window as any).viewer.cameraControls.getPosition();
+        return [position.x, position.y, position.z];
+    });
+    await page.waitForTimeout(300);
+    const stopped = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const position = viewer.cameraControls.getPosition();
+        return {
+            position: [position.x, position.y, position.z],
+            activeId: viewer.observer.get('poi.activeId'),
+            playing: viewer.observer.get('poi.playing'),
+            states: (window as any).__tourStates
+        };
+    });
+    stopped.position.forEach((value: number, index: number) => {
+        expect(value).toBeCloseTo(stoppedPosition[index], 10);
+    });
+    expect(stopped.activeId).toBe('tour-1');
+    expect(stopped.playing).toBe(false);
+    expect(stopped.states).toEqual(['playing', 'paused', 'playing', 'stopped']);
+});
+
 test('alignment tab toggles alignment mode safely without runtime errors', async ({ page }) => {
+    test.setTimeout(60000);
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => {
         pageErrors.push(error.message);
     });
 
-    await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
 
     await page.waitForFunction(() => {
@@ -258,11 +524,11 @@ test('alignment tab toggles alignment mode safely without runtime errors', async
 
     await page.locator('.left-panel-tab-alignment').click();
     await expect(page.locator('#alignment-panel')).toBeVisible();
-    const centerObjectButton = page.locator('.alignment-object-center-button');
-    await expect(centerObjectButton).toHaveText('Object to Center');
+    const centerObjectButton = page.locator('.align-icon-object-center');
+    await expect(centerObjectButton).toBeVisible();
     await centerObjectButton.click();
-    const centerPivotButton = page.locator('.alignment-pivot-center-button');
-    await expect(centerPivotButton).toHaveText('Pivot Point → Object Center');
+    const centerPivotButton = page.locator('.align-icon-pivot-center');
+    await expect(centerPivotButton).toBeVisible();
 
     const pivotBefore = await page.evaluate(() => {
         const viewer = (window as any).viewer;
@@ -285,6 +551,20 @@ test('alignment tab toggles alignment mode safely without runtime errors', async
     });
     pivotAfter.pivot.forEach((value, index) => expect(value).toBeCloseTo(pivotBefore.center[index], 5));
     pivotAfter.contentTransform.forEach((value, index) => expect(value).toBeCloseTo(pivotBefore.contentTransform[index], 5));
+
+    await page.locator('.alignment-box-button').click();
+    const liveBox = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.calcSceneBounds(viewer.dynamicSceneBounds);
+        return {
+            center: viewer.observer.get('dimensionBox.center'),
+            size: viewer.observer.get('dimensionBox.size'),
+            expectedCenter: [viewer.dynamicSceneBounds.center.x, viewer.dynamicSceneBounds.center.y, viewer.dynamicSceneBounds.center.z],
+            expectedSize: [viewer.dynamicSceneBounds.halfExtents.x * 2, viewer.dynamicSceneBounds.halfExtents.y * 2, viewer.dynamicSceneBounds.halfExtents.z * 2]
+        };
+    });
+    liveBox.center.forEach((value: number, index: number) => expect(value).toBeCloseTo(liveBox.expectedCenter[index], 5));
+    liveBox.size.forEach((value: number, index: number) => expect(value).toBeCloseTo(liveBox.expectedSize[index], 5));
 
     await page.evaluate(() => {
         const viewer = (window as any).viewer;

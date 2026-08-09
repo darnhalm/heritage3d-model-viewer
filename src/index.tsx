@@ -144,6 +144,9 @@ const observerData: ObserverData = {
             info: true,
             modelInfo: true,
             controls: true,
+            hd: true,
+            share: true,
+            cameraMode: true,
             fullscreen: true,
             fit: true,
             reset: true
@@ -157,6 +160,7 @@ const observerData: ObserverData = {
         multisample: true,
         hq: true,
         mode: 'orbit',
+        flySpeed: 1,
         position: null,
         focus: null
     },
@@ -405,13 +409,14 @@ const main = () => {
 
     const embedEnabled = parseBool('embed', false);
     const embedPresetParam = url.searchParams.get('ui');
-    const embedPreset = embedPresetParam === 'compact' || embedPresetParam === 'minimal' || embedPresetParam === 'full' ?
+    const embedPreset = embedPresetParam === 'compact' || embedPresetParam === 'minimal' || embedPresetParam === 'full' || embedPresetParam === 'none' ?
         embedPresetParam :
         'full';
     const embedDefaults = {
-        full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, fullscreen: true, fit: true, reset: true, animAutoplay: true, animControls: true },
-        compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, fullscreen: true, fit: true, reset: true, animAutoplay: true, animControls: true },
-        minimal: { panel: false, poi: true, tour: true, measure: false, info: false, modelInfo: false, controls: false, fullscreen: true, fit: false, reset: true, animAutoplay: true, animControls: false }
+        full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, hd: true, share: true, cameraMode: true, fullscreen: true, fit: true, reset: true, animAutoplay: true, animControls: true },
+        compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, hd: false, share: false, cameraMode: false, fullscreen: true, fit: true, reset: true, animAutoplay: true, animControls: true },
+        minimal: { panel: false, poi: true, tour: true, measure: false, info: false, modelInfo: false, controls: false, hd: false, share: false, cameraMode: false, fullscreen: true, fit: false, reset: true, animAutoplay: true, animControls: false },
+        none: { panel: false, poi: false, tour: false, measure: false, info: false, modelInfo: false, controls: false, hd: false, share: false, cameraMode: false, fullscreen: false, fit: false, reset: false, animAutoplay: true, animControls: false }
     } as const;
     const embedConfig: NonNullable<ObserverData['ui']['embed']> = {
         enabled: embedEnabled,
@@ -430,6 +435,9 @@ const main = () => {
         info: parseBool('info', embedDefaults[embedPreset].info),
         modelInfo: parseBool('modelInfo', embedDefaults[embedPreset].modelInfo),
         controls: parseBool('controls', embedDefaults[embedPreset].controls),
+        hd: parseBool('hd', embedDefaults[embedPreset].hd),
+        share: parseBool('share', embedDefaults[embedPreset].share),
+        cameraMode: parseBool('cameraMode', embedDefaults[embedPreset].cameraMode),
         fullscreen: parseBool('fullscreen', embedDefaults[embedPreset].fullscreen),
         fit: parseBool('fit', embedDefaults[embedPreset].fit),
         reset: parseBool('reset', embedDefaults[embedPreset].reset)
@@ -447,6 +455,9 @@ const main = () => {
         'info',
         'modelInfo',
         'controls',
+        'hd',
+        'share',
+        'cameraMode',
         'fullscreen',
         'fit',
         'reset',

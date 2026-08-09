@@ -122,7 +122,7 @@ type InfoTab = 'controls' | 'model' | 'about';
 type ControlsSubTab = 'desktop' | 'touch';
 type EmbedGeneratorState = {
     embedType: 'responsive' | 'fixed',
-    preset: 'full' | 'compact' | 'minimal',
+    preset: 'full' | 'compact' | 'minimal' | 'none',
     width: number,
     height: number,
     panel: boolean,
@@ -134,6 +134,10 @@ type EmbedGeneratorState = {
     info: boolean,
     modelInfo: boolean,
     controls: boolean,
+    hd: boolean,
+    share: boolean,
+    cameraMode: boolean,
+    animControls: boolean,
     fit: boolean,
     reset: boolean,
     language: 'auto' | 'en' | 'ru' | 'zh',
@@ -155,6 +159,10 @@ const SHARE_FLAG_ICONS: Record<string, string> = {
     info: 'static/icons/info-icon.svg',
     modelInfo: 'static/icons/view-in-ar-icon.svg',
     controls: 'static/icons/mouse-icon.svg',
+    hd: 'static/icons/hd-icon.svg',
+    share: 'static/icons/share-icon.svg',
+    cameraMode: 'static/icons/orbit-mode.svg',
+    animControls: 'static/icons/embed-play.svg',
     fit: 'static/icons/fit-screen-icon.svg',
     reset: 'static/icons/reset-camera-icon.svg'
 };
@@ -288,6 +296,17 @@ class InfoPanel extends React.Component <{
                                     <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
                                     <ControlDetail label={t('Look Around', lang)} value={t('Left Mouse', lang)} useMouseIcon icons={['right_click']} />
                                     <ControlDetail label={t('Fly', lang)} value='W, S, A, D' icon='keyboard' />
+                                    <div className='fly-speed-control'>
+                                        <Slider
+                                            label={t('Movement speed', lang)}
+                                            precision={1}
+                                            min={0.1}
+                                            max={5}
+                                            step={0.1}
+                                            value={observerData.camera.flySpeed}
+                                            setProperty={(value: number) => setProperty('camera.flySpeed', value)}
+                                        />
+                                    </div>
                                     {(showFitControl || showResetControl) && (
                                         <>
                                             <Label text={t('General', lang)} class='popup-panel-heading' />
@@ -552,7 +571,18 @@ class MeasurementsPanel extends React.Component <{
         return (
             <div className='popup-panel-parent'>
                 <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'measurement'}>
-                    <Label text={t('Measurement', lang)} class='popup-panel-heading' />
+                    <div className='measure-panel-heading-row'>
+                        <Label text={t('Measurement', lang)} class='popup-panel-heading' />
+                        <button
+                            type='button'
+                            className='measure-export-button'
+                            title={t('Export measurements JSON', lang)}
+                            aria-label={t('Export measurements JSON', lang)}
+                            onClick={() => window.viewer?.downloadMeasurementsJson?.()}
+                        >
+                            <span className='material-symbols-outlined'>download</span>
+                        </button>
+                    </div>
 
                     <div className='measure-mode-toolbar'>
                         <button
@@ -666,7 +696,7 @@ class ViewPanel extends React.Component <{
     setProperty: SetProperty }> {
     declare state: EmbedGeneratorState;
 
-    private presetDefaults: Record<'full' | 'compact' | 'minimal', {
+    private presetDefaults: Record<'full' | 'compact' | 'minimal' | 'none', {
         panel: boolean,
         poi: boolean,
         tour: boolean,
@@ -674,13 +704,18 @@ class ViewPanel extends React.Component <{
         info: boolean,
         modelInfo: boolean,
         controls: boolean,
+        hd: boolean,
+        share: boolean,
+        cameraMode: boolean,
+        animControls: boolean,
         allowFullscreen: boolean,
         fit: boolean,
         reset: boolean
     }> = {
-            full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, allowFullscreen: true, fit: true, reset: true },
-            compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, allowFullscreen: true, fit: true, reset: true },
-            minimal: { panel: false, poi: true, tour: true, measure: false, info: false, modelInfo: false, controls: false, allowFullscreen: true, fit: false, reset: true }
+            full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, hd: true, share: true, cameraMode: true, animControls: true, allowFullscreen: true, fit: true, reset: true },
+            compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, hd: false, share: false, cameraMode: false, animControls: true, allowFullscreen: true, fit: true, reset: true },
+            minimal: { panel: false, poi: true, tour: true, measure: false, info: false, modelInfo: false, controls: false, hd: false, share: false, cameraMode: false, animControls: false, allowFullscreen: true, fit: false, reset: true },
+            none: { panel: false, poi: false, tour: false, measure: false, info: false, modelInfo: false, controls: false, hd: false, share: false, cameraMode: false, animControls: false, allowFullscreen: false, fit: false, reset: false }
         };
 
     get embedSrc() {
@@ -710,6 +745,10 @@ class ViewPanel extends React.Component <{
         url.searchParams.set('info', this.state.info ? '1' : '0');
         url.searchParams.set('modelInfo', this.state.modelInfo ? '1' : '0');
         url.searchParams.set('controls', this.state.controls ? '1' : '0');
+        url.searchParams.set('hd', this.state.hd ? '1' : '0');
+        url.searchParams.set('share', this.state.share ? '1' : '0');
+        url.searchParams.set('cameraMode', this.state.cameraMode ? '1' : '0');
+        url.searchParams.set('animControls', this.state.animControls ? '1' : '0');
         url.searchParams.set('fullscreen', this.state.allowFullscreen ? '1' : '0');
         url.searchParams.set('fit', this.state.fit ? '1' : '0');
         url.searchParams.set('reset', this.state.reset ? '1' : '0');
@@ -772,6 +811,10 @@ class ViewPanel extends React.Component <{
             info: embed?.info ?? defaults.info,
             modelInfo: embed?.modelInfo ?? defaults.modelInfo,
             controls: embed?.controls ?? defaults.controls,
+            hd: embed?.hd ?? defaults.hd,
+            share: embed?.share ?? defaults.share,
+            cameraMode: embed?.cameraMode ?? defaults.cameraMode,
+            animControls: embed?.animControls ?? defaults.animControls,
             fit: embed?.fit ?? defaults.fit,
             reset: embed?.reset ?? defaults.reset,
             language: (props.uiData?.language ?? 'auto') as 'auto' | 'en' | 'ru' | 'zh',
@@ -798,7 +841,7 @@ class ViewPanel extends React.Component <{
                JSON.stringify(nextState) !== JSON.stringify(this.state);
     }
 
-    private applyPreset = (preset: 'full' | 'compact' | 'minimal') => {
+    private applyPreset = (preset: 'full' | 'compact' | 'minimal' | 'none') => {
         const defaults = this.presetDefaults[preset];
         this.setState({
             preset,
@@ -810,6 +853,10 @@ class ViewPanel extends React.Component <{
             info: defaults.info,
             modelInfo: defaults.modelInfo,
             controls: defaults.controls,
+            hd: defaults.hd,
+            share: defaults.share,
+            cameraMode: defaults.cameraMode,
+            animControls: defaults.animControls,
             allowFullscreen: defaults.allowFullscreen,
             fit: defaults.fit,
             reset: defaults.reset,
@@ -845,10 +892,11 @@ class ViewPanel extends React.Component <{
                                 options={[
                                     { v: 'full', t: t('Full', lang) },
                                     { v: 'compact', t: t('Compact', lang) },
-                                    { v: 'minimal', t: t('Minimal', lang) }
+                                    { v: 'minimal', t: t('Minimal', lang) },
+                                    { v: 'none', t: t('None', lang) }
                                 ]}
                                 value={this.state.preset}
-                                setProperty={(value: 'full' | 'compact' | 'minimal') => this.applyPreset(value)}
+                                setProperty={(value: 'full' | 'compact' | 'minimal' | 'none') => this.applyPreset(value)}
                             />
                         </div>
                     </div>
@@ -863,6 +911,10 @@ class ViewPanel extends React.Component <{
                         <ShareFlagButton flagKey='info' label={t('Info', lang)} on={this.state.info} lang={lang} onToggle={() => this.setState({ info: !this.state.info })} />
                         <ShareFlagButton flagKey='modelInfo' label={t('Model info', lang)} on={this.state.modelInfo} lang={lang} onToggle={() => this.setState({ modelInfo: !this.state.modelInfo })} />
                         <ShareFlagButton flagKey='controls' label={t('Controls', lang)} on={this.state.controls} lang={lang} onToggle={() => this.setState({ controls: !this.state.controls })} />
+                        <ShareFlagButton flagKey='hd' label={t('HD / SD', lang)} on={this.state.hd} lang={lang} onToggle={() => this.setState({ hd: !this.state.hd })} />
+                        <ShareFlagButton flagKey='share' label={t('View & share', lang)} on={this.state.share} lang={lang} onToggle={() => this.setState({ share: !this.state.share })} />
+                        <ShareFlagButton flagKey='cameraMode' label={t('Camera mode', lang)} on={this.state.cameraMode} lang={lang} onToggle={() => this.setState({ cameraMode: !this.state.cameraMode })} />
+                        <ShareFlagButton flagKey='animControls' label={t('Animation controls', lang)} on={this.state.animControls} lang={lang} onToggle={() => this.setState({ animControls: !this.state.animControls })} />
                         <ShareFlagButton flagKey='fit' label={t('Fit', lang)} on={this.state.fit} lang={lang} onToggle={() => this.setState({ fit: !this.state.fit })} />
                         <ShareFlagButton flagKey='reset' label={t('Reset', lang)} on={this.state.reset} lang={lang} onToggle={() => this.setState({ reset: !this.state.reset })} />
                     </div>

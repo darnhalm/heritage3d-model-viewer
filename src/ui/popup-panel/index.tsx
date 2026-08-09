@@ -59,7 +59,6 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
 
         const lang = this.props.observerData?.ui?.language;
         const embed = this.props.observerData?.ui?.embed;
-        const embedPreset = embed?.preset;
         // Вне встройки — всегда; во встройке — по флагу animControls (его дефолт
         // зависит от пресета: full/compact → вкл, minimal → выкл).
         const showAnimationControls = !(embed?.enabled) || embed?.animControls !== false;
@@ -67,8 +66,9 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
         const showMeasureButton = !(embed?.enabled) || embed.measure;
         const showFitButton = !(embed?.enabled) || embed.fit;
         const showFullscreenButton = !(embed?.enabled) || embed.fullscreen;
-        const showHdButton = !(embed?.enabled) || embedPreset === 'full';
-        const showCameraModeButton = !(embed?.enabled) || embedPreset === 'full';
+        const showHdButton = !(embed?.enabled) || embed.hd;
+        const showShareButton = !(embed?.enabled) || embed.share;
+        const showCameraModeButton = !(embed?.enabled) || embed.cameraMode;
         const wrap = (titleText: string, btn: React.ReactNode) => (
             <span title={titleText} style={{ display: 'contents' }}>{btn}</span>
         );
@@ -114,7 +114,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         }}
                     />
                 ))}
-                {!embed?.enabled && wrap(t('View & share', lang), (
+                {showShareButton && wrap(t('View & share', lang), (
                     <Button class={buildClass('view').concat('view-button')} id='view-button' width={40} height={40} onClick={() => this.handleClick('view')} />
                 ))}
                 {showFitButton && wrap(t('Frame scene', lang), (

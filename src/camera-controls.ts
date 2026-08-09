@@ -148,6 +148,9 @@ class CameraControls {
     // this gets overridden by the viewer based on scene size
     moveSpeed = 1;
 
+    // User-adjustable multiplier for movement while the fly controller is active.
+    flySpeed = 1;
+
     orbitSpeed = 18;
 
     pinchSpeed = 0.4;
@@ -312,7 +315,7 @@ class CameraControls {
         const keyboardSpeed = this._state.shift ?
             FLY_KEYBOARD_BOOST_SPEED :
             (this._state.ctrl ? FLY_KEYBOARD_PRECISE_SPEED : FLY_KEYBOARD_SPEED);
-        v.add(keyMove.mulScalar(fly * this.moveSpeed * keyboardSpeed * dt));
+        v.add(keyMove.mulScalar(fly * this.moveSpeed * this.flySpeed * keyboardSpeed * dt));
         const panMove = screenToWorld(this._camera, mouse[0], mouse[1], distance);
         v.add(panMove.mulScalar(pan));
         const wheelMove = new Vec3(0, 0, -wheel[0]);
@@ -345,7 +348,7 @@ class CameraControls {
         const orbitMove = screenToWorld(this._camera, touch[0], touch[1], distance);
         v.add(orbitMove.mulScalar(orbit * pan));
         const flyMove = new Vec3(leftInput[0], 0, -leftInput[1]);
-        v.add(flyMove.mulScalar(fly * this.moveSpeed * dt));
+        v.add(flyMove.mulScalar(fly * this.moveSpeed * this.flySpeed * dt));
         const pinchMove = new Vec3(0, 0, pinch[0]);
         v.add(pinchMove.mulScalar(orbit * double * this.pinchSpeed * dt));
         deltas.move.append([v.x, v.y, v.z]);
@@ -361,7 +364,7 @@ class CameraControls {
         // gamepad move
         v.set(0, 0, 0);
         const stickMove = new Vec3(leftStick[0], 0, -leftStick[1]);
-        v.add(stickMove.mulScalar(this.moveSpeed * dt));
+        v.add(stickMove.mulScalar(this.moveSpeed * (fly ? this.flySpeed : 1) * dt));
         deltas.move.append([v.x, v.y, v.z]);
 
         // gamepad rotate

@@ -38,7 +38,7 @@ export interface ObserverData {
         language?: 'en' | 'ru' | 'zh',
         embed?: {
             enabled: boolean,
-            preset: 'full' | 'compact' | 'minimal',
+            preset: 'full' | 'compact' | 'minimal' | 'none',
             autoplay: boolean,
             animAutoplay: boolean,
             animControls: boolean,
@@ -51,6 +51,9 @@ export interface ObserverData {
             info: boolean,
             modelInfo: boolean,
             controls: boolean,
+            hd: boolean,
+            share: boolean,
+            cameraMode: boolean,
             fullscreen: boolean,
             fit: boolean,
             reset: boolean
@@ -64,6 +67,7 @@ export interface ObserverData {
         multisample: boolean,
         hq: boolean,
         mode: 'orbit' | 'fly',
+        flySpeed: number,
         position?: [number, number, number] | null,
         focus?: [number, number, number] | null
     },

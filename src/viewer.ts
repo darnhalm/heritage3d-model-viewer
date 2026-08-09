@@ -759,6 +759,16 @@ class Viewer {
         endFov: number;
     } | null = null;
 
+    // Прерванный паузой тура перелёт камеры: сохраняем цель и остаток времени,
+    // чтобы Play продолжил движение к той же точке за оставшуюся длительность, а
+    // не начинал карточку заново.
+    private pausedCameraFly: {
+        position: [number, number, number];
+        focus: [number, number, number];
+        fov: number;
+        remaining: number;
+    } | null = null;
+
     private destroyed = false;
 
     constructor(
@@ -1755,6 +1765,9 @@ class Viewer {
             },
             'camera.mode': (mode: 'orbit' | 'fly') => {
                 this.cameraControls.mode = mode;
+            },
+            'camera.flySpeed': (speed: number) => {
+                this.cameraControls.flySpeed = Math.max(0.1, Math.min(5, Number(speed) || 1));
             },
 
             // skybox
@@ -3097,6 +3110,20 @@ class Viewer {
         });
     }
 
+    downloadMeasurementsJson() {
+        const data = this.measurementController?.getMeasurementsExportData();
+        if (!data) return;
+        const filenames = this.observer.get('scene.filenames') as string[];
+        const modelName = filenames?.[0]?.replace(/\.[^/.]+$/, '') || 'model-viewer';
+        const blob = new Blob([`${JSON.stringify(data, null, 2)}\n`], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `${modelName}.measurements.json`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
     // Снимает ТЕКУЩИЙ вьюпорт (вытянутый, как канвас) и возвращает PNG-байты
     // без скачивания — для заставки-заглушки под прогресс-баром на хосте.
     captureViewportImage(): Promise<Uint8Array | null> {
@@ -3553,6 +3580,44 @@ class Viewer {
     private stopCameraFlyTransition() {
         this.cameraFlyTransition = null;
         this.cameraControls.enabled = true;
+    }
+
+    /**
+     * Мгновенно заморозить текущий перелёт камеры (пауза тура): камера остаётся там,
+     * где оказалась, а цель и остаток времени сохраняются для последующего resume.
+     * Возвращает остаток секунд перелёта (0, если перелёта не было).
+     *
+     * @returns Остаток времени перелёта в секундах.
+     */
+    pauseCameraFly(): number {
+        const tr = this.cameraFlyTransition;
+        if (!tr) {
+            this.pausedCameraFly = null;
+            return 0;
+        }
+        const remaining = Math.max(0, tr.duration - tr.elapsed);
+        this.pausedCameraFly = {
+            position: [tr.endPosition.x, tr.endPosition.y, tr.endPosition.z],
+            focus: [tr.endFocus.x, tr.endFocus.y, tr.endFocus.z],
+            fov: tr.endFov,
+            remaining
+        };
+        this.stopCameraFlyTransition();
+        return remaining;
+    }
+
+    /** Продолжить прерванный паузой перелёт к той же цели за оставшееся время. */
+    resumeCameraFly() {
+        const paused = this.pausedCameraFly;
+        this.pausedCameraFly = null;
+        if (!paused || paused.remaining <= 0.001) return;
+        this.flyToCameraView({ position: paused.position, focus: paused.focus, fov: paused.fov }, paused.remaining);
+    }
+
+    /** Полностью отменить перелёт камеры (Stop тура): без снапа к цели. */
+    cancelCameraFly() {
+        this.pausedCameraFly = null;
+        if (this.cameraFlyTransition) this.stopCameraFlyTransition();
     }
 
     private updateCameraFlyTransition(dt: number) {

@@ -17,9 +17,11 @@ class PngExporter {
             const imageData = lodepng._malloc(width * height * 4);
 
             // copy pixels into wasm memory
+            // Texture.read() already returns rows in PNG/top-to-bottom order for the current
+            // render targets. The previous extra vertical flip inverted screenshots and covers.
             for (let y = 0; y < height; ++y) {
                 let soff = y * width;
-                let doff = imageData / 4 + (height - 1 - y) * width;
+                let doff = imageData / 4 + y * width;
                 for (let x = 0; x < width; ++x) {
                     lodepng.HEAPU32[doff++] = words[soff++];
                 }

@@ -185,6 +185,31 @@ select {
     border-radius: 10px;
     background: rgba(32, 32, 32, 0.4);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+    overflow: hidden;
+}
+
+// Общий прогресс тура: фон плашки, заливаемый слева направо.
+.poi-player-progress {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+.poi-player-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: rgba(96, 160, 224, 0.28);
+    border-right: 1px solid rgba(140, 190, 236, 0.55);
+    transition: width 90ms linear;
+}
+
+// Управляющие элементы поверх фоновой заливки прогресса.
+#poi-player-overlay > .poi-player-button,
+#poi-player-overlay > .poi-player-title {
+    position: relative;
+    z-index: 1;
 }
 
 .poi-player-button {
@@ -1119,6 +1144,37 @@ body:not(.ui-ready) #panel-left {
     padding: 6px 4px 10px;
 }
 
+.measure-panel-heading-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.measure-panel-heading-row .popup-panel-heading {
+    flex: 1;
+}
+
+.measure-export-button {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    color: #d9e8f5;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.measure-export-button:hover {
+    background: rgba(120, 200, 255, 0.18);
+}
+
+.measure-export-button .material-symbols-outlined {
+    font-size: 18px;
+}
+
 .measure-warning {
     color: #f5c77b;
     font-size: 12px;
@@ -1512,6 +1568,14 @@ input {
 
     .control-detail {
         min-height: 28px;
+    }
+
+    .fly-speed-control {
+        margin-top: 4px;
+
+        .panel-option {
+            min-height: 34px;
+        }
     }
 
     .control-icon-mouse,

@@ -584,7 +584,6 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
         const unitScale = safeUnitScale(props.observerData.measure?.unitScale);
         const boxSize = Array.isArray(dimensionBox?.size) ? dimensionBox.size : [1, 1, 1];
         const sceneBoundsSize = parseVec3String(props.observerData.scene?.bounds);
-        const sceneBoundsCenter = parseVec3String(props.observerData.scene?.boundsCenter) ?? [0, 0, 0];
         const setBoxAxis = (axis: 0 | 1 | 2, value: number) => {
             const next: [number, number, number] = [
                 Number(boxSize[0]) || 1,
@@ -714,13 +713,9 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                         className='pcui-button secondary alignment-box-button'
                         title={modelBoundsTip || undefined}
                         onClick={() => {
-                            if (sceneBoundsSize) {
-                                props.setProperty('dimensionBox.size', sceneBoundsSize);
-                                props.setProperty('dimensionBox.center', sceneBoundsCenter);
-                            } else {
-                                getViewer()?.setDimensionBoxFromModelBounds?.();
-                            }
-                            props.setProperty('dimensionBox.enabled', true);
+                            // Always recalculate live geometry bounds. scene.bounds is an observer
+                            // snapshot and may still describe the pre-alignment position here.
+                            getViewer()?.setDimensionBoxFromModelBounds?.();
                             // Сигналим хосту сохранить настройки сразу (бокс не теряется при
                             // закрытии редактора). Хост сам запросит свежие настройки.
                             window.parent?.postMessage({ type: 'dimensionbox-changed' }, '*');

@@ -84,7 +84,11 @@ class MeasurementController {
     private lastScreenPoints: Array<{ x: number; y: number; z: number }> = [];
 
     /** Index of the currently dragged point (null when not dragging). */
-    private dragIndex: number | null = null;
+    private dragTarget: { measurementId: number | null; pointIndex: number } | null = null;
+
+    private draggedHandleEl: SVGCircleElement | null = null;
+
+    private pendingAreaClick: ReturnType<typeof setTimeout> | null = null;
 
     private meshGeometryCache = new WeakMap<object, CachedMeshGeometry | null>();
 
@@ -217,7 +221,19 @@ class MeasurementController {
         this.onMeasureMouseup = (event: MouseEvent) => {
             if (event.button !== 0) return;
             if (this.measureIsPotentialClick && this.measureClickDown && this.observer.get('measure.enabled')) {
-                this.pickAndMeasureAt(this.measureClickDown.canvasX, this.measureClickDown.canvasY);
+                const x = this.measureClickDown.canvasX;
+                const y = this.measureClickDown.canvasY;
+                // Once an area has at least three points, defer its next click briefly so a
+                // double-click can close the polygon without appending two duplicate points.
+                if (this.getMode() === 'area' && this.points.length >= 3) {
+                    if (this.pendingAreaClick !== null) clearTimeout(this.pendingAreaClick);
+                    this.pendingAreaClick = setTimeout(() => {
+                        this.pendingAreaClick = null;
+                        this.pickAndMeasureAt(x, y);
+                    }, 220);
+                } else {
+                    this.pickAndMeasureAt(x, y);
+                }
             }
             this.measureIsPotentialClick = false;
             this.measureClickDown = null;
@@ -228,6 +244,10 @@ class MeasurementController {
             if (event.target !== this.canvas) return;
             if (this.getMode() !== 'area' || this.points.length < 3) return;
             event.preventDefault();
+            if (this.pendingAreaClick !== null) {
+                clearTimeout(this.pendingAreaClick);
+                this.pendingAreaClick = null;
+            }
             this.closeAreaMeasurement();
         };
         this.canvas.addEventListener('mousedown', this.onMeasureMousedown);
@@ -252,7 +272,7 @@ class MeasurementController {
             this.closeAreaMeasurement();
             return;
         }
-        this.dragIndex = index;
+        this.dragTarget = { measurementId: null, pointIndex: index };
         // Don't let the canvas mousedown/mouseup path treat this as a fresh click.
         this.measureIsPotentialClick = false;
         this.measureClickDown = null;
@@ -263,13 +283,37 @@ class MeasurementController {
             // ignore — capture is best-effort
         }
         target?.classList.add('dragging');
+        this.draggedHandleEl = target;
+    }
+
+    private beginStoredHandleDrag(event: PointerEvent, measurementId: number, pointIndex: number) {
+        if (!this.observer.get('measure.enabled') || event.button !== 0) return;
+        const measurement = this.completedMeasurements.find(entry => entry.id === measurementId);
+        if (!measurement || pointIndex < 0 || pointIndex >= measurement.points.length) return;
+        event.preventDefault();
+        event.stopPropagation();
+        this.dragTarget = { measurementId, pointIndex };
+        this.measureIsPotentialClick = false;
+        this.measureClickDown = null;
+        const target = event.target as SVGCircleElement | null;
+        try {
+            target?.setPointerCapture?.(event.pointerId);
+        } catch {
+            // capture is best-effort
+        }
+        target?.classList.add('dragging');
+        this.draggedHandleEl = target;
     }
 
     private updateHandleDrag(event: PointerEvent) {
-        if (this.dragIndex === null) return;
-        const idx = this.dragIndex;
-        if (idx >= this.points.length) {
-            this.dragIndex = null;
+        if (!this.dragTarget) return;
+        const target = this.dragTarget;
+        const measurement = target.measurementId === null ?
+            null :
+            this.completedMeasurements.find(entry => entry.id === target.measurementId);
+        const targetPoints = measurement?.points ?? this.points;
+        if (target.pointIndex >= targetPoints.length) {
+            this.dragTarget = null;
             return;
         }
         const rect = this.canvas.getBoundingClientRect();
@@ -279,7 +323,18 @@ class MeasurementController {
         // Synchronous raycast only — async picker.pick would queue many rounds per drag.
         const hit = this.pickSurfacePoint(x, y);
         if (!hit) return;
-        this.points[idx] = hit.clone();
+        targetPoints[target.pointIndex] = hit.clone();
+
+        if (measurement) {
+            // Recalculate a completed figure in place and expose its live value in the panel.
+            const draftPoints = this.points;
+            this.points = measurement.points;
+            Object.assign(measurement, this.finalizeMeasurement(measurement.mode));
+            this.points = draftPoints;
+            this.renderNextFrame();
+            return;
+        }
+
         // If the measurement is already complete for the current mode, re-finalize live.
         const mode = this.getMode();
         if ((mode === 'area' && this.isAreaComplete()) || (mode !== 'area' && this.points.length === MODE_POINT_COUNT[mode])) {
@@ -289,15 +344,16 @@ class MeasurementController {
     }
 
     private endHandleDrag(event: PointerEvent) {
-        if (this.dragIndex === null) return;
-        const handle = this.measureHandles[this.dragIndex];
+        if (!this.dragTarget) return;
+        const handle = this.draggedHandleEl;
         try {
             handle?.releasePointerCapture?.(event.pointerId);
         } catch {
             // ignore — release is best-effort
         }
         handle?.classList.remove('dragging');
-        this.dragIndex = null;
+        this.dragTarget = null;
+        this.draggedHandleEl = null;
     }
 
     dispose() {
@@ -325,6 +381,10 @@ class MeasurementController {
             document.removeEventListener('pointerup', this.onHandlePointerUp);
             document.removeEventListener('pointercancel', this.onHandlePointerUp);
             this.onHandlePointerUp = null;
+        }
+        if (this.pendingAreaClick !== null) {
+            clearTimeout(this.pendingAreaClick);
+            this.pendingAreaClick = null;
         }
         this.measureOverlay?.remove();
         this.measureOverlay = null;
@@ -702,6 +762,60 @@ class MeasurementController {
         this.renderNextFrame();
     }
 
+    getMeasurementsExportData() {
+        const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
+        const unitScaleValue = Number(this.observer.get('measure.unitScale') ?? 1);
+        const metersPerSceneUnit = Number.isFinite(unitScaleValue) && unitScaleValue > 0 ? unitScaleValue : 1;
+        const displayFactor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
+        const serializePoints = (points: Vec3[]) => points.map((point, index) => ({
+            index: index + 1,
+            scene: { x: point.x, y: point.y, z: point.z },
+            meters: {
+                x: point.x * metersPerSceneUnit,
+                y: point.y * metersPerSceneUnit,
+                z: point.z * metersPerSceneUnit
+            }
+        }));
+        const serializeMeasurement = (measurement: StoredMeasurement) => {
+            const result: Record<string, number> = {};
+            if (measurement.mode === 'distance' && measurement.points.length >= 2) {
+                const meters = measurement.points[0].distance(measurement.points[1]) * metersPerSceneUnit;
+                result.distanceMeters = meters;
+                result.distanceDisplay = meters * displayFactor;
+            } else if (measurement.mode === 'angle') {
+                result.angleDegrees = measurement.angle ?? 0;
+            } else if (measurement.mode === 'area') {
+                const areaResult = this.computeArea(measurement.points);
+                const squareMeters = areaResult.area * metersPerSceneUnit * metersPerSceneUnit;
+                result.areaSquareMeters = squareMeters;
+                result.areaDisplay = squareMeters * displayFactor * displayFactor;
+                result.planarityDeviationMeters = areaResult.maxDeviation * metersPerSceneUnit;
+            }
+            return {
+                id: measurement.id,
+                type: measurement.mode,
+                controlPoints: serializePoints(measurement.points),
+                result
+            };
+        };
+
+        return {
+            schema: 'heritage3d-measurements',
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            sceneUnits: {
+                coordinateUnit: 'scene-unit',
+                metersPerSceneUnit,
+                displayUnit: unit
+            },
+            measurements: this.completedMeasurements.map(serializeMeasurement),
+            draft: this.points.length > 0 ? {
+                type: this.getMode(),
+                controlPoints: serializePoints(this.points)
+            } : null
+        };
+    }
+
     updateOverlay(worldToScreen: (point: Vec3) => Vec3) {
         if (!this.observer.get('measure.enabled')) {
             this.hideOverlay();
@@ -851,7 +965,8 @@ class MeasurementController {
             }
 
             const crossSize = 6;
-            for (const point of screen) {
+            for (let pointIndex = 0; pointIndex < screen.length; pointIndex++) {
+                const point = screen[pointIndex];
                 const hx = document.createElementNS('http://www.w3.org/2000/svg', 'line');
                 hx.setAttribute('class', 'measure-cross measure-completed-cross');
                 hx.setAttribute('x1', `${point.x - crossSize}`);
@@ -867,6 +982,16 @@ class MeasurementController {
                 vy.setAttribute('x2', `${point.x}`);
                 vy.setAttribute('y2', `${point.y + crossSize}`);
                 this.completedMeasureGroupEl.appendChild(vy);
+
+                const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                handle.setAttribute('class', 'measure-handle measure-completed-handle');
+                handle.setAttribute('cx', `${point.x}`);
+                handle.setAttribute('cy', `${point.y}`);
+                handle.setAttribute('r', '12');
+                handle.addEventListener('pointerdown', (event: PointerEvent) => {
+                    this.beginStoredHandleDrag(event, measurement.id, pointIndex);
+                });
+                this.completedMeasureGroupEl.appendChild(handle);
             }
 
             if (measurement.mode === 'area') {

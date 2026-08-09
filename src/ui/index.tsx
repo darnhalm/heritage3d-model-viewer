@@ -4,6 +4,7 @@ import React from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 
+import { t } from '../i18n/translations';
 import { ObserverData } from '../types';
 import { ErrorBox, WarningsBox } from './errors';
 import LeftPanel from './left-panel';
@@ -37,13 +38,31 @@ class App extends React.Component<{ observer: Observer }> {
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
 
     private stateUpdateRaf: number | null = null;
+
     private poiSlideshowTimeout: ReturnType<typeof setTimeout> | null = null;
+
     private poiProgressRaf: number | null = null;
 
     private currentPoiStartTime: number = 0;
+
     private currentPoiDuration: number = 0;
+
     private currentPoiHoldTime: number = 0;
+
     private activePoiId: string = '';
+
+    // Токен сессии воспроизведения: инкрементируется при каждом старте карточки,
+    // паузе, стопе и ручном переключении. Отложенный колбэк авто-перехода сверяет
+    // свой токен с текущим и молча выходит, если тур уже ушёл вперёд/остановлен.
+    private poiPlaybackToken: number = 0;
+
+    // Прошедшее время карточки в момент паузы (сек). Пока не null — тур на паузе:
+    // прогресс заморожен на этом значении, Play продолжит с него, а не с нуля.
+    private poiPausedElapsed: number | null = null;
+
+    // Stop сам переводит playing в false. Флаг не даёт componentDidUpdate
+    // принять этот переход за обычную паузу и снова заморозить камеру.
+    private poiStopPending: boolean = false;
 
     constructor(props: { observer: Observer }) {
         super(props);
@@ -63,35 +82,63 @@ class App extends React.Component<{ observer: Observer }> {
         this.updatePoiProgress();
     }
 
+    private setOverallProgress = (pct: number) => {
+        const fill = document.getElementById('poi-player-progress-fill');
+        if (fill) fill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+    };
+
     private updatePoiProgress = () => {
-        if (!this.state?.poi?.playing || !this.activePoiId) {
-            document.querySelectorAll('.poi-progress-transition, .poi-progress-hold').forEach(el => {
+        const paused = this.poiPausedElapsed !== null;
+        const playing = !!this.state?.poi?.playing;
+
+        // Idle/Stop: ни воспроизведения, ни паузы — всё в ноль.
+        if ((!playing && !paused) || !this.activePoiId) {
+            document.querySelectorAll('.poi-progress-transition, .poi-progress-hold').forEach((el) => {
                 (el as HTMLElement).style.width = '0%';
             });
+            this.setOverallProgress(0);
             this.poiProgressRaf = requestAnimationFrame(this.updatePoiProgress);
             return;
         }
 
-        const elapsed = (Date.now() - this.currentPoiStartTime) / 1000;
         const duration = this.currentPoiDuration;
         const holdTime = this.currentPoiHoldTime;
-        
+        // На паузе время заморожено на poiPausedElapsed, иначе идёт от старта карточки.
+        const cardTotal = duration + holdTime;
+        const elapsed = paused ?
+            (this.poiPausedElapsed as number) :
+            Math.min((Date.now() - this.currentPoiStartTime) / 1000, cardTotal);
+
         const transitionProgress = Math.min(100, Math.max(0, duration > 0 ? (elapsed / duration) * 100 : 100));
         let holdProgress = 0;
         if (elapsed > duration && holdTime > 0) {
             holdProgress = Math.min(100, Math.max(0, ((elapsed - duration) / holdTime) * 100));
         }
 
-        document.querySelectorAll('.poi-progress-transition').forEach(el => {
+        document.querySelectorAll('.poi-progress-transition').forEach((el) => {
             const castEl = el as HTMLElement;
             if (el.id === `poi-progress-transition-${this.activePoiId}`) castEl.style.width = `${transitionProgress}%`;
             else castEl.style.width = '0%';
         });
-        document.querySelectorAll('.poi-progress-hold').forEach(el => {
+        document.querySelectorAll('.poi-progress-hold').forEach((el) => {
             const castEl = el as HTMLElement;
             if (el.id === `poi-progress-hold-${this.activePoiId}`) castEl.style.width = `${holdProgress}%`;
             else castEl.style.width = '0%';
         });
+
+        // Общий прогресс тура: сумма (duration + holdTime) всех обычных точек,
+        // завершённые карточки до текущей + прошедшее в текущей.
+        const list = this.getPoiList();
+        const idx = list.findIndex(poi => String(poi.id) === this.activePoiId);
+        let total = 0;
+        let before = 0;
+        list.forEach((poi, i) => {
+            const cardT = (poi.duration ?? 1.0) + (poi.holdTime ?? 1.0);
+            total += cardT;
+            if (idx >= 0 && i < idx) before += cardT;
+        });
+        const overallElapsed = before + Math.min(elapsed, cardTotal);
+        this.setOverallProgress(total > 0 ? (overallElapsed / total) * 100 : 0);
 
         this.poiProgressRaf = requestAnimationFrame(this.updatePoiProgress);
     };
@@ -150,40 +197,121 @@ class App extends React.Component<{ observer: Observer }> {
             }
         }
 
-        if (playing && (!prevPlaying || activeId !== prevActiveId)) {
-            if (this.poiSlideshowTimeout !== null) {
-                clearTimeout(this.poiSlideshowTimeout);
-            }
-            
-            const list = this.getPoiList();
-            const currentPoi = list.find(poi => String(poi.id) === activeId);
-            const duration = currentPoi?.duration ?? 1.0;
-            const holdTime = currentPoi?.holdTime ?? 1.0;
-
-            this.currentPoiStartTime = Date.now();
-            this.currentPoiDuration = duration;
-            this.currentPoiHoldTime = holdTime;
-            this.activePoiId = activeId;
-
-            this.poiSlideshowTimeout = setTimeout(() => {
-                const currentIndex = list.findIndex(poi => String(poi.id) === activeId);
-                const nextIndex = currentIndex < list.length - 1 ? currentIndex + 1 : 0;
-                const nextPoi = list[nextIndex];
-                if (nextPoi?.id) {
-                    window.viewer?.focusPoi?.(String(nextPoi.id));
-                }
-            }, (duration + holdTime) * 1000);
+        const list = this.getPoiList();
+        if (this.poiStopPending && !playing) {
+            // Stop уже отменил перелёт и сбросил таймеры. Не вызываем pauseCard
+            // повторно на отложенном React-обновлении observer.
+            this.poiStopPending = false;
+            this.poiPausedElapsed = null;
+            this.syncCardMetrics(activeId, list);
+        } else if (playing && !prevPlaying && this.poiPausedElapsed !== null && activeId === this.activePoiId) {
+            // Возобновление с паузы — продолжаем ту же карточку с замороженной фазы.
+            this.resumeCard(activeId, list);
+        } else if (playing && (!prevPlaying || activeId !== prevActiveId)) {
+            // Старт карточки заново: первый Play или переход на другую точку.
+            this.poiPausedElapsed = null;
+            this.startCard(activeId, list);
+            if (!prevPlaying) this.emitTourState('playing');
         } else if (!playing && prevPlaying) {
-            if (this.poiSlideshowTimeout !== null) {
-                clearTimeout(this.poiSlideshowTimeout);
-                this.poiSlideshowTimeout = null;
-            }
+            // Пауза — мгновенно замораживаем перелёт камеры, таймер и прогресс.
+            this.pauseCard();
+        } else if (!playing && activeId !== prevActiveId) {
+            // Ручное переключение точки вне воспроизведения: снимаем паузу и
+            // синхронизируем метрики карточки (прогресс покажет исходное состояние).
+            this.poiPausedElapsed = null;
+            this.syncCardMetrics(activeId, list);
         }
     }
+
+    private scheduleAdvance(seconds: number, activeId: string, list: PoiUiEntry[], token: number) {
+        if (this.poiSlideshowTimeout !== null) {
+            clearTimeout(this.poiSlideshowTimeout);
+        }
+        this.poiSlideshowTimeout = setTimeout(() => {
+            if (token !== this.poiPlaybackToken) return; // устаревший колбэк — тур ушёл вперёд/на паузу/стоп
+            const currentIndex = list.findIndex(poi => String(poi.id) === activeId);
+            const nextIndex = currentIndex < list.length - 1 ? currentIndex + 1 : 0;
+            const nextPoi = list[nextIndex];
+            if (nextPoi?.id) window.viewer?.focusPoi?.(String(nextPoi.id));
+        }, Math.max(0, seconds) * 1000);
+    }
+
+    private syncCardMetrics(activeId: string, list: PoiUiEntry[]) {
+        const currentPoi = list.find(poi => String(poi.id) === activeId);
+        this.currentPoiDuration = currentPoi?.duration ?? 1.0;
+        this.currentPoiHoldTime = currentPoi?.holdTime ?? 1.0;
+        this.currentPoiStartTime = Date.now();
+        this.activePoiId = activeId;
+    }
+
+    private startCard(activeId: string, list: PoiUiEntry[]) {
+        this.poiPlaybackToken++;
+        this.syncCardMetrics(activeId, list);
+        this.scheduleAdvance(this.currentPoiDuration + this.currentPoiHoldTime, activeId, list, this.poiPlaybackToken);
+    }
+
+    private resumeCard(activeId: string, list: PoiUiEntry[]) {
+        this.poiPlaybackToken++;
+        const elapsed = this.poiPausedElapsed ?? 0;
+        this.poiPausedElapsed = null;
+        const cardTotal = this.currentPoiDuration + this.currentPoiHoldTime;
+        this.currentPoiStartTime = Date.now() - elapsed * 1000;
+        this.activePoiId = activeId;
+        window.viewer?.resumeCameraFly?.();
+        this.scheduleAdvance(cardTotal - elapsed, activeId, list, this.poiPlaybackToken);
+        this.emitTourState('playing');
+    }
+
+    private pauseCard() {
+        this.poiPlaybackToken++; // инвалидируем запланированный авто-переход
+        if (this.poiSlideshowTimeout !== null) {
+            clearTimeout(this.poiSlideshowTimeout);
+            this.poiSlideshowTimeout = null;
+        }
+        const cardTotal = this.currentPoiDuration + this.currentPoiHoldTime;
+        const elapsed = Math.min((Date.now() - this.currentPoiStartTime) / 1000, cardTotal);
+        this.poiPausedElapsed = Math.max(0, elapsed);
+        window.viewer?.pauseCameraFly?.();
+        this.emitTourState('paused');
+    }
+
+    private emitTourState(state: 'playing' | 'paused' | 'stopped') {
+        window.parent?.postMessage({
+            type: 'tour-state',
+            state,
+            id: this.activePoiId || null,
+            elapsed: state === 'stopped' ? 0 : (this.poiPausedElapsed ?? Math.max(0, (Date.now() - this.currentPoiStartTime) / 1000))
+        }, '*');
+    }
+
+    private stopTour = () => {
+        this.poiPlaybackToken++;
+        if (this.poiSlideshowTimeout !== null) {
+            clearTimeout(this.poiSlideshowTimeout);
+            this.poiSlideshowTimeout = null;
+        }
+        const wasPlaying = !!this.state?.poi?.playing;
+        this.poiPausedElapsed = null;
+        this.poiStopPending = wasPlaying;
+        this._setStateProperty('poi.playing', false);
+
+        // Вернуть выбор к первой обычной точке, но не доигрывать начатый
+        // focusPoi перелёт: Stop оставляет камеру там, где её остановили.
+        const first = this.getPoiList()[0];
+        this.currentPoiStartTime = 0;
+        if (first?.id) {
+            this.activePoiId = String(first.id);
+            window.viewer?.focusPoi?.(String(first.id));
+        }
+        window.viewer?.cancelCameraFly?.();
+        this.setOverallProgress(0);
+        this.emitTourState('stopped');
+    };
 
     render() {
         if (!this.state) return null;
         const embed = this.state?.ui?.embed;
+        const lang = this.state?.ui?.language;
         const poiList = this.getPoiList();
         const activePoiId = this.state?.poi?.activeId || '';
         const activePoiIndex = poiList.findIndex(poi => String(poi.id) === activePoiId);
@@ -262,15 +390,28 @@ class App extends React.Component<{ observer: Observer }> {
                 {showSelectedNode && <SelectedNode observerData={this.state} setProperty={this._setStateProperty} />}
                 {showPoiPlayer && currentPoi && (
                     <div id='poi-player-overlay'>
+                        <div className='poi-player-progress' aria-hidden='true'>
+                            <div className='poi-player-progress-fill' id='poi-player-progress-fill' />
+                        </div>
                         <button
                             type='button'
                             className='poi-player-button poi-player-play-button'
                             onClick={() => {
                                 this._setStateProperty('poi.playing', !(this.state?.poi?.playing ?? false));
                             }}
-                            title={this.state?.poi?.playing ? 'Pause' : 'Play'}
+                            title={this.state?.poi?.playing ? t('Pause', lang) : t('Play', lang)}
+                            aria-label={this.state?.poi?.playing ? t('Pause', lang) : t('Play', lang)}
                         >
                             {this.state?.poi?.playing ? '⏸' : '►'}
+                        </button>
+                        <button
+                            type='button'
+                            className='poi-player-button'
+                            onClick={this.stopTour}
+                            title={t('Stop', lang)}
+                            aria-label={t('Stop', lang)}
+                        >
+                            ⏹
                         </button>
                         <button
                             type='button'
@@ -280,6 +421,8 @@ class App extends React.Component<{ observer: Observer }> {
                                 const prevPoi = poiList[prevIndex];
                                 if (prevPoi?.id) window.viewer?.focusPoi?.(String(prevPoi.id));
                             }}
+                            title={t('Previous POI', lang)}
+                            aria-label={t('Previous POI', lang)}
                         >
                             ‹
                         </button>
@@ -294,6 +437,8 @@ class App extends React.Component<{ observer: Observer }> {
                                 const nextPoi = poiList[nextIndex];
                                 if (nextPoi?.id) window.viewer?.focusPoi?.(String(nextPoi.id));
                             }}
+                            title={t('Next POI', lang)}
+                            aria-label={t('Next POI', lang)}
                         >
                             ›
                         </button>

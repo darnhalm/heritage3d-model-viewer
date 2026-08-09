@@ -349,6 +349,7 @@ class SettingsService {
         o.set('camera.multisample', true);
         o.set('camera.hq', true);
         o.set('camera.mode', 'orbit');
+        o.set('camera.flySpeed', 1);
         o.set('skybox.value', this.skyboxUrls.has('Paul Lobe Haus') ? 'Paul Lobe Haus' : 'None');
         o.set('skybox.exposure', 0);
         o.set('skybox.rotation', 0);
@@ -416,7 +417,7 @@ class SettingsService {
         const filter = SettingsService.SETTINGS_FILTER_PATHS;
         const blockedKeys = new Set(['__proto__', 'constructor', 'prototype']);
         const colorPaths = ['skybox.backgroundColor', 'light.color', 'debug.wireframeColor'];
-        const numericPaths = new Set(['measure.unitScale', 'measure.knownDistance', 'camera.fov', 'skybox.exposure', 'debug.selectedUvSet']);
+        const numericPaths = new Set(['measure.unitScale', 'measure.knownDistance', 'camera.fov', 'camera.flySpeed', 'skybox.exposure', 'debug.selectedUvSet']);
         const clampFinite = (value: unknown, min: number, max: number): number | null => {
             const n = Number(value);
             if (!Number.isFinite(n)) return null;
@@ -430,6 +431,8 @@ class SettingsService {
                     return clampFinite(value, 0, 1000000000);
                 case 'camera.fov':
                     return clampFinite(value, 35, 150);
+                case 'camera.flySpeed':
+                    return clampFinite(value, 0.1, 5);
                 case 'skybox.exposure':
                     return clampFinite(value, -6, 6);
                 case 'debug.selectedUvSet':
