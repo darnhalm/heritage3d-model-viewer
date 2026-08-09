@@ -612,6 +612,149 @@ test('отладочный оверлей тайлов: OBB активных т�
     expect(pageErrors).toEqual([]);
 });
 
+test('production fragment box clips tile geometry exactly and restores materials', async ({ page }) => {
+    test.skip(!await samplesAvailable(page, DISCRETE_LOD),
+        'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
+
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+    await page.goto(`/?webgl&load=${encodeURIComponent(DISCRETE_LOD)}`);
+    await waitForViewer(page);
+    await waitForTiles(page);
+    await placeCamera(page, 900);
+
+    await expect(page.locator('#fragment-button')).toBeVisible();
+    await page.locator('#fragment-button').click();
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('fragment.selecting'))).toBe(true);
+    const picked = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const canvas = document.querySelector('#application-canvas') as HTMLCanvasElement;
+        const positions = [0.5, 0.35, 0.65, 0.25, 0.75];
+        for (const y of positions) {
+            for (const x of positions) {
+                const clickX = canvas.clientWidth * x;
+                const clickY = canvas.clientHeight * y;
+                if (viewer.pickFragmentAt(clickX, clickY)) {
+                    const screen = viewer.camera.camera.worldToScreen(viewer.fragmentBoxEntity.getPosition());
+                    const device = viewer.app.graphicsDevice;
+                    return {
+                        click: [clickX, clickY],
+                        center: [
+                            screen.x * canvas.clientWidth / device.width,
+                            screen.y * canvas.clientHeight / device.height
+                        ]
+                    };
+                }
+            }
+        }
+        return null;
+    });
+    expect(picked).not.toBeNull();
+    expect(picked!.center[0]).toBeCloseTo(picked!.click[0], 1);
+    expect(picked!.center[1]).toBeCloseTo(picked!.click[1], 1);
+    await pumpFrames(page, 5);
+
+    const initial = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const size = viewer.observer.get('fragment.size') as number[];
+        return {
+            enabled: viewer.observer.get('fragment.enabled'),
+            initialized: viewer.observer.get('fragment.initialized'),
+            size,
+            overlayVertices: viewer.debugFragmentBoxSolid.mesh.primitive[0].count,
+            panelVisible: !(document.querySelector('.fragment-panel')?.closest('.popup-panel-parent') as HTMLElement)?.hidden
+        };
+    });
+    expect(initial.enabled).toBe(false);
+    expect(initial.initialized).toBe(true);
+    expect(initial.panelVisible).toBe(true);
+    expect(initial.size.every(value => value > 0)).toBe(true);
+    expect(initial.overlayVertices).toBeGreaterThan(72);
+    await expect(page.locator('.fragment-primary-actions .pcui-button')).toHaveCount(2);
+    await expect(page.locator('.fragment-mode-toolbar .pcui-button')).toHaveCount(3);
+    await expect(page.getByText('FIT BOX TO MODEL', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('EXIT MODE', { exact: true })).toHaveCount(0);
+    await expect(page.locator('.fragment-panel button:not(.pcui-button)')).toHaveCount(0);
+    const initialRotation = await page.evaluate(() => (window as any).viewer.observer.get('fragment.rotation'));
+    expect(initialRotation[0]).toBeCloseTo(0, 5);
+    expect(initialRotation[2]).toBeCloseTo(0, 5);
+
+    await page.evaluate(() => (window as any).viewer.observer.set('fragment.editMode', 'rotate'));
+    await pumpFrames(page, 1);
+    const rotateMode = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        return {
+            mode: viewer.observer.get('fragment.editMode'),
+            rotateEnabled: viewer.fragmentRotateGizmo.enabled,
+            moveEnabled: viewer.fragmentTranslateGizmo.enabled
+        };
+    });
+    expect(rotateMode).toEqual({ mode: 'rotate', rotateEnabled: true, moveEnabled: false });
+
+    await page.evaluate(() => (window as any).viewer.observer.set('fragment.editMode', 'move'));
+    await pumpFrames(page, 1);
+    const moveMode = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        return {
+            mode: viewer.observer.get('fragment.editMode'),
+            coordSpace: viewer.fragmentTranslateGizmo.coordSpace,
+            rotateEnabled: viewer.fragmentRotateGizmo.enabled,
+            moveEnabled: viewer.fragmentTranslateGizmo.enabled
+        };
+    });
+    expect(moveMode).toEqual({ mode: 'move', coordSpace: 'local', rotateEnabled: false, moveEnabled: true });
+
+    await page.keyboard.press('f');
+    await pumpFrames(page, 1);
+    const fragmentFocusDistance = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        return viewer.cameraControls.getFocus().distance(viewer.fragmentBoxEntity.getPosition());
+    });
+    expect(fragmentFocusDistance).toBeLessThan(0.0001);
+
+    await page.locator('.fragment-isolate-button').click();
+    await pumpFrames(page, 3);
+    const isolatedOverlayVertices = await page.evaluate(() =>
+        (window as any).viewer.debugFragmentBoxSolid.mesh.primitive[0].count);
+    expect(isolatedOverlayVertices).toBe(72);
+
+    const clipped = await page.evaluate((initialSize) => {
+        const viewer = (window as any).viewer;
+        viewer.observer.set('fragment.size', [initialSize[0] * 0.45, initialSize[1] * 0.8, initialSize[2] * 0.8]);
+        viewer.observer.set('fragment.rotation', [0, 37, 0]);
+        viewer.app.tick(performance.now());
+        const materials = viewer.tileManager.getVisibleMeshInstances().map((mi: any) => mi.material);
+        return {
+            rotation: viewer.fragmentBoxEntity.getEulerAngles().y,
+            enabled: viewer.observer.get('fragment.enabled'),
+            shaderInstalled: materials.some((material: any) =>
+                material.shaderChunks.glsl.get('litUserMainStartPS')?.includes('clipBoxInside')),
+            tileFilterEnabled: !!viewer.tileManager.clipBoxWorldToLocal
+        };
+    }, initial.size);
+    expect(clipped.rotation).toBeCloseTo(37, 1);
+    expect(clipped.enabled).toBe(true);
+    expect(clipped.shaderInstalled).toBe(true);
+    expect(clipped.tileFilterEnabled).toBe(true);
+
+    await page.locator('.fragment-isolate-button').click();
+    await pumpFrames(page, 3);
+    const restored = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const materials = viewer.tileManager.getVisibleMeshInstances().map((mi: any) => mi.material);
+        return {
+            enabled: viewer.observer.get('fragment.enabled'),
+            tileFilter: viewer.tileManager.clipBoxWorldToLocal,
+            shaderStillInstalled: materials.some((material: any) =>
+                material.shaderChunks.glsl.get('litUserMainStartPS')?.includes('clipBoxInside'))
+        };
+    });
+    expect(restored.enabled).toBe(false);
+    expect(restored.tileFilter).toBeNull();
+    expect(restored.shaderStillInstalled).toBe(false);
+    expect(pageErrors).toEqual([]);
+});
+
 const setFlag = (page: Page, key: string, value: unknown) =>
     page.evaluate(([k, v]) => (window as any).viewer.observer.set(k, v), [key, value] as const);
 

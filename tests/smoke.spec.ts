@@ -246,12 +246,15 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
     await expect(embedCode).toHaveValue(/hd=1/);
     await expect(embedCode).toHaveValue(/share=1/);
     await expect(embedCode).toHaveValue(/cameraMode=1/);
+    await expect(embedCode).toHaveValue(/fragment=1/);
     await expect(embedCode).toHaveValue(/animControls=1/);
     await expect(embedCode).toHaveValue(/parentOrigin=https%3A%2F%2Fportal\.example/);
     await expect(page.locator('.share-flag[aria-label^="HD / SD:"]')).toHaveCount(1);
     await expect(page.locator('.share-flag[aria-label^="View & share:"]')).toHaveCount(1);
     await expect(page.locator('.share-flag[aria-label^="Camera mode:"]')).toHaveCount(1);
     await expect(page.locator('.share-flag[aria-label^="Animation controls:"]')).toHaveCount(1);
+    await expect(page.locator('.share-flag[aria-label^="Fragment view:"]')).toHaveCount(1);
+    await expect(page.locator('.share-flag[aria-label^="Model info:"]')).toHaveCount(0);
     await expect(page.locator('.share-flag-label').first()).toHaveCSS('color', 'rgb(255, 255, 255)');
 });
 
@@ -263,7 +266,7 @@ test('none embed preset hides every configurable interface element', async ({ pa
     await expect(page.locator('#popup-buttons-parent').locator('button')).toHaveCount(0);
     const embed = await page.evaluate(() => (window as any).viewer.observer.get('ui.embed'));
     expect(embed.preset).toBe('none');
-    for (const key of ['panel', 'poi', 'tour', 'measure', 'info', 'modelInfo', 'controls', 'hd', 'share', 'cameraMode', 'fullscreen', 'fit', 'reset', 'animControls']) {
+    for (const key of ['panel', 'poi', 'tour', 'measure', 'info', 'fragment', 'controls', 'hd', 'share', 'cameraMode', 'fullscreen', 'fit', 'reset', 'animControls']) {
         expect(embed[key]).toBe(false);
     }
 });

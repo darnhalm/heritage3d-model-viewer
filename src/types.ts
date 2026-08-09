@@ -57,7 +57,7 @@ export interface ObserverData {
             tour: boolean,
             measure: boolean,
             info: boolean,
-            modelInfo: boolean,
+            fragment: boolean,
             controls: boolean,
             hd: boolean,
             share: boolean,
@@ -289,6 +289,17 @@ export interface ObserverData {
         knownDistance: number,
         /** Warning shown when scene-scale calibration collapses multiple distance segments to one. */
         knownDistanceWarning: boolean
+    },
+    /** Temporary production clipping tool; intentionally excluded from model settings. */
+    fragment: {
+        enabled: boolean,
+        selecting: boolean,
+        invert: boolean,
+        editMode: 'move' | 'resize' | 'rotate',
+        center: [number, number, number],
+        size: [number, number, number],
+        rotation: [number, number, number],
+        initialized: boolean
     },
     dimensionBox: {
         enabled: boolean,

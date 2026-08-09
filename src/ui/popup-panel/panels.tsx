@@ -133,7 +133,7 @@ type EmbedGeneratorState = {
     tour: boolean,
     measure: boolean,
     info: boolean,
-    modelInfo: boolean,
+    fragment: boolean,
     controls: boolean,
     hd: boolean,
     share: boolean,
@@ -158,7 +158,7 @@ const SHARE_FLAG_ICONS: Record<string, string> = {
     tour: 'static/icons/tour-icon.svg',
     measure: 'static/icons/ruler-icon.svg',
     info: 'static/icons/info-icon.svg',
-    modelInfo: 'static/icons/view-in-ar-icon.svg',
+    fragment: 'static/icons/fragment-frame-icon.svg',
     controls: 'static/icons/mouse-icon.svg',
     hd: 'static/icons/hd-icon.svg',
     share: 'static/icons/share-icon.svg',
@@ -215,7 +215,7 @@ class InfoPanel extends React.Component <{
         const lang = observerData?.ui?.language;
         const embed = observerData?.ui?.embed;
         const showControlsTab = !(embed?.enabled) || embed.controls;
-        const showModelTab = !(embed?.enabled) || embed.modelInfo;
+        const showModelTab = !(embed?.enabled) || embed.info;
         const showAboutTab = !(embed?.enabled) || embed.info;
         const showFitControl = !(embed?.enabled) || embed.fit;
         const showResetControl = !(embed?.enabled) || embed.reset;
@@ -703,7 +703,7 @@ class ViewPanel extends React.Component <{
         tour: boolean,
         measure: boolean,
         info: boolean,
-        modelInfo: boolean,
+        fragment: boolean,
         controls: boolean,
         hd: boolean,
         share: boolean,
@@ -713,10 +713,10 @@ class ViewPanel extends React.Component <{
         fit: boolean,
         reset: boolean
     }> = {
-            full: { panel: true, poi: true, tour: true, measure: true, info: true, modelInfo: true, controls: true, hd: true, share: true, cameraMode: true, animControls: true, allowFullscreen: true, fit: true, reset: true },
-            compact: { panel: false, poi: true, tour: true, measure: false, info: true, modelInfo: false, controls: true, hd: false, share: false, cameraMode: false, animControls: true, allowFullscreen: true, fit: true, reset: true },
-            minimal: { panel: false, poi: true, tour: true, measure: false, info: false, modelInfo: false, controls: false, hd: false, share: false, cameraMode: false, animControls: false, allowFullscreen: true, fit: false, reset: true },
-            none: { panel: false, poi: false, tour: false, measure: false, info: false, modelInfo: false, controls: false, hd: false, share: false, cameraMode: false, animControls: false, allowFullscreen: false, fit: false, reset: false }
+            full: { panel: true, poi: true, tour: true, measure: true, info: true, fragment: true, controls: true, hd: true, share: true, cameraMode: true, animControls: true, allowFullscreen: true, fit: true, reset: true },
+            compact: { panel: false, poi: true, tour: true, measure: false, info: true, fragment: false, controls: true, hd: false, share: false, cameraMode: false, animControls: true, allowFullscreen: true, fit: true, reset: true },
+            minimal: { panel: false, poi: true, tour: true, measure: false, info: false, fragment: false, controls: false, hd: false, share: false, cameraMode: false, animControls: false, allowFullscreen: true, fit: false, reset: true },
+            none: { panel: false, poi: false, tour: false, measure: false, info: false, fragment: false, controls: false, hd: false, share: false, cameraMode: false, animControls: false, allowFullscreen: false, fit: false, reset: false }
         };
 
     get embedSrc() {
@@ -744,7 +744,7 @@ class ViewPanel extends React.Component <{
         url.searchParams.set('tour', this.state.tour ? '1' : '0');
         url.searchParams.set('measure', this.state.measure ? '1' : '0');
         url.searchParams.set('info', this.state.info ? '1' : '0');
-        url.searchParams.set('modelInfo', this.state.modelInfo ? '1' : '0');
+        url.searchParams.set('fragment', this.state.fragment ? '1' : '0');
         url.searchParams.set('controls', this.state.controls ? '1' : '0');
         url.searchParams.set('hd', this.state.hd ? '1' : '0');
         url.searchParams.set('share', this.state.share ? '1' : '0');
@@ -823,7 +823,7 @@ class ViewPanel extends React.Component <{
             tour: embed?.tour ?? defaults.tour,
             measure: embed?.measure ?? defaults.measure,
             info: embed?.info ?? defaults.info,
-            modelInfo: embed?.modelInfo ?? defaults.modelInfo,
+            fragment: embed?.fragment ?? defaults.fragment,
             controls: embed?.controls ?? defaults.controls,
             hd: embed?.hd ?? defaults.hd,
             share: embed?.share ?? defaults.share,
@@ -865,7 +865,7 @@ class ViewPanel extends React.Component <{
             tour: defaults.tour,
             measure: defaults.measure,
             info: defaults.info,
-            modelInfo: defaults.modelInfo,
+            fragment: defaults.fragment,
             controls: defaults.controls,
             hd: defaults.hd,
             share: defaults.share,
@@ -923,7 +923,7 @@ class ViewPanel extends React.Component <{
                         <ShareFlagButton flagKey='tour' label={t('Tour', lang)} on={this.state.tour} lang={lang} onToggle={() => this.setState({ tour: !this.state.tour })} />
                         <ShareFlagButton flagKey='measure' label={t('Measure', lang)} on={this.state.measure} lang={lang} onToggle={() => this.setState({ measure: !this.state.measure })} />
                         <ShareFlagButton flagKey='info' label={t('Info', lang)} on={this.state.info} lang={lang} onToggle={() => this.setState({ info: !this.state.info })} />
-                        <ShareFlagButton flagKey='modelInfo' label={t('Model info', lang)} on={this.state.modelInfo} lang={lang} onToggle={() => this.setState({ modelInfo: !this.state.modelInfo })} />
+                        <ShareFlagButton flagKey='fragment' label={t('Fragment view', lang)} on={this.state.fragment} lang={lang} onToggle={() => this.setState({ fragment: !this.state.fragment })} />
                         <ShareFlagButton flagKey='controls' label={t('Controls', lang)} on={this.state.controls} lang={lang} onToggle={() => this.setState({ controls: !this.state.controls })} />
                         <ShareFlagButton flagKey='hd' label={t('HD / SD', lang)} on={this.state.hd} lang={lang} onToggle={() => this.setState({ hd: !this.state.hd })} />
                         <ShareFlagButton flagKey='share' label={t('View & share', lang)} on={this.state.share} lang={lang} onToggle={() => this.setState({ share: !this.state.share })} />
@@ -1047,6 +1047,57 @@ class ViewPanel extends React.Component <{
         );
     }
 }
+
+export const FragmentPanel = (props: { observerData: ObserverData, setProperty: SetProperty }) => {
+    const data = props.observerData.fragment;
+    const lang = props.observerData.ui.language;
+
+    return (
+        <div className='popup-panel-parent' hidden={props.observerData.ui.active !== 'fragment'}>
+            <Container class={['popup-panel', 'fragment-panel'].concat(data.selecting ? ['fragment-selecting'] : [])} flex>
+                <Label text={t('Fragment view', lang)} class='popup-panel-heading' />
+                <Container class='fragment-primary-actions'>
+                    <Button
+                        class={['secondary', 'fragment-primary-button'].concat(data.selecting ? ['selected'] : [])}
+                        text={t('SELECT FRAGMENT', lang)}
+                        onClick={() => window.viewer?.beginFragmentSelection?.()}
+                    />
+                    <Button
+                        class={['secondary', 'fragment-primary-button', 'fragment-isolate-button'].concat(data.enabled ? ['active'] : [])}
+                        text={data.enabled ? t('EXIT ISOLATION', lang) : t('ISOLATE FRAGMENT', lang)}
+                        enabled={data.initialized && !data.selecting}
+                        onClick={() => window.viewer?.toggleFragmentIsolation?.()}
+                    />
+                </Container>
+                {data.initialized && (
+                    <Container class='fragment-mode-toolbar'>
+                        {([
+                            ['move', 'fragment-tool-move', 'Move box'],
+                            ['resize', 'fragment-tool-scale', 'Resize box'],
+                            ['rotate', 'fragment-tool-rotate', 'Rotate box']
+                        ] as const).map(([mode, iconClass, title]) => (
+                            <span key={mode} title={t(title, lang)} style={{ display: 'contents' }}>
+                                <Button
+                                    class={[
+                                        'secondary', 'fragment-tool-button', iconClass,
+                                        ...(data.editMode === mode ? ['active'] : [])
+                                    ]}
+                                    aria-label={t(title, lang)}
+                                    aria-pressed={data.editMode === mode}
+                                    onClick={() => props.setProperty('fragment.editMode', mode)}
+                                />
+                            </span>
+                        ))}
+                    </Container>
+                )}
+                <div className='fragment-hint'>
+                    {data.selecting ? t('Click the model where the fragment box should appear.', lang) :
+                        t('Adjust the box, then isolate the selected fragment.', lang)}
+                </div>
+            </Container>
+        </div>
+    );
+};
 
 // Метаданные (Dublin Core) убраны из плеера — источник правды портал.
 // Прежняя отдельная ID-панель удалена: постоянный TWIN_ID переехал в

@@ -414,6 +414,15 @@ class SettingsService {
         o.set('measure.pointCount', 0);
         o.set('measure.knownDistance', 0);
         o.set('measure.knownDistanceWarning', false);
+        // Fragment clipping is a temporary viewing state, never a model setting.
+        o.set('fragment.enabled', false);
+        o.set('fragment.selecting', false);
+        o.set('fragment.invert', false);
+        o.set('fragment.editMode', 'move');
+        o.set('fragment.center', [0, 0, 0]);
+        o.set('fragment.size', [1, 1, 1]);
+        o.set('fragment.rotation', [0, 0, 0]);
+        o.set('fragment.initialized', false);
         o.set('dimensionBox.enabled', false);
         o.set('dimensionBox.size', [1, 1, 1]);
         o.set('dimensionBox.center', [0, 0, 0]);

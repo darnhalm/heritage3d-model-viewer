@@ -2,7 +2,7 @@ import { Button } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import AnimationControls from './animation-controls';
-import { MeasurementsPanel, ViewPanel, InfoPanel } from './panels';
+import { FragmentPanel, MeasurementsPanel, ViewPanel, InfoPanel } from './panels';
 import { addEventListenerOnClickOnly } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData } from '../../types';
@@ -11,6 +11,7 @@ const PopupPanelControls = (props: { observerData: ObserverData, setProperty: Se
     return (<>
         <InfoPanel setProperty={props.setProperty} observerData={props.observerData} />
         <MeasurementsPanel setProperty={props.setProperty} observerData={props.observerData} />
+        <FragmentPanel setProperty={props.setProperty} observerData={props.observerData} />
         <ViewPanel setProperty={props.setProperty} sceneData={props.observerData.scene} uiData={props.observerData.ui} runtimeData={props.observerData.runtime}/>
     </>);
 };
@@ -44,6 +45,11 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                 if (target instanceof Node && this.popupPanelElement?.contains(target)) {
                     return;
                 }
+                // Choosing a fragment is intentionally a click on the canvas outside
+                // the popup. Keep the panel and selection mode alive for that click.
+                if (document.querySelector('.fragment-panel.fragment-selecting') && target instanceof HTMLCanvasElement) {
+                    return;
+                }
                 this.props.setProperty('ui.active', null);
                 this.removeDeselectEvents?.();
                 this.removeDeselectEvents = null;
@@ -69,6 +75,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
         const showHdButton = !(embed?.enabled) || embed.hd;
         const showShareButton = !(embed?.enabled) || embed.share;
         const showCameraModeButton = !(embed?.enabled) || embed.cameraMode;
+        const showFragmentButton = !!this.props.observerData.scene.isTileset && (!(embed?.enabled) || embed.fragment);
         const wrap = (titleText: string, btn: React.ReactNode) => (
             <span title={titleText} style={{ display: 'contents' }}>{btn}</span>
         );
@@ -110,6 +117,23 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                             this.handleClick('measurement');
                             if (isOpening) {
                                 this.props.setProperty('measure.enabled', true);
+                            }
+                        }}
+                    />
+                ))}
+                {showFragmentButton && wrap(t('Fragment view', lang), (
+                    <Button
+                        class={buildClass('fragment')
+                        .concat('fragment-button')
+                        .concat(this.props.observerData.fragment.enabled ? 'fragment-enabled' : [])}
+                        id='fragment-button'
+                        width={40}
+                        height={40}
+                        onClick={() => {
+                            const isOpening = this.props.observerData.ui.active !== 'fragment';
+                            this.handleClick('fragment');
+                            if (isOpening && !this.props.observerData.fragment.initialized) {
+                                window.viewer?.beginFragmentSelection?.();
                             }
                         }}
                     />

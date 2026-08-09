@@ -269,6 +269,14 @@ export class TileManager {
      */
     private lodIsolate: number | null = null;
 
+    /** Production clipping volume in world → unit-box local coordinates. */
+    private clipBoxWorldToLocal: Mat4 | null = null;
+
+    /** false: keep inside the box; true: keep outside it. */
+    private clipBoxInvert = false;
+
+    private readonly clipBoxCorner = new Vec3();
+
     private frame = 0;
 
     /** Матрица «система тайлсета → мир». */
@@ -531,6 +539,11 @@ export class TileManager {
      * @returns `true`, если поддерево закрывает свою область (нечего показывать поверх).
      */
     private visit(tile: Tile, selection: Tile[]): boolean {
+        // Exact pixels are clipped in the material shader. This conservative tree test
+        // only avoids requesting branches that are definitely outside the kept volume.
+        if (!this.intersectsClipBox(tile)) {
+            return true;
+        }
         // Тайл без поддержанных габаритов (`region`) считаем видимым и бесконечно грубым:
         // лучше показать лишнее, чем потерять геометрию.
         tile.inFrustum = !tile.obb || this.frustum.containsSphere(tile.obb.sphere) !== 0;
@@ -605,6 +618,50 @@ export class TileManager {
         // Ни дети, ни родитель не готовы — показываем то, что есть.
         selection.push(...sub);
         return false;
+    }
+
+    /**
+     * Conservative OBB-vs-oriented-box test. Tile corners are transformed into the
+     * clipping box's unit space. Their AABB can overestimate an intersection but can
+     * never reject visible geometry, which is the safe choice for streaming.
+     *
+     * @param tile - Tile whose world OBB is tested.
+     * @returns Whether the tile can contain geometry kept by the clipping mode.
+     */
+    private intersectsClipBox(tile: Tile): boolean {
+        const matrix = this.clipBoxWorldToLocal;
+        const obb = tile.obb;
+        if (!matrix || !obb) return true;
+
+        let minX = Infinity;
+        let minY = Infinity;
+        let minZ = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        let maxZ = -Infinity;
+        for (let x = -1; x <= 1; x += 2) {
+            for (let y = -1; y <= 1; y += 2) {
+                for (let z = -1; z <= 1; z += 2) {
+                    const corner = this.clipBoxCorner.copy(obb.center)
+                    .addScaled(obb.halfAxes[0], x)
+                    .addScaled(obb.halfAxes[1], y)
+                    .addScaled(obb.halfAxes[2], z);
+                    matrix.transformPoint(corner, corner);
+                    minX = Math.min(minX, corner.x);
+                    minY = Math.min(minY, corner.y);
+                    minZ = Math.min(minZ, corner.z);
+                    maxX = Math.max(maxX, corner.x);
+                    maxY = Math.max(maxY, corner.y);
+                    maxZ = Math.max(maxZ, corner.z);
+                }
+            }
+        }
+
+        if (this.clipBoxInvert) {
+            // In outside mode only reject tiles proven fully contained by the box.
+            return !(minX >= -0.5 && maxX <= 0.5 && minY >= -0.5 && maxY <= 0.5 && minZ >= -0.5 && maxZ <= 0.5);
+        }
+        return !(maxX < -0.5 || minX > 0.5 || maxY < -0.5 || minY > 0.5 || maxZ < -0.5 || minZ > 0.5);
     }
 
     /**
@@ -850,8 +907,8 @@ export class TileManager {
             return;
         }
 
-        const candidates = [...this.loaded].filter(tile =>
-            tile !== this.debugPickedTile && !tile.selected && tile.lastUsedFrame !== this.frame);
+        const candidates = [...this.loaded].filter(tile => tile !== this.debugPickedTile &&
+            !tile.selected && tile.lastUsedFrame !== this.frame);
         candidates.sort((a, b) => compareTilePriority(b, a, this.frame));
 
         let excess = this.loaded.size - this.options.maxCachedTiles;
@@ -993,6 +1050,19 @@ export class TileManager {
     setDebugIsolatePicked(value: boolean) {
         this.debugIsolatePicked = value;
         this.applyDebugVisibility();
+        this.onChange();
+    }
+
+    /**
+     * Set the production clipping box used to prune definitely invisible branches.
+     * Pixel-accurate clipping itself is performed by the viewer's material shaders.
+     *
+     * @param worldToLocal - World-to-unit-box transform, or null to disable pruning.
+     * @param invert - Keep geometry outside instead of inside the box.
+     */
+    setClipBox(worldToLocal: Mat4 | null, invert = false) {
+        this.clipBoxWorldToLocal = worldToLocal ? worldToLocal.clone() : null;
+        this.clipBoxInvert = invert;
         this.onChange();
     }
 

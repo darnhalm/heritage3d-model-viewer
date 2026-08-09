@@ -57,6 +57,7 @@ import {
     GSPLAT_RENDERER_COMPUTE,
     GSPLAT_RENDERER_RASTER_CPU_SORT,
     GSPLAT_RENDERER_RASTER_GPU_SORT,
+    GIZMOSPACE_LOCAL,
     GSplatComponent,
     GSplatComponentSystem,
     GSplatData,
@@ -72,6 +73,7 @@ import {
     MiniStats,
     Quat,
     RotateGizmo,
+    ScaleGizmo,
     RenderComponent,
     RenderTarget,
     SEMANTIC_POSITION,
@@ -92,6 +94,7 @@ import { serializeCompressedPly } from 'spz-js';
 
 import { App } from './app';
 import { CameraControls } from './camera-controls';
+import { ClipBoxMaterials } from './clip-box';
 import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
@@ -502,6 +505,34 @@ class Viewer {
      */
     tileManager: TileManager | null;
 
+    /** Exact production clipping box and its reversible material shader injection. */
+    private readonly fragmentClipMaterials = new ClipBoxMaterials();
+
+    private fragmentBoxEntity: Entity;
+
+    private fragmentTranslateGizmo: TranslateGizmo;
+
+    private fragmentScaleGizmo: ScaleGizmo;
+
+    private fragmentRotateGizmo: RotateGizmo;
+
+    private readonly fragmentWorldToLocal = new Mat4();
+
+    private fragmentHandleLayer: HTMLDivElement;
+
+    private fragmentHandleDrag: {
+        axis: 0 | 1 | 2,
+        sign: -1 | 1,
+        startClientX: number,
+        startClientY: number,
+        screenAxisX: number,
+        screenAxisY: number,
+        pixelsPerWorld: number,
+        worldAxis: Vec3,
+        startCenter: Vec3,
+        startSize: [number, number, number]
+    } | null = null;
+
     sceneTransform: { position: [number, number, number]; rotation: [number, number, number]; scale: [number, number, number]; pivotOffset: [number, number, number] };
 
     rotateGizmo: RotateGizmo | null;
@@ -643,6 +674,12 @@ class Viewer {
     /** Полупрозрачный объём FOV замороженной камеры. */
     debugTileCameraSolid: DebugSolid;
 
+    /** Visible contour of the production clipping volume. */
+    debugFragmentBox: DebugLines;
+
+    /** Translucent red fill of the production clipping volume. */
+    debugFragmentBoxSolid: DebugSolid;
+
     private frozenTileCamera: FrozenTileCamera | null = null;
 
     /** DOM-оверлей со статистикой тайлов; создаётся лениво при первом включении. */
@@ -665,7 +702,8 @@ class Viewer {
     private tilePickIsClick = false;
 
     private readonly onTilePickMouseDown = (event: MouseEvent) => {
-        if (event.button !== 0 || event.target !== this.canvas || !this.observer.get('debug.tilePick')) return;
+        const picking = this.observer.get('debug.tilePick') || this.observer.get('fragment.selecting');
+        if (event.button !== 0 || event.target !== this.canvas || !picking) return;
         const rect = this.canvas.getBoundingClientRect();
         this.tilePickDown = {
             clientX: event.clientX,
@@ -684,11 +722,71 @@ class Viewer {
     };
 
     private readonly onTilePickMouseUp = (event: MouseEvent) => {
-        if (event.button === 0 && this.tilePickIsClick && this.tilePickDown && this.observer.get('debug.tilePick')) {
-            this.pickDebugTileAt(this.tilePickDown.canvasX, this.tilePickDown.canvasY);
+        if (event.button === 0 && this.tilePickIsClick && this.tilePickDown) {
+            if (this.observer.get('fragment.selecting')) {
+                this.pickFragmentAt(this.tilePickDown.canvasX, this.tilePickDown.canvasY);
+            } else if (this.observer.get('debug.tilePick')) {
+                this.pickDebugTileAt(this.tilePickDown.canvasX, this.tilePickDown.canvasY);
+            }
         }
         this.tilePickDown = null;
         this.tilePickIsClick = false;
+    };
+
+    private readonly onFragmentHandlePointerDown = (event: PointerEvent) => {
+        const target = event.currentTarget as HTMLButtonElement;
+        const axis = Number(target.dataset.axis) as 0 | 1 | 2;
+        const sign = Number(target.dataset.sign) as -1 | 1;
+        if (!this.observer.get('fragment.initialized') || ![0, 1, 2].includes(axis) || (sign !== -1 && sign !== 1)) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        const localAxis = new Vec3(axis === 0 ? 1 : 0, axis === 1 ? 1 : 0, axis === 2 ? 1 : 0);
+        const worldAxis = this.fragmentBoxEntity.getRotation().transformVector(localAxis).normalize();
+        const faceLocal = localAxis.clone().mulScalar(sign * 0.5);
+        const faceWorld = this.fragmentBoxEntity.getWorldTransform().transformPoint(faceLocal);
+        const unitWorld = faceWorld.clone().add(worldAxis);
+        const faceScreen = this.fragmentWorldToCssScreen(faceWorld);
+        const unitScreen = this.fragmentWorldToCssScreen(unitWorld);
+        const dx = unitScreen.x - faceScreen.x;
+        const dy = unitScreen.y - faceScreen.y;
+        const pixelsPerWorld = Math.max(0.0001, Math.hypot(dx, dy));
+        this.fragmentHandleDrag = {
+            axis,
+            sign,
+            startClientX: event.clientX,
+            startClientY: event.clientY,
+            screenAxisX: dx / pixelsPerWorld,
+            screenAxisY: dy / pixelsPerWorld,
+            pixelsPerWorld,
+            worldAxis,
+            startCenter: this.fragmentBoxEntity.getPosition().clone(),
+            startSize: this.fragmentTuple('fragment.size', [1, 1, 1])
+        };
+        this.cameraControls.enabled = false;
+    };
+
+    private readonly onFragmentHandlePointerMove = (event: PointerEvent) => {
+        const drag = this.fragmentHandleDrag;
+        if (!drag) return;
+        const pointerX = event.clientX - drag.startClientX;
+        const pointerY = event.clientY - drag.startClientY;
+        const deltaWorld = (pointerX * drag.screenAxisX + pointerY * drag.screenAxisY) / drag.pixelsPerWorld;
+        const minSize = Math.max(0.00001, this.sceneBounds.halfExtents.length() * 0.0001);
+        const nextSize = [...drag.startSize] as [number, number, number];
+        nextSize[drag.axis] = Math.max(minSize, drag.startSize[drag.axis] + drag.sign * deltaWorld);
+        const actualFaceDelta = drag.sign * (nextSize[drag.axis] - drag.startSize[drag.axis]);
+        const center = drag.startCenter.clone().add(drag.worldAxis.clone().mulScalar(actualFaceDelta * 0.5));
+        this.observer.set('fragment.center', [center.x, center.y, center.z]);
+        this.observer.set('fragment.size', nextSize);
+        this.renderNextFrame();
+    };
+
+    private readonly onFragmentHandlePointerUp = () => {
+        if (!this.fragmentHandleDrag) return;
+        this.fragmentHandleDrag = null;
+        this.cameraControls.enabled = true;
+        this.renderNextFrame();
     };
 
     // Навигационный куб (как в 3ds Max) + иконка орто/перспектива для выравнивания и Tiles Debug.
@@ -980,7 +1078,7 @@ class Viewer {
             }
             switch (event.key) {
                 case KEY_F: {
-                    this.focus(false);
+                    this.frameScene();
                     break;
                 }
                 case KEY_R: {
@@ -1187,6 +1285,8 @@ class Viewer {
         this.debugTilesSolid = new DebugSolid(app, camera);
         this.debugTileCamera = new DebugLines(app, camera);
         this.debugTileCameraSolid = new DebugSolid(app, camera);
+        this.debugFragmentBoxSolid = new DebugSolid(app, camera);
+        this.debugFragmentBox = new DebugLines(app, camera);
 
         // construct ministats, default off
         this.miniStats = new MiniStats(app);
@@ -1292,6 +1392,56 @@ class Viewer {
             this.lastAlignmentContentTransform = null;
             this.setCenterScene(centered);
         });
+
+        // Production clipping volume. It is a transform-only entity: the contour is
+        // drawn by DebugLines and the same world transform is consumed by the shaders.
+        this.fragmentBoxEntity = new Entity('FragmentClipBox');
+        this.fragmentBoxEntity.setLocalScale(1, 1, 1);
+        this.app.root.addChild(this.fragmentBoxEntity);
+        const fragmentGizmoLayer = Gizmo.createLayer(app, 'FragmentClipBoxGizmo');
+        this.fragmentTranslateGizmo = new TranslateGizmo(this.camera.camera, fragmentGizmoLayer);
+        this.fragmentTranslateGizmo.coordSpace = GIZMOSPACE_LOCAL;
+        this.fragmentScaleGizmo = new ScaleGizmo(this.camera.camera, fragmentGizmoLayer);
+        this.fragmentScaleGizmo.lowerBoundScale.set(0.00001, 0.00001, 0.00001);
+        this.fragmentRotateGizmo = new RotateGizmo(this.camera.camera, fragmentGizmoLayer);
+        const fragmentTransformStart = () => {
+            this.cameraControls.enabled = false;
+        };
+        const fragmentTransformMove = () => {
+            this.syncFragmentObserverFromEntity();
+            this.syncFragmentClipping();
+        };
+        const fragmentTransformEnd = () => {
+            this.syncFragmentObserverFromEntity();
+            this.syncFragmentClipping();
+            this.cameraControls.enabled = true;
+        };
+        [this.fragmentTranslateGizmo, this.fragmentScaleGizmo, this.fragmentRotateGizmo].forEach((gizmo) => {
+            gizmo.enabled = false;
+            gizmo.on('transform:start', fragmentTransformStart);
+            gizmo.on('transform:move', fragmentTransformMove);
+            gizmo.on('transform:end', fragmentTransformEnd);
+        });
+        this.fragmentHandleLayer = document.createElement('div');
+        this.fragmentHandleLayer.id = 'fragment-box-handles';
+        this.fragmentHandleLayer.style.display = 'none';
+        (this.canvas.parentElement ?? document.body).appendChild(this.fragmentHandleLayer);
+        ([0, 1, 2] as const).forEach((axis) => {
+            ([-1, 1] as const).forEach((sign) => {
+                const handle = document.createElement('button');
+                handle.type = 'button';
+                handle.className = `fragment-face-handle axis-${axis} sign-${sign}`;
+                handle.dataset.axis = String(axis);
+                handle.dataset.sign = String(sign);
+                handle.title = 'Resize clipping box';
+                handle.setAttribute('aria-label', 'Resize clipping box');
+                handle.addEventListener('pointerdown', this.onFragmentHandlePointerDown);
+                this.fragmentHandleLayer.appendChild(handle);
+            });
+        });
+        document.addEventListener('pointermove', this.onFragmentHandlePointerMove);
+        document.addEventListener('pointerup', this.onFragmentHandlePointerUp);
+        document.addEventListener('pointercancel', this.onFragmentHandlePointerUp);
 
         const device = this.app.graphicsDevice;
 
@@ -1529,10 +1679,93 @@ class Viewer {
     }
 
     private getPickRay(x: number, y: number) {
-        const origin = this.camera.camera.screenToWorld(x, y, this.camera.camera.nearClip);
-        const end = this.camera.camera.screenToWorld(x, y, this.camera.camera.farClip);
+        const rect = this.canvas.getBoundingClientRect();
+        const device = this.app.graphicsDevice;
+        // Mouse coordinates are CSS pixels while PlayCanvas screenToWorld expects
+        // render-target pixels. The difference is especially visible in SD mode.
+        const screenX = x * device.width / Math.max(1, rect.width);
+        const screenY = y * device.height / Math.max(1, rect.height);
+        const origin = this.camera.camera.screenToWorld(screenX, screenY, this.camera.camera.nearClip);
+        const end = this.camera.camera.screenToWorld(screenX, screenY, this.camera.camera.farClip);
         const direction = end.sub(origin).normalize();
         return { origin, direction };
+    }
+
+    /** Enter cursor mode for choosing the center of a new fragment box. */
+    beginFragmentSelection() {
+        this.observer.set('fragment.enabled', false);
+        this.observer.set('fragment.initialized', false);
+        this.observer.set('fragment.selecting', true);
+        this.observer.set('ui.active', 'fragment');
+    }
+
+    /** Remove the fragment box and restore the complete model. */
+    resetFragmentView() {
+        this.observer.set('fragment.enabled', false);
+        this.observer.set('fragment.selecting', false);
+        this.observer.set('fragment.initialized', false);
+        this.updateFragmentGizmo();
+        this.renderNextFrame();
+    }
+
+    /** Toggle isolation using the live observer value at click time. */
+    toggleFragmentIsolation() {
+        if (!this.observer.get('fragment.initialized')) return;
+        this.observer.set('fragment.enabled', !this.observer.get('fragment.enabled'));
+    }
+
+    /**
+     * Place a camera-aligned medium box around the surface point under the cursor.
+     * Its world size is derived from a stable fraction of the current viewport, so
+     * the initial box feels similar at any zoom level.
+     *
+     * @param x - Horizontal coordinate inside the canvas.
+     * @param y - Vertical coordinate inside the canvas.
+     * @returns Whether a model surface was hit.
+     */
+    pickFragmentAt(x: number, y: number): boolean {
+        const manager = this.tileManager;
+        if (!manager) return false;
+        const { origin, direction } = this.getPickRay(x, y);
+        let bestDistance = Number.POSITIVE_INFINITY;
+        manager.getVisibleMeshInstances().forEach((meshInstance) => {
+            const distance = intersectMeshTriangles(
+                meshInstance,
+                origin,
+                direction,
+                bestDistance,
+                this.meshGeometryCache
+            );
+            if (distance !== null && distance < bestDistance) bestDistance = distance;
+        });
+        if (!Number.isFinite(bestDistance)) return false;
+
+        const hit = origin.clone().add(direction.clone().mulScalar(bestDistance));
+        const rect = this.canvas.getBoundingClientRect();
+        const camera = this.camera.camera;
+        const aspect = Math.max(0.001, rect.width / Math.max(1, rect.height));
+        const fovRadians = camera.fov * Math.PI / 180;
+        const verticalFov = camera.horizontalFov ? 2 * Math.atan(Math.tan(fovRadians * 0.5) / aspect) : fovRadians;
+        const cameraDistance = Math.max(camera.nearClip, hit.distance(this.camera.getPosition()));
+        const worldPerPixel = 2 * cameraDistance * Math.tan(verticalFov * 0.5) / Math.max(1, rect.height);
+        const screenSpan = Math.min(rect.width, rect.height) * 0.34;
+        const minimumSize = Math.max(0.00001, this.sceneBounds.halfExtents.length() * 0.03);
+        const size = Math.max(minimumSize, worldPerPixel * screenSpan);
+        const cameraRotation = this.camera.getEulerAngles();
+
+        this.observer.set('fragment.enabled', false);
+        this.observer.set('fragment.center', [hit.x, hit.y, hit.z]);
+        this.observer.set('fragment.size', [size, size, size * 0.8]);
+        // Keep the box upright: its horizontal faces stay parallel to the scene
+        // ground while the heading still follows the current view.
+        this.observer.set('fragment.rotation', [0, cameraRotation.y, 0]);
+        this.observer.set('fragment.editMode', 'move');
+        this.observer.set('fragment.initialized', true);
+        this.observer.set('fragment.selecting', false);
+        this.syncFragmentEntityFromObserver();
+        this.updateFragmentGizmo();
+        this.renderNextFrame();
+        return true;
     }
 
     /**
@@ -1590,6 +1823,18 @@ class Viewer {
     destroy() {
         if (this.destroyed) return;
         this.destroyed = true;
+        this.fragmentClipMaterials.clear();
+        this.fragmentTranslateGizmo?.destroy();
+        this.fragmentScaleGizmo?.destroy();
+        this.fragmentRotateGizmo?.destroy();
+        this.fragmentBoxEntity?.destroy();
+        this.fragmentHandleLayer?.querySelectorAll<HTMLButtonElement>('.fragment-face-handle').forEach((handle) => {
+            handle.removeEventListener('pointerdown', this.onFragmentHandlePointerDown);
+        });
+        this.fragmentHandleLayer?.remove();
+        document.removeEventListener('pointermove', this.onFragmentHandlePointerMove);
+        document.removeEventListener('pointerup', this.onFragmentHandlePointerUp);
+        document.removeEventListener('pointercancel', this.onFragmentHandlePointerUp);
         this.measurementController?.dispose?.();
         this.poiController?.dispose?.();
         this.selectionController?.dispose?.();
@@ -1785,6 +2030,12 @@ class Viewer {
     // construct the controls interface and initialize controls
     private bindControlEvents() {
         const controlEvents: Record<string, (...args: unknown[]) => void> = {
+            'ui.active': (active: string | null) => {
+                if (active !== 'fragment' && this.observer.get('fragment.selecting')) {
+                    this.observer.set('fragment.selecting', false);
+                }
+                this.updateFragmentGizmo();
+            },
             // camera
             'camera.fov': this.setFov.bind(this),
             'camera.tonemapping': this.setTonemapping.bind(this),
@@ -1837,6 +2088,57 @@ class Viewer {
             'shadowCatcher.enabled': this.setShadowCatcherEnabled.bind(this),
             'shadowCatcher.intensity': this.setShadowCatcherIntensity.bind(this),
             'shadowCatcher.heightOffset': this.setShadowCatcherHeightOffset.bind(this),
+
+            // Exact temporary fragment clipping box.
+            'fragment.enabled': (enabled: boolean) => {
+                if (enabled) {
+                    if (this.observer.get('fragment.selecting')) this.observer.set('fragment.selecting', false);
+                    if (!this.observer.get('fragment.initialized')) this.resetFragmentBox();
+                    if (this.observer.get('measure.enabled')) this.observer.set('measure.enabled', false);
+                    if (this.observer.get('poi.enabled')) this.observer.set('poi.enabled', false);
+                    if (this.observer.get('debug.tilePick')) this.observer.set('debug.tilePick', false);
+                    if (this.observer.get('debug.alignmentMode')) this.observer.set('debug.alignmentMode', false);
+                    this.syncFragmentEntityFromObserver();
+                    this.syncFragmentClipping();
+                } else {
+                    this.fragmentClipMaterials.clear();
+                    this.tileManager?.setClipBox(null);
+                }
+                this.updateFragmentGizmo();
+                this.renderNextFrame();
+            },
+            'fragment.selecting': (selecting: boolean) => {
+                if (selecting) {
+                    if (this.observer.get('fragment.enabled')) this.observer.set('fragment.enabled', false);
+                    if (this.observer.get('measure.enabled')) this.observer.set('measure.enabled', false);
+                    if (this.observer.get('poi.enabled')) this.observer.set('poi.enabled', false);
+                    if (this.observer.get('debug.tilePick')) this.observer.set('debug.tilePick', false);
+                }
+                this.updatePickCursor();
+                this.updateFragmentGizmo();
+                this.renderNextFrame();
+            },
+            'fragment.invert': () => this.syncFragmentClipping(),
+            'fragment.center': () => {
+                this.syncFragmentEntityFromObserver();
+                this.syncFragmentClipping();
+            },
+            'fragment.size': () => {
+                this.syncFragmentEntityFromObserver();
+                this.syncFragmentClipping();
+            },
+            'fragment.rotation': () => {
+                this.syncFragmentEntityFromObserver();
+                this.syncFragmentClipping();
+            },
+            'fragment.editMode': () => {
+                this.updateFragmentGizmo();
+                this.renderNextFrame();
+            },
+            'fragment.initialized': () => {
+                this.updateFragmentGizmo();
+                this.renderNextFrame();
+            },
 
             // debug
             'debug.stats': this.setDebugStats.bind(this),
@@ -1913,7 +2215,7 @@ class Viewer {
                     }
                     this.tileManager?.setDebugPickedMeshInstance(null);
                 }
-                this.canvas.style.cursor = enabled ? 'crosshair' : '';
+                this.updatePickCursor();
                 this.renderNextFrame();
             },
             'debug.tileIsolatePick': (enabled: boolean) => {
@@ -2293,6 +2595,10 @@ class Viewer {
     resetScene() {
         const app = this.app;
 
+        this.fragmentClipMaterials.clear();
+        this.observer.set('fragment.enabled', false);
+        this.observer.set('fragment.selecting', false);
+        this.observer.set('fragment.initialized', false);
         this.clearHelpers();
 
         // reset camera state first - switch back to viewer camera before destroying entities
@@ -3591,8 +3897,20 @@ class Viewer {
     /** Fit the camera to the scene (same as pressing F). */
     frameScene() {
         this.stopCameraFlyTransition();
-        this.focus(false);
+        if (this.observer.get('ui.active') === 'fragment' && this.observer.get('fragment.initialized')) {
+            const center = this.fragmentBoxEntity.getPosition().clone();
+            const size = this.fragmentBoxEntity.getLocalScale();
+            const sceneSize = Math.max(0.00001, size.length() * 0.5);
+            const zoom = this.calcZoom(sceneSize);
+            const start = this.camera.forward.clone().mulScalar(-zoom).add(center);
+            this.cameraControls.moveSpeed = sceneSize * 2.5;
+            this.cameraControls.zoomRange = new Vec2(ZOOM_SCALE_MIN, 10 * sceneSize);
+            this.cameraControls.reset(center, start);
+        } else {
+            this.focus(false);
+        }
         this.fitCameraClipPlanes();
+        this.renderNextFrame();
     }
 
     /** Reset the camera to default position (same as pressing R). */
@@ -4984,6 +5302,132 @@ class Viewer {
             this.observer.set('ui.loadingBackgroundReady', false);
             this.renderNextFrame();
         }
+    }
+
+    /** Reset the exact clipping volume to the current model/tileset world bounds. */
+    resetFragmentBox() {
+        this.tileManager?.syncTransform();
+        if (this.tileManager) {
+            this.sceneBounds.copy(this.tileManager.bounds);
+        } else {
+            this.calcSceneBounds(this.sceneBounds);
+        }
+        const center = this.sceneBounds.center;
+        const half = this.sceneBounds.halfExtents;
+        const safe = (value: number) => Math.max(0.00001, Math.abs(value) * 2);
+        this.observer.set('fragment.center', [center.x, center.y, center.z]);
+        this.observer.set('fragment.size', [safe(half.x), safe(half.y), safe(half.z)]);
+        this.observer.set('fragment.rotation', [0, 0, 0]);
+        this.observer.set('fragment.initialized', true);
+        this.syncFragmentEntityFromObserver();
+        this.syncFragmentClipping();
+        this.updateFragmentGizmo();
+    }
+
+    private fragmentTuple(path: string, fallback: [number, number, number]): [number, number, number] {
+        const raw = this.observer.get(path) as number[] | undefined;
+        if (!Array.isArray(raw) || raw.length < 3) return fallback;
+        return [0, 1, 2].map((index) => {
+            const value = Number(raw[index]);
+            return Number.isFinite(value) ? value : fallback[index];
+        }) as [number, number, number];
+    }
+
+    private syncFragmentEntityFromObserver() {
+        if (!this.fragmentBoxEntity) return;
+        const center = this.fragmentTuple('fragment.center', [0, 0, 0]);
+        const size = this.fragmentTuple('fragment.size', [1, 1, 1]).map(value => Math.max(0.00001, Math.abs(value))) as [number, number, number];
+        const rotation = this.fragmentTuple('fragment.rotation', [0, 0, 0]);
+        this.fragmentBoxEntity.setPosition(center[0], center[1], center[2]);
+        this.fragmentBoxEntity.setEulerAngles(rotation[0], rotation[1], rotation[2]);
+        this.fragmentBoxEntity.setLocalScale(size[0], size[1], size[2]);
+    }
+
+    private syncFragmentObserverFromEntity() {
+        const position = this.fragmentBoxEntity.getPosition();
+        const scale = this.fragmentBoxEntity.getLocalScale();
+        const rotation = this.fragmentBoxEntity.getEulerAngles();
+        this.observer.set('fragment.center', [position.x, position.y, position.z]);
+        this.observer.set('fragment.size', [Math.max(0.00001, Math.abs(scale.x)), Math.max(0.00001, Math.abs(scale.y)), Math.max(0.00001, Math.abs(scale.z))]);
+        this.observer.set('fragment.rotation', [rotation.x, rotation.y, rotation.z]);
+        this.observer.set('fragment.initialized', true);
+    }
+
+    private syncFragmentClipping() {
+        if (!this.fragmentBoxEntity || !this.observer.get('fragment.enabled')) {
+            this.tileManager?.setClipBox(null);
+            this.renderNextFrame();
+            return;
+        }
+        this.fragmentWorldToLocal.copy(this.fragmentBoxEntity.getWorldTransform()).invert();
+        this.tileManager?.setClipBox(this.fragmentWorldToLocal, !!this.observer.get('fragment.invert'));
+        this.renderNextFrame();
+    }
+
+    private syncFragmentMaterials() {
+        if (!this.observer.get('fragment.enabled')) return;
+        this.fragmentWorldToLocal.copy(this.fragmentBoxEntity.getWorldTransform()).invert();
+        this.fragmentClipMaterials.apply(
+            this.getPickableMeshInstances(),
+            this.fragmentWorldToLocal,
+            !!this.observer.get('fragment.invert')
+        );
+    }
+
+    private updatePickCursor() {
+        const picking = !!this.observer.get('debug.tilePick') || !!this.observer.get('fragment.selecting');
+        this.canvas.style.cursor = picking ? 'crosshair' : '';
+    }
+
+    private fragmentWorldToCssScreen(point: Vec3) {
+        const screen = this.camera.camera.worldToScreen(point);
+        const device = this.app.graphicsDevice;
+        const rect = this.canvas.getBoundingClientRect();
+        return new Vec3(
+            screen.x * rect.width / Math.max(1, device.width),
+            screen.y * rect.height / Math.max(1, device.height),
+            screen.z
+        );
+    }
+
+    private updateFragmentHandles() {
+        const visible = !!this.observer.get('fragment.initialized') &&
+            this.observer.get('ui.active') === 'fragment' && !this.observer.get('fragment.selecting');
+        if (!visible) {
+            this.fragmentHandleLayer.style.display = 'none';
+            return;
+        }
+        this.fragmentHandleLayer.style.display = 'block';
+        const transform = this.fragmentBoxEntity.getWorldTransform();
+        const handles = this.fragmentHandleLayer.querySelectorAll<HTMLButtonElement>('.fragment-face-handle');
+        handles.forEach((handle) => {
+            const axis = Number(handle.dataset.axis);
+            const sign = Number(handle.dataset.sign);
+            const local = new Vec3(
+                axis === 0 ? sign * 0.5 : 0,
+                axis === 1 ? sign * 0.5 : 0,
+                axis === 2 ? sign * 0.5 : 0
+            );
+            const world = transform.transformPoint(local);
+            const screen = this.fragmentWorldToCssScreen(world);
+            handle.style.left = `${screen.x}px`;
+            handle.style.top = `${screen.y}px`;
+        });
+    }
+
+    private updateFragmentGizmo() {
+        if (!this.fragmentTranslateGizmo) return;
+        [this.fragmentTranslateGizmo, this.fragmentScaleGizmo, this.fragmentRotateGizmo].forEach((gizmo) => {
+            gizmo.detach();
+            gizmo.enabled = false;
+        });
+        const visible = !!this.observer.get('fragment.initialized') && this.observer.get('ui.active') === 'fragment';
+        if (!visible) return;
+        const mode = this.observer.get('fragment.editMode') ?? 'move';
+        const gizmo = mode === 'resize' ? this.fragmentScaleGizmo :
+            mode === 'rotate' ? this.fragmentRotateGizmo : this.fragmentTranslateGizmo;
+        gizmo.attach([this.fragmentBoxEntity]);
+        gizmo.enabled = true;
     }
 
     /**
@@ -6629,6 +7073,35 @@ class Viewer {
         this.debugTilesSolid.update();
         this.updateTileHud();
         this.drawFrozenTileCamera();
+
+        // Exact production clipping and its persistent oriented-box contour. Newly
+        // streamed materials are discovered here before the frame is submitted.
+        this.syncFragmentMaterials();
+        this.debugFragmentBoxSolid.clear();
+        this.debugFragmentBox.clear();
+        if (this.observer.get('fragment.initialized')) {
+            const transform = this.fragmentBoxEntity.getWorldTransform();
+            const center = this.fragmentBoxEntity.getPosition();
+            const ax = transform.transformVector(new Vec3(0.5, 0, 0));
+            const ay = transform.transformVector(new Vec3(0, 0.5, 0));
+            const az = transform.transformVector(new Vec3(0, 0, 0.5));
+            if (!this.observer.get('fragment.enabled')) {
+                this.debugFragmentBoxSolid.obbFaces(center, ax, ay, az, 0x3000ff00);
+            }
+            this.debugFragmentBoxSolid.obbEdgesThick(
+                center,
+                ax,
+                ay,
+                az,
+                this.camera.getPosition(),
+                0.0021,
+                0xffffffff
+            );
+            this.debugFragmentBox.obb(center, ax, ay, az, 0xffffffff);
+        }
+        this.debugFragmentBoxSolid.update();
+        this.debugFragmentBox.update();
+        this.updateFragmentHandles();
 
         // measurement overlays (thick 2D SVG line + crosses)
         // keep DebugLines buffer empty so measurements are always overlay-only (never depth-tested / occluded by mesh)
