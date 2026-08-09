@@ -3925,7 +3925,7 @@ class Viewer {
     /** Fit the camera to the scene (same as pressing F). */
     frameScene() {
         this.stopCameraFlyTransition();
-        if (this.observer.get('ui.active') === 'fragment' && this.observer.get('fragment.initialized')) {
+        if (this.observer.get('fragment.enabled') && this.observer.get('fragment.initialized')) {
             const center = this.fragmentBoxEntity.getPosition().clone();
             const size = this.fragmentBoxEntity.getLocalScale();
             const sceneSize = Math.max(0.00001, size.length() * 0.5);
