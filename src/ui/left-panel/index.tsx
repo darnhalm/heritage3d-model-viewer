@@ -532,7 +532,7 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
             <Panel headerText={t('Settings', lang)} id='settings-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
                 <ColorPickerControl
                     label={t('Theme color', lang)}
-                    value={rgbToArr(props.observerData.theme?.primaryColor ?? { r: 200 / 255, g: 200 / 255, b: 200 / 255 })}
+                    value={rgbToArr(props.observerData.theme?.primaryColor ?? { r: 221 / 255, g: 111 / 255, b: 0 })}
                     setProperty={(value: number[]) => props.setProperty('theme.primaryColor', arrToRgb(value))} />
                 <Toggle
                     label='WebGPU / WebGL 2'
@@ -586,32 +586,7 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
         const props = this.props;
         const debugData = props.observerData.debug;
         const dimensionBox = props.observerData.dimensionBox;
-        const unit = props.observerData.measure?.unit ?? 'm';
-        const unitScale = safeUnitScale(props.observerData.measure?.unitScale);
-        const boxSize = Array.isArray(dimensionBox?.size) ? dimensionBox.size : [1, 1, 1];
-        const sceneBoundsSize = parseVec3String(props.observerData.scene?.bounds);
-        const setBoxAxis = (axis: 0 | 1 | 2, value: number) => {
-            const next: [number, number, number] = [
-                Number(boxSize[0]) || 1,
-                Number(boxSize[1]) || 1,
-                Number(boxSize[2]) || 1
-            ];
-            next[axis] = displayToSceneSize(value, unitScale, unit);
-            props.setProperty('dimensionBox.size', next);
-        };
-        const formatDimension = (value: number) => {
-            const n = sceneToDisplaySize(value, unitScale, unit);
-            return `${n.toFixed(unit === 'm' ? 3 : 1)} ${unit}`;
-        };
         const lang = props.observerData?.ui?.language;
-
-        // Справка по размерам показывается только в tooltip, без постоянной подписи снизу.
-        // Различаем текущий (возможно изменённый) размер бокса и исходные границы модели.
-        const currentBoxTip = `${t('Current Box Size', lang)}: ${formatDimension(Number(boxSize[0]) || 1)} × ${formatDimension(Number(boxSize[1]) || 1)} × ${formatDimension(Number(boxSize[2]) || 1)}`;
-        const modelBoundsTip = sceneBoundsSize ?
-            `${t('Original Model Bounds', lang)}: ${formatDimension(sceneBoundsSize[0])} × ${formatDimension(sceneBoundsSize[1])} × ${formatDimension(sceneBoundsSize[2])}` :
-            '';
-        const dimensionFieldsTip = modelBoundsTip ? `${currentBoxTip}\n${modelBoundsTip}` : currentBoxTip;
 
         const target = debugData?.alignmentTarget ?? 'model';
         const gizmoMode = debugData?.alignmentGizmoMode ?? 'rotate';
@@ -647,7 +622,10 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                             icon: 'align-icon-model',
                             label: t('Model', lang),
                             active: target === 'model',
-                            onClick: () => props.setProperty('debug.alignmentTarget', 'model')
+                            onClick: () => {
+                                props.setProperty('debug.alignmentTarget', 'model');
+                                if (gizmoMode === 'resize') props.setProperty('debug.alignmentGizmoMode', 'move');
+                            }
                         })}
                         {toolBtn({
                             icon: 'align-icon-helper',
@@ -656,6 +634,19 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                             onClick: () => {
                                 props.setProperty('debug.alignmentTarget', 'helper');
                                 props.setProperty('debug.alignmentGizmoMode', 'move');
+                            }
+                        })}
+                        {toolBtn({
+                            icon: 'align-icon-box',
+                            label: t('Box', lang),
+                            active: target === 'box',
+                            onClick: () => {
+                                if (!dimensionBox?.initialized) {
+                                    getViewer()?.setDimensionBoxFromModelBounds?.();
+                                } else {
+                                    props.setProperty('dimensionBox.enabled', true);
+                                }
+                                props.setProperty('debug.alignmentTarget', 'box');
                             }
                         })}
                     </Container>
@@ -673,6 +664,12 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                             active: gizmoMode === 'rotate',
                             onClick: () => props.setProperty('debug.alignmentGizmoMode', 'rotate')
                         })}
+                        {target === 'box' ? toolBtn({
+                            icon: 'align-icon-scale',
+                            label: t('Resize box', lang),
+                            active: gizmoMode === 'resize',
+                            onClick: () => props.setProperty('debug.alignmentGizmoMode', 'resize')
+                        }) : null}
                     </Container>
                     <Container class='alignment-toolbar-sep' />
                     <Container class='alignment-toolbar-group'>
@@ -696,9 +693,11 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                     <Container class={['alignment-toolbar-group', 'alignment-toolbar-group-reset']}>
                         {toolBtn({
                             icon: 'align-icon-reset',
-                            label: t('Reset Object', lang),
+                            label: target === 'box' ? t('Box from Model Bounds', lang) : t('Reset Object', lang),
                             extraClass: 'alignment-reset',
-                            onClick: () => getViewer()?.resetObjectTransform?.()
+                            onClick: () => target === 'box' ?
+                                getViewer()?.setDimensionBoxFromModelBounds?.() :
+                                getViewer()?.resetObjectTransform?.()
                         })}
                     </Container>
                 </Container>
@@ -706,53 +705,6 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                 {this.state.flashLabel ?
                     <Label class='alignment-tool-caption' text={this.state.flashLabel} /> :
                     null}
-                <Container class='alignment-section-header'>
-                    <Label class='panel-label' text={t('Dimension Box', lang)} />
-                </Container>
-                <Toggle
-                    label={t('Show dimension box', lang)}
-                    value={dimensionBox?.enabled ?? false}
-                    setProperty={(value: boolean) => props.setProperty('dimensionBox.enabled', value)} />
-                <Container class={['alignment-action-row', 'alignment-single-row']}>
-                    <button
-                        type='button'
-                        className='pcui-button secondary alignment-box-button'
-                        title={modelBoundsTip || undefined}
-                        onClick={() => {
-                            // Always recalculate live geometry bounds. scene.bounds is an observer
-                            // snapshot and may still describe the pre-alignment position here.
-                            getViewer()?.setDimensionBoxFromModelBounds?.();
-                            // Сигналим хосту сохранить настройки сразу (бокс не теряется при
-                            // закрытии редактора). Хост сам запросит свежие настройки.
-                            postToViewerParent({ type: 'dimensionbox-changed' });
-                        }}
-                    >
-                        {t('Box from Model Bounds', lang)}
-                    </button>
-                </Container>
-                <span title={dimensionFieldsTip} style={{ display: 'contents' }}>
-                    <Numeric
-                        label={`${t('Width', lang)}, ${unit}`}
-                        value={sceneToDisplaySize(Number(boxSize[0]) || 1, unitScale, unit)}
-                        min={0.001}
-                        max={1000000000}
-                        enabled={dimensionBox?.enabled ?? false}
-                        setProperty={(value: number) => setBoxAxis(0, value)} />
-                    <Numeric
-                        label={`${t('Height', lang)}, ${unit}`}
-                        value={sceneToDisplaySize(Number(boxSize[1]) || 1, unitScale, unit)}
-                        min={0.001}
-                        max={1000000000}
-                        enabled={dimensionBox?.enabled ?? false}
-                        setProperty={(value: number) => setBoxAxis(1, value)} />
-                    <Numeric
-                        label={`${t('Depth', lang)}, ${unit}`}
-                        value={sceneToDisplaySize(Number(boxSize[2]) || 1, unitScale, unit)}
-                        min={0.001}
-                        max={1000000000}
-                        enabled={dimensionBox?.enabled ?? false}
-                        setProperty={(value: number) => setBoxAxis(2, value)} />
-                </span>
             </Container>
         );
     }

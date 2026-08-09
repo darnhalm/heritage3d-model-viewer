@@ -336,8 +336,10 @@ const observerData: ObserverData = {
     },
     dimensionBox: {
         enabled: false,
+        initialized: false,
         size: [1, 1, 1],
-        center: [0, 0, 0]
+        center: [0, 0, 0],
+        rotation: [0, 0, 0]
     },
     helpers: {
         visible: false,
@@ -516,16 +518,17 @@ const main = () => {
         });
     }
 
-    // One-time migration for browsers that persisted the former blue default before
-    // the configurable theme shipped. A deliberately chosen blue remains available
-    // after this migration marker has been written.
+    // One-time migration for browsers that persisted an earlier blue or neutral
+    // default. Deliberately chosen custom colors remain untouched.
     try {
-        const migrationKey = 'mv:theme-default-c8-v1';
+        const migrationKey = 'mv:theme-default-dd6f00-v1';
         if (!window.localStorage.getItem(migrationKey)) {
             const color = observer.get('theme.primaryColor') as { r?: number; g?: number; b?: number } | undefined;
             const legacy = [136 / 255, 188 / 255, 232 / 255];
+            const previousDefault = [200 / 255, 200 / 255, 200 / 255];
             const channels = [Number(color?.r), Number(color?.g), Number(color?.b)];
-            if (channels.every((channel, index) => Math.abs(channel - legacy[index]) < 1e-6)) {
+            if ([legacy, previousDefault].some(candidate =>
+                channels.every((channel, index) => Math.abs(channel - candidate[index]) < 1e-6))) {
                 observer.set('theme.primaryColor', { ...DEFAULT_THEME_COLOR });
             }
             window.localStorage.setItem(migrationKey, '1');

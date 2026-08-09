@@ -356,7 +356,7 @@ class SettingsService {
         o.set('camera.hq', true);
         o.set('camera.mode', 'orbit');
         o.set('camera.flySpeed', 1);
-        o.set('theme.primaryColor', { r: 200 / 255, g: 200 / 255, b: 200 / 255 });
+        o.set('theme.primaryColor', { r: 221 / 255, g: 111 / 255, b: 0 });
         o.set('skybox.value', this.skyboxUrls.has('Paul Lobe Haus') ? 'Paul Lobe Haus' : 'None');
         o.set('skybox.exposure', 0);
         o.set('skybox.rotation', 0);
@@ -424,8 +424,10 @@ class SettingsService {
         o.set('fragment.rotation', [0, 0, 0]);
         o.set('fragment.initialized', false);
         o.set('dimensionBox.enabled', false);
+        o.set('dimensionBox.initialized', false);
         o.set('dimensionBox.size', [1, 1, 1]);
         o.set('dimensionBox.center', [0, 0, 0]);
+        o.set('dimensionBox.rotation', [0, 0, 0]);
         o.set('poi.enabled', false);
         o.set('poi.list', '[]');
         this.onMeasurementReset();
@@ -461,7 +463,8 @@ class SettingsService {
                 case 'poi.list':
                     return Array.isArray(value) ? JSON.stringify(value) : '[]';
                 case 'dimensionBox.size':
-                case 'dimensionBox.center': {
+                case 'dimensionBox.center':
+                case 'dimensionBox.rotation': {
                     if (!Array.isArray(value) || value.length < 3) return null;
                     const tuple = value.slice(0, 3).map((entry) => Number(entry));
                     return tuple.every((entry) => Number.isFinite(entry)) ? tuple : null;
@@ -523,7 +526,7 @@ class SettingsService {
                 });
             } else {
                 const safeValue = sanitizeLeaf(path, value);
-                if ((numericPaths.has(path) || path === 'dimensionBox.size' || path === 'dimensionBox.center') && safeValue == null) return;
+                if ((numericPaths.has(path) || path === 'dimensionBox.size' || path === 'dimensionBox.center' || path === 'dimensionBox.rotation') && safeValue == null) return;
                 if (path !== 'skybox.value' || safeValue === 'None' || this.skyboxUrls.has(safeValue as string)) {
                     this.observer.set(path, safeValue);
                 }

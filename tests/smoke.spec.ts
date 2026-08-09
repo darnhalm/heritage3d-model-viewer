@@ -48,7 +48,7 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
     });
 });
 
-test('theme color drives blue accents, active tools, progress colors and settings export', async ({ page }) => {
+test('theme color drives accents, active tools, progress colors and settings export', async ({ page }) => {
     await page.goto('/?webgl');
     await waitForViewer(page);
     await expect(page.locator('#settings-panel')).toContainText('Theme color');
@@ -57,9 +57,9 @@ test('theme color drives blue accents, active tools, progress colors and setting
         backgroundColor: (window as any).viewer.observer.get('skybox.backgroundColor'),
         css: getComputedStyle(document.documentElement).getPropertyValue('--theme-primary').trim()
     }));
-    expect(defaultTheme.color).toEqual({ r: 200 / 255, g: 200 / 255, b: 200 / 255 });
+    expect(defaultTheme.color).toEqual({ r: 221 / 255, g: 111 / 255, b: 0 });
     expect(defaultTheme.backgroundColor).toEqual({ r: 128 / 255, g: 128 / 255, b: 128 / 255 });
-    expect(defaultTheme.css).toBe('rgb(200 200 200)');
+    expect(defaultTheme.css).toBe('rgb(221 111 0)');
 
     const themed = await page.evaluate(() => {
         const viewer = (window as any).viewer;

@@ -2367,6 +2367,11 @@ input {
     mask: url('static/icons/alignment-helper-icon.svg') no-repeat center / contain;
 }
 
+#alignment-panel .align-icon-box::before {
+    -webkit-mask: url('static/icons/alignment-box-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/alignment-box-icon.svg') no-repeat center / contain;
+}
+
 #alignment-panel .align-icon-move::before {
     -webkit-mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
     mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
@@ -2375,6 +2380,11 @@ input {
 #alignment-panel .align-icon-rotate::before {
     -webkit-mask: url('static/icons/alignment-rotate-icon.svg') no-repeat center / contain;
     mask: url('static/icons/alignment-rotate-icon.svg') no-repeat center / contain;
+}
+
+#alignment-panel .align-icon-scale::before {
+    -webkit-mask: url('static/icons/fragment-scale-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/fragment-scale-icon.svg') no-repeat center / contain;
 }
 
 #alignment-panel .align-icon-object-center::before {

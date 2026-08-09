@@ -126,8 +126,8 @@ export interface ObserverData {
         axes: boolean,
         grid: boolean,
         alignmentMode?: boolean,
-        alignmentGizmoMode?: 'move' | 'rotate',
-        alignmentTarget?: 'model' | 'helper',
+        alignmentGizmoMode?: 'move' | 'rotate' | 'resize',
+        alignmentTarget?: 'model' | 'helper' | 'box',
         normals: number,
         uvCheckerScale: number,
         selectedUvSet: number,
@@ -303,10 +303,13 @@ export interface ObserverData {
     },
     dimensionBox: {
         enabled: boolean,
+        initialized: boolean,
         /** Box dimensions in scene/model units. Real size = size * measure.unitScale. */
         size: [number, number, number],
         /** Box center in scene/model coordinates. */
-        center: [number, number, number]
+        center: [number, number, number],
+        /** Box orientation in world-space Euler degrees. */
+        rotation: [number, number, number]
     },
     helpers?: {
         visible: boolean,

@@ -1,6 +1,6 @@
 type ThemeRgb = { r: number; g: number; b: number };
 
-const DEFAULT_THEME_COLOR: ThemeRgb = { r: 200 / 255, g: 200 / 255, b: 200 / 255 };
+const DEFAULT_THEME_COLOR: ThemeRgb = { r: 221 / 255, g: 111 / 255, b: 0 };
 
 const normalizeChannel = (value: unknown, fallback: number) => {
     const channel = Number(value);

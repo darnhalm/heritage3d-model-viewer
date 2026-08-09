@@ -506,6 +506,9 @@ class Viewer {
      */
     tileManager: TileManager | null;
 
+    /** User-adjustable reference bounds used for reliable scene framing. */
+    private dimensionBoxEntity: Entity;
+
     /** Exact production clipping box and its reversible material shader injection. */
     private readonly fragmentClipMaterials = new ClipBoxMaterials();
 
@@ -539,6 +542,8 @@ class Viewer {
     rotateGizmo: RotateGizmo | null;
 
     translateGizmo: TranslateGizmo | null;
+
+    private dimensionBoxScaleGizmo: ScaleGizmo;
 
     lastAlignmentContentTransform: Mat4 | null;
 
@@ -1332,9 +1337,14 @@ class Viewer {
         this.rotateGizmo.enabled = false;
         this.rotateGizmo.on('transform:start', () => {
             this.cameraControls.enabled = false;
-            this.lastAlignmentContentTransform = this.captureSceneContentTransform();
+            this.lastAlignmentContentTransform = this.getAlignmentTarget() === 'model' ?
+                this.captureSceneContentTransform() : null;
         });
         this.rotateGizmo.on('transform:move', () => {
+            if (this.getAlignmentTarget() === 'box') {
+                this.syncDimensionBoxObserverFromEntity();
+                return;
+            }
             this.applyPoiTransformFromLastAlignmentState();
             const eulers = this.sceneRoot.getLocalEulerAngles();
             this.sceneTransform = {
@@ -1344,6 +1354,12 @@ class Viewer {
             this.renderNextFrame();
         });
         this.rotateGizmo.on('transform:end', () => {
+            if (this.getAlignmentTarget() === 'box') {
+                this.syncDimensionBoxObserverFromEntity();
+                this.cameraControls.enabled = true;
+                postToViewerParent({ type: 'dimensionbox-changed' });
+                return;
+            }
             this.applyPoiTransformFromLastAlignmentState();
             const eulers = this.sceneRoot.getLocalEulerAngles();
             this.sceneTransform = {
@@ -1358,9 +1374,14 @@ class Viewer {
         this.translateGizmo.enabled = false;
         this.translateGizmo.on('transform:start', () => {
             this.cameraControls.enabled = false;
-            this.lastAlignmentContentTransform = this.getAlignmentTarget() === 'helper' ? null : this.captureSceneContentTransform();
+            this.lastAlignmentContentTransform = this.getAlignmentTarget() === 'model' ?
+                this.captureSceneContentTransform() : null;
         });
         this.translateGizmo.on('transform:move', () => {
+            if (this.getAlignmentTarget() === 'box') {
+                this.syncDimensionBoxObserverFromEntity();
+                return;
+            }
             if (this.getAlignmentTarget() === 'helper') {
                 // emit=true → шлём helper:moved прямо во время драга (живое обновление
                 // позиции/высоты слушателя на хосте). Круг 3D→u,v,Z→3D у хоста
@@ -1383,6 +1404,12 @@ class Viewer {
             this.renderNextFrame();
         });
         this.translateGizmo.on('transform:end', () => {
+            if (this.getAlignmentTarget() === 'box') {
+                this.syncDimensionBoxObserverFromEntity();
+                this.cameraControls.enabled = true;
+                postToViewerParent({ type: 'dimensionbox-changed' });
+                return;
+            }
             if (this.getAlignmentTarget() === 'helper') {
                 this.syncActiveHelperFromEntity(true);
                 this.cameraControls.enabled = true;
@@ -1403,6 +1430,24 @@ class Viewer {
             this.cameraControls.enabled = true;
             this.lastAlignmentContentTransform = null;
             this.setCenterScene(centered);
+        });
+
+        this.dimensionBoxEntity = new Entity('DimensionBoxTransform');
+        this.app.root.addChild(this.dimensionBoxEntity);
+        this.syncDimensionBoxEntityFromObserver();
+        this.dimensionBoxScaleGizmo = new ScaleGizmo(this.camera.camera, gizmoLayer);
+        this.dimensionBoxScaleGizmo.lowerBoundScale.set(0.000001, 0.000001, 0.000001);
+        this.dimensionBoxScaleGizmo.enabled = false;
+        this.dimensionBoxScaleGizmo.on('transform:start', () => {
+            this.cameraControls.enabled = false;
+        });
+        this.dimensionBoxScaleGizmo.on('transform:move', () => {
+            this.syncDimensionBoxObserverFromEntity();
+        });
+        this.dimensionBoxScaleGizmo.on('transform:end', () => {
+            this.syncDimensionBoxObserverFromEntity();
+            this.cameraControls.enabled = true;
+            postToViewerParent({ type: 'dimensionbox-changed' });
         });
 
         // Production clipping volume. It is a transform-only entity: the contour is
@@ -1855,7 +1900,9 @@ class Viewer {
         this.fragmentTranslateGizmo?.destroy();
         this.fragmentScaleGizmo?.destroy();
         this.fragmentRotateGizmo?.destroy();
+        this.dimensionBoxScaleGizmo?.destroy();
         this.fragmentBoxEntity?.destroy();
+        this.dimensionBoxEntity?.destroy();
         this.fragmentHandleLayer?.querySelectorAll<HTMLButtonElement>('.fragment-face-handle').forEach((handle) => {
             handle.removeEventListener('pointerdown', this.onFragmentHandlePointerDown);
         });
@@ -2332,13 +2379,21 @@ class Viewer {
             },
             'dimensionBox.enabled': () => {
                 this.dirtyBounds = true;
+                this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
                 this.renderNextFrame();
             },
             'dimensionBox.size': () => {
+                this.syncDimensionBoxEntityFromObserver();
                 this.dirtyBounds = true;
                 this.renderNextFrame();
             },
             'dimensionBox.center': () => {
+                this.syncDimensionBoxEntityFromObserver();
+                this.dirtyBounds = true;
+                this.renderNextFrame();
+            },
+            'dimensionBox.rotation': () => {
+                this.syncDimensionBoxEntityFromObserver();
                 this.dirtyBounds = true;
                 this.renderNextFrame();
             },
@@ -2669,6 +2724,8 @@ class Viewer {
         // Бокс размеров — сессионный инструмент: гасим при сбросе сцены и чистим
         // отрисовку, чтобы он не «висел» поверх новой/перезагружаемой модели.
         this.observer.set('dimensionBox.enabled', false);
+        this.observer.set('dimensionBox.initialized', false);
+        this.observer.set('dimensionBox.rotation', [0, 0, 0]);
         this.debugBounds.clear();
         this.debugBounds.update();
         this.dirtyBounds = true;
@@ -3934,6 +3991,16 @@ class Viewer {
             this.cameraControls.moveSpeed = sceneSize * 2.5;
             this.cameraControls.zoomRange = new Vec2(ZOOM_SCALE_MIN, 10 * sceneSize);
             this.cameraControls.reset(center, start);
+        } else if (this.observer.get('dimensionBox.initialized')) {
+            this.syncDimensionBoxEntityFromObserver();
+            const center = this.dimensionBoxEntity.getPosition().clone();
+            const size = this.dimensionBoxEntity.getLocalScale();
+            const sceneSize = Math.max(0.00001, size.length() * 0.5);
+            const zoom = this.calcZoom(sceneSize);
+            const start = this.camera.forward.clone().mulScalar(-zoom).add(center);
+            this.cameraControls.moveSpeed = sceneSize * 2.5;
+            this.cameraControls.zoomRange = new Vec2(ZOOM_SCALE_MIN, 10 * sceneSize);
+            this.cameraControls.reset(center, start);
         } else {
             this.focus(false);
         }
@@ -4227,8 +4294,9 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    private getAlignmentTarget(): 'model' | 'helper' {
-        return this.observer.get('debug.alignmentTarget') === 'helper' ? 'helper' : 'model';
+    private getAlignmentTarget(): 'model' | 'helper' | 'box' {
+        const target = this.observer.get('debug.alignmentTarget');
+        return target === 'helper' || target === 'box' ? target : 'model';
     }
 
     selectHelper(id: string | null) {
@@ -4361,6 +4429,52 @@ class Viewer {
         ];
         this.observer.set('dimensionBox.size', size);
         this.observer.set('dimensionBox.center', center);
+        this.observer.set('dimensionBox.rotation', [0, 0, 0]);
+        this.observer.set('dimensionBox.initialized', true);
+        this.observer.set('dimensionBox.enabled', true);
+        this.syncDimensionBoxEntityFromObserver();
+        this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
+        postToViewerParent({ type: 'dimensionbox-changed' });
+        this.dirtyBounds = true;
+        this.renderNextFrame();
+    }
+
+    private dimensionBoxTuple(path: string, fallback: [number, number, number]): [number, number, number] {
+        const value = this.observer.get(path) as number[] | undefined;
+        if (!Array.isArray(value) || value.length < 3) return fallback;
+        return [0, 1, 2].map(index => {
+            const channel = Number(value[index]);
+            return Number.isFinite(channel) ? channel : fallback[index];
+        }) as [number, number, number];
+    }
+
+    private syncDimensionBoxEntityFromObserver() {
+        if (!this.dimensionBoxEntity) return;
+        const center = this.dimensionBoxTuple('dimensionBox.center', [0, 0, 0]);
+        const size = this.dimensionBoxTuple('dimensionBox.size', [1, 1, 1]);
+        const rotation = this.dimensionBoxTuple('dimensionBox.rotation', [0, 0, 0]);
+        this.dimensionBoxEntity.setPosition(center[0], center[1], center[2]);
+        this.dimensionBoxEntity.setEulerAngles(rotation[0], rotation[1], rotation[2]);
+        this.dimensionBoxEntity.setLocalScale(
+            Math.max(0.000001, Math.abs(size[0])),
+            Math.max(0.000001, Math.abs(size[1])),
+            Math.max(0.000001, Math.abs(size[2]))
+        );
+    }
+
+    private syncDimensionBoxObserverFromEntity() {
+        if (!this.dimensionBoxEntity) return;
+        const center = this.dimensionBoxEntity.getPosition();
+        const size = this.dimensionBoxEntity.getLocalScale();
+        const rotation = this.dimensionBoxEntity.getEulerAngles();
+        this.observer.set('dimensionBox.center', [center.x, center.y, center.z]);
+        this.observer.set('dimensionBox.size', [
+            Math.max(0.000001, Math.abs(size.x)),
+            Math.max(0.000001, Math.abs(size.y)),
+            Math.max(0.000001, Math.abs(size.z))
+        ]);
+        this.observer.set('dimensionBox.rotation', [rotation.x, rotation.y, rotation.z]);
+        this.observer.set('dimensionBox.initialized', true);
         this.observer.set('dimensionBox.enabled', true);
         this.dirtyBounds = true;
         this.renderNextFrame();
@@ -6044,12 +6158,13 @@ class Viewer {
     }
 
     setAlignmentMode(enabled: boolean) {
-        if (!this.rotateGizmo || !this.translateGizmo) {
+        if (!this.rotateGizmo || !this.translateGizmo || !this.dimensionBoxScaleGizmo) {
             return;
         }
 
         this.rotateGizmo.enabled = false;
         this.translateGizmo.enabled = false;
+        this.dimensionBoxScaleGizmo.enabled = false;
         // Куб используется и выравниванием, и инспектором тайлов; выход из одного режима
         // не должен прятать инструмент, пока второй остаётся активным.
         this.updateViewCubeVisibility();
@@ -6058,6 +6173,7 @@ class Viewer {
         } else {
             this.rotateGizmo.detach();
             this.translateGizmo.detach();
+            this.dimensionBoxScaleGizmo.detach();
             this.cameraControls.enabled = true;
             // Все отображения выравнивания гаснут при выходе: размерный бокс и орто-проекция
             // (камера возвращается к обычной перспективе — это была песочница).
@@ -6067,8 +6183,8 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    setAlignmentGizmoMode(mode: 'move' | 'rotate') {
-        if (!this.rotateGizmo || !this.translateGizmo) {
+    setAlignmentGizmoMode(mode: 'move' | 'rotate' | 'resize') {
+        if (!this.rotateGizmo || !this.translateGizmo || !this.dimensionBoxScaleGizmo) {
             return;
         }
 
@@ -6080,8 +6196,10 @@ class Viewer {
         const enabled = !!this.observer.get('debug.alignmentMode') || helperEditing;
         this.rotateGizmo.enabled = false;
         this.translateGizmo.enabled = false;
+        this.dimensionBoxScaleGizmo.enabled = false;
         this.rotateGizmo.detach();
         this.translateGizmo.detach();
+        this.dimensionBoxScaleGizmo.detach();
 
         if (!enabled) {
             this.renderNextFrame();
@@ -6100,6 +6218,33 @@ class Viewer {
             this.translateGizmo.attach([entity]);
             this.translateGizmo.enabled = true;
             this.translateGizmo.update();
+            this.renderNextFrame();
+            return;
+        }
+
+        if (target === 'box') {
+            if (!this.observer.get('dimensionBox.initialized')) {
+                this.setDimensionBoxFromModelBounds();
+            }
+            if (!this.observer.get('dimensionBox.enabled')) {
+                this.renderNextFrame();
+                return;
+            }
+            this.syncDimensionBoxEntityFromObserver();
+            if (mode === 'move') {
+                this.translateGizmo.size = 1;
+                this.translateGizmo.attach([this.dimensionBoxEntity]);
+                this.translateGizmo.enabled = true;
+                this.translateGizmo.update();
+            } else if (mode === 'resize') {
+                this.dimensionBoxScaleGizmo.attach([this.dimensionBoxEntity]);
+                this.dimensionBoxScaleGizmo.enabled = true;
+                this.dimensionBoxScaleGizmo.update();
+            } else {
+                this.rotateGizmo.attach([this.dimensionBoxEntity]);
+                this.rotateGizmo.enabled = true;
+                this.rotateGizmo.update();
+            }
             this.renderNextFrame();
             return;
         }
@@ -6957,21 +7102,13 @@ class Viewer {
                 this.debugBounds.box(bbox.getMin(), bbox.getMax());
             }
             if (this.observer.get('dimensionBox.enabled')) {
-                const size = this.observer.get('dimensionBox.size') as [number, number, number] | undefined;
-                const center = this.observer.get('dimensionBox.center') as [number, number, number] | undefined;
-                if (Array.isArray(size) && Array.isArray(center) && size.length >= 3 && center.length >= 3) {
-                    const sx = Math.max(0.000001, Number(size[0]) || 0.000001);
-                    const sy = Math.max(0.000001, Number(size[1]) || 0.000001);
-                    const sz = Math.max(0.000001, Number(size[2]) || 0.000001);
-                    const cx = Number(center[0]) || 0;
-                    const cy = Number(center[1]) || 0;
-                    const cz = Number(center[2]) || 0;
-                    this.debugBounds.box(
-                        new Vec3(cx - sx / 2, cy - sy / 2, cz - sz / 2),
-                        new Vec3(cx + sx / 2, cy + sy / 2, cz + sz / 2),
-                        0xff33d6ff
-                    );
-                }
+                this.syncDimensionBoxEntityFromObserver();
+                const transform = this.dimensionBoxEntity.getWorldTransform();
+                const center = this.dimensionBoxEntity.getPosition();
+                const ax = transform.transformVector(new Vec3(0.5, 0, 0));
+                const ay = transform.transformVector(new Vec3(0, 0.5, 0));
+                const az = transform.transformVector(new Vec3(0, 0, 0.5));
+                this.debugBounds.obb(center, ax, ay, az, 0xff33d6ff);
             }
             this.debugBounds.update();
 
