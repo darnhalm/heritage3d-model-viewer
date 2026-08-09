@@ -572,18 +572,7 @@ class MeasurementsPanel extends React.Component <{
         return (
             <div className='popup-panel-parent'>
                 <Container class='popup-panel' flex hidden={props.observerData.ui.active !== 'measurement'}>
-                    <div className='measure-panel-heading-row'>
-                        <Label text={t('Measurement', lang)} class='popup-panel-heading' />
-                        <button
-                            type='button'
-                            className='measure-export-button'
-                            title={t('Export measurements JSON', lang)}
-                            aria-label={t('Export measurements JSON', lang)}
-                            onClick={() => window.viewer?.downloadMeasurementsJson?.()}
-                        >
-                            <span className='material-symbols-outlined'>download</span>
-                        </button>
-                    </div>
+                    <Label text={t('Measurement', lang)} class='popup-panel-heading' />
 
                     <div className='measure-mode-toolbar'>
                         <button
@@ -684,6 +673,17 @@ class MeasurementsPanel extends React.Component <{
                     )}
 
                     <Detail label={t('Points', lang)} value={t(pointsHintKey, lang)} />
+                    <div className='measure-panel-footer'>
+                        <button
+                            type='button'
+                            className='measure-export-button'
+                            title={t('Export measurements JSON', lang)}
+                            aria-label={t('Export measurements JSON', lang)}
+                            onClick={() => window.viewer?.downloadMeasurementsJson?.()}
+                        >
+                            <span className='measure-export-icon' aria-hidden='true' />
+                        </button>
+                    </div>
                 </Container>
             </div>
         );

@@ -69,17 +69,26 @@ test('theme color drives blue accents, active tools, progress colors and setting
         fixture.innerHTML = `
             <button class="measure-mode-btn active"></button>
             <div id="alignment-panel"><button class="alignment-icon-btn active"></button></div>
+            <div class="twin-id-row"><button class="twin-id-copy"></button></div>
+            <div class="selected-object-block"><button class="selected-object-copy"></button></div>
+            <button class="left-panel-tour-button"></button>
             <div class="pcui-progress"><div class="pcui-progress-inner"></div></div>
         `;
         document.body.appendChild(fixture);
         const measure = fixture.querySelector('.measure-mode-btn') as HTMLElement;
         const alignment = fixture.querySelector('.alignment-icon-btn') as HTMLElement;
+        const twinIdCopy = fixture.querySelector('.twin-id-copy') as HTMLElement;
+        const selectedObjectCopy = fixture.querySelector('.selected-object-copy') as HTMLElement;
+        const tourButton = fixture.querySelector('.left-panel-tour-button') as HTMLElement;
         const progress = fixture.querySelector('.pcui-progress-inner') as HTMLElement;
         const result = {
             primary: getComputedStyle(document.documentElement).getPropertyValue('--theme-primary').trim(),
             bright: getComputedStyle(document.documentElement).getPropertyValue('--theme-bright').trim(),
             measureBackground: getComputedStyle(measure).backgroundColor,
             alignmentBackground: getComputedStyle(alignment).backgroundColor,
+            twinIdCopyColor: getComputedStyle(twinIdCopy).color,
+            selectedObjectCopyColor: getComputedStyle(selectedObjectCopy).color,
+            tourButtonBackground: getComputedStyle(tourButton).backgroundColor,
             progressBackground: getComputedStyle(progress).backgroundImage,
             savedColor: viewer.settingsService.getSettingsData().theme.primaryColor,
             localColor: JSON.parse(localStorage.getItem('model-viewer-uistate') || '{}').theme?.primaryColor
@@ -92,10 +101,32 @@ test('theme color drives blue accents, active tools, progress colors and setting
     expect(themed.bright).toBe('rgb(116 151 186)');
     expect(themed.measureBackground).toBe('rgb(116, 151, 186)');
     expect(themed.alignmentBackground).toBe('rgb(116, 151, 186)');
+    expect(themed.twinIdCopyColor).toBe('rgb(51, 102, 153)');
+    expect(themed.selectedObjectCopyColor).toBe('rgb(51, 102, 153)');
+    expect(themed.tourButtonBackground).toBe('rgba(51, 102, 153, 0.15)');
     expect(themed.progressBackground).toContain('rgb(116, 151, 186)');
     expect(themed.progressBackground).toContain('rgb(51, 102, 153)');
     expect(themed.savedColor).toBe('#336699');
     expect(themed.localColor).toEqual({ r: 0.2, g: 0.4, b: 0.6 });
+});
+
+test('measurement JSON export is a compact icon in the panel footer', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => {
+        const filenames = (window as any).viewer?.observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
+    });
+    await page.evaluate(() => (window as any).viewer.observer.set('ui.active', 'measurement'));
+
+    const exportButton = page.getByRole('button', { name: 'Export measurements JSON' });
+    await expect(exportButton).toBeVisible();
+    await expect(exportButton).toHaveText('');
+    await expect(exportButton).toHaveCSS('width', '24px');
+    await expect(exportButton).toHaveCSS('height', '24px');
+    await expect(exportButton.locator('.measure-export-icon')).toHaveCount(1);
+    await expect(exportButton.locator('xpath=..')).toHaveClass(/measure-panel-footer/);
 });
 
 test('loads a model and auto-applies nearby settings safely', async ({ page }) => {
@@ -197,6 +228,8 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
     await page.locator('#view-button').click();
     await page.getByRole('button', { name: 'Show embed code' }).click();
     await page.getByRole('button', { name: 'Advanced' }).click();
+    await expect(page.getByRole('button', { name: 'Advanced' })).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(page.getByRole('button', { name: 'Hide embed code' })).toHaveCSS('color', 'rgb(255, 255, 255)');
     await page.getByRole('textbox', { name: 'Parent origin' }).fill('https://portal.example/path');
 
     const embedCode = page.locator('#embed-code-wrapper textarea');

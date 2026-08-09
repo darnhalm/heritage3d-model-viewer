@@ -66,6 +66,30 @@ html {
     height: 100%;
 }
 
+.left-panel-tour-button {
+    all: unset;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background-color: rgba(var(--theme-primary-rgb), 0.15);
+    color: var(--theme-primary);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+    flex-shrink: 0;
+}
+
+.left-panel-tour-button:hover,
+.left-panel-tour-button:focus {
+    background-color: var(--theme-primary);
+    color: #0d1520;
+}
+
 body {
     margin: 0px;
     height: 100%;
@@ -1159,35 +1183,40 @@ body:not(.ui-ready) #panel-left {
     padding: 6px 4px 10px;
 }
 
-.measure-panel-heading-row {
+.measure-panel-footer {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-}
-
-.measure-panel-heading-row .popup-panel-heading {
-    flex: 1;
+    justify-content: flex-end;
+    min-height: 24px;
+    padding-top: 2px;
 }
 
 .measure-export-button {
-    width: 30px;
-    height: 30px;
+    width: 24px;
+    height: 24px;
     padding: 0;
     display: grid;
     place-items: center;
-    color: #d9e8f5;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 5px;
+    color: #fff;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
     cursor: pointer;
+    opacity: 0.58;
 }
 
-.measure-export-button:hover {
-    background: rgba(var(--theme-primary-rgb), 0.18);
+.measure-export-button:hover,
+.measure-export-button:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    opacity: 1;
 }
 
-.measure-export-button .material-symbols-outlined {
-    font-size: 18px;
+.measure-export-icon {
+    width: 17px;
+    height: 17px;
+    background: currentColor;
+    -webkit-mask: url(./static/icons/file-json-icon.svg) center / contain no-repeat;
+    mask: url(./static/icons/file-json-icon.svg) center / contain no-repeat;
 }
 
 .measure-warning {
@@ -2256,7 +2285,7 @@ input {
         border: none;
         border-radius: 6px;
         cursor: pointer;
-        color: #cfe3f7;
+        color: var(--theme-primary);
         background-color: rgba(255, 255, 255, 0.08);
 
         &:hover {
@@ -2327,7 +2356,7 @@ input {
         border: none;
         border-radius: 6px;
         cursor: pointer;
-        color: #cfe3f7;
+        color: var(--theme-primary);
         background-color: rgba(255, 255, 255, 0.08);
 
         &:hover {
@@ -3104,7 +3133,7 @@ input {
     padding: 8px 4px;
     border: none;
     background: transparent;
-    color: #cfe3f7;
+    color: #fff;
     font-size: 13px;
     font-weight: 600;
     text-align: left;
