@@ -457,7 +457,7 @@ class InfoPanel extends React.Component <{
                     {activeTab === 'about' && (
                         <div className='info-about-block'>
                             <div className='about-header'>
-                                <img src='static/heritage3d-logo.svg' alt='' className='about-logo' />
+                                <img src='static/heritage3d-logo.svg?v=2218652' alt='' className='about-logo' />
                                 <div className='about-title'>HERITAGE3D Viewer v1.0</div>
                             </div>
                             <div className='about-description'>

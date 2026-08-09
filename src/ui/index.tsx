@@ -333,12 +333,12 @@ class App extends React.Component<{ observer: Observer }> {
                 <Container id="panel-left" width={32} flex resizable='right' resizeMin={220} resizeMax={800}>
                     <div className="header" style={{ display: 'none' }}>
                         <div id="title">
-                            <img src={'static/heritage3d-logo.svg'}/>
+                            <img src={'static/heritage3d-logo.svg?v=2218652'}/>
                             <div>HERITAGE3D Viewer v1.0</div>
                         </div>
                     </div>
                     <div id="panel-toggle">
-                        <img src={'static/heritage3d-logo.svg'}/>
+                        <img src={'static/heritage3d-logo.svg?v=2218652'}/>
                     </div>
                     <LeftPanel observerData={this.state} setProperty={this._setStateProperty} />
                     {!embed?.enabled && (
