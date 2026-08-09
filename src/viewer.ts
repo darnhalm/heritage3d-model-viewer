@@ -136,6 +136,31 @@ type FrozenTileCamera = {
     orthographic: boolean;
     orthoHeight: number;
 };
+
+type GSplatDebugStats = {
+    nodes: number;
+    visibleNodes: number;
+    transitioningNodes: number;
+    pendingFiles: number;
+    queuedFiles: number;
+    runningFiles: number;
+    loadedFiles: number;
+    activeSplats: number;
+    budget: number;
+    awaitingLodUpdate: boolean;
+    lodCounts: number[];
+};
+
+type GSplatFrozenLodCamera = {
+    position: Vec3;
+    forward: Vec3;
+    camera: {
+        fov: number;
+        horizontalFov: boolean;
+        aspectRatio: number;
+    };
+    getPosition: () => Vec3;
+};
 type TextureAssetFile = { filename?: string };
 type TextureLike = {
     name?: string;
@@ -622,6 +647,18 @@ class Viewer {
 
     /** DOM-оверлей со статистикой тайлов; создаётся лениво при первом включении. */
     private tileHud: HTMLDivElement | null = null;
+
+    /** Последний read-only снимок spatial LOD; обновляется только при включённой диагностике. */
+    private gsplatDebugStats: GSplatDebugStats | null = null;
+
+    /** Снимок камеры, используемый только для расчёта spatial LOD. */
+    private gsplatFrozenLodCamera: GSplatFrozenLodCamera | null = null;
+
+    /** Оригинальные методы GSplatWorld.update, временно обёрнутые при freeze. */
+    private readonly gsplatWorldUpdates = new WeakMap<object, (...args: any[]) => any>();
+
+    /** Штатный лимит каждого загрузчика, восстанавливаемый после pause. */
+    private readonly gsplatLoaderConcurrency = new WeakMap<object, number>();
 
     private tilePickDown: { clientX: number; clientY: number; canvasX: number; canvasY: number } | null = null;
 
@@ -1826,6 +1863,32 @@ class Viewer {
                 this.renderNextFrame();
             },
             'debug.renderMode': this.setRenderMode.bind(this),
+            'debug.gsplatLodColor': (enabled: boolean) => {
+                this.app.scene.gsplat.colorizeLod = enabled;
+                this.renderNextFrame();
+            },
+            'debug.gsplatNodeBounds': () => this.renderNextFrame(),
+            'debug.gsplatDebugMode': () => this.renderNextFrame(),
+            'debug.gsplatFreeze': (enabled: boolean) => {
+                if (enabled) {
+                    if (!this.observer.get('debug.gsplatPaused')) {
+                        this.observer.set('debug.gsplatPaused', true);
+                    }
+                    this.captureGSplatLodCamera();
+                    this.captureFrozenTileCamera(true, false);
+                    this.enterFrozenTileCameraInspector();
+                } else {
+                    this.restoreFrozenTileCameraView();
+                    this.captureFrozenTileCamera(false, false);
+                    this.gsplatFrozenLodCamera = null;
+                    this.syncGSplatStreamingDebugControls();
+                }
+                this.renderNextFrame();
+            },
+            'debug.gsplatPaused': () => {
+                this.syncGSplatStreamingDebugControls();
+                this.renderNextFrame();
+            },
             // Отладка тайлов: отрисовка не gated dirty-флагом (onPrerender читает флаги живьём),
             // поэтому достаточно попросить кадр — там оверлей либо нарисуется, либо очистится.
             'debug.tileDebug': (enabled: boolean) => {
@@ -4836,6 +4899,11 @@ class Viewer {
         this.observer.set('debug.tileLodLock', false);
         this.observer.set('debug.tilePick', false);
         this.observer.set('debug.tileIsolatePick', false);
+        this.observer.set('debug.gsplatLodColor', false);
+        this.observer.set('debug.gsplatNodeBounds', false);
+        this.observer.set('debug.gsplatDebugMode', 'state');
+        this.observer.set('debug.gsplatFreeze', false);
+        this.observer.set('debug.gsplatPaused', false);
         this.observer.set('scene.tilesetMaxDepth', 0);
 
         const manager = new TileManager({
@@ -4996,8 +5064,8 @@ class Viewer {
      *
      * @param enabled - Создать или удалить снимок камеры.
      */
-    private captureFrozenTileCamera(enabled: boolean) {
-        if (!enabled || !this.tileManager) {
+    private captureFrozenTileCamera(enabled: boolean, requireTileManager = true) {
+        if (!enabled || (requireTileManager && !this.tileManager)) {
             this.frozenTileCamera = null;
             return;
         }
@@ -5066,7 +5134,8 @@ class Viewer {
         this.debugTileCameraSolid.clear();
 
         const frozen = this.frozenTileCamera;
-        if (!frozen || !this.observer.get('debug.tileFreeze')) {
+        const freezeEnabled = this.observer.get('debug.tileFreeze') || this.observer.get('debug.gsplatFreeze');
+        if (!frozen || !freezeEnabled) {
             this.debugTileCamera.update();
             this.debugTileCameraSolid.update();
             return;
@@ -6549,6 +6618,12 @@ class Viewer {
             };
             this.tileManager.debugDraw(this.debugTiles, this.debugTilesSolid, this.debugTilesFill, mode, style);
         }
+        const gsplatDebugEnabled = !!this.observer.get('scene.hasGsplat') &&
+            (!!this.observer.get('debug.gsplatNodeBounds') || !!this.observer.get('debug.gsplatLodColor') ||
+                !!this.observer.get('debug.gsplatFreeze') || !!this.observer.get('debug.gsplatPaused'));
+        this.syncGSplatStreamingDebugControls();
+        this.gsplatDebugStats = gsplatDebugEnabled ?
+            this.updateGSplatDebugBounds(!!this.observer.get('debug.gsplatNodeBounds')) : null;
         this.debugTiles.update();
         this.debugTilesFill.update();
         this.debugTilesSolid.update();
@@ -6576,7 +6651,9 @@ class Viewer {
 
     /** Живой DOM-оверлей со статистикой тайлов; создаётся лениво, прячется когда выключен. */
     private updateTileHud() {
-        const enabled = !!this.tileManager && !!this.observer.get('debug.tileDebug');
+        const tileEnabled = !!this.tileManager && !!this.observer.get('debug.tileDebug');
+        const gsplatEnabled = !!this.gsplatDebugStats;
+        const enabled = tileEnabled || gsplatEnabled;
         if (!enabled) {
             if (this.tileHud) {
                 this.tileHud.style.display = 'none';
@@ -6594,6 +6671,22 @@ class Viewer {
             this.tileHud = el;
         }
         this.tileHud.style.display = 'block';
+
+        if (gsplatEnabled && this.gsplatDebugStats) {
+            const s = this.gsplatDebugStats;
+            const mode = (this.observer.get('debug.gsplatDebugMode') as 'state' | 'lod') ?? 'state';
+            const lods = s.lodCounts.map((count, lod) => `L${lod}:${count}`).filter(label => !label.endsWith(':0')).join('  ');
+            const flags = [
+                this.observer.get('debug.gsplatFreeze') ? 'FROZEN' : '',
+                this.observer.get('debug.gsplatPaused') ? 'PAUSED' : ''
+            ].filter(Boolean).join(' ');
+            this.tileHud.textContent =
+                `GSPLAT SPATIAL LOD   mode: ${mode}${flags ? `   ${flags}` : ''}${s.awaitingLodUpdate ? '   UPDATING' : ''}\n` +
+                `nodes ${s.nodes}   visible ${s.visibleNodes}   transitioning ${s.transitioningNodes}\n` +
+                `files loaded ${s.loadedFiles}   running ${s.runningFiles}   queued ${s.queuedFiles}\n` +
+                `splats ${s.activeSplats.toLocaleString()} / ${s.budget.toLocaleString()}\n${lods || 'LOD selection pending'}`;
+            return;
+        }
 
         const s = this.tileManager.getStats();
         const mb = (s.bytes / (1024 * 1024)).toFixed(1);
@@ -6628,6 +6721,176 @@ class Viewer {
                 `${displayUrl}`;
         } else if (this.observer.get('debug.tilePick')) {
             this.tileHud.textContent += '\n\nPICK TILE: click model surface';
+        }
+    }
+
+    /**
+     * Читает живое состояние GSplatWorld без мутаций и при необходимости рисует OBB leaf-узлов.
+     * Внутренние поля используются только в одном адаптере: UI и остальной viewer от структуры
+     * PlayCanvas не зависят.
+     *
+     * @param drawBounds - Рисовать OBB узлов вместе со сбором статистики.
+     * @returns Сводный снимок spatial LOD для HUD.
+     */
+    private updateGSplatDebugBounds(drawBounds: boolean): GSplatDebugStats {
+        const stats: GSplatDebugStats = {
+            nodes: 0,
+            visibleNodes: 0,
+            transitioningNodes: 0,
+            pendingFiles: 0,
+            queuedFiles: 0,
+            runningFiles: 0,
+            loadedFiles: 0,
+            activeSplats: 0,
+            budget: Number(this.app.scene.gsplat.splatBudget ?? 0),
+            awaitingLodUpdate: false,
+            lodCounts: []
+        };
+        const managers = this.getGSplatManagers();
+
+        const lodPalette = [
+            0xff0000ff, 0xff00ff00, 0xffff0000, 0xff00ffff,
+            0xffff00ff, 0xffffff00, 0xff0080ff, 0xffff0080
+        ];
+        const stateColors = {
+            optimal: 0xff52d273,
+            coarser: 0xffbfd42d,
+            finer: 0xffc084fc,
+            loading: 0xff00bfff,
+            missing: 0xff888888
+        };
+
+        for (const manager of managers) {
+            const world = manager.world;
+            stats.pendingFiles += Number(world?.pendingLoadCount ?? 0);
+            stats.activeSplats += Number(world?.currentState?.totalActiveSplats ?? 0);
+            stats.awaitingLodUpdate ||= !!world?.awaitingLodUpdate;
+            for (const inst of world?._octreeInstances?.values?.() ?? []) {
+                stats.loadedFiles += Number(inst.octree?.fileResources?.size ?? 0);
+                stats.queuedFiles += Number(inst.octree?.assetLoader?._loadQueue?.length ?? 0);
+                stats.runningFiles += Number(inst.octree?.assetLoader?._currentlyLoading?.size ?? 0);
+                const bounds = inst.octree?.nodeBoundsMinMax as Float32Array | undefined;
+                const infos = inst.nodeInfos as Array<{ currentLod: number; optimalLod: number }> | undefined;
+                const worldMat = inst.placement?.node?.getWorldTransform?.() as Mat4 | undefined;
+                if (!bounds || !infos || !worldMat) continue;
+                stats.nodes += infos.length;
+                for (let i = 0; i < infos.length; i++) {
+                    const info = infos[i];
+                    const current = Number(info.currentLod);
+                    const optimal = Number(info.optimalLod);
+                    const transitioning = current !== optimal || current < 0;
+                    if (current >= 0) {
+                        stats.visibleNodes++;
+                        stats.lodCounts[current] = (stats.lodCounts[current] ?? 0) + 1;
+                    }
+                    if (transitioning) stats.transitioningNodes++;
+                    if (!drawBounds) continue;
+
+                    const b = i * 6;
+                    const center = new Vec3(
+                        (bounds[b] + bounds[b + 3]) * 0.5,
+                        (bounds[b + 1] + bounds[b + 4]) * 0.5,
+                        (bounds[b + 2] + bounds[b + 5]) * 0.5
+                    );
+                    const half = new Vec3(
+                        (bounds[b + 3] - bounds[b]) * 0.5,
+                        (bounds[b + 4] - bounds[b + 1]) * 0.5,
+                        (bounds[b + 5] - bounds[b + 2]) * 0.5
+                    );
+                    const worldCenter = worldMat.transformPoint(center, new Vec3());
+                    const ax = worldMat.transformVector(new Vec3(half.x, 0, 0), new Vec3());
+                    const ay = worldMat.transformVector(new Vec3(0, half.y, 0), new Vec3());
+                    const az = worldMat.transformVector(new Vec3(0, 0, half.z), new Vec3());
+                    const mode = this.observer.get('debug.gsplatDebugMode') ?? 'state';
+                    let color = lodPalette[Math.max(0, current) % lodPalette.length];
+                    if (mode === 'state') {
+                        const pending = inst.pendingVisibleAdds?.has?.(i) ||
+                            (current >= 0 && inst.pendingDecrements?.has?.(i));
+                        color = current < 0 ? (pending ? stateColors.loading : stateColors.missing) :
+                            (current === optimal ? stateColors.optimal :
+                                (current > optimal ? stateColors.coarser : stateColors.finer));
+                    } else if (current < 0) {
+                        color = stateColors.missing;
+                    }
+                    this.debugTiles.obb(worldCenter, ax, ay, az, color);
+                }
+            }
+        }
+        return stats;
+    }
+
+    /** @returns Активные GSplat-менеджеры основной камеры без дубликатов слоёв. */
+    private getGSplatManagers(): Set<any> {
+        const renderer = this.app.renderer as unknown as {
+            gsplatDirector?: {
+                camerasMap?: Map<unknown, { layersMap?: Map<unknown, { gsplatManager?: any }> }>;
+            };
+        };
+        const managers = new Set<any>();
+        for (const cameraData of renderer.gsplatDirector?.camerasMap?.values?.() ?? []) {
+            for (const layerData of cameraData.layersMap?.values?.() ?? []) {
+                if (layerData.gsplatManager) managers.add(layerData.gsplatManager);
+            }
+        }
+        return managers;
+    }
+
+    /** Сохраняет текущую render-камеру как неизменяемый источник расчёта LOD. */
+    private captureGSplatLodCamera() {
+        const manager = this.getGSplatManagers().values().next().value;
+        const node = manager?.cameraNode;
+        const camera = node?.camera;
+        if (!node || !camera) return;
+        const position = node.getPosition().clone();
+        this.gsplatFrozenLodCamera = {
+            position,
+            forward: node.forward.clone(),
+            camera: {
+                fov: camera.fov,
+                horizontalFov: camera.horizontalFov,
+                aspectRatio: camera.aspectRatio
+            },
+            getPosition: () => position
+        };
+        this.syncGSplatStreamingDebugControls();
+    }
+
+    /**
+     * Применяет freeze/pause к уже созданным и появившимся позже GSplatWorld/asset loaders.
+     * Уже идущие загрузки на паузе не отменяются; очередь возобновляется штатным обработчиком.
+     */
+    private syncGSplatStreamingDebugControls() {
+        const frozenCamera = this.observer.get('debug.gsplatFreeze') ? this.gsplatFrozenLodCamera : null;
+        const paused = !!this.observer.get('debug.gsplatPaused');
+        for (const manager of this.getGSplatManagers()) {
+            const world = manager.world;
+            const originalUpdate = this.gsplatWorldUpdates.get(world);
+            if (frozenCamera && !originalUpdate) {
+                const original = world.update.bind(world);
+                this.gsplatWorldUpdates.set(world, original);
+                world.update = (camera: unknown, ...args: unknown[]) => original(this.gsplatFrozenLodCamera ?? camera, ...args);
+            } else if (!frozenCamera && originalUpdate) {
+                world.update = originalUpdate;
+                this.gsplatWorldUpdates.delete(world);
+            }
+
+            for (const inst of world?._octreeInstances?.values?.() ?? []) {
+                const loader = inst.octree?.assetLoader;
+                if (!loader) continue;
+                if (paused) {
+                    if (!this.gsplatLoaderConcurrency.has(loader)) {
+                        this.gsplatLoaderConcurrency.set(loader, Number(loader.maxConcurrentLoads ?? 2));
+                    }
+                    loader.maxConcurrentLoads = 0;
+                } else {
+                    const concurrency = this.gsplatLoaderConcurrency.get(loader);
+                    if (concurrency !== undefined) {
+                        loader.maxConcurrentLoads = concurrency;
+                        this.gsplatLoaderConcurrency.delete(loader);
+                        loader._processQueue?.();
+                    }
+                }
+            }
         }
     }
 

@@ -221,7 +221,12 @@ const observerData: ObserverData = {
         tileFreeze: false,
         tilePaused: false,
         tileLodLock: false,
-        tileLodLevel: 0
+        tileLodLevel: 0,
+        gsplatLodColor: false,
+        gsplatNodeBounds: false,
+        gsplatDebugMode: 'state',
+        gsplatFreeze: false,
+        gsplatPaused: false
     },
     animation: {
         playing: false,

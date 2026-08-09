@@ -784,7 +784,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.isTileset', 'scene.tilesetMaxDepth', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'ui.language', 'animation.list'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.isTileset', 'scene.tilesetLit', 'scene.tilesetMaxDepth', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'ui.language', 'animation.list'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) ||
@@ -862,11 +862,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
 
     componentDidUpdate(_: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, prevState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }) {
         if (this.props.observerData?.ui?.embed?.enabled && this.state.tab !== 'scene') {
-            this.setState({ tab: 'scene' });
-            return;
-        }
-
-        if (this.state.tab === 'materials' && this.props.observerData?.scene?.hasGsplat) {
             this.setState({ tab: 'scene' });
             return;
         }
@@ -975,7 +970,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         })();
         const embedEnabled = !!observerData?.ui?.embed?.enabled;
         const embedPreset = observerData?.ui?.embed?.preset;
-        const showMaterialsTab = !embedEnabled && !observerData?.scene?.hasGsplat;
+        const showMaterialsTab = !embedEnabled;
         const activePoiCardId = observerData?.poi?.activeId || this.state.activePoiCardId;
         const texelDensityShortValue = (() => {
             const summary = observerData?.scene?.texelDensitySummary || 'n/a';
@@ -1007,6 +1002,16 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const poiList = parsePoiList(observerData?.poi?.list);
         const draggedPoi = poiList.find(poi => String(poi.id) === draggingPoiId) ?? null;
         const visiblePoiList = draggingPoiId ? poiList.filter(poi => String(poi.id) !== draggingPoiId) : poiList;
+        const materialRenderCategories = observerData?.scene?.hasGsplat ? [] : renderModeCategories(
+            new Set(parseStringArray(observerData?.scene?.materialChannelsWithTextures)),
+            observerData?.debug?.withTextureOnly ?? false,
+            parseStringRecord(observerData?.scene?.materialChannelFilenames)
+        )
+        // На тайлсете прячем категорию UV: её раскладки строятся из
+        // статического `meshInstances`, которого у потоковых тайлов нет.
+        .filter(cat => !(observerData?.scene?.isTileset && cat.title === 'UV'))
+        // У «запечённого» (unlit) контента каналы материала бессмысленны.
+        .filter(cat => !(observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false && cat.title === 'MATERIAL CHANNELS'));
 
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
@@ -1093,21 +1098,61 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     {showMaterialsTab && tab === 'materials' && (
                         <Container id='materials-panel' class='tab-panel'>
                             <div className='materials-layer-list'>
-                                {renderModeCategories(
-                                    new Set(parseStringArray(observerData?.scene?.materialChannelsWithTextures)),
-                                    observerData?.debug?.withTextureOnly ?? false,
-                                    parseStringRecord(observerData?.scene?.materialChannelFilenames)
-                                )
-                                // На тайлсете прячем категорию UV: её раскладки строятся из
-                                // статического `meshInstances`, которого у потоковых тайлов нет.
-                                .filter(cat => !(observerData?.scene?.isTileset && cat.title === 'UV'))
-                                // У «запечённого» (unlit) контента — фотограмметрия из ion —
-                                // каналы материала бессмысленны (свет и цвет запечены в
-                                // текстуру), поэтому их прячем и подписываем режим Unlit.
-                                // У освещаемого PBR (`tilesetLit === true`, как у брони) каналы
-                                // осмысленны и остаются.
-                                .filter(cat => !(observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false && cat.title === 'MATERIAL CHANNELS'))
-                                .map((cat, ci) => (
+                                {observerData?.scene?.hasGsplat && (
+                                    <div className='materials-layer-category'>
+                                        <div className='materials-layer-category-title'>{t('Spatial LOD Debug', lang)} (4)</div>
+                                        <button
+                                            type='button'
+                                            className={`materials-layer-item${observerData?.debug?.gsplatLodColor ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.gsplatLodColor', !observerData?.debug?.gsplatLodColor)}
+                                        >
+                                            {t('Color Splats by LOD', lang)}
+                                        </button>
+                                        <button
+                                            type='button'
+                                            className={`materials-layer-item${observerData?.debug?.gsplatNodeBounds ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.gsplatNodeBounds', !observerData?.debug?.gsplatNodeBounds)}
+                                        >
+                                            {t('Spatial Node Bounds', lang)}
+                                        </button>
+                                        <button
+                                            type='button'
+                                            className={`materials-layer-item${observerData?.debug?.gsplatFreeze ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.gsplatFreeze', !observerData?.debug?.gsplatFreeze)}
+                                        >
+                                            {t('Freeze LOD Camera', lang)}
+                                        </button>
+                                        <button
+                                            type='button'
+                                            className={`materials-layer-item${observerData?.debug?.gsplatPaused ? ' selected' : ''}`}
+                                            onClick={() => setProperty('debug.gsplatPaused', !observerData?.debug?.gsplatPaused)}
+                                        >
+                                            {t('Pause Loading', lang)}
+                                        </button>
+                                        {observerData?.debug?.gsplatNodeBounds && (
+                                            <div className='materials-layer-normals-row'>
+                                                <button
+                                                    type='button'
+                                                    className={`materials-layer-item${(observerData?.debug?.gsplatDebugMode ?? 'state') === 'state' ? ' selected' : ''}`}
+                                                    onClick={() => setProperty('debug.gsplatDebugMode', 'state')}
+                                                >
+                                                    {t('By State', lang)}
+                                                </button>
+                                                <button
+                                                    type='button'
+                                                    className={`materials-layer-item${observerData?.debug?.gsplatDebugMode === 'lod' ? ' selected' : ''}`}
+                                                    onClick={() => setProperty('debug.gsplatDebugMode', 'lod')}
+                                                >
+                                                    {t('By LOD', lang)}
+                                                </button>
+                                            </div>
+                                        )}
+                                        <div className='materials-layer-inline-hint'>
+                                            {t('LOD diagnostics use the live streaming state.', lang)}
+                                        </div>
+                                    </div>
+                                )}
+                                {materialRenderCategories.map((cat, ci) => (
                                     <div key={ci} className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>
                                             {cat.title} ({cat.items.length})
@@ -1232,7 +1277,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {/* Каркас и нормали вершин строятся из статического
                                     `meshInstances` — у потоковых тайлов он пуст, поэтому для
                                     тайлсета вся геометрическая категория скрыта. */}
-                                {!observerData?.scene?.isTileset && (
+                                {!observerData?.scene?.isTileset && !observerData?.scene?.hasGsplat && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Geometry', lang)} (2)</div>
                                         <button
@@ -1383,7 +1428,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                     </div>
                                 )}
                             </div>
-                            {!observerData?.scene?.isTileset && observerData?.debug?.wireframe && (
+                            {!observerData?.scene?.isTileset && !observerData?.scene?.hasGsplat && observerData?.debug?.wireframe && (
                                 <ColorPickerControl
                                     label={t('Wireframe Color', lang)}
                                     value={rgbToArr(observerData?.debug?.wireframeColor ?? { r: 0, g: 0, b: 0 })}

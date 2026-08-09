@@ -154,7 +154,17 @@ export interface ObserverData {
         /** Зажим уровня LOD: показывать не глубже выбранной глубины. */
         tileLodLock?: boolean,
         /** Выбранная глубина LOD при зажиме. */
-        tileLodLevel?: number
+        tileLodLevel?: number,
+        /** Раскрашивать потоковый GSplat по реально выбранному движком LOD. */
+        gsplatLodColor?: boolean,
+        /** Показывать границы leaf-узлов spatial LOD и диагностический HUD. */
+        gsplatNodeBounds?: boolean,
+        /** Цвет границ GSplat-узлов: состояние стриминга или текущий LOD. */
+        gsplatDebugMode?: 'state' | 'lod',
+        /** Заморозить камеру, по которой движок выбирает spatial LOD. */
+        gsplatFreeze?: boolean,
+        /** Не запускать новые GSplat-загрузки; уже идущие запросы завершаются. */
+        gsplatPaused?: boolean
     },
     animation: {
         playing: boolean,

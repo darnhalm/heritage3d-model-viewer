@@ -186,6 +186,10 @@ test('загружает тайлсет 1.1 с несколькими конте
     await setFlag(page, 'scene.tilesetLit', true);
     await expect(page.locator('.materials-layer-item-final-render')).toContainText('Final Render — Lit (PBR)');
     await setFlag(page, 'scene.tilesetLit', false);
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.observer.get('scene.tilesetLit'))).toBe(false);
+    await page.evaluate(() => new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
     await expect(page.locator('.materials-layer-item-final-render')).toContainText('Final Render — Unlit');
 
     // Изоляция оставляет включённой entity выбранного тайла и полностью восстанавливает
