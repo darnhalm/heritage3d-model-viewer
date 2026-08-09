@@ -92,6 +92,7 @@ import { serializeCompressedPly } from 'spz-js';
 
 import { App } from './app';
 import { CameraControls } from './camera-controls';
+import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { t } from './i18n/translations';
@@ -849,12 +850,11 @@ class Viewer {
             return btoa(binary);
         };
         window.addEventListener('message', async (e: MessageEvent) => {
+            if (!isTrustedViewerMessage(e)) return;
             const d = e.data;
             if (!d || typeof d !== 'object') return;
             const reply = (msg: Record<string, unknown>) => {
-                try {
-                    (e.source as Window | null)?.postMessage({ ...msg, requestId: d.requestId }, '*');
-                } catch { /* cross-origin */ }
+                replyToViewerMessage(e, { ...msg, requestId: d.requestId });
             };
             // Достаёт байты последней загруженной модели (если есть).
             const getModelExport = async (): Promise<{ glb: string; filename: string } | null> => {
@@ -3268,11 +3268,11 @@ class Viewer {
         this.captureCoverImage().then((png) => {
             if (!png) return;
             if (this.saveToParent) {
-                window.parent?.postMessage({
+                postToViewerParent({
                     type: 'export-cover-result',
                     cover: Viewer.bytesToBase64(png),
                     auto: true
-                }, '*');
+                });
                 return;
             }
             if (this.pngExporter) {
@@ -3460,11 +3460,11 @@ class Viewer {
     /** Export current viewer settings (camera, skybox, light, etc.) to a JSON file. */
     exportViewerSettings() {
         if (this.saveToParent) {
-            window.parent?.postMessage({
+            postToViewerParent({
                 type: 'export-settings-result',
                 settings: this.settingsService.getSettingsData(),
                 auto: true
-            }, '*');
+            });
             return;
         }
         this.settingsService.exportViewerSettings();
@@ -3843,11 +3843,11 @@ class Viewer {
             z: position.z
         });
         if (emit) {
-            window.parent?.postMessage({
+            postToViewerParent({
                 type: 'helper:moved',
                 id: this.activeHelperId,
                 position: { x: position.x, y: position.y, z: position.z }
-            }, '*');
+            });
         }
     }
 
@@ -3921,7 +3921,7 @@ class Viewer {
 
         this.setHelpers([...currentHelpers, ...helpers]);
         this.observer.set('helpers.group', 'mic');
-        window.parent?.postMessage({
+        postToViewerParent({
             type: 'helper:imported',
             helpers: helpers.map(helper => ({
                 id: helper.id,
@@ -3935,7 +3935,7 @@ class Viewer {
                     z: helper.position[2]
                 }
             }))
-        }, '*');
+        });
     }
 
     setDimensionBoxFromModelBounds() {
@@ -6734,9 +6734,7 @@ class Viewer {
             // (helper/microphone/poi). До этого вьюер НЕ слал родителю ни одного
             // сообщения, поэтому встройка не знала о готовности и не отправляла,
             // например, микрофоны пространственной записи на пассивной странице.
-            try {
-                window.parent?.postMessage({ type: 'viewer-ready' }, '*');
-            } catch { /* cross-origin */ }
+            postToViewerParent({ type: 'viewer-ready' });
         }
 
         // resolve the (possibly multisampled) render target

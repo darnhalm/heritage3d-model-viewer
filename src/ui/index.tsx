@@ -4,6 +4,7 @@ import React from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 
+import { postToViewerParent } from '../embed-messaging';
 import { t } from '../i18n/translations';
 import { ObserverData } from '../types';
 import { ErrorBox, WarningsBox } from './errors';
@@ -276,12 +277,12 @@ class App extends React.Component<{ observer: Observer }> {
     }
 
     private emitTourState(state: 'playing' | 'paused' | 'stopped') {
-        window.parent?.postMessage({
+        postToViewerParent({
             type: 'tour-state',
             state,
             id: this.activePoiId || null,
             elapsed: state === 'stopped' ? 0 : (this.poiPausedElapsed ?? Math.max(0, (Date.now() - this.currentPoiStartTime) / 1000))
-        }, '*');
+        });
     }
 
     private stopTour = () => {

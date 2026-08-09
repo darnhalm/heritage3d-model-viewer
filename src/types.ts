@@ -44,6 +44,7 @@ export interface ObserverData {
             animControls: boolean,
             waiting?: boolean,
             placeholderUrl?: string | null,
+            parentOrigin?: string | null,
             panel: boolean,
             poi: boolean,
             tour: boolean,

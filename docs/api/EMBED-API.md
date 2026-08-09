@@ -61,7 +61,7 @@ Viewer также отправляет события обратно наруж�
 <iframe
   id="viewer-frame"
   title="3D Viewer"
-  src="https://your-domain.com/viewer/?load=%2Fmodels%2Fexample.glb&embed=1&ui=compact&panel=0&poi=1&tour=1"
+  src="https://your-domain.com/viewer/?load=%2Fmodels%2Fexample.glb&embed=1&ui=compact&panel=0&poi=1&tour=1&parentOrigin=https%3A%2F%2Fportal.example"
   width="960"
   height="640"
   style="border:0"
@@ -211,26 +211,27 @@ GET /api/v1/access-control/model
 
 <script>
   const frame = document.getElementById('viewer-frame');
+  const viewerOrigin = new URL(frame.src).origin;
 
   document.querySelectorAll('[data-poi-id]').forEach((button) => {
     button.addEventListener('click', () => {
       frame.contentWindow.postMessage({
         type: 'focus-poi',
         id: button.dataset.poiId
-      }, '*');
+      }, viewerOrigin);
     });
   });
 
   document.getElementById('poi-prev').addEventListener('click', () => {
-    frame.contentWindow.postMessage({ type: 'prev-poi' }, '*');
+    frame.contentWindow.postMessage({ type: 'prev-poi' }, viewerOrigin);
   });
 
   document.getElementById('poi-next').addEventListener('click', () => {
-    frame.contentWindow.postMessage({ type: 'next-poi' }, '*');
+    frame.contentWindow.postMessage({ type: 'next-poi' }, viewerOrigin);
   });
 
   document.getElementById('poi-clear').addEventListener('click', () => {
-    frame.contentWindow.postMessage({ type: 'clear-poi' }, '*');
+    frame.contentWindow.postMessage({ type: 'clear-poi' }, viewerOrigin);
   });
 </script>
 ```
@@ -361,7 +362,10 @@ Viewer отправляет состояние верхнего плеера POI
 
 - Для интеграции лучше использовать `poi.id`, а не номер точки.
 - Номера могут меняться после reorder в списке POI.
-- Если сайт и viewer работают на разных доменах, вместо `'*'` лучше указывать конкретный origin.
+- При `embed=1` viewer принимает команды только от прямого родительского окна. Разрешённый origin задаётся параметром `parentOrigin=https://portal.example`; без него используется origin из `document.referrer`.
+- Если браузер не передал referrer и `parentOrigin` отсутствует, внешние команды и события блокируются, но автономный просмотр модели продолжает работать.
+- Хост должен отправлять команды на точный `viewerOrigin`, а не на `'*'`. Viewer также отправляет события только на разрешённый parent origin.
+- В standalone-режиме origin-policy не применяется, чтобы сохранить совместимость локальных интеграций.
 - Пресет `ui=none` скрывает все конфигурируемые элементы viewer.
 - Для embed-режима можно отдельно управлять флагами `0|1`: `panel`, `poi`, `tour`, `measure`,
   `info`, `modelInfo`, `controls`, `hd`, `share`, `cameraMode`, `animControls`, `fullscreen`, `fit`, `reset`.
@@ -373,4 +377,4 @@ Viewer отправляет состояние верхнего плеера POI
 - `focus-poi` по slug;
 - старт с конкретной точки через `?poi=...`;
 - события `tour-next` / `tour-prev`;
-- валидация `origin` для безопасного cross-window обмена.
+- allowlist нескольких доверенных origin, если один embed должен обслуживать несколько порталов без генерации отдельных URL.

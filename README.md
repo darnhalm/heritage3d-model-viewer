@@ -68,9 +68,9 @@
 
 Главное отличие форка для интеграторов: вьюер встраивается в `<iframe>` и **двусторонне** общается с хост-страницей через `window.postMessage`. В оригинале PlayCanvas такого протокола управления нет.
 
-**Встраивание (iframe + query-параметры):** `embed`, `ui=full|compact|minimal|none`, флаги панелей/POI/тура/измерений/info и кнопок `hd`, `share`, `cameraMode`, `animControls`; готовый iframe генерируется в панели **View & share**. Также URL-параметры загрузки: `assetUrl`/`load`, `id`/`efkId`, `cameraPosition`, `cameraFocus`.
+**Встраивание (iframe + query-параметры):** `embed`, `ui=full|compact|minimal|none`, `parentOrigin` и флаги панелей/POI/тура/измерений/info и кнопок `hd`, `share`, `cameraMode`, `animControls`; готовый iframe генерируется в панели **View & share**. Если `parentOrigin` не задан, viewer использует origin из `document.referrer`. Также поддерживаются параметры загрузки `assetUrl`/`load`, `id`/`efkId`, `cameraPosition`, `cameraFocus`.
 
-**Команды хост → вьюер** (`iframe.contentWindow.postMessage({...}, '*')`):
+**Команды хост → вьюер** (`iframe.contentWindow.postMessage({...}, viewerOrigin)`): в режиме `embed=1` принимаются сообщения только от прямого родителя с origin, совпадающим с `parentOrigin` или referrer.
 
 | Группа | Команды |
 |---|---|

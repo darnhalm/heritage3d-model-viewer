@@ -12,6 +12,7 @@ import {
 } from 'playcanvas';
 
 import { resolveRequestedBackend, persistRequestedBackend } from './graphics-backend';
+import { isTrustedViewerMessage, postToViewerParent } from './embed-messaging';
 import { initMaterials } from './material';
 import { ObserverData, File as ViewerFile } from './types';
 import initializeUI from './ui';
@@ -428,6 +429,7 @@ const main = () => {
         animControls: parseBool('animControls', embedDefaults[embedPreset].animControls),
         waiting: false,
         placeholderUrl: null,
+        parentOrigin: url.searchParams.get('parentOrigin'),
         panel: parseBool('panel', embedDefaults[embedPreset].panel),
         poi: parseBool('poi', embedDefaults[embedPreset].poi),
         tour: parseBool('tour', embedDefaults[embedPreset].tour),
@@ -463,7 +465,8 @@ const main = () => {
         'reset',
         'lang',
         'perf',
-        'poster'
+        'poster',
+        'parentOrigin'
     ]);
 
     initMaterials();
@@ -568,6 +571,7 @@ const main = () => {
         });
 
         window.addEventListener('message', (event: MessageEvent) => {
+            if (!isTrustedViewerMessage(event)) return;
             const data = event.data;
             if (!data || typeof data !== 'object') return;
 
@@ -691,7 +695,7 @@ const main = () => {
                         viewer.updatePoiSystemName(activeId, note);
                         viewer.updatePoiTrigger(activeId, true);
                         // Сообщаем хосту результат (для подсветки/подтверждения).
-                        window.parent?.postMessage({ type: 'trigger-note-set', id: activeId, note }, '*');
+                        postToViewerParent({ type: 'trigger-note-set', id: activeId, note });
                     }
                     break;
                 }
@@ -812,7 +816,7 @@ const main = () => {
                 // флагу НЕ перематывает текст к точке (иначе тур постоянно уводит
                 // страницу от окна модели), а только подсвечивает её.
                 const tourPlaying = !!observer.get('poi.playing');
-                window.parent?.postMessage({
+                postToViewerParent({
                     type: 'poi-selected',
                     id: activeId,
                     number: poi?.number ?? null,
@@ -822,11 +826,11 @@ const main = () => {
                     trigger: poi?.trigger ?? false,
                     systemName: poi?.systemName ?? null,
                     tour: tourPlaying
-                }, '*');
+                });
             } else {
-                window.parent?.postMessage({
+                postToViewerParent({
                     type: 'poi-cleared'
-                }, '*');
+                });
             }
         });
 
@@ -843,16 +847,16 @@ const main = () => {
                     if (hit.animFrom != null) msg.frame = hit.animFrom;
                     if (hit.animTo != null) msg.to = hit.animTo;
                     if (hit.animFps != null) msg.fps = hit.animFps;
-                    window.postMessage(msg, '*');
+                    window.postMessage(msg, window.location.origin);
                 }
                 // Хосту — только нота сэмплера (звук живёт на стороне сайта).
                 // systemName необязателен: триггер может быть чисто анимационным.
-                window.parent?.postMessage({
+                postToViewerParent({
                     type: 'poi-selected',
                     id: hit.id,
                     trigger: true,
                     systemName: hit.systemName || null
-                }, '*');
+                });
             } catch { /* ignore */ }
         });
 
@@ -866,7 +870,7 @@ const main = () => {
             const clip = observer.get('animation.selectedTrack') ?? null;
             const fps = 24;
             const time = progress * duration;
-            window.parent?.postMessage({
+            postToViewerParent({
                 type: 'animation-time',
                 clip,
                 time,
@@ -874,7 +878,7 @@ const main = () => {
                 fps,
                 duration,
                 progress
-            }, '*');
+            });
         });
 
         // get list of files, decode them

@@ -146,6 +146,8 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
 
     await page.locator('#view-button').click();
     await page.getByRole('button', { name: 'Show embed code' }).click();
+    await page.getByRole('button', { name: 'Advanced' }).click();
+    await page.getByRole('textbox', { name: 'Parent origin' }).fill('https://portal.example/path');
 
     const embedCode = page.locator('#embed-code-wrapper textarea');
     await expect(embedCode).toBeVisible();
@@ -155,6 +157,7 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
     await expect(embedCode).toHaveValue(/share=1/);
     await expect(embedCode).toHaveValue(/cameraMode=1/);
     await expect(embedCode).toHaveValue(/animControls=1/);
+    await expect(embedCode).toHaveValue(/parentOrigin=https%3A%2F%2Fportal\.example/);
     await expect(page.locator('.share-flag[aria-label^="HD / SD:"]')).toHaveCount(1);
     await expect(page.locator('.share-flag[aria-label^="View & share:"]')).toHaveCount(1);
     await expect(page.locator('.share-flag[aria-label^="Camera mode:"]')).toHaveCount(1);
@@ -172,6 +175,70 @@ test('none embed preset hides every configurable interface element', async ({ pa
     for (const key of ['panel', 'poi', 'tour', 'measure', 'info', 'modelInfo', 'controls', 'hd', 'share', 'cameraMode', 'fullscreen', 'fit', 'reset', 'animControls']) {
         expect(embed[key]).toBe(false);
     }
+});
+
+test('embed messaging accepts only the configured or referrer parent origin', async ({ page }) => {
+    test.setTimeout(60000);
+    // Use a passive same-origin document as the host so the parent itself does not
+    // initialize the viewer or perform backend-recovery navigation.
+    await page.goto('/static/icons/info-icon.svg');
+    const viewerOrigin = new URL(page.url()).origin;
+    await page.route(`${viewerOrigin}/security-host.html`, route => route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><html><body></body></html>'
+    }));
+    await page.goto(`${viewerOrigin}/security-host.html`);
+    await page.evaluate(() => {
+        (window as any).__viewerMessages = [];
+        window.addEventListener('message', event => (window as any).__viewerMessages.push(event.data));
+    });
+
+    const mountViewer = async (query: string) => {
+        await page.evaluate(({ origin, suffix }) => {
+            document.body.innerHTML = `<iframe id="security-viewer" src="${origin}/?webgl&embed=1${suffix}"></iframe>`;
+        }, { origin: viewerOrigin, suffix: query });
+        const frame = page.frameLocator('#security-viewer');
+        await frame.locator('body').waitFor();
+        await expect.poll(async () => frame.locator('body').evaluate(() => {
+            return typeof (window as any).viewer !== 'undefined';
+        })).toBe(true);
+        return frame;
+    };
+
+    const allowedFrame = await mountViewer('');
+    await page.evaluate((origin) => {
+        const target = (document.getElementById('security-viewer') as HTMLIFrameElement).contentWindow;
+        target?.postMessage({ type: 'helper:visibility', visible: true }, origin);
+    }, viewerOrigin);
+    await expect.poll(async () => allowedFrame.locator('body').evaluate(() => {
+        return (window as any).viewer.observer.get('helpers.visible');
+    })).toBe(true);
+    await allowedFrame.locator('body').evaluate(() => {
+        (window as any).viewer.observer.set('poi.activeId', 'allowed-poi');
+    });
+    await expect.poll(() => page.evaluate(() => {
+        return (window as any).__viewerMessages.some((message: any) => message?.type === 'poi-selected' && message.id === 'allowed-poi');
+    })).toBe(true);
+
+    await page.evaluate(() => { (window as any).__viewerMessages = []; });
+    const blockedFrame = await mountViewer('&parentOrigin=https%3A%2F%2Ftrusted.example');
+    await page.evaluate((origin) => {
+        const target = (document.getElementById('security-viewer') as HTMLIFrameElement).contentWindow;
+        target?.postMessage({ type: 'helper:visibility', visible: true }, origin);
+    }, viewerOrigin);
+    await page.waitForTimeout(250);
+    const blocked = await blockedFrame.locator('body').evaluate(() => {
+        return (window as any).viewer.observer.get('helpers.visible');
+    });
+    expect(blocked).toBe(false);
+    await blockedFrame.locator('body').evaluate(() => {
+        (window as any).viewer.observer.set('poi.activeId', 'blocked-poi');
+    });
+    await page.waitForTimeout(250);
+    const leaked = await page.evaluate(() => {
+        return (window as any).__viewerMessages.some((message: any) => message?.id === 'blocked-poi');
+    });
+    expect(leaked).toBe(false);
 });
 
 test('raycast helpers hit secondary mesh primitives for selection and measurement', async ({ page }) => {

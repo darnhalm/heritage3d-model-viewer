@@ -2987,6 +2987,17 @@ input {
     color: #bbb;
 }
 
+#view-panel .share-field > input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 8px;
+    color: #eee;
+    border: 1px solid #46545a;
+    border-radius: 4px;
+    background-color: #293538;
+}
+
 .share-flags-heading {
     margin: 6px 0 8px 0 !important;
     text-align: left !important;

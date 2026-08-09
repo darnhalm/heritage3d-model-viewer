@@ -125,6 +125,7 @@ type EmbedGeneratorState = {
     preset: 'full' | 'compact' | 'minimal' | 'none',
     width: number,
     height: number,
+    parentOrigin: string,
     panel: boolean,
     autoplay: boolean,
     allowFullscreen: boolean,
@@ -752,6 +753,17 @@ class ViewPanel extends React.Component <{
         url.searchParams.set('fullscreen', this.state.allowFullscreen ? '1' : '0');
         url.searchParams.set('fit', this.state.fit ? '1' : '0');
         url.searchParams.set('reset', this.state.reset ? '1' : '0');
+        const parentOrigin = this.state.parentOrigin.trim();
+        if (parentOrigin) {
+            try {
+                const parsed = new URL(parentOrigin);
+                if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+                    url.searchParams.set('parentOrigin', parsed.origin);
+                }
+            } catch {
+                // Invalid values are omitted; document.referrer remains the runtime fallback.
+            }
+        }
         if (this.state.language !== 'auto') {
             url.searchParams.set('lang', this.state.language);
         }
@@ -759,17 +771,18 @@ class ViewPanel extends React.Component <{
     }
 
     get embedCode() {
-        const allowAttrs = ['autoplay'];
-        if (this.state.allowFullscreen) {
-            allowAttrs.push('fullscreen', 'web-share');
-        }
+        const allowAttrs: string[] = [];
+        if (this.state.autoplay) allowAttrs.push('autoplay');
+        if (this.state.allowFullscreen) allowAttrs.push('fullscreen');
+        if (this.state.share) allowAttrs.push('web-share');
+        const allowAttribute = allowAttrs.length > 0 ? `allow="${allowAttrs.join('; ')}"` : '';
         if (this.state.embedType === 'responsive') {
             return `<div style="position: relative; width: 100%; height: ${this.state.height}px;">
   <iframe
     title="3D Viewer"
     frameborder="0"
     ${this.state.allowFullscreen ? 'allowfullscreen\n    mozallowfullscreen="true"\n    webkitallowfullscreen="true"' : ''}
-    allow="${allowAttrs.join('; ')}"
+    ${allowAttribute}
     src="${this.embedSrc}"
     style="position: absolute; inset: 0; width: 100%; height: 100%; border: 0;"
   ></iframe>
@@ -779,7 +792,7 @@ class ViewPanel extends React.Component <{
   title="3D Viewer"
   frameborder="0"
   ${this.state.allowFullscreen ? 'allowfullscreen\n  mozallowfullscreen="true"\n  webkitallowfullscreen="true"' : ''}
-  allow="${allowAttrs.join('; ')}"
+  ${allowAttribute}
   src="${this.embedSrc}"
   width="${this.state.width}"
   height="${this.state.height}"
@@ -802,6 +815,7 @@ class ViewPanel extends React.Component <{
             preset,
             width: 960,
             height: 640,
+            parentOrigin: embed?.parentOrigin ?? '',
             panel: embed?.panel ?? defaults.panel,
             autoplay: embed?.autoplay ?? true,
             allowFullscreen: embed?.fullscreen ?? defaults.allowFullscreen,
@@ -965,6 +979,17 @@ class ViewPanel extends React.Component <{
                                 value={this.state.language}
                                 setProperty={(value: 'auto' | 'en' | 'ru' | 'zh') => this.setState({ language: value })}
                             />
+                            <div className='share-field'>
+                                <Label text={t('Parent origin', lang)} />
+                                <input
+                                    type='url'
+                                    value={this.state.parentOrigin}
+                                    placeholder='https://example.com'
+                                    aria-label={t('Parent origin', lang)}
+                                    title={t('Allowed parent site origin for embed messaging', lang)}
+                                    onChange={event => this.setState({ parentOrigin: event.currentTarget.value, copied: false })}
+                                />
+                            </div>
                         </div>
                     ) : null}
                     <div id='copy-embed-row'>

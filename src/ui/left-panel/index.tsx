@@ -1,6 +1,7 @@
 import { Panel, Container, Button, Label, TextInput } from '@playcanvas/pcui/react';
 import React from 'react';
 
+import { postToViewerParent } from '../../embed-messaging';
 import { persistRequestedBackend, GraphicsBackend } from '../../graphics-backend';
 import { extract } from '../../helpers';
 import { t } from '../../i18n/translations';
@@ -718,7 +719,7 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                             getViewer()?.setDimensionBoxFromModelBounds?.();
                             // Сигналим хосту сохранить настройки сразу (бокс не теряется при
                             // закрытии редактора). Хост сам запросит свежие настройки.
-                            window.parent?.postMessage({ type: 'dimensionbox-changed' }, '*');
+                            postToViewerParent({ type: 'dimensionbox-changed' });
                         }}
                     >
                         {t('Box from Model Bounds', lang)}
