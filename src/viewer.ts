@@ -451,6 +451,12 @@ const createUvColorCanvas = (size = 1024): HTMLCanvasElement => {
     return canvas;
 };
 
+/**
+ * A load failure whose message is already written for the user, so the failure-path diagnostics
+ * leave it alone instead of replacing it with a guess about the server.
+ */
+class FormattedLoadError extends Error {}
+
 class Viewer {
     private static readonly MODEL_FILE_SIZE_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
 
@@ -4747,218 +4753,189 @@ class Viewer {
 
     // load gltf model given its url and list of external urls
     private loadGltf(gltfUrl: File, externalUrls: Array<File>, warnings: string[], onProgress?: (progress: number) => void) {
-        return this.exceedsRemoteSizeLimit(gltfUrl, Viewer.MODEL_FILE_SIZE_LIMIT_BYTES)
-        .then((oversizedBytes) => {
-            if (oversizedBytes === 'unknown') {
-                throw new Error(this.formatUnknownRemoteSizeMessage(gltfUrl.filename ?? gltfUrl.url ?? '', '1 GB'));
-            }
-            if (oversizedBytes !== null) {
-                const name = gltfUrl.filename ?? gltfUrl.url ?? '';
-                throw new Error(typeof oversizedBytes === 'object' ?
-                    this.formatMissingRemoteFileMessage(name, oversizedBytes.missing) :
-                    this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', name, oversizedBytes));
-            }
-            return new Promise((resolve, reject) => {
-            // provide buffer view callback so we can handle models compressed with MeshOptimizer
-            // https://github.com/zeux/meshoptimizer
-                const processBufferView = (
-                    gltfBuffer: GltfBufferLike,
-                    buffers: Array<Uint8Array>,
-                    continuation: AssetProcessContinuation
-                ) => {
-                    if (gltfBuffer.extensions?.EXT_meshopt_compression) {
-                        const extensionDef = gltfBuffer.extensions.EXT_meshopt_compression;
+        return new Promise((resolve, reject) => {
+        // provide buffer view callback so we can handle models compressed with MeshOptimizer
+        // https://github.com/zeux/meshoptimizer
+            const processBufferView = (
+                gltfBuffer: GltfBufferLike,
+                buffers: Array<Uint8Array>,
+                continuation: AssetProcessContinuation
+            ) => {
+                if (gltfBuffer.extensions?.EXT_meshopt_compression) {
+                    const extensionDef = gltfBuffer.extensions.EXT_meshopt_compression;
 
-                        Promise.all([MeshoptDecoder.ready, buffers[extensionDef.buffer]]).then((promiseResult) => {
-                            const buffer = promiseResult[1] as Uint8Array;
+                    Promise.all([MeshoptDecoder.ready, buffers[extensionDef.buffer]]).then((promiseResult) => {
+                        const buffer = promiseResult[1] as Uint8Array;
 
-                            const byteOffset = extensionDef.byteOffset || 0;
-                            const byteLength = extensionDef.byteLength || 0;
+                        const byteOffset = extensionDef.byteOffset || 0;
+                        const byteLength = extensionDef.byteLength || 0;
 
-                            const count = extensionDef.count;
-                            const stride = extensionDef.byteStride;
+                        const count = extensionDef.count;
+                        const stride = extensionDef.byteStride;
 
-                            const result = new Uint8Array(count * stride);
-                            const source = new Uint8Array(buffer.buffer, buffer.byteOffset + byteOffset, byteLength);
+                        const result = new Uint8Array(count * stride);
+                        const source = new Uint8Array(buffer.buffer, buffer.byteOffset + byteOffset, byteLength);
 
-                            MeshoptDecoder.decodeGltfBuffer(
-                                result,
-                                count,
-                                stride,
-                                source,
-                                extensionDef.mode,
-                                extensionDef.filter
-                            );
+                        MeshoptDecoder.decodeGltfBuffer(
+                            result,
+                            count,
+                            stride,
+                            source,
+                            extensionDef.mode,
+                            extensionDef.filter
+                        );
 
-                            continuation(null, result);
-                        });
-                    } else {
-                        continuation(null, null);
-                    }
-                };
-
-                const createPlaceholderTexture = (name: string) => {
-                // Create a small placeholder texture (magenta to indicate missing texture)
-                    const texture = new Texture(this.app.graphicsDevice, {
-                        name: `placeholder-${name}`,
-                        width: 2,
-                        height: 2,
-                        format: PIXELFORMAT_RGBA8
+                        continuation(null, result);
                     });
-                    // Fill with magenta color to indicate missing texture
-                    const pixels = texture.lock();
-                    for (let i = 0; i < 4; i++) {
-                        pixels[i * 4 + 0] = 255; // R
-                        pixels[i * 4 + 1] = 0;   // G
-                        pixels[i * 4 + 2] = 255; // B
-                        pixels[i * 4 + 3] = 255; // A
-                    }
-                    texture.unlock();
-
-                    const asset = new Asset(name, 'texture', null, null);
-                    asset.resource = texture;
-                    asset.loaded = true;
-                    this.app.assets.add(asset);
-                    return asset;
-                };
-
-                const processImage = (gltfImage: GltfImageLike, continuation: AssetProcessContinuation) => {
-                    const u: File = externalUrls.find((url) => {
-                        return url.filename === decodeURIComponent(path.normalize(gltfImage.uri || ''));
-                    });
-                    if (u) {
-                        const textureAsset = new Asset(u.filename, 'texture', {
-                            url: u.url,
-                            filename: u.filename
-                        });
-                        textureAsset.on('load', () => {
-                            continuation(null, textureAsset);
-                        });
-                        textureAsset.on('error', (err: string) => {
-                        // Texture failed to load - warn but continue with placeholder
-                            warnings.push(`Failed to load texture '${u.filename}': ${err}`);
-                            continuation(null, createPlaceholderTexture(u.filename));
-                        });
-                        this.app.assets.add(textureAsset);
-                        this.app.assets.load(textureAsset);
-                    } else if (gltfImage.uri && !gltfImage.uri.startsWith('data:')) {
-                    // External texture referenced but not provided - warn but continue with placeholder
-                        warnings.push(`External texture not found: '${gltfImage.uri}'`);
-                        continuation(null, createPlaceholderTexture(gltfImage.uri));
-                    } else {
-                        continuation(null, null);
-                    }
-                };
-
-                const postProcessTexture = (gltfTexture: GltfTextureLike, textureAsset: Asset) => {
-                // Set max anisotropy only for textures that use linear filtering, as anisotropic
-                // filtering only makes sense with linear filtering modes
-                    const texture = textureAsset.resource as Texture;
-                    if (texture.minFilter !== FILTER_NEAREST && texture.magFilter !== FILTER_NEAREST) {
-                        texture.anisotropy = this.app.graphicsDevice.maxAnisotropy;
-                    }
-                };
-
-                const processBuffer = (gltfBuffer: GltfBufferLike, continuation: AssetProcessContinuation) => {
-                    const u = externalUrls.find((url) => {
-                        return url.filename === decodeURIComponent(path.normalize(gltfBuffer.uri || ''));
-                    });
-                    if (u) {
-                        const bufferAsset = new Asset(u.filename, 'binary', {
-                            url: u.url,
-                            filename: u.filename
-                        });
-                        bufferAsset.on('load', () => {
-                            continuation(null, new Uint8Array(bufferAsset.resource as ArrayBuffer));
-                        });
-                        bufferAsset.on('error', (err: string) => {
-                            continuation(`Failed to load buffer file '${u.filename}': ${err}`, null);
-                        });
-                        this.app.assets.add(bufferAsset);
-                        this.app.assets.load(bufferAsset);
-                    } else if (gltfBuffer.uri && !gltfBuffer.uri.startsWith('data:')) {
-                    // External buffer file referenced but not provided
-                    // Check if only the current .gltf file was dragged (no other files provided)
-                        const onlyGltfFile = externalUrls.length === 1 &&
-                        this.isModelFilename(externalUrls[0].filename) &&
-                        externalUrls[0].filename === gltfUrl.filename;
-                        if (onlyGltfFile) {
-                            continuation(`External buffer file '${gltfBuffer.uri}' not found. Try dragging the folder containing the .gltf file instead of the file itself.`, null);
-                        } else {
-                            continuation(`External buffer file not found: '${gltfBuffer.uri}'. Make sure to include the associated .bin file(s).`, null);
-                        }
-                    } else {
-                        continuation(null, null);
-                    }
-                };
-
-                const containerAssetOptions: AssetLoadProcessOptions = {
-                    bufferView: {
-                        processAsync: processBufferView
-                    },
-                    image: {
-                        processAsync: processImage
-                    },
-                    texture: {
-                        postprocess: postProcessTexture
-                    },
-                    buffer: {
-                        processAsync: processBuffer
-                    }
-                };
-                const containerAsset = new Asset(gltfUrl.filename, 'container', gltfUrl, null, {
-                    ...(containerAssetOptions as object)
-                });
-                containerAsset.on('load', () => resolve(containerAsset));
-                containerAsset.on('error', (err: string) => reject(err));
-                if (onProgress) {
-                    containerAsset.on('progress', (receivedBytes: number, totalBytes: number) => {
-                        onProgress(totalBytes > 0 ? receivedBytes / totalBytes : 0);
-                    });
+                } else {
+                    continuation(null, null);
                 }
-                this.app.assets.add(containerAsset);
-                this.app.assets.load(containerAsset);
+            };
+
+            const createPlaceholderTexture = (name: string) => {
+            // Create a small placeholder texture (magenta to indicate missing texture)
+                const texture = new Texture(this.app.graphicsDevice, {
+                    name: `placeholder-${name}`,
+                    width: 2,
+                    height: 2,
+                    format: PIXELFORMAT_RGBA8
+                });
+                // Fill with magenta color to indicate missing texture
+                const pixels = texture.lock();
+                for (let i = 0; i < 4; i++) {
+                    pixels[i * 4 + 0] = 255; // R
+                    pixels[i * 4 + 1] = 0;   // G
+                    pixels[i * 4 + 2] = 255; // B
+                    pixels[i * 4 + 3] = 255; // A
+                }
+                texture.unlock();
+
+                const asset = new Asset(name, 'texture', null, null);
+                asset.resource = texture;
+                asset.loaded = true;
+                this.app.assets.add(asset);
+                return asset;
+            };
+
+            const processImage = (gltfImage: GltfImageLike, continuation: AssetProcessContinuation) => {
+                const u: File = externalUrls.find((url) => {
+                    return url.filename === decodeURIComponent(path.normalize(gltfImage.uri || ''));
+                });
+                if (u) {
+                    const textureAsset = new Asset(u.filename, 'texture', {
+                        url: u.url,
+                        filename: u.filename
+                    });
+                    textureAsset.on('load', () => {
+                        continuation(null, textureAsset);
+                    });
+                    textureAsset.on('error', (err: string) => {
+                    // Texture failed to load - warn but continue with placeholder
+                        warnings.push(`Failed to load texture '${u.filename}': ${err}`);
+                        continuation(null, createPlaceholderTexture(u.filename));
+                    });
+                    this.app.assets.add(textureAsset);
+                    this.app.assets.load(textureAsset);
+                } else if (gltfImage.uri && !gltfImage.uri.startsWith('data:')) {
+                // External texture referenced but not provided - warn but continue with placeholder
+                    warnings.push(`External texture not found: '${gltfImage.uri}'`);
+                    continuation(null, createPlaceholderTexture(gltfImage.uri));
+                } else {
+                    continuation(null, null);
+                }
+            };
+
+            const postProcessTexture = (gltfTexture: GltfTextureLike, textureAsset: Asset) => {
+            // Set max anisotropy only for textures that use linear filtering, as anisotropic
+            // filtering only makes sense with linear filtering modes
+                const texture = textureAsset.resource as Texture;
+                if (texture.minFilter !== FILTER_NEAREST && texture.magFilter !== FILTER_NEAREST) {
+                    texture.anisotropy = this.app.graphicsDevice.maxAnisotropy;
+                }
+            };
+
+            const processBuffer = (gltfBuffer: GltfBufferLike, continuation: AssetProcessContinuation) => {
+                const u = externalUrls.find((url) => {
+                    return url.filename === decodeURIComponent(path.normalize(gltfBuffer.uri || ''));
+                });
+                if (u) {
+                    const bufferAsset = new Asset(u.filename, 'binary', {
+                        url: u.url,
+                        filename: u.filename
+                    });
+                    bufferAsset.on('load', () => {
+                        continuation(null, new Uint8Array(bufferAsset.resource as ArrayBuffer));
+                    });
+                    bufferAsset.on('error', (err: string) => {
+                        continuation(`Failed to load buffer file '${u.filename}': ${err}`, null);
+                    });
+                    this.app.assets.add(bufferAsset);
+                    this.app.assets.load(bufferAsset);
+                } else if (gltfBuffer.uri && !gltfBuffer.uri.startsWith('data:')) {
+                // External buffer file referenced but not provided
+                // Check if only the current .gltf file was dragged (no other files provided)
+                    const onlyGltfFile = externalUrls.length === 1 &&
+                    this.isModelFilename(externalUrls[0].filename) &&
+                    externalUrls[0].filename === gltfUrl.filename;
+                    if (onlyGltfFile) {
+                        continuation(`External buffer file '${gltfBuffer.uri}' not found. Try dragging the folder containing the .gltf file instead of the file itself.`, null);
+                    } else {
+                        continuation(`External buffer file not found: '${gltfBuffer.uri}'. Make sure to include the associated .bin file(s).`, null);
+                    }
+                } else {
+                    continuation(null, null);
+                }
+            };
+
+            const containerAssetOptions: AssetLoadProcessOptions = {
+                bufferView: {
+                    processAsync: processBufferView
+                },
+                image: {
+                    processAsync: processImage
+                },
+                texture: {
+                    postprocess: postProcessTexture
+                },
+                buffer: {
+                    processAsync: processBuffer
+                }
+            };
+            const containerAsset = new Asset(gltfUrl.filename, 'container', gltfUrl, null, {
+                ...(containerAssetOptions as object)
             });
-        });
+            containerAsset.on('load', () => resolve(containerAsset));
+            containerAsset.on('error', (err: string) => reject(err));
+            this.attachSizeGuard(containerAsset, gltfUrl, reject, onProgress);
+            this.app.assets.add(containerAsset);
+            this.app.assets.load(containerAsset);
+        })
+        .catch(err => this.refineRemoteLoadError(gltfUrl, err));
     }
 
     private loadPly(url: File, externalUrls: Array<File>, onProgress?: (progress: number) => void) {
-        return this.exceedsRemoteSizeLimit(url, Viewer.MODEL_FILE_SIZE_LIMIT_BYTES)
-        .then((oversizedBytes) => {
-            if (oversizedBytes === 'unknown') {
-                throw new Error(this.formatUnknownRemoteSizeMessage(url.filename ?? url.url ?? '', '1 GB'));
-            }
-            if (oversizedBytes !== null) {
-                const name = url.filename ?? url.url ?? '';
-                throw new Error(typeof oversizedBytes === 'object' ?
-                    this.formatMissingRemoteFileMessage(name, oversizedBytes.missing) :
-                    this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', name, oversizedBytes));
-            }
-            if (this.isSpzFilename(url.filename ?? url.url ?? '')) {
-                return this.loadSpzAsCompressedPly(url, onProgress);
-            }
-            const urls: Record<string, string> = {};
-            externalUrls.forEach((externalUrl) => {
-                urls[externalUrl.filename] = externalUrl.url;
-            });
-            return new Promise((resolve, reject) => {
-                const gsplatOptions: AssetLoadProcessOptions = {
-                    mapUrl: (mapUrl: string) => urls[mapUrl]
-                };
-                const asset = new Asset(url.filename, 'gsplat', url, null, {
-                    ...(gsplatOptions as object)
-                });
-                asset.on('load', () => resolve(asset));
-                asset.on('error', (err: string) => reject(err));
-                if (onProgress) {
-                    asset.on('progress', (receivedBytes: number, totalBytes: number) => {
-                        onProgress(totalBytes > 0 ? receivedBytes / totalBytes : 0);
-                    });
-                }
-                this.app.assets.add(asset);
-                this.app.assets.load(asset);
-            });
+        if (this.isSpzFilename(url.filename ?? url.url ?? '')) {
+            return this.loadSpzAsCompressedPly(url, onProgress)
+            .catch(err => this.refineRemoteLoadError(url, err));
+        }
+        const urls: Record<string, string> = {};
+        externalUrls.forEach((externalUrl) => {
+            urls[externalUrl.filename] = externalUrl.url;
         });
+        return new Promise((resolve, reject) => {
+            const gsplatOptions: AssetLoadProcessOptions = {
+                mapUrl: (mapUrl: string) => urls[mapUrl]
+            };
+            const asset = new Asset(url.filename, 'gsplat', url, null, {
+                ...(gsplatOptions as object)
+            });
+            asset.on('load', () => resolve(asset));
+            asset.on('error', (err: string) => reject(err));
+            this.attachSizeGuard(asset, url, reject, onProgress);
+            this.app.assets.add(asset);
+            this.app.assets.load(asset);
+        })
+        .catch(err => this.refineRemoteLoadError(url, err));
     }
 
     /**
@@ -5128,36 +5105,23 @@ class Viewer {
         .replace('{status}', String(status));
     }
 
-    private formatUnknownRemoteSizeMessage(filename: string, limitLabel: string): string {
-        const lang = this.observer.get('ui.language') as string | undefined;
-        return t('File "{filename}" was blocked because server does not provide size metadata. Limit: {size}.', lang)
-        .replace('{filename}', filename)
-        .replace('{size}', limitLabel);
-    }
-
-    private parseContentRangeTotal(contentRange: string | null): number | null {
-        if (!contentRange) return null;
-        const match = /^bytes\s+\d+-\d+\/(\d+|\*)$/i.exec(contentRange.trim());
-        if (!match || match[1] === '*') return null;
-        const total = Number(match[1]);
-        return Number.isFinite(total) && total > 0 ? total : null;
-    }
-
     /**
-     * Probe a remote file's size before downloading it.
+     * Ask the server whether it is refusing a file outright.
      *
-     * The Range probe is authoritative for existence: a HEAD may be rejected by servers that still
-     * serve GET (some CDNs answer HEAD without `content-length`), so only the ranged GET decides
-     * whether the file is actually missing. Distinguishing "missing" from "size unknown" matters
-     * because the two need very different error messages.
+     * Runs only after a load has already failed, to turn a bare loader error into one that names
+     * the cause. HEAD alone will not do: some CDNs reject HEAD but serve GET, so a 4xx seen there
+     * is only trusted once the ranged GET has had its chance to overrule it.
+     *
+     * A probe that never gets an answer (timeout, dropped connection, unanswered CORS preflight)
+     * proves nothing and is reported as "not refused" — the caller then keeps the original error
+     * rather than inventing a reason.
      *
      * @param url - Absolute http(s) URL.
-     * @returns The size in bytes, or `{ missing: status }` when the server refused the file, or
-     * null when it exists but the size could not be determined.
+     * @returns The 4xx status the server refused with, or null if it did not refuse the file.
      */
-    private async resolveRemoteFileSize(url: string): Promise<number | { missing: number } | null> {
-        // A 4xx from HEAD is remembered rather than returned: some CDNs reject HEAD but serve GET,
-        // so the range probe below still gets a chance to prove the file exists.
+    private async probeRefusalStatus(url: string): Promise<number | null> {
+        // A 4xx from HEAD is remembered rather than returned, so the range probe below still gets
+        // a chance to prove the file is served after all.
         let refusedStatus: number | null = null;
 
         const headController = new AbortController();
@@ -5165,12 +5129,9 @@ class Viewer {
         try {
             const response = await fetch(url, { method: 'HEAD', signal: headController.signal, cache: 'no-store' });
             if (response.ok) {
-                const contentLength = response.headers.get('content-length');
-                const bytes = Number(contentLength);
-                if (Number.isFinite(bytes) && bytes > 0) {
-                    return bytes;
-                }
-            } else if (response.status >= 400 && response.status < 500) {
+                return null;
+            }
+            if (response.status >= 400 && response.status < 500) {
                 refusedStatus = response.status;
             }
         } catch {
@@ -5188,41 +5149,82 @@ class Viewer {
                 signal: rangeController.signal,
                 cache: 'no-store'
             });
-            if (!response.ok) {
-                // 4xx means the server knows the file and refuses it (missing, forbidden, gone) —
-                // report that instead of blaming missing size metadata.
-                const status = response.status >= 400 && response.status < 500 ? response.status : refusedStatus;
-                return status === null ? null : { missing: status };
+            if (response.ok) {
+                return null;
             }
-
-            const rangeTotal = this.parseContentRangeTotal(response.headers.get('content-range'));
-            if (rangeTotal !== null) return rangeTotal;
-
-            const contentLength = response.headers.get('content-length');
-            const bytes = Number(contentLength);
-            return Number.isFinite(bytes) && bytes > 0 ? bytes : null;
+            // 4xx means the server knows the file and refuses it (missing, forbidden, gone). A 5xx
+            // is a server hiccup that says nothing about the file itself.
+            return response.status >= 400 && response.status < 500 ? response.status : refusedStatus;
         } catch {
             // The range probe itself can fail cross-origin: a `Range` header makes the request
             // non-simple, so it needs a CORS preflight that many static-file hosts don't answer.
             // In that case a 4xx seen by HEAD is the best evidence we have.
-            return refusedStatus === null ? null : { missing: refusedStatus };
+            return refusedStatus;
         } finally {
             clearTimeout(rangeTimeoutId);
         }
     }
 
-    private async exceedsRemoteSizeLimit(file: File, limitBytes: number): Promise<number | 'unknown' | { missing: number } | null> {
-        if (typeof file.sizeBytes === 'number' && file.sizeBytes > 0) {
-            return file.sizeBytes > limitBytes ? file.sizeBytes : null;
+    /**
+     * Enforce the model size limit from the download's own progress reports.
+     *
+     * The transfer announces its total size in the first progress events, so the limit is read from
+     * those rather than from a blocking pre-flight probe. Probing first cost a round-trip on every
+     * URL load and, whenever the probe timed out on a cold connection, refused a perfectly good
+     * file — while a server that misreports its size slipped through anyway.
+     *
+     * The engine hands out no handle on the underlying request, so the transfer itself cannot be
+     * cancelled: rejecting here stops the viewer waiting on it and skips parsing the result.
+     *
+     * @param asset - The asset being loaded.
+     * @param file - The file it came from, for the error message.
+     * @param reject - Rejects the enclosing load promise.
+     * @param onProgress - Download progress callback, 0..1.
+     */
+    private attachSizeGuard(asset: Asset, file: File, reject: (err: Error) => void, onProgress?: (progress: number) => void) {
+        let rejected = false;
+        asset.on('progress', (receivedBytes: number, totalBytes: number) => {
+            if (rejected) {
+                return;
+            }
+            // `totalBytes` is the declared size and arrives first; `receivedBytes` is the ground
+            // truth that catches a server declaring less than it actually sends.
+            const observedBytes = Math.max(receivedBytes, totalBytes);
+            if (observedBytes > Viewer.MODEL_FILE_SIZE_LIMIT_BYTES) {
+                rejected = true;
+                reject(new FormattedLoadError(this.formatLimitMessage(
+                    'File "{filename}" ({size}) exceeds model limit of 1 GB.',
+                    file.filename ?? file.url ?? '',
+                    observedBytes)));
+                return;
+            }
+            onProgress?.(totalBytes > 0 ? receivedBytes / totalBytes : 0);
+        });
+    }
+
+    /**
+     * Replace a bare loader failure with a message that names the actual problem.
+     *
+     * The engine only reports that the request failed, so the status is probed here — on the
+     * failure path only, where an extra round-trip costs nothing the user would notice.
+     *
+     * @param file - The file that failed to load.
+     * @param err - The failure reported by the asset loader.
+     * @returns Never — always throws.
+     */
+    private async refineRemoteLoadError(file: File, err: unknown): Promise<never> {
+        if (err instanceof FormattedLoadError) {
+            throw err;
         }
         const fileUrl = file.url ?? '';
-        if (!/^https?:\/\//i.test(fileUrl)) {
-            return null;
+        if (/^https?:\/\//i.test(fileUrl)) {
+            const refusedStatus = await this.probeRefusalStatus(fileUrl);
+            if (refusedStatus !== null) {
+                throw new Error(this.formatMissingRemoteFileMessage(
+                    file.filename ?? fileUrl, refusedStatus));
+            }
         }
-        const resolved = await this.resolveRemoteFileSize(fileUrl);
-        if (resolved === null) return 'unknown';
-        if (typeof resolved === 'object') return resolved;
-        return resolved > limitBytes ? resolved : null;
+        throw err instanceof Error ? err : new Error(String(err));
     }
 
     // load the list of urls.

@@ -123,12 +123,6 @@ class SettingsService {
         .replace('{size}', this.formatBytes(sizeBytes));
     }
 
-    private formatUnknownSettingsSizeMessage(filename: string): string {
-        const lang = this.observer.get('ui.language') as string | undefined;
-        return t('File "{filename}" was blocked because server does not provide size metadata. Limit: 10 MB.', lang)
-        .replace('{filename}', filename);
-    }
-
     private parseContentRangeTotal(contentRange: string | null): number | null {
         if (!contentRange) return null;
         const match = /^bytes\s+\d+-\d+\/(\d+|\*)$/i.exec(contentRange.trim());
