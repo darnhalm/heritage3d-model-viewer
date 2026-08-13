@@ -5,6 +5,7 @@ import { postToViewerParent } from '../../embed-messaging';
 import { persistRequestedBackend, GraphicsBackend } from '../../graphics-backend';
 import { extract } from '../../helpers';
 import { t } from '../../i18n/translations';
+import { DEFAULT_POI_DURATION_SECONDS, DEFAULT_POI_HOLD_TIME_SECONDS } from '../../poi-defaults';
 import { DEFAULT_THEME_COLOR } from '../../theme';
 import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
@@ -1464,7 +1465,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                                 precision={1}
                                                                 min={0}
                                                                 max={10}
-                                                                value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : 1.0}
+                                                                value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : DEFAULT_POI_DURATION_SECONDS}
                                                                 setProperty={(value: number) => getViewer()?.updatePoiDuration?.(String(poi.id), value)}
                                                             />
                                                         </div>
@@ -1481,7 +1482,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                                 precision={1}
                                                                 min={0}
                                                                 max={60}
-                                                                value={Number.isFinite(Number(poi.holdTime)) ? Number(poi.holdTime) : 1.0}
+                                                                value={Number.isFinite(Number(poi.holdTime)) ? Number(poi.holdTime) : DEFAULT_POI_HOLD_TIME_SECONDS}
                                                                 setProperty={(value: number) => getViewer()?.updatePoiHoldTime?.(String(poi.id), value)}
                                                             />
                                                         </div>

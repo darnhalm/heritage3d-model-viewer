@@ -1,0 +1,2 @@
+export const DEFAULT_POI_DURATION_SECONDS = 3;
+export const DEFAULT_POI_HOLD_TIME_SECONDS = 3;

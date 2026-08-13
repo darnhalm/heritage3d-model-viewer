@@ -3,6 +3,7 @@ import { MeshInstance, Vec3 } from 'playcanvas';
 
 import { CachedMeshGeometry, intersectMeshTrianglesDetailed } from './mesh-raycast';
 import { Picker } from '../../picker';
+import { DEFAULT_POI_DURATION_SECONDS, DEFAULT_POI_HOLD_TIME_SECONDS } from '../../poi-defaults';
 
 const POI_CLICK_DRAG_THRESHOLD = 5;
 const POI_MARKER_HIT_RADIUS = 18;
@@ -359,14 +360,13 @@ class PoiController {
 
         const list = this.getPoiList();
         const nextNumber = list.length + 1;
-        const isFirstPoi = list.length === 0;
         const nextPoi: PoiEntry = {
             id: `poi-${Date.now()}-${nextNumber}`,
             number: nextNumber,
             title: `POI ${nextNumber}`,
             color: '#000000',
-            duration: isFirstPoi ? 0 : 1.0,
-            holdTime: isFirstPoi ? 0 : 1.0,
+            duration: DEFAULT_POI_DURATION_SECONDS,
+            holdTime: DEFAULT_POI_HOLD_TIME_SECONDS,
             position: [placement.point.x, placement.point.y, placement.point.z],
             normal: [placement.normal.x, placement.normal.y, placement.normal.z]
         };
@@ -441,7 +441,7 @@ class PoiController {
     }
 
     updatePoiDuration(id: string, duration: number) {
-        const safeDuration = Number.isFinite(duration) ? Math.max(0, Math.min(10, duration)) : 1.0;
+        const safeDuration = Number.isFinite(duration) ? Math.max(0, Math.min(10, duration)) : DEFAULT_POI_DURATION_SECONDS;
         const updated = this.getPoiList().map((poi) => {
             if (poi.id !== id) return poi;
             return {
@@ -453,7 +453,7 @@ class PoiController {
     }
 
     updatePoiHoldTime(id: string, holdTime: number) {
-        const safeHold = Number.isFinite(holdTime) ? Math.max(0, Math.min(60, holdTime)) : 2.0;
+        const safeHold = Number.isFinite(holdTime) ? Math.max(0, Math.min(60, holdTime)) : DEFAULT_POI_HOLD_TIME_SECONDS;
         const updated = this.getPoiList().map((poi) => {
             if (poi.id !== id) return poi;
             return {

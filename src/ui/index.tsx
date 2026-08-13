@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 
 import { postToViewerParent } from '../embed-messaging';
 import { t } from '../i18n/translations';
+import { DEFAULT_POI_DURATION_SECONDS, DEFAULT_POI_HOLD_TIME_SECONDS } from '../poi-defaults';
 import { ObserverData } from '../types';
 import { ErrorBox, WarningsBox } from './errors';
 import LeftPanel from './left-panel';
@@ -135,7 +136,7 @@ class App extends React.Component<{ observer: Observer }> {
         let total = 0;
         let before = 0;
         list.forEach((poi, i) => {
-            const cardT = (poi.duration ?? 1.0) + (poi.holdTime ?? 1.0);
+            const cardT = (poi.duration ?? DEFAULT_POI_DURATION_SECONDS) + (poi.holdTime ?? DEFAULT_POI_HOLD_TIME_SECONDS);
             total += cardT;
             if (idx >= 0 && i < idx) before += cardT;
         });
@@ -240,8 +241,8 @@ class App extends React.Component<{ observer: Observer }> {
 
     private syncCardMetrics(activeId: string, list: PoiUiEntry[]) {
         const currentPoi = list.find(poi => String(poi.id) === activeId);
-        this.currentPoiDuration = currentPoi?.duration ?? 1.0;
-        this.currentPoiHoldTime = currentPoi?.holdTime ?? 1.0;
+        this.currentPoiDuration = currentPoi?.duration ?? DEFAULT_POI_DURATION_SECONDS;
+        this.currentPoiHoldTime = currentPoi?.holdTime ?? DEFAULT_POI_HOLD_TIME_SECONDS;
         this.currentPoiStartTime = Date.now();
         this.activePoiId = activeId;
     }

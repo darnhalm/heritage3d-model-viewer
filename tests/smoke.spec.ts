@@ -488,6 +488,16 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     expect(Math.max(...tabWidths) - Math.min(...tabWidths)).toBeLessThanOrEqual(1);
     expect(Math.max(...tabTops) - Math.min(...tabTops)).toBeLessThanOrEqual(1);
 
+    await page.locator('.left-panel-tab-poi').click();
+    await page.locator('#application-canvas').click({ position: { x: 320, y: 240 } });
+    await expect(page.locator('.poi-list-item')).toHaveCount(1);
+    const newPoiDefaults = await page.evaluate(() => {
+        const raw = (window as any).viewer?.observer?.get('poi.list');
+        const list = JSON.parse(String(raw ?? '[]'));
+        return { duration: list[0]?.duration, holdTime: list[0]?.holdTime };
+    });
+    expect(newPoiDefaults).toEqual({ duration: 3, holdTime: 3 });
+
     await page.evaluate(() => {
         (window as any).viewer?.observer?.set('poi.list', JSON.stringify([{
             id: 'poi-smoke-1',
@@ -502,7 +512,6 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
         }]));
     });
 
-    await page.locator('.left-panel-tab-poi').click();
     await expect(page.locator('.left-panel-active-title')).toHaveText('POI');
     await expect(page.locator('#poi-panel')).toBeVisible();
     await expect(page.locator('.poi-list-item')).toHaveCount(1);
