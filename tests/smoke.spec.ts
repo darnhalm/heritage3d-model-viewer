@@ -472,6 +472,10 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
         document.getElementById('panel-left')?.classList.add('expanded');
     });
 
+    await expect(page.locator('.lang-switcher .left-panel-tour-button')).toBeVisible();
+    const tabWidths = await page.locator('.left-panel-tab').evaluateAll(tabs => tabs.map(tab => tab.getBoundingClientRect().width));
+    expect(Math.max(...tabWidths) - Math.min(...tabWidths)).toBeLessThanOrEqual(1);
+
     await page.evaluate(() => {
         (window as any).viewer?.observer?.set('poi.list', JSON.stringify([{
             id: 'poi-smoke-1',

@@ -9,6 +9,7 @@ import { t } from '../i18n/translations';
 import { ObserverData } from '../types';
 import { ErrorBox, WarningsBox } from './errors';
 import LeftPanel from './left-panel';
+import { startLeftPanelTour } from './left-panel/tour';
 import LoadControls from './load-controls';
 import PopupPanel from './popup-panel';
 import SelectedNode from './selected-node';
@@ -379,6 +380,18 @@ class App extends React.Component<{ observer: Observer }> {
                                 title='中文'
                                 onClick={() => this._setStateProperty('ui.language', 'zh')}
                             />
+                            <button
+                                type='button'
+                                className='left-panel-tour-button'
+                                title={t('Tour: Help button', lang)}
+                                aria-label={t('Tour: Help button', lang)}
+                                onClick={() => {
+                                    document.querySelector<HTMLElement>('.left-panel-tab-scene')?.click();
+                                    window.setTimeout(() => startLeftPanelTour(lang), 0);
+                                }}
+                            >
+                                ?
+                            </button>
                         </div>
                     )}
                 </Container>

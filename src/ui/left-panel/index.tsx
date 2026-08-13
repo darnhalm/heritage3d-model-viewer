@@ -8,7 +8,7 @@ import { t } from '../../i18n/translations';
 import { DEFAULT_THEME_COLOR } from '../../theme';
 import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
-import { maybeAutoStartTour, startLeftPanelTour } from './tour';
+import { maybeAutoStartTour } from './tour';
 
 type PoiItem = {
     id: string;
@@ -1012,22 +1012,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             text={t('POI', lang)}
                             onClick={() => this.setState({ tab: 'poi' })}
                         />
-                    )}
-                    {!embedEnabled && (
-                        <button
-                            type='button'
-                            className='left-panel-tour-button'
-                            title={t('Tour: Help button', lang)}
-                            aria-label={t('Tour: Help button', lang)}
-                            onClick={(event) => {
-                                event.stopPropagation();
-                                this.setState({ tab: 'scene' }, () => {
-                                    startLeftPanelTour(lang);
-                                });
-                            }}
-                        >
-                            ?
-                        </button>
                     )}
                 </div>
 

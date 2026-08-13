@@ -75,7 +75,6 @@ html {
     justify-content: center;
     width: 22px;
     height: 22px;
-    margin-left: 4px;
     border-radius: 50%;
     background-color: rgba(var(--theme-primary-rgb), 0.15);
     color: var(--theme-primary);
@@ -3489,6 +3488,10 @@ input {
     margin-top: auto;
     flex-shrink: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+
+    .left-panel-tour-button {
+        margin-left: 4px;
+    }
 
     button.fi {
         width: 24px;
