@@ -1,4 +1,4 @@
-import { Container, Button, Label, TreeView, TreeViewItem } from '@playcanvas/pcui/react';
+import { Button, Container, Label, TextAreaInput, TextInput, TreeView, TreeViewItem } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import { extract, addEventListenerOnClickOnly } from '../../helpers';
@@ -242,50 +242,40 @@ class InfoPanel extends React.Component <{
                 <Container class={['popup-panel', 'info-panel']} flex>
                     <div className='info-panel-tabs'>
                         {showControlsTab && (
-                            <button
-                                type='button'
-                                className={`info-tab${activeTab === 'controls' ? ' active' : ''}`}
+                            <Button
+                                class={['info-tab', ...(activeTab === 'controls' ? ['active'] : [])]}
+                                text={t('Controls', lang)}
                                 onClick={() => this.setState({ tab: 'controls' })}
-                            >
-                                {t('Controls', lang)}
-                            </button>
+                            />
                         )}
                         {showModelTab && (
-                            <button
-                                type='button'
-                                className={`info-tab${activeTab === 'model' ? ' active' : ''}`}
+                            <Button
+                                class={['info-tab', ...(activeTab === 'model' ? ['active'] : [])]}
+                                text={t('Model', lang)}
                                 onClick={() => this.setState({ tab: 'model' })}
-                            >
-                                {t('Model', lang)}
-                            </button>
+                            />
                         )}
                         {showAboutTab && (
-                            <button
-                                type='button'
-                                className={`info-tab${activeTab === 'about' ? ' active' : ''}`}
+                            <Button
+                                class={['info-tab', ...(activeTab === 'about' ? ['active'] : [])]}
+                                text={t('About', lang)}
                                 onClick={() => this.setState({ tab: 'about' })}
-                            >
-                                {t('About', lang)}
-                            </button>
+                            />
                         )}
                     </div>
                     {activeTab === 'controls' && (
                         <>
                             <div className='info-panel-subtabs'>
-                                <button
-                                    type='button'
-                                    className={`info-subtab${this.state.controlsSubTab === 'desktop' ? ' active' : ''}`}
+                                <Button
+                                    class={['info-subtab', ...(this.state.controlsSubTab === 'desktop' ? ['active'] : [])]}
+                                    text={t('Desktop', lang)}
                                     onClick={() => this.setState({ controlsSubTab: 'desktop' })}
-                                >
-                                    {t('Desktop', lang)}
-                                </button>
-                                <button
-                                    type='button'
-                                    className={`info-subtab${this.state.controlsSubTab === 'touch' ? ' active' : ''}`}
+                                />
+                                <Button
+                                    class={['info-subtab', ...(this.state.controlsSubTab === 'touch' ? ['active'] : [])]}
+                                    text={t('Touch', lang)}
                                     onClick={() => this.setState({ controlsSubTab: 'touch' })}
-                                >
-                                    {t('Touch', lang)}
-                                </button>
+                                />
                             </div>
                             {this.state.controlsSubTab === 'desktop' ? (
                                 <div className='info-controls-content'>
@@ -979,17 +969,16 @@ class ViewPanel extends React.Component <{
                                 value={this.state.language}
                                 setProperty={(value: 'auto' | 'en' | 'ru' | 'zh') => this.setState({ language: value })}
                             />
-                            <div className='share-field'>
+                            <label className='share-field'>
                                 <Label text={t('Parent origin', lang)} />
-                                <input
-                                    type='url'
+                                <TextInput
+                                    class='share-parent-origin-input'
                                     value={this.state.parentOrigin}
                                     placeholder='https://example.com'
-                                    aria-label={t('Parent origin', lang)}
-                                    title={t('Allowed parent site origin for embed messaging', lang)}
-                                    onChange={event => this.setState({ parentOrigin: event.currentTarget.value, copied: false })}
+                                    keyChange
+                                    onChange={(value: unknown) => this.setState({ parentOrigin: String(value ?? ''), copied: false })}
                                 />
-                            </div>
+                            </label>
                         </div>
                     ) : null}
                     <div id='copy-embed-row'>
@@ -1018,7 +1007,12 @@ class ViewPanel extends React.Component <{
                     </button>
                     {this.state.codeOpen ? (
                         <div id='embed-code-wrapper'>
-                            <textarea readOnly value={this.embedCode} />
+                            <TextAreaInput
+                                class='embed-code-input'
+                                readOnly
+                                resizable='vertical'
+                                value={this.embedCode}
+                            />
                         </div>
                     ) : null}
                     <Button

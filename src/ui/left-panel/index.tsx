@@ -1,4 +1,4 @@
-import { Panel, Container, Button, Label, TextInput } from '@playcanvas/pcui/react';
+import { Panel, Container, Button, Label, NumericInput, SelectInput, TextAreaInput, TextInput } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import { postToViewerParent } from '../../embed-messaging';
@@ -958,6 +958,13 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const setSelectedSpecularColor = (value: number[]) => {
             getViewer()?.setSelectedSpecularColor?.(arrToRgb(value));
         };
+        const materialActionButton = (label: string, selected: boolean, onClick: () => void, classes: string[] = []) => (
+            <Button
+                class={['materials-layer-item', ...classes, ...(selected ? ['selected'] : [])]}
+                text={label}
+                onClick={onClick}
+            />
+        );
         const poiList = parsePoiList(observerData?.poi?.list);
         const draggedPoi = poiList.find(poi => String(poi.id) === draggingPoiId) ?? null;
         const visiblePoiList = draggingPoiId ? poiList.filter(poi => String(poi.id) !== draggingPoiId) : poiList;
@@ -975,39 +982,36 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
                 <div className='left-panel-tabs'>
-                    <button
-                        type='button'
-                        className={`left-panel-tab left-panel-tab-scene${tab === 'scene' ? ' active' : ''}`}
+                    <Button
+                        class={['left-panel-tab', 'left-panel-tab-scene', ...(tab === 'scene' ? ['active'] : [])]}
+                        text={t('Settings', lang)}
                         onClick={() => this.setState({ tab: 'scene' })}
-                    >
-                        {t('Settings', lang)}
-                    </button>
+                    />
                     {!embedEnabled && (
-                        <button
-                            type='button'
-                            className={`left-panel-tab left-panel-tab-alignment${tab === 'alignment' ? ' active tool-active' : ''}`}
+                        <Button
+                            class={['left-panel-tab', 'left-panel-tab-alignment', ...(tab === 'alignment' ? ['active', 'tool-active'] : [])]}
+                            text={t('Object Alignment', lang)}
                             onClick={() => this.setState({ tab: 'alignment' })}
-                        >
-                            {t('Object Alignment', lang)}
-                        </button>
+                        />
                     )}
                     {showMaterialsTab && (
-                        <button
-                            type='button'
-                            className={`left-panel-tab left-panel-tab-materials${tab === 'materials' ? ' active' : ''}`}
+                        <Button
+                            class={['left-panel-tab', 'left-panel-tab-materials', ...(tab === 'materials' ? ['active'] : [])]}
+                            text={t('Materials', lang)}
                             onClick={() => this.setState({ tab: 'materials' })}
-                        >
-                            {t('Materials', lang)}
-                        </button>
+                        />
                     )}
                     {!embedEnabled && (
-                        <button
-                            type='button'
-                            className={`left-panel-tab left-panel-tab-poi${tab === 'poi' ? ' active' : ''}${observerData?.poi?.enabled ? ' tool-active' : ''}`}
+                        <Button
+                            class={[
+                                'left-panel-tab',
+                                'left-panel-tab-poi',
+                                ...(tab === 'poi' ? ['active'] : []),
+                                ...(observerData?.poi?.enabled ? ['tool-active'] : [])
+                            ]}
+                            text={t('POI', lang)}
                             onClick={() => this.setState({ tab: 'poi' })}
-                        >
-                            {t('POI', lang)}
-                        </button>
+                        />
                     )}
                     {!embedEnabled && (
                         <button
@@ -1060,50 +1064,14 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {observerData?.scene?.hasGsplat && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Spatial LOD Debug', lang)} (4)</div>
-                                        <button
-                                            type='button'
-                                            className={`materials-layer-item${observerData?.debug?.gsplatLodColor ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.gsplatLodColor', !observerData?.debug?.gsplatLodColor)}
-                                        >
-                                            {t('Color Splats by LOD', lang)}
-                                        </button>
-                                        <button
-                                            type='button'
-                                            className={`materials-layer-item${observerData?.debug?.gsplatNodeBounds ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.gsplatNodeBounds', !observerData?.debug?.gsplatNodeBounds)}
-                                        >
-                                            {t('Spatial Node Bounds', lang)}
-                                        </button>
-                                        <button
-                                            type='button'
-                                            className={`materials-layer-item${observerData?.debug?.gsplatFreeze ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.gsplatFreeze', !observerData?.debug?.gsplatFreeze)}
-                                        >
-                                            {t('Freeze LOD Camera', lang)}
-                                        </button>
-                                        <button
-                                            type='button'
-                                            className={`materials-layer-item${observerData?.debug?.gsplatPaused ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.gsplatPaused', !observerData?.debug?.gsplatPaused)}
-                                        >
-                                            {t('Pause Loading', lang)}
-                                        </button>
+                                        {materialActionButton(t('Color Splats by LOD', lang), !!observerData?.debug?.gsplatLodColor, () => setProperty('debug.gsplatLodColor', !observerData?.debug?.gsplatLodColor))}
+                                        {materialActionButton(t('Spatial Node Bounds', lang), !!observerData?.debug?.gsplatNodeBounds, () => setProperty('debug.gsplatNodeBounds', !observerData?.debug?.gsplatNodeBounds))}
+                                        {materialActionButton(t('Freeze LOD Camera', lang), !!observerData?.debug?.gsplatFreeze, () => setProperty('debug.gsplatFreeze', !observerData?.debug?.gsplatFreeze))}
+                                        {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.gsplatPaused, () => setProperty('debug.gsplatPaused', !observerData?.debug?.gsplatPaused))}
                                         {observerData?.debug?.gsplatNodeBounds && (
                                             <div className='materials-layer-normals-row'>
-                                                <button
-                                                    type='button'
-                                                    className={`materials-layer-item${(observerData?.debug?.gsplatDebugMode ?? 'state') === 'state' ? ' selected' : ''}`}
-                                                    onClick={() => setProperty('debug.gsplatDebugMode', 'state')}
-                                                >
-                                                    {t('By State', lang)}
-                                                </button>
-                                                <button
-                                                    type='button'
-                                                    className={`materials-layer-item${observerData?.debug?.gsplatDebugMode === 'lod' ? ' selected' : ''}`}
-                                                    onClick={() => setProperty('debug.gsplatDebugMode', 'lod')}
-                                                >
-                                                    {t('By LOD', lang)}
-                                                </button>
+                                                {materialActionButton(t('By State', lang), (observerData?.debug?.gsplatDebugMode ?? 'state') === 'state', () => setProperty('debug.gsplatDebugMode', 'state'))}
+                                                {materialActionButton(t('By LOD', lang), observerData?.debug?.gsplatDebugMode === 'lod', () => setProperty('debug.gsplatDebugMode', 'lod'))}
                                             </div>
                                         )}
                                         <div className='materials-layer-inline-hint'>
@@ -1239,21 +1207,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {!observerData?.scene?.isTileset && !observerData?.scene?.hasGsplat && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Geometry', lang)} (2)</div>
-                                        <button
-                                            type='button'
-                                            className={`materials-layer-item materials-layer-item-wireframe${observerData?.debug?.wireframe ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.wireframe', !observerData?.debug?.wireframe)}
-                                        >
-                                            {t('Wireframe', lang)}
-                                        </button>
+                                        {materialActionButton(t('Wireframe', lang), !!observerData?.debug?.wireframe, () => setProperty('debug.wireframe', !observerData?.debug?.wireframe), ['materials-layer-item-wireframe'])}
                                         <div className='materials-layer-normals-row'>
-                                            <button
-                                                type='button'
-                                                className={`materials-layer-item materials-layer-item-vertex-normals${(observerData?.debug?.normals ?? 0) > 0 ? ' selected' : ''}`}
-                                                onClick={() => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 0.2)}
-                                            >
-                                                {t('Vertex Normals', lang)}
-                                            </button>
+                                            {materialActionButton(t('Vertex Normals', lang), (observerData?.debug?.normals ?? 0) > 0, () => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 0.2), ['materials-layer-item-vertex-normals'])}
                                             {(observerData?.debug?.normals ?? 0) > 0 && (
                                                 <div className='materials-layer-normals-slider'>
                                                     <Slider
@@ -1273,13 +1229,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {observerData?.scene?.isTileset && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Tiles Debug', lang)} (1)</div>
-                                        <button
-                                            type='button'
-                                            className={`materials-layer-item${observerData?.debug?.tileLodLock ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.tileLodLock', !observerData?.debug?.tileLodLock)}
-                                        >
-                                            {t('Isolate LOD Level', lang)}
-                                        </button>
+                                        {materialActionButton(t('Isolate LOD Level', lang), !!observerData?.debug?.tileLodLock, () => setProperty('debug.tileLodLock', !observerData?.debug?.tileLodLock))}
                                         {observerData?.debug?.tileLodLock && (
                                             <Slider
                                                 label={t('LOD Level', lang)}
@@ -1291,70 +1241,22 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 setProperty={(value: number) => setProperty('debug.tileLodLevel', value)}
                                             />
                                         )}
-                                        <button
-                                            type='button'
-                                            className={`materials-layer-item${observerData?.debug?.tileDebug ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.tileDebug', !observerData?.debug?.tileDebug)}
-                                        >
-                                            {t('Tile Bounds (OBB)', lang)}
-                                        </button>
-                                        <button
-                                            type='button'
-                                            className={`materials-layer-item${observerData?.debug?.tileFreeze ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.tileFreeze', !observerData?.debug?.tileFreeze)}
-                                        >
-                                            {t('Freeze Camera + FOV', lang)}
-                                        </button>
-                                        <button
-                                            type='button'
-                                            className={`materials-layer-item${observerData?.debug?.tilePaused ? ' selected' : ''}`}
-                                            onClick={() => setProperty('debug.tilePaused', !observerData?.debug?.tilePaused)}
-                                        >
-                                            {t('Pause Loading', lang)}
-                                        </button>
+                                        {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => setProperty('debug.tileDebug', !observerData?.debug?.tileDebug))}
+                                        {materialActionButton(t('Freeze Camera + FOV', lang), !!observerData?.debug?.tileFreeze, () => setProperty('debug.tileFreeze', !observerData?.debug?.tileFreeze))}
+                                        {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.tilePaused, () => setProperty('debug.tilePaused', !observerData?.debug?.tilePaused))}
                                         {observerData?.debug?.tileDebug && (
                                             <>
                                                 <div className='materials-layer-normals-row'>
-                                                    <button
-                                                        type='button'
-                                                        className={`materials-layer-item${observerData?.debug?.tileLineStyle === 'solid' ? ' selected' : ''}`}
-                                                        onClick={() => setProperty('debug.tileLineStyle', 'solid')}
-                                                    >
-                                                        {t('Solid Frame', lang)}
-                                                    </button>
-                                                    <button
-                                                        type='button'
-                                                        className={`materials-layer-item${observerData?.debug?.tileLineStyle !== 'solid' ? ' selected' : ''}`}
-                                                        onClick={() => setProperty('debug.tileLineStyle', 'checker')}
-                                                    >
-                                                        {t('Checker Frame', lang)}
-                                                    </button>
+                                                    {materialActionButton(t('Solid Frame', lang), observerData?.debug?.tileLineStyle === 'solid', () => setProperty('debug.tileLineStyle', 'solid'))}
+                                                    {materialActionButton(t('Checker Frame', lang), observerData?.debug?.tileLineStyle !== 'solid', () => setProperty('debug.tileLineStyle', 'checker'))}
                                                 </div>
                                                 <div className='materials-layer-normals-row'>
-                                                    <button
-                                                        type='button'
-                                                        className={`materials-layer-item${(observerData?.debug?.tileDebugMode ?? 'state') !== 'lod' ? ' selected' : ''}`}
-                                                        onClick={() => setProperty('debug.tileDebugMode', 'state')}
-                                                    >
-                                                        {t('By State', lang)}
-                                                    </button>
-                                                    <button
-                                                        type='button'
-                                                        className={`materials-layer-item${observerData?.debug?.tileDebugMode === 'lod' ? ' selected' : ''}`}
-                                                        onClick={() => setProperty('debug.tileDebugMode', 'lod')}
-                                                    >
-                                                        {t('By LOD', lang)}
-                                                    </button>
+                                                    {materialActionButton(t('By State', lang), (observerData?.debug?.tileDebugMode ?? 'state') !== 'lod', () => setProperty('debug.tileDebugMode', 'state'))}
+                                                    {materialActionButton(t('By LOD', lang), observerData?.debug?.tileDebugMode === 'lod', () => setProperty('debug.tileDebugMode', 'lod'))}
                                                 </div>
                                                 {observerData?.debug?.tileLineStyle !== 'solid' && (
                                                     <>
-                                                        <button
-                                                            type='button'
-                                                            className={`materials-layer-item${observerData?.debug?.tileCheckerFill ? ' selected' : ''}`}
-                                                            onClick={() => setProperty('debug.tileCheckerFill', !observerData?.debug?.tileCheckerFill)}
-                                                        >
-                                                            {t('Checker Fill', lang)}
-                                                        </button>
+                                                        {materialActionButton(t('Checker Fill', lang), !!observerData?.debug?.tileCheckerFill, () => setProperty('debug.tileCheckerFill', !observerData?.debug?.tileCheckerFill))}
                                                     </>
                                                 )}
                                                 <Slider
@@ -1366,21 +1268,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     value={observerData?.debug?.tileLineThickness ?? 2}
                                                     setProperty={(value: number) => setProperty('debug.tileLineThickness', value)}
                                                 />
-                                                <button
-                                                    type='button'
-                                                    className={`materials-layer-item${observerData?.debug?.tilePick ? ' selected' : ''}`}
-                                                    onClick={() => setProperty('debug.tilePick', !observerData?.debug?.tilePick)}
-                                                >
-                                                    {t('Pick Tile', lang)}
-                                                </button>
+                                                {materialActionButton(t('Pick Tile', lang), !!observerData?.debug?.tilePick, () => setProperty('debug.tilePick', !observerData?.debug?.tilePick))}
                                                 {observerData?.debug?.tilePick && (
-                                                    <button
-                                                        type='button'
-                                                        className={`materials-layer-item${observerData?.debug?.tileIsolatePick ? ' selected' : ''}`}
-                                                        onClick={() => setProperty('debug.tileIsolatePick', !observerData?.debug?.tileIsolatePick)}
-                                                    >
-                                                        {t('Isolate Picked Tile', lang)}
-                                                    </button>
+                                                    materialActionButton(t('Isolate Picked Tile', lang), !!observerData?.debug?.tileIsolatePick, () => setProperty('debug.tileIsolatePick', !observerData?.debug?.tileIsolatePick))
                                                 )}
                                             </>
                                         )}
@@ -1430,14 +1320,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 />
                                             </div>
                                             <div className='poi-trigger-row' style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '6px 0' }}>
-                                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>
-                                                    <input
-                                                        type='checkbox'
-                                                        checked={!!poi.trigger}
-                                                        onChange={(event: any) => getViewer()?.updatePoiTrigger?.(String(poi.id), event.currentTarget.checked)}
-                                                    />
-                                                    {t('Trigger', lang)}
-                                                </label>
+                                                <Toggle
+                                                    label={t('Trigger', lang)}
+                                                    value={!!poi.trigger}
+                                                    setProperty={(value: boolean) => getViewer()?.updatePoiTrigger?.(String(poi.id), value)}
+                                                />
                                                 {poi.trigger ? (
                                                     <TextInput
                                                         class='poi-list-input'
@@ -1450,16 +1337,16 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             {poi.trigger ? (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '4px 0 6px' }}>
                                                     {animTracks.length > 0 ? (
-                                                        <select
+                                                        <SelectInput
+                                                            class='poi-list-animation-select'
+                                                            type='string'
+                                                            options={[
+                                                                { v: '', t: `— ${t('Anim clip', lang)} —` },
+                                                                ...animTracks.map((clip: string) => ({ v: clip, t: clip }))
+                                                            ]}
                                                             value={poi.animClip ?? ''}
-                                                            onChange={(e: any) => getViewer()?.updatePoiAnimClip?.(String(poi.id), e.target.value)}
-                                                            style={{ fontSize: 11, padding: '2px 4px', borderRadius: 3, border: '1px solid var(--pcui-border-color, #444)', background: 'var(--pcui-background, #222)', color: 'inherit', width: '100%' }}
-                                                        >
-                                                            <option value=''>— {t('Anim clip', lang)} —</option>
-                                                            {animTracks.map((clip: string) => (
-                                                                <option key={clip} value={clip}>{clip}</option>
-                                                            ))}
-                                                        </select>
+                                                            onChange={(value: unknown) => getViewer()?.updatePoiAnimClip?.(String(poi.id), String(value ?? ''))}
+                                                        />
                                                     ) : (
                                                         <TextInput
                                                             class='poi-list-input'
@@ -1469,41 +1356,50 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                         />
                                                     )}
                                                     <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                                                        <input
-                                                            type='number'
+                                                        <NumericInput
+                                                            class='poi-list-animation-number'
                                                             placeholder={t('From', lang)}
-                                                            value={poi.animFrom ?? ''}
+                                                            value={poi.animFrom ?? null}
                                                             min={0}
                                                             step={1}
-                                                            style={{ width: 60, fontSize: 11, padding: '2px 4px', borderRadius: 3, border: '1px solid var(--pcui-border-color, #444)', background: 'var(--pcui-background, #222)', color: 'inherit' }}
-                                                            onChange={(e: any) => {
-                                                                const v = e.target.value === '' ? null : Number(e.target.value);
+                                                            precision={0}
+                                                            allowNull
+                                                            hideSlider
+                                                            width={60}
+                                                            onChange={(value: unknown) => {
+                                                                const v = value === null || value === '' ? null : Number(value);
                                                                 getViewer()?.updatePoiAnimFrom?.(String(poi.id), v);
                                                             }}
                                                         />
                                                         <span style={{ fontSize: 10, opacity: 0.6 }}>–</span>
-                                                        <input
-                                                            type='number'
+                                                        <NumericInput
+                                                            class='poi-list-animation-number'
                                                             placeholder={t('To', lang)}
-                                                            value={poi.animTo ?? ''}
+                                                            value={poi.animTo ?? null}
                                                             min={0}
                                                             step={1}
-                                                            style={{ width: 60, fontSize: 11, padding: '2px 4px', borderRadius: 3, border: '1px solid var(--pcui-border-color, #444)', background: 'var(--pcui-background, #222)', color: 'inherit' }}
-                                                            onChange={(e: any) => {
-                                                                const v = e.target.value === '' ? null : Number(e.target.value);
+                                                            precision={0}
+                                                            allowNull
+                                                            hideSlider
+                                                            width={60}
+                                                            onChange={(value: unknown) => {
+                                                                const v = value === null || value === '' ? null : Number(value);
                                                                 getViewer()?.updatePoiAnimTo?.(String(poi.id), v);
                                                             }}
                                                         />
                                                         <span style={{ fontSize: 10, opacity: 0.6 }}>fps</span>
-                                                        <input
-                                                            type='number'
+                                                        <NumericInput
+                                                            class='poi-list-animation-number'
                                                             placeholder='24'
-                                                            value={poi.animFps ?? ''}
+                                                            value={poi.animFps ?? null}
                                                             min={1}
                                                             step={1}
-                                                            style={{ width: 44, fontSize: 11, padding: '2px 4px', borderRadius: 3, border: '1px solid var(--pcui-border-color, #444)', background: 'var(--pcui-background, #222)', color: 'inherit' }}
-                                                            onChange={(e: any) => {
-                                                                const v = e.target.value === '' ? null : Number(e.target.value);
+                                                            precision={0}
+                                                            allowNull
+                                                            hideSlider
+                                                            width={44}
+                                                            onChange={(value: unknown) => {
+                                                                const v = value === null || value === '' ? null : Number(value);
                                                                 getViewer()?.updatePoiAnimFps?.(String(poi.id), v);
                                                             }}
                                                         />
@@ -1517,34 +1413,28 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             />
                                             {!poi.trigger && (
                                                 <div className='poi-description-field'>
-                                                    <textarea
-                                                        className='poi-list-description'
+                                                    <TextAreaInput
+                                                        class='poi-list-description'
                                                         value={String(poi.description ?? '')}
-                                                        maxLength={636}
                                                         placeholder={t('Description', lang)}
-                                                        onChange={event => getViewer()?.updatePoiDescription?.(String(poi.id), event.target.value)}
+                                                        resizable='vertical'
+                                                        onChange={(value: unknown) => getViewer()?.updatePoiDescription?.(String(poi.id), String(value ?? '').slice(0, 636))}
                                                     />
                                                 </div>
                                             )}
                                             {!poi.trigger && (
                                                 <div className='poi-list-actions poi-list-actions-secondary'>
-                                                    <button
-                                                        type='button'
-                                                        className={`poi-list-secondary-button${poi.camera ? ' is-saved' : ''}`}
+                                                    <Button
+                                                        class={['poi-list-secondary-button', ...(poi.camera ? ['is-saved'] : [])]}
+                                                        text={t(poi.camera ? 'Retake View' : 'Capture View', lang)}
                                                         onClick={() => getViewer()?.capturePoiCameraView?.(String(poi.id))}
-                                                    >
-                                                        <img src='static/icons/poi-capture-view.svg' alt='' className='poi-list-secondary-button-icon' />
-                                                        {t(poi.camera ? 'Retake View' : 'Capture View', lang)}
-                                                    </button>
+                                                    />
                                                     {poi.camera ? (
-                                                        <button
-                                                            type='button'
-                                                            className='poi-list-secondary-button poi-list-secondary-button-delete-view'
+                                                        <Button
+                                                            class={['poi-list-secondary-button', 'poi-list-secondary-button-delete-view']}
+                                                            text={t('Delete View', lang)}
                                                             onClick={() => getViewer()?.clearPoiCameraView?.(String(poi.id))}
-                                                        >
-                                                            <img src='static/icons/poi-delete-view.svg' alt='' className='poi-list-secondary-button-icon' />
-                                                            {t('Delete View', lang)}
-                                                        </button>
+                                                        />
                                                     ) : null}
                                                 </div>
                                             )}
@@ -1587,14 +1477,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     </div>
                                                 </div>
                                                 )}
-                                                <button
-                                                    type='button'
-                                                    className='poi-list-delete'
-                                                    title={t('Delete', lang)}
+                                                <Button
+                                                    class='poi-list-delete'
+                                                    text=''
                                                     onClick={() => getViewer()?.removePoi?.(String(poi.id))}
-                                                >
-                                                    <img src='static/icons/poi-delete.svg' alt='' className='poi-list-delete-icon' />
-                                                </button>
+                                                />
                                             </div>
                                         </div>
                                     </React.Fragment>

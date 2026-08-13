@@ -2,6 +2,7 @@ import React from 'react';
 
 import { t } from '../i18n/translations';
 import { SetProperty, ObserverData } from '../types';
+import { Select } from './components';
 
 class SelectedNode extends React.Component < { observerData: ObserverData; setProperty: SetProperty } > {
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>): boolean {
@@ -94,35 +95,25 @@ class SelectedNode extends React.Component < { observerData: ObserverData; setPr
                     {this.renderDetail(t('Material', lang), selectedMaterialNames.length > 0 ? selectedMaterialNames.join(', ') : '-', true)}
 
                     {variantListOptions.length > 0 && (
-                        <div className='panel-option'>
-                            <div className='panel-label'>{t('Material Variant', lang)}</div>
-                            <select
-                                className='panel-value selected-node-native-select'
-                                value={scene?.variant?.selected ?? ''}
-                                onChange={event => setProperty('scene.variant.selected', event.target.value)}
-                            >
-                                {variantListOptions.map(option => (
-                                    <option key={option.v} value={option.v}>{option.t}</option>
-                                ))}
-                            </select>
-                        </div>
+                        <Select
+                            label={t('Material Variant', lang)}
+                            type='string'
+                            options={variantListOptions}
+                            value={scene?.variant?.selected ?? ''}
+                            setProperty={(value: string) => setProperty('scene.variant.selected', value)}
+                        />
                     )}
 
                     {this.renderDetail(t('Active UV', lang), activeUvSetLabel)}
 
                     {uvSetOptions.length > 1 && (
-                        <div className='panel-option'>
-                            <div className='panel-label'>{t('UV Set', lang)}</div>
-                            <select
-                                className='panel-value selected-node-native-select'
-                                value={String(observerData?.debug?.selectedUvSet ?? 0)}
-                                onChange={event => setProperty('debug.selectedUvSet', Number(event.target.value))}
-                            >
-                                {uvSetOptions.map(option => (
-                                    <option key={option.v} value={String(option.v)}>{option.t}</option>
-                                ))}
-                            </select>
-                        </div>
+                        <Select
+                            label={t('UV Set', lang)}
+                            type='number'
+                            options={uvSetOptions}
+                            value={observerData?.debug?.selectedUvSet ?? 0}
+                            setProperty={(value: number) => setProperty('debug.selectedUvSet', value)}
+                        />
                     )}
 
                     <div className='panel-option selected-node-multiline-detail'>

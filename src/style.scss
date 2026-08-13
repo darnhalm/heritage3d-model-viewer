@@ -790,6 +790,29 @@ body:not(.ui-ready) #panel-left {
     color: #ddd;
 }
 
+.poi-trigger-row .panel-option {
+    width: auto;
+    margin: 0;
+    flex: 0 0 auto;
+}
+
+.poi-trigger-row .panel-label {
+    width: auto;
+    min-width: max-content;
+}
+
+.poi-trigger-row > .pcui-text-input {
+    flex: 1 1 auto;
+}
+
+.poi-list-animation-select {
+    width: 100% !important;
+}
+
+.poi-list-animation-number {
+    flex: 0 0 auto;
+}
+
 .poi-description-field {
     display: flex;
     flex-direction: column;
@@ -808,21 +831,18 @@ body:not(.ui-ready) #panel-left {
 .poi-list-description {
     width: 100%;
     min-height: 72px;
-    resize: vertical;
-    border: none;
-    border-radius: 6px;
     box-sizing: border-box;
-    padding: 8px 10px;
-    background: rgba(255, 255, 255, 0.06);
-    color: #ddd;
-    font: inherit;
-    font-size: 12px;
-    line-height: 1.35;
     margin: 0;
 }
 
-.poi-list-description:focus {
-    outline: none;
+.poi-list-description textarea {
+    min-height: 72px;
+    font: inherit;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+.poi-list-description.pcui-focus {
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.75);
 }
 
@@ -866,11 +886,17 @@ body:not(.ui-ready) #panel-left {
     color: var(--theme-bright);
 }
 
-.poi-list-secondary-button-icon {
+.poi-list-secondary-button::before {
+    content: '';
     width: 14px;
     height: 14px;
     display: block;
     flex: 0 0 14px;
+    background: url('static/icons/poi-capture-view.svg') no-repeat center / contain;
+}
+
+.poi-list-secondary-button-delete-view::before {
+    background-image: url('static/icons/poi-delete-view.svg');
 }
 
 .poi-list-delete {
@@ -886,12 +912,10 @@ body:not(.ui-ready) #panel-left {
     padding: 0;
     font: inherit;
     cursor: pointer;
-}
-
-.poi-list-delete-icon {
-    width: 16px;
-    height: 16px;
-    display: block;
+    background-image: url('static/icons/poi-delete.svg');
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 16px;
 }
 
 .poi-list-duration {
@@ -3193,11 +3217,14 @@ input {
     width: 100%;
 }
 
-#embed-code-wrapper > textarea {
+#embed-code-wrapper > .embed-code-input {
     width: 100%;
     min-height: 180px;
-    resize: vertical;
     box-sizing: border-box;
+}
+
+#embed-code-wrapper .embed-code-input textarea {
+    min-height: 180px;
     border: none;
     outline: none;
     border-radius: 6px;

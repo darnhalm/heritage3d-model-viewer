@@ -243,6 +243,8 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
     await page.getByRole('button', { name: 'Advanced' }).click();
     await expect(page.getByRole('button', { name: 'Advanced' })).toHaveCSS('color', 'rgb(255, 255, 255)');
     await expect(page.getByRole('button', { name: 'Hide embed code' })).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(page.locator('.share-parent-origin-input')).toHaveClass(/pcui-text-input/);
+    await expect(page.locator('.embed-code-input')).toHaveClass(/pcui-text-area-input/);
     await page.getByRole('textbox', { name: 'Parent origin' }).fill('https://portal.example/path');
 
     const embedCode = page.locator('#embed-code-wrapper textarea');
@@ -486,6 +488,10 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     await page.locator('.left-panel-tab-poi').click();
     await expect(page.locator('#poi-panel')).toBeVisible();
     await expect(page.locator('.poi-list-item')).toHaveCount(1);
+    await expect(page.locator('.left-panel-tab-poi')).toHaveClass(/pcui-button/);
+    await expect(page.locator('.poi-list-description')).toHaveClass(/pcui-text-area-input/);
+    await expect(page.locator('.poi-list-secondary-button')).toHaveClass(/pcui-button/);
+    await expect(page.locator('.poi-list-delete')).toHaveClass(/pcui-button/);
 
     const poiDescription = page.locator('.poi-list-description').first();
     await poiDescription.fill('Smoke description');
@@ -774,6 +780,10 @@ test('materials by objects mode shows selected-node panel and stays stable', asy
         viewer?.observer?.set('scene.nodes', JSON.stringify([{ name: 'SmokeNode', path: 'SmokeNode' }]));
         viewer?.observer?.set('scene.selectedNode.path', 'SmokeNode');
         viewer?.observer?.set('scene.selectedNode.name', 'SmokeNode');
+        viewer?.observer?.set('scene.variants.list', JSON.stringify(['Default', 'Variant A']));
+        viewer?.observer?.set('scene.variant.selected', 'Default');
+        viewer?.observer?.set('scene.availableUvSets', JSON.stringify([0, 1]));
+        viewer?.observer?.set('debug.selectedUvSet', 0);
     });
 
     await page.waitForFunction(() => {
@@ -784,6 +794,7 @@ test('materials by objects mode shows selected-node panel and stays stable', asy
 
     await expect(page.locator('.selected-node-panel')).toBeVisible();
     await expect(page.locator('.selected-node-panel .panel-option').first()).toBeVisible();
+    await expect(page.locator('.selected-node-panel .pcui-select-input')).toHaveCount(2);
     expect(pageErrors).toEqual([]);
 });
 
