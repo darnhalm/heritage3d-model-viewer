@@ -5,6 +5,7 @@ import { postToViewerParent } from '../../embed-messaging';
 import { persistRequestedBackend, GraphicsBackend } from '../../graphics-backend';
 import { extract } from '../../helpers';
 import { t } from '../../i18n/translations';
+import { DEFAULT_THEME_COLOR } from '../../theme';
 import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
 import { maybeAutoStartTour, startLeftPanelTour } from './tour';
@@ -533,7 +534,7 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
             <Panel headerText={t('Settings', lang)} id='settings-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
                 <ColorPickerControl
                     label={t('Theme color', lang)}
-                    value={rgbToArr(props.observerData.theme?.primaryColor ?? { r: 221 / 255, g: 111 / 255, b: 0 })}
+                    value={rgbToArr(props.observerData.theme?.primaryColor ?? DEFAULT_THEME_COLOR)}
                     setProperty={(value: number[]) => props.setProperty('theme.primaryColor', arrToRgb(value))} />
                 <Toggle
                     label='WebGPU / WebGL 2'

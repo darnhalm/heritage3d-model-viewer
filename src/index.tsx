@@ -518,16 +518,17 @@ const main = () => {
         });
     }
 
-    // One-time migration for browsers that persisted an earlier blue or neutral
-    // default. Deliberately chosen custom colors remain untouched.
+    // One-time migration for browsers that persisted an earlier default.
+    // Deliberately chosen custom colors remain untouched.
     try {
-        const migrationKey = 'mv:theme-default-dd6f00-v1';
+        const migrationKey = 'mv:theme-default-ee4b18-v1';
         if (!window.localStorage.getItem(migrationKey)) {
             const color = observer.get('theme.primaryColor') as { r?: number; g?: number; b?: number } | undefined;
             const legacy = [136 / 255, 188 / 255, 232 / 255];
             const previousDefault = [200 / 255, 200 / 255, 200 / 255];
+            const orangeDefault = [221 / 255, 111 / 255, 0];
             const channels = [Number(color?.r), Number(color?.g), Number(color?.b)];
-            if ([legacy, previousDefault].some(candidate =>
+            if ([legacy, previousDefault, orangeDefault].some(candidate =>
                 channels.every((channel, index) => Math.abs(channel - candidate[index]) < 1e-6))) {
                 observer.set('theme.primaryColor', { ...DEFAULT_THEME_COLOR });
             }

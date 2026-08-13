@@ -2,6 +2,7 @@ import { Observer } from '@playcanvas/observer';
 import { Vec3 } from 'playcanvas';
 
 import { t } from '../i18n/translations';
+import { DEFAULT_THEME_COLOR } from '../theme';
 
 type Rgb = { r: number; g: number; b: number };
 
@@ -350,7 +351,7 @@ class SettingsService {
         o.set('camera.hq', true);
         o.set('camera.mode', 'orbit');
         o.set('camera.flySpeed', 1);
-        o.set('theme.primaryColor', { r: 221 / 255, g: 111 / 255, b: 0 });
+        o.set('theme.primaryColor', { ...DEFAULT_THEME_COLOR });
         o.set('skybox.value', this.skyboxUrls.has('Paul Lobe Haus') ? 'Paul Lobe Haus' : 'None');
         o.set('skybox.exposure', 0);
         o.set('skybox.rotation', 0);
