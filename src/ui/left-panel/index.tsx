@@ -1424,17 +1424,28 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             )}
                                             {!poi.trigger && (
                                                 <div className='poi-list-actions poi-list-actions-secondary'>
-                                                    <Button
-                                                        class={['poi-list-secondary-button', ...(poi.camera ? ['is-saved'] : [])]}
-                                                        text={t(poi.camera ? 'Retake View' : 'Capture View', lang)}
-                                                        onClick={() => getViewer()?.capturePoiCameraView?.(String(poi.id))}
-                                                    />
-                                                    {poi.camera ? (
+                                                    <div
+                                                        className='poi-list-secondary-action'
+                                                        title={t(poi.camera ? 'Retake View' : 'Capture View', lang)}
+                                                    >
                                                         <Button
-                                                            class={['poi-list-secondary-button', 'poi-list-secondary-button-delete-view']}
-                                                            text={t('Delete View', lang)}
-                                                            onClick={() => getViewer()?.clearPoiCameraView?.(String(poi.id))}
+                                                            class={[
+                                                                'poi-list-secondary-button',
+                                                                poi.camera ? 'poi-list-secondary-button-retake-view' : 'poi-list-secondary-button-capture-view',
+                                                                ...(poi.camera ? ['is-saved'] : [])
+                                                            ]}
+                                                            text={t(poi.camera ? 'Retake View' : 'Capture View', lang)}
+                                                            onClick={() => getViewer()?.capturePoiCameraView?.(String(poi.id))}
                                                         />
+                                                    </div>
+                                                    {poi.camera ? (
+                                                        <div className='poi-list-secondary-action' title={t('Delete View', lang)}>
+                                                            <Button
+                                                                class={['poi-list-secondary-button', 'poi-list-secondary-button-delete-view']}
+                                                                text={t('Delete View', lang)}
+                                                                onClick={() => getViewer()?.clearPoiCameraView?.(String(poi.id))}
+                                                            />
+                                                        </div>
                                                     ) : null}
                                                 </div>
                                             )}

@@ -860,23 +860,34 @@ body:not(.ui-ready) #panel-left {
     gap: 8px;
 }
 
-.poi-list-secondary-button {
+.poi-list-secondary-action {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.poi-list-secondary-button.pcui-button {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: center;
+    width: 100% !important;
+    height: 44px !important;
+    min-height: 44px !important;
+    margin: 0 !important;
+    gap: 0;
     border: none;
     background: rgba(255, 255, 255, 0.08);
     color: #ddd;
     border-radius: 6px;
-    padding: 6px 8px;
+    padding: 0;
     font: inherit;
-    font-size: 12px;
-    line-height: 1.2;
+    font-size: 0 !important;
+    line-height: 0 !important;
     cursor: pointer;
 }
 
 .poi-list-secondary-button-delete-view {
-    margin-left: auto;
+    margin-left: 0;
 }
 
 .poi-list-secondary-button.is-saved {
@@ -887,10 +898,10 @@ body:not(.ui-ready) #panel-left {
 
 .poi-list-secondary-button::before {
     content: '';
-    width: 14px;
-    height: 14px;
+    width: 22px;
+    height: 22px;
     display: block;
-    flex: 0 0 14px;
+    flex: 0 0 22px;
     background: url('static/icons/poi-capture-view.svg') no-repeat center / contain;
 }
 

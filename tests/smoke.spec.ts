@@ -490,6 +490,7 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
             description: '',
             color: '#123abc',
             duration: 0.8,
+            camera: {},
             position: [0, 0, 0],
             normal: [0, 1, 0]
         }]));
@@ -501,7 +502,12 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     await expect(page.locator('.poi-list-item')).toHaveCount(1);
     await expect(page.locator('.left-panel-tab-poi')).toHaveClass(/pcui-button/);
     await expect(page.locator('.poi-list-description')).toHaveClass(/pcui-text-area-input/);
-    await expect(page.locator('.poi-list-secondary-button')).toHaveClass(/pcui-button/);
+    await expect(page.locator('.poi-list-secondary-action')).toHaveCount(2);
+    await expect(page.locator('.poi-list-secondary-action').first()).toHaveAttribute('title', 'Retake View');
+    await expect(page.locator('.poi-list-secondary-action').last()).toHaveAttribute('title', 'Delete View');
+    await expect(page.locator('.poi-list-secondary-button-retake-view')).toHaveClass(/pcui-button/);
+    await expect(page.locator('.poi-list-secondary-button-delete-view')).toHaveClass(/pcui-button/);
+    await expect(page.locator('.poi-list-secondary-button-retake-view')).toHaveCSS('font-size', '0px');
     await expect(page.locator('.poi-list-delete')).toHaveClass(/pcui-button/);
 
     const poiDescription = page.locator('.poi-list-description').first();
