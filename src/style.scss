@@ -861,9 +861,9 @@ body:not(.ui-ready) #panel-left {
 }
 
 .poi-list-secondary-button.is-saved {
-    background: rgba(34, 163, 98, 0.22);
-    box-shadow: inset 0 0 0 1px rgba(142, 255, 198, 0.5);
-    color: #dff7e8;
+    background: rgba(var(--theme-primary-rgb), 0.22);
+    box-shadow: inset 0 0 0 1px rgba(var(--theme-bright-rgb), 0.5);
+    color: var(--theme-bright);
 }
 
 .poi-list-secondary-button-icon {

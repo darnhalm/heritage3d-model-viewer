@@ -72,6 +72,7 @@ test('theme color drives accents, active tools, progress colors and settings exp
             <div class="twin-id-row"><button class="twin-id-copy"></button></div>
             <div class="selected-object-block"><button class="selected-object-copy"></button></div>
             <button class="left-panel-tour-button"></button>
+            <button class="poi-list-secondary-button is-saved"></button>
             <div id="popup-buttons-parent"><button class="pcui-button popup-button pcui-focus"></button></div>
             <div class="pcui-progress"><div class="pcui-progress-inner"></div></div>
         `;
@@ -81,6 +82,7 @@ test('theme color drives accents, active tools, progress colors and settings exp
         const twinIdCopy = fixture.querySelector('.twin-id-copy') as HTMLElement;
         const selectedObjectCopy = fixture.querySelector('.selected-object-copy') as HTMLElement;
         const tourButton = fixture.querySelector('.left-panel-tour-button') as HTMLElement;
+        const savedPoiViewButton = fixture.querySelector('.poi-list-secondary-button.is-saved') as HTMLElement;
         const centralButton = fixture.querySelector('.popup-button') as HTMLElement;
         const progress = fixture.querySelector('.pcui-progress-inner') as HTMLElement;
         const result = {
@@ -92,6 +94,8 @@ test('theme color drives accents, active tools, progress colors and settings exp
             twinIdCopyColor: getComputedStyle(twinIdCopy).color,
             selectedObjectCopyColor: getComputedStyle(selectedObjectCopy).color,
             tourButtonBackground: getComputedStyle(tourButton).backgroundColor,
+            savedPoiViewBackground: getComputedStyle(savedPoiViewButton).backgroundColor,
+            savedPoiViewColor: getComputedStyle(savedPoiViewButton).color,
             centralButtonShadow: getComputedStyle(centralButton).boxShadow,
             progressBackground: getComputedStyle(progress).backgroundImage,
             savedColor: viewer.settingsService.getSettingsData().theme.primaryColor,
@@ -109,6 +113,8 @@ test('theme color drives accents, active tools, progress colors and settings exp
     expect(themed.twinIdCopyColor).toBe('rgb(51, 102, 153)');
     expect(themed.selectedObjectCopyColor).toBe('rgb(51, 102, 153)');
     expect(themed.tourButtonBackground).toBe('rgba(51, 102, 153, 0.15)');
+    expect(themed.savedPoiViewBackground).toBe('rgba(51, 102, 153, 0.22)');
+    expect(themed.savedPoiViewColor).toBe('rgb(116, 151, 186)');
     expect(themed.centralButtonShadow).toContain('rgba(218, 227, 237, 0.34)');
     expect(themed.centralButtonShadow).toContain('rgba(218, 227, 237, 0.24)');
     expect(themed.progressBackground).toContain('rgb(116, 151, 186)');
