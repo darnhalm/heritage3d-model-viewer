@@ -1601,13 +1601,20 @@ input {
     margin-bottom: 12px;
 }
 
-.info-subtab {
+.info-subtab.pcui-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex: 1;
-    padding: 6px 10px;
+    height: 30px !important;
+    min-height: 30px !important;
+    margin: 0 !important;
+    padding: 0 10px;
     border: 1px solid #555;
     background: rgba(40, 40, 40, 0.8);
     color: #aaa;
     font-size: 13px;
+    line-height: 1.2 !important;
     cursor: pointer;
     border-radius: 16px;
     transition: background-color 250ms ease;

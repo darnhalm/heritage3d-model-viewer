@@ -30,6 +30,9 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
     await expect(page.locator('.info-tab').first()).toHaveCSS('display', 'flex');
     await expect(page.locator('.info-tab').first()).toHaveCSS('align-items', 'center');
     await expect(page.locator('.info-tab').first()).toHaveCSS('height', '32px');
+    await expect(page.locator('.info-subtab').first()).toHaveCSS('display', 'flex');
+    await expect(page.locator('.info-subtab').first()).toHaveCSS('align-items', 'center');
+    await expect(page.locator('.info-subtab').first()).toHaveCSS('height', '30px');
     await expect(page.locator('.fly-speed-control')).toBeVisible();
     await expect(page.locator('.fly-speed-control')).toContainText('Movement speed');
 
