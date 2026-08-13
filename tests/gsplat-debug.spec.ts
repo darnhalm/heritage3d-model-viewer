@@ -99,3 +99,28 @@ test('GSplat spatial debug freezes the LOD camera and pauses loader dispatch', a
     expect(resumed.concurrency).toBe(2);
     expect(resumed.running + resumed.queue).toBeGreaterThan(0);
 });
+
+test('GSplat material debug buttons switch off on a second click', async ({ page }) => {
+    test.skip(!(await page.request.get(JUMA)).ok(), 'Локальный JUMA spatial LOD отсутствует');
+
+    await page.addInitScript(() => localStorage.setItem('h3d.tour.v1.seen', '1'));
+    await page.goto(`/?load=${JUMA}`);
+    await page.waitForFunction(() => (window as any).viewer?.observer?.get('scene.hasGsplat') === true);
+    await page.locator('#panel-toggle').click();
+    await page.locator('.left-panel-tab-materials').click();
+
+    const cases = [
+        { label: 'Color Splats by LOD', path: 'debug.gsplatLodColor' },
+        { label: 'Spatial Node Bounds', path: 'debug.gsplatNodeBounds' },
+        { label: 'Freeze LOD Camera', path: 'debug.gsplatFreeze' },
+        { label: 'Pause Loading', path: 'debug.gsplatPaused' }
+    ];
+    for (const item of cases) {
+        await page.evaluate(({ path }) => (window as any).viewer.observer.set(path, false), item);
+        const button = page.getByRole('button', { name: item.label, exact: true });
+        await button.click();
+        await expect.poll(() => page.evaluate(({ path }) => (window as any).viewer.observer.get(path), item)).toBe(true);
+        await button.click();
+        await expect.poll(() => page.evaluate(({ path }) => (window as any).viewer.observer.get(path), item)).toBe(false);
+    }
+});

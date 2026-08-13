@@ -830,6 +830,39 @@ test('materials by objects mode shows selected-node panel and stays stable', asy
     expect(pageErrors).toEqual([]);
 });
 
+test('materials debug buttons toggle off on a second click', async ({ page }) => {
+    await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => {
+        const filenames = (window as any).viewer?.observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
+    });
+
+    await page.evaluate(() => {
+        document.getElementById('panel-left')?.classList.add('expanded');
+        const observer = (window as any).viewer?.observer;
+        observer?.set('debug.wireframe', false);
+        observer?.set('debug.normals', 0);
+    });
+    await page.locator('.left-panel-tab-materials').click();
+
+    const wireframe = page.locator('.materials-layer-item-wireframe');
+    await wireframe.click();
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.observer.get('debug.wireframe'))).toBe(true);
+    await expect(wireframe).toHaveClass(/selected/);
+    await wireframe.click();
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.observer.get('debug.wireframe'))).toBe(false);
+    await expect(wireframe).not.toHaveClass(/selected/);
+
+    const normals = page.locator('.materials-layer-item-vertex-normals');
+    await normals.click();
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.observer.get('debug.normals'))).toBe(0.2);
+    await expect(normals).toHaveClass(/selected/);
+    await normals.click();
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.observer.get('debug.normals'))).toBe(0);
+    await expect(normals).not.toHaveClass(/selected/);
+});
+
 test('rejects oversized model and settings files by size limits', async ({ page }) => {
     await page.goto('/');
     await waitForViewer(page);

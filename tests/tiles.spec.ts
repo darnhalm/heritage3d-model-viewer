@@ -41,6 +41,42 @@ const pumpFrames = (page: Page, count: number) => page.evaluate(async (n) => {
     }
 }, count);
 
+test('tile material debug buttons switch off on a second click', async ({ page }) => {
+    test.skip(!(await samplesAvailable(page, DISCRETE_LOD)), 'Локальный tileset sample отсутствует');
+
+    await page.addInitScript(() => localStorage.setItem('h3d.tour.v1.seen', '1'));
+    await page.goto(`/?load=${DISCRETE_LOD}`);
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer.observer.get('scene.isTileset') === true);
+    await page.locator('#panel-toggle').click();
+    await page.locator('.left-panel-tab-materials').click();
+
+    const toggle = async (label: string, path: string) => {
+        await page.evaluate(({ path }) => (window as any).viewer.observer.set(path, false), { path });
+        const button = page.getByRole('button', { name: label, exact: true });
+        await button.click();
+        await expect.poll(() => page.evaluate(({ path }) => (window as any).viewer.observer.get(path), { path })).toBe(true);
+        await button.click();
+        await expect.poll(() => page.evaluate(({ path }) => (window as any).viewer.observer.get(path), { path })).toBe(false);
+    };
+
+    await toggle('Isolate LOD Level', 'debug.tileLodLock');
+    await toggle('Tile Bounds (OBB)', 'debug.tileDebug');
+    await toggle('Freeze Camera + FOV', 'debug.tileFreeze');
+    await toggle('Pause Loading', 'debug.tilePaused');
+
+    await page.evaluate(() => {
+        const observer = (window as any).viewer.observer;
+        observer.set('debug.tileDebug', true);
+        observer.set('debug.tileLineStyle', 'checker');
+    });
+    await toggle('Checker Fill', 'debug.tileCheckerFill');
+    await toggle('Pick Tile', 'debug.tilePick');
+
+    await page.evaluate(() => (window as any).viewer.observer.set('debug.tilePick', true));
+    await toggle('Isolate Picked Tile', 'debug.tileIsolatePick');
+});
+
 /** Дождаться, пока обход выберет хотя бы один тайл с готовым контентом. */
 const waitForTiles = async (page: Page) => {
     await page.waitForFunction(() => {

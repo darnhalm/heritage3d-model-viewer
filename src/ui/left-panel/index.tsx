@@ -966,12 +966,27 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
             getViewer()?.setSelectedSpecularColor?.(arrToRgb(value));
         };
         const materialActionButton = (label: string, selected: boolean, onClick: () => void, classes: string[] = []) => (
-            <Button
-                class={['materials-layer-item', ...classes, ...(selected ? ['selected'] : [])]}
-                text={label}
+            <button
+                type='button'
+                className={['materials-layer-item', ...classes, ...(selected ? ['selected'] : [])].join(' ')}
                 onClick={onClick}
-            />
+            >
+                {label}
+            </button>
         );
+        // Debug buttons are intentionally native: streaming tile/GSplat state can
+        // update between clicks, while PCUI Button retains its mount-time callback.
+        // Always read the live Observer value so a second click reliably switches
+        // the mode off even during rapid streaming updates.
+        const toggleObserverBoolean = (path: string, fallback: boolean) => {
+            const current = getViewer()?.observer?.get?.(path);
+            setProperty(path, !(typeof current === 'boolean' ? current : fallback));
+        };
+        const toggleObserverNumber = (path: string, fallback: number, activeValue: number) => {
+            const current = getViewer()?.observer?.get?.(path);
+            const value = typeof current === 'number' && Number.isFinite(current) ? current : fallback;
+            setProperty(path, value > 0 ? 0 : activeValue);
+        };
         const poiList = parsePoiList(observerData?.poi?.list);
         const draggedPoi = poiList.find(poi => String(poi.id) === draggingPoiId) ?? null;
         const visiblePoiList = draggingPoiId ? poiList.filter(poi => String(poi.id) !== draggingPoiId) : poiList;
@@ -1065,10 +1080,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {observerData?.scene?.hasGsplat && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Spatial LOD Debug', lang)} (4)</div>
-                                        {materialActionButton(t('Color Splats by LOD', lang), !!observerData?.debug?.gsplatLodColor, () => setProperty('debug.gsplatLodColor', !observerData?.debug?.gsplatLodColor))}
-                                        {materialActionButton(t('Spatial Node Bounds', lang), !!observerData?.debug?.gsplatNodeBounds, () => setProperty('debug.gsplatNodeBounds', !observerData?.debug?.gsplatNodeBounds))}
-                                        {materialActionButton(t('Freeze LOD Camera', lang), !!observerData?.debug?.gsplatFreeze, () => setProperty('debug.gsplatFreeze', !observerData?.debug?.gsplatFreeze))}
-                                        {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.gsplatPaused, () => setProperty('debug.gsplatPaused', !observerData?.debug?.gsplatPaused))}
+                                        {materialActionButton(t('Color Splats by LOD', lang), !!observerData?.debug?.gsplatLodColor, () => toggleObserverBoolean('debug.gsplatLodColor', !!observerData?.debug?.gsplatLodColor))}
+                                        {materialActionButton(t('Spatial Node Bounds', lang), !!observerData?.debug?.gsplatNodeBounds, () => toggleObserverBoolean('debug.gsplatNodeBounds', !!observerData?.debug?.gsplatNodeBounds))}
+                                        {materialActionButton(t('Freeze LOD Camera', lang), !!observerData?.debug?.gsplatFreeze, () => toggleObserverBoolean('debug.gsplatFreeze', !!observerData?.debug?.gsplatFreeze))}
+                                        {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.gsplatPaused, () => toggleObserverBoolean('debug.gsplatPaused', !!observerData?.debug?.gsplatPaused))}
                                         {observerData?.debug?.gsplatNodeBounds && (
                                             <div className='materials-layer-normals-row'>
                                                 {materialActionButton(t('By State', lang), (observerData?.debug?.gsplatDebugMode ?? 'state') === 'state', () => setProperty('debug.gsplatDebugMode', 'state'))}
@@ -1208,9 +1223,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {!observerData?.scene?.isTileset && !observerData?.scene?.hasGsplat && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Geometry', lang)} (2)</div>
-                                        {materialActionButton(t('Wireframe', lang), !!observerData?.debug?.wireframe, () => setProperty('debug.wireframe', !observerData?.debug?.wireframe), ['materials-layer-item-wireframe'])}
+                                        {materialActionButton(t('Wireframe', lang), !!observerData?.debug?.wireframe, () => toggleObserverBoolean('debug.wireframe', !!observerData?.debug?.wireframe), ['materials-layer-item-wireframe'])}
                                         <div className='materials-layer-normals-row'>
-                                            {materialActionButton(t('Vertex Normals', lang), (observerData?.debug?.normals ?? 0) > 0, () => setProperty('debug.normals', (observerData?.debug?.normals ?? 0) > 0 ? 0 : 0.2), ['materials-layer-item-vertex-normals'])}
+                                            {materialActionButton(t('Vertex Normals', lang), (observerData?.debug?.normals ?? 0) > 0, () => toggleObserverNumber('debug.normals', observerData?.debug?.normals ?? 0, 0.2), ['materials-layer-item-vertex-normals'])}
                                             {(observerData?.debug?.normals ?? 0) > 0 && (
                                                 <div className='materials-layer-normals-slider'>
                                                     <Slider
@@ -1230,7 +1245,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {observerData?.scene?.isTileset && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Tiles Debug', lang)} (1)</div>
-                                        {materialActionButton(t('Isolate LOD Level', lang), !!observerData?.debug?.tileLodLock, () => setProperty('debug.tileLodLock', !observerData?.debug?.tileLodLock))}
+                                        {materialActionButton(t('Isolate LOD Level', lang), !!observerData?.debug?.tileLodLock, () => toggleObserverBoolean('debug.tileLodLock', !!observerData?.debug?.tileLodLock))}
                                         {observerData?.debug?.tileLodLock && (
                                             <Slider
                                                 label={t('LOD Level', lang)}
@@ -1242,9 +1257,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 setProperty={(value: number) => setProperty('debug.tileLodLevel', value)}
                                             />
                                         )}
-                                        {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => setProperty('debug.tileDebug', !observerData?.debug?.tileDebug))}
-                                        {materialActionButton(t('Freeze Camera + FOV', lang), !!observerData?.debug?.tileFreeze, () => setProperty('debug.tileFreeze', !observerData?.debug?.tileFreeze))}
-                                        {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.tilePaused, () => setProperty('debug.tilePaused', !observerData?.debug?.tilePaused))}
+                                        {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
+                                        {materialActionButton(t('Freeze Camera + FOV', lang), !!observerData?.debug?.tileFreeze, () => toggleObserverBoolean('debug.tileFreeze', !!observerData?.debug?.tileFreeze))}
+                                        {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.tilePaused, () => toggleObserverBoolean('debug.tilePaused', !!observerData?.debug?.tilePaused))}
                                         {observerData?.debug?.tileDebug && (
                                             <>
                                                 <div className='materials-layer-normals-row'>
@@ -1257,7 +1272,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 </div>
                                                 {observerData?.debug?.tileLineStyle !== 'solid' && (
                                                     <>
-                                                        {materialActionButton(t('Checker Fill', lang), !!observerData?.debug?.tileCheckerFill, () => setProperty('debug.tileCheckerFill', !observerData?.debug?.tileCheckerFill))}
+                                                        {materialActionButton(t('Checker Fill', lang), !!observerData?.debug?.tileCheckerFill, () => toggleObserverBoolean('debug.tileCheckerFill', !!observerData?.debug?.tileCheckerFill))}
                                                     </>
                                                 )}
                                                 <Slider
@@ -1269,9 +1284,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     value={observerData?.debug?.tileLineThickness ?? 2}
                                                     setProperty={(value: number) => setProperty('debug.tileLineThickness', value)}
                                                 />
-                                                {materialActionButton(t('Pick Tile', lang), !!observerData?.debug?.tilePick, () => setProperty('debug.tilePick', !observerData?.debug?.tilePick))}
+                                                {materialActionButton(t('Pick Tile', lang), !!observerData?.debug?.tilePick, () => toggleObserverBoolean('debug.tilePick', !!observerData?.debug?.tilePick))}
                                                 {observerData?.debug?.tilePick && (
-                                                    materialActionButton(t('Isolate Picked Tile', lang), !!observerData?.debug?.tileIsolatePick, () => setProperty('debug.tileIsolatePick', !observerData?.debug?.tileIsolatePick))
+                                                    materialActionButton(t('Isolate Picked Tile', lang), !!observerData?.debug?.tileIsolatePick, () => toggleObserverBoolean('debug.tileIsolatePick', !!observerData?.debug?.tileIsolatePick))
                                                 )}
                                             </>
                                         )}
