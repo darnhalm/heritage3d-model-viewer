@@ -474,7 +474,9 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
 
     await expect(page.locator('.lang-switcher .left-panel-tour-button')).toBeVisible();
     const tabWidths = await page.locator('.left-panel-tab').evaluateAll(tabs => tabs.map(tab => tab.getBoundingClientRect().width));
+    const tabTops = await page.locator('.left-panel-tab').evaluateAll(tabs => tabs.map(tab => tab.getBoundingClientRect().top));
     expect(Math.max(...tabWidths) - Math.min(...tabWidths)).toBeLessThanOrEqual(1);
+    expect(Math.max(...tabTops) - Math.min(...tabTops)).toBeLessThanOrEqual(1);
 
     await page.evaluate(() => {
         (window as any).viewer?.observer?.set('poi.list', JSON.stringify([{

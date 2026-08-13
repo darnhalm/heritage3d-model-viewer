@@ -2151,7 +2151,7 @@ input {
 
 .left-panel-tabs {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 4px;
     margin-top: 8px;
     margin-bottom: 8px;
@@ -2163,23 +2163,31 @@ input {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.left-panel-tab {
-    flex: 1 1 calc(50% - 2px);
+.left-panel-tab.pcui-button {
+    flex: 1 1 0;
     min-width: 0;
-    padding: 6px 8px 6px 26px;
+    margin: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    aspect-ratio: 1;
+    padding: 28px 2px 3px;
+    box-sizing: border-box;
     border: 1px solid #555;
     background-color: rgba(40, 40, 40, 0.8);
     background-repeat: no-repeat;
-    background-size: 15px;
-    background-position: 6px center;
+    background-size: 18px;
+    background-position: center 7px;
     color: #aaa;
-    font-size: 11px;
+    font-size: 9px !important;
+    line-height: 1.1 !important;
+    letter-spacing: 0 !important;
+    text-align: center;
     cursor: pointer;
     border-radius: 6px;
     transition: background-color 250ms ease;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
     overflow: hidden;
-    text-overflow: ellipsis;
 
     &:hover {
         background-color: rgba(50, 50, 50, 0.9);
