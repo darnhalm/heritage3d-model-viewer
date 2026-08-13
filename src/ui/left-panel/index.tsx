@@ -930,6 +930,12 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const embedEnabled = !!observerData?.ui?.embed?.enabled;
         const embedPreset = observerData?.ui?.embed?.preset;
         const showMaterialsTab = !embedEnabled;
+        const tabLabels: Record<LeftPanelTab, string> = {
+            scene: t('Settings', lang),
+            alignment: t('Object Alignment', lang),
+            materials: t('Materials', lang),
+            poi: t('POI', lang)
+        };
         const activePoiCardId = observerData?.poi?.activeId || this.state.activePoiCardId;
         const texelDensityShortValue = (() => {
             const summary = observerData?.scene?.texelDensitySummary || 'n/a';
@@ -982,38 +988,48 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
                 <div className='left-panel-tabs'>
-                    <Button
-                        class={['left-panel-tab', 'left-panel-tab-scene', ...(tab === 'scene' ? ['active'] : [])]}
-                        text={t('Settings', lang)}
-                        onClick={() => this.setState({ tab: 'scene' })}
-                    />
-                    {!embedEnabled && (
+                    <div className='left-panel-tab-slot' title={tabLabels.scene}>
                         <Button
-                            class={['left-panel-tab', 'left-panel-tab-alignment', ...(tab === 'alignment' ? ['active', 'tool-active'] : [])]}
-                            text={t('Object Alignment', lang)}
-                            onClick={() => this.setState({ tab: 'alignment' })}
+                            class={['left-panel-tab', 'left-panel-tab-scene', ...(tab === 'scene' ? ['active'] : [])]}
+                            text={tabLabels.scene}
+                            onClick={() => this.setState({ tab: 'scene' })}
                         />
+                    </div>
+                    {!embedEnabled && (
+                        <div className='left-panel-tab-slot' title={tabLabels.alignment}>
+                            <Button
+                                class={['left-panel-tab', 'left-panel-tab-alignment', ...(tab === 'alignment' ? ['active', 'tool-active'] : [])]}
+                                text={tabLabels.alignment}
+                                onClick={() => this.setState({ tab: 'alignment' })}
+                            />
+                        </div>
                     )}
                     {showMaterialsTab && (
-                        <Button
-                            class={['left-panel-tab', 'left-panel-tab-materials', ...(tab === 'materials' ? ['active'] : [])]}
-                            text={t('Materials', lang)}
-                            onClick={() => this.setState({ tab: 'materials' })}
-                        />
+                        <div className='left-panel-tab-slot' title={tabLabels.materials}>
+                            <Button
+                                class={['left-panel-tab', 'left-panel-tab-materials', ...(tab === 'materials' ? ['active'] : [])]}
+                                text={tabLabels.materials}
+                                onClick={() => this.setState({ tab: 'materials' })}
+                            />
+                        </div>
                     )}
                     {!embedEnabled && (
-                        <Button
-                            class={[
-                                'left-panel-tab',
-                                'left-panel-tab-poi',
-                                ...(tab === 'poi' ? ['active'] : []),
-                                ...(observerData?.poi?.enabled ? ['tool-active'] : [])
-                            ]}
-                            text={t('POI', lang)}
-                            onClick={() => this.setState({ tab: 'poi' })}
-                        />
+                        <div className='left-panel-tab-slot' title={tabLabels.poi}>
+                            <Button
+                                class={[
+                                    'left-panel-tab',
+                                    'left-panel-tab-poi',
+                                    ...(tab === 'poi' ? ['active'] : []),
+                                    ...(observerData?.poi?.enabled ? ['tool-active'] : [])
+                                ]}
+                                text={tabLabels.poi}
+                                onClick={() => this.setState({ tab: 'poi' })}
+                            />
+                        </div>
                     )}
                 </div>
+
+                <Label class='left-panel-active-title' text={tabLabels[tab]} />
 
                 <div className='left-panel-tab-content'>
                     {tab === 'scene' && (

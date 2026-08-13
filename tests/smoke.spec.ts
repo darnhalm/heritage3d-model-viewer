@@ -473,6 +473,10 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     });
 
     await expect(page.locator('.lang-switcher .left-panel-tour-button')).toBeVisible();
+    await expect(page.locator('.left-panel-tab-slot')).toHaveCount(4);
+    await expect(page.locator('.left-panel-tab-slot').first()).toHaveAttribute('title', 'Settings');
+    await expect(page.locator('.left-panel-active-title')).toHaveText('Settings');
+    await expect(page.locator('.left-panel-tab').first()).toHaveCSS('font-size', '0px');
     const tabWidths = await page.locator('.left-panel-tab').evaluateAll(tabs => tabs.map(tab => tab.getBoundingClientRect().width));
     const tabTops = await page.locator('.left-panel-tab').evaluateAll(tabs => tabs.map(tab => tab.getBoundingClientRect().top));
     expect(Math.max(...tabWidths) - Math.min(...tabWidths)).toBeLessThanOrEqual(1);
@@ -492,6 +496,7 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     });
 
     await page.locator('.left-panel-tab-poi').click();
+    await expect(page.locator('.left-panel-active-title')).toHaveText('POI');
     await expect(page.locator('#poi-panel')).toBeVisible();
     await expect(page.locator('.poi-list-item')).toHaveCount(1);
     await expect(page.locator('.left-panel-tab-poi')).toHaveClass(/pcui-button/);
