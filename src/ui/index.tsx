@@ -285,6 +285,24 @@ class App extends React.Component<{ observer: Observer }> {
         });
     }
 
+    private toggleTourPlayback = () => {
+        const playing = !!this.state?.poi?.playing;
+        if (playing) {
+            this._setStateProperty('poi.playing', false);
+            return;
+        }
+
+        // A fresh Play always starts the tour from its first regular POI.
+        // Resume is the only case that keeps the currently active POI.
+        if (this.poiPausedElapsed === null) {
+            const first = this.getPoiList()[0];
+            if (first?.id) {
+                window.viewer?.focusPoi?.(String(first.id));
+            }
+        }
+        this._setStateProperty('poi.playing', true);
+    };
+
     private stopTour = () => {
         this.poiPlaybackToken++;
         if (this.poiSlideshowTimeout !== null) {
@@ -397,9 +415,7 @@ class App extends React.Component<{ observer: Observer }> {
                         <button
                             type='button'
                             className='poi-player-button poi-player-play-button'
-                            onClick={() => {
-                                this._setStateProperty('poi.playing', !(this.state?.poi?.playing ?? false));
-                            }}
+                            onClick={this.toggleTourPlayback}
                             title={this.state?.poi?.playing ? t('Pause', lang) : t('Play', lang)}
                             aria-label={this.state?.poi?.playing ? t('Pause', lang) : t('Play', lang)}
                         >

@@ -551,7 +551,11 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
     }, selector);
     await expect(page.locator('.poi-player-title')).toHaveText('Tour 1');
 
+    // A fresh Play must restart from the first POI even when another POI is selected.
+    await clickTourButton('#poi-player-overlay button[aria-label="Next POI"]');
+    await expect(page.locator('.poi-player-title')).toHaveText('Tour 2');
     await clickTourButton('.poi-player-play-button');
+    await expect(page.locator('.poi-player-title')).toHaveText('Tour 1');
     await clickTourButton('#poi-player-overlay button[aria-label="Next POI"]');
     await expect(page.locator('.poi-player-title')).toHaveText('Tour 2');
     await page.waitForTimeout(150);
