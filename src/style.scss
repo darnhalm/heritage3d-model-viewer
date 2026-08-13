@@ -1815,13 +1815,20 @@ input {
     }
 }
 
-.info-tab {
+.info-tab.pcui-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     flex: 1;
-    padding: 8px 12px;
+    height: 32px !important;
+    min-height: 32px !important;
+    margin: 0 !important;
+    padding: 0 12px;
     border: 1px solid #555;
     background: rgba(40, 40, 40, 0.8);
     color: #aaa;
     font-size: 14px;
+    line-height: 1.2 !important;
     cursor: pointer;
     border-radius: 16px;
     transition: background-color 250ms ease;
