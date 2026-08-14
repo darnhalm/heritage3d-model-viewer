@@ -2254,7 +2254,14 @@ class Viewer {
             'debug.uvCheckerScale': this.setUvCheckerScale.bind(this),
             'debug.selectedUvSet': this.setSelectedUvSet.bind(this),
             'debug.withTextureOnly': () => {
-                this.selectionController?.onTextureSelectionModeChange(this.observer.get('debug.withTextureOnly'));
+                const enabled = !!this.observer.get('debug.withTextureOnly');
+                this.selectionController?.onTextureSelectionModeChange(enabled);
+                // `By objects` is a scoped inspection mode. Keeping the old node after
+                // leaving it made material names/channels continue to come from that node,
+                // and could leave the same stale path selected after another model load.
+                if (!enabled && (this.selectedNode || this.observer.get('scene.selectedNode.path'))) {
+                    this.observer.set('scene.selectedNode.path', '');
+                }
                 this.dirtySelectionHighlight = true;
                 this.dirtyTexelDensityHeatmap = true;
                 this.renderNextFrame();
@@ -2741,6 +2748,17 @@ class Viewer {
         this.assets = [];
 
         this.meshInstances = [];
+        // A selected GraphNode belongs to the model being destroyed. Clear both the
+        // runtime reference and observer state so a subsequently loaded model with the
+        // same node path can still emit a fresh selection change.
+        this.selectedNode = null;
+        this.observer.set('scene.selectedNode', {
+            name: '',
+            path: '',
+            position: '',
+            rotation: '',
+            scale: ''
+        });
         this.selectionController.reset();
         this.resetWireframeMeshes();
         this.resetSelectionHighlightMeshes();
@@ -6034,6 +6052,14 @@ class Viewer {
                 position: graphNode.getLocalPosition().toString(),
                 rotation: graphNode.getLocalEulerAngles().toString(),
                 scale: graphNode.getLocalScale().toString()
+            });
+        } else {
+            this.observer.set('scene.selectedNode', {
+                name: '',
+                path: '',
+                position: '',
+                rotation: '',
+                scale: ''
             });
         }
 

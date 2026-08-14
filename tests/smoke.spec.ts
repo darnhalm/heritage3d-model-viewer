@@ -786,7 +786,7 @@ test('alignment tab toggles alignment mode safely without runtime errors', async
     expect(pageErrors).toEqual([]);
 });
 
-test('materials by objects mode shows selected-node panel and stays stable', async ({ page }) => {
+test('materials by objects mode selects a real node and clears its scope when disabled', async ({ page }) => {
     test.setTimeout(60000);
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => {
@@ -809,17 +809,17 @@ test('materials by objects mode shows selected-node panel and stays stable', asy
     await page.locator('.left-panel-tab-materials').click();
     await expect(page.locator('#materials-panel')).toBeVisible();
 
-    await page.evaluate(() => {
+    const selectedObject = await page.evaluate(() => {
         const viewer = (window as any).viewer;
-        viewer?.observer?.set('debug.withTextureOnly', true);
-        // Stabilize test rendering path for right-side object panel.
-        viewer?.observer?.set('scene.nodes', JSON.stringify([{ name: 'SmokeNode', path: 'SmokeNode' }]));
-        viewer?.observer?.set('scene.selectedNode.path', 'SmokeNode');
-        viewer?.observer?.set('scene.selectedNode.name', 'SmokeNode');
-        viewer?.observer?.set('scene.variants.list', JSON.stringify(['Default', 'Variant A']));
-        viewer?.observer?.set('scene.variant.selected', 'Default');
-        viewer?.observer?.set('scene.availableUvSets', JSON.stringify([0, 1]));
-        viewer?.observer?.set('debug.selectedUvSet', 0);
+        const path = viewer?.meshInstances?.[0]?.node?.path;
+        if (!path) throw new Error('The test model has no selectable mesh node');
+        viewer.observer.set('debug.withTextureOnly', true);
+        viewer.observer.set('scene.selectedNode.path', path);
+        return {
+            path,
+            name: viewer.observer.get('scene.selectedNode.name'),
+            materials: JSON.parse(viewer.observer.get('scene.selectedMaterialNames'))
+        };
     });
 
     await page.waitForFunction(() => {
@@ -828,9 +828,34 @@ test('materials by objects mode shows selected-node panel and stays stable', asy
             !!observer?.get('scene.selectedNode.path');
     });
 
+    expect(selectedObject.path).toBeTruthy();
+    expect(selectedObject.name).toBeTruthy();
+    expect(selectedObject.materials).toContain('Texture');
     await expect(page.locator('.selected-node-panel')).toBeVisible();
     await expect(page.locator('.selected-node-panel .panel-option').first()).toBeVisible();
-    await expect(page.locator('.selected-node-panel .pcui-select-input')).toHaveCount(2);
+
+    await page.evaluate(() => {
+        (window as any).viewer.observer.set('debug.withTextureOnly', false);
+    });
+
+    await page.waitForFunction(() => {
+        const viewer = (window as any).viewer;
+        return viewer?.observer?.get('debug.withTextureOnly') === false &&
+            viewer?.observer?.get('scene.selectedNode.path') === '' &&
+            viewer?.selectedNode == null;
+    });
+    await expect(page.locator('.selected-node-panel')).toBeHidden();
+
+    await page.evaluate((path) => {
+        const viewer = (window as any).viewer;
+        viewer.observer.set('debug.withTextureOnly', true);
+        viewer.observer.set('scene.selectedNode.path', path);
+        viewer.resetScene();
+    }, selectedObject.path);
+    await page.waitForFunction(() => {
+        const viewer = (window as any).viewer;
+        return viewer?.observer?.get('scene.selectedNode.path') === '' && viewer?.selectedNode == null;
+    });
     expect(pageErrors).toEqual([]);
 });
 
