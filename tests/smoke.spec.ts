@@ -61,11 +61,15 @@ test('theme color drives accents, active tools, progress colors and settings exp
     const defaultTheme = await page.evaluate(() => ({
         color: (window as any).viewer.observer.get('theme.primaryColor'),
         backgroundColor: (window as any).viewer.observer.get('skybox.backgroundColor'),
-        css: getComputedStyle(document.documentElement).getPropertyValue('--theme-primary').trim()
+        css: getComputedStyle(document.documentElement).getPropertyValue('--theme-primary').trim(),
+        bright: getComputedStyle(document.documentElement).getPropertyValue('--theme-bright').trim(),
+        glow: getComputedStyle(document.documentElement).getPropertyValue('--theme-glow').trim()
     }));
-    expect(defaultTheme.color).toEqual({ r: 238 / 255, g: 75 / 255, b: 24 / 255 });
+    expect(defaultTheme.color).toEqual({ r: 1, g: 51 / 255, b: 0 });
     expect(defaultTheme.backgroundColor).toEqual({ r: 128 / 255, g: 128 / 255, b: 128 / 255 });
-    expect(defaultTheme.css).toBe('rgb(238 75 24)');
+    expect(defaultTheme.css).toBe('rgb(255 51 0)');
+    expect(defaultTheme.bright).toBe('rgb(255 116 82)');
+    expect(defaultTheme.glow).toBe('rgb(255 218 209)');
 
     const themed = await page.evaluate(() => {
         const viewer = (window as any).viewer;
