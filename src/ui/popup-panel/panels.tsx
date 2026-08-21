@@ -1079,6 +1079,17 @@ export const FragmentPanel = (props: { observerData: ObserverData, setProperty: 
                         setProperty={(value: boolean) => props.setProperty('fragment.outline', value)}
                     />
                 )}
+                {data.enabled && data.outline && (
+                    <Slider
+                        label={t('Outline width', lang)}
+                        precision={1}
+                        min={0.5}
+                        max={8}
+                        step={0.5}
+                        value={data.outlineWidth ?? 2}
+                        setProperty={(value: number) => props.setProperty('fragment.outlineWidth', value)}
+                    />
+                )}
                 {data.initialized && (
                     <Container class='fragment-mode-toolbar'>
                         {([

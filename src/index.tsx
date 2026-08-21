@@ -333,6 +333,7 @@ const observerData: ObserverData = {
         selecting: false,
         invert: false,
         outline: false,
+        outlineWidth: 2,
         editMode: 'move',
         center: [0, 0, 0],
         size: [1, 1, 1],

@@ -305,6 +305,8 @@ export interface ObserverData {
         invert: boolean,
         /** Подсвечивать линию, по которой бокс рассекает поверхность модели. */
         outline?: boolean,
+        /** Толщина подсветки контура в пикселях. */
+        outlineWidth?: number,
         editMode: 'move' | 'resize' | 'rotate',
         center: [number, number, number],
         size: [number, number, number],

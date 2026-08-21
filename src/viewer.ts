@@ -128,8 +128,9 @@ const MIC_CAMEL_HELPER_NODE_RE = /^mic[A-Z0-9]/;
 
 const doubleTapDelay = 400;
 
-/** Толщина подсветки контура сечения в пикселях: тоньше — теряется, толще — «жирнит» срез. */
-const FRAGMENT_OUTLINE_WIDTH_PX = 1.6;
+/** Границы толщины подсветки контура сечения (пиксели): тоньше — теряется, толще — «жирнит». */
+const FRAGMENT_OUTLINE_WIDTH_MIN_PX = 0.5;
+const FRAGMENT_OUTLINE_WIDTH_MAX_PX = 8;
 const doubleTapRadius = 45;
 const RIPPLE_CAMERA_DELAY_MS = 380;
 const RIPPLE_REMOVE_MS = 900;
@@ -2271,6 +2272,7 @@ class Viewer {
             // Подсветка контура живёт в параметрах материалов, которые обновляются в кадре:
             // без запроса кадра переключатель не дал бы видимого эффекта.
             'fragment.outline': () => this.renderNextFrame(),
+            'fragment.outlineWidth': () => this.renderNextFrame(),
             'fragment.center': () => {
                 this.syncFragmentEntityFromObserver();
                 this.syncFragmentClipping();
@@ -5772,9 +5774,22 @@ class Viewer {
             this.fragmentWorldToLocal,
             !!this.observer.get('fragment.invert'),
             this.observer.get('fragment.outline') ?
-                { color: [theme.r, theme.g, theme.b], widthPx: FRAGMENT_OUTLINE_WIDTH_PX } :
+                { color: [theme.r, theme.g, theme.b], widthPx: this.fragmentOutlineWidth() } :
                 null
         );
+    }
+
+    /**
+     * Толщина подсветки контура сечения из настроек, приведённая к разумным границам.
+     *
+     * @returns Толщина линии в пикселях.
+     */
+    private fragmentOutlineWidth(): number {
+        const value = Number(this.observer.get('fragment.outlineWidth'));
+        if (!Number.isFinite(value)) {
+            return 2;
+        }
+        return Math.min(FRAGMENT_OUTLINE_WIDTH_MAX_PX, Math.max(FRAGMENT_OUTLINE_WIDTH_MIN_PX, value));
     }
 
     /**
