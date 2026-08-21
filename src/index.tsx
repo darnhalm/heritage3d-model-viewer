@@ -224,6 +224,7 @@ const observerData: ObserverData = {
         tilePaused: false,
         tileLodLock: false,
         tileLodLevel: 0,
+        tileLodColor: false,
         gsplatLodColor: false,
         gsplatNodeBounds: false,
         gsplatDebugMode: 'state',

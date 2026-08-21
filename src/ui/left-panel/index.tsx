@@ -1306,6 +1306,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 setProperty={(value: number) => setProperty('debug.tileLodLevel', value)}
                                             />
                                         )}
+                                        {materialActionButton(t('Color Tiles by LOD', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
                                         {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
                                         {materialActionButton(t('Freeze Camera + FOV', lang), !!observerData?.debug?.tileFreeze, () => toggleObserverBoolean('debug.tileFreeze', !!observerData?.debug?.tileFreeze))}
                                         {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.tilePaused, () => toggleObserverBoolean('debug.tilePaused', !!observerData?.debug?.tilePaused))}

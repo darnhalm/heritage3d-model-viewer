@@ -708,6 +708,13 @@ class Viewer {
     private tileHudLegend: HTMLDivElement | null = null;
 
     /**
+     * Меши, которым проставлен цвет LOD, и глубина, под которую он посчитан. Цвет живёт в
+     * параметрах mesh instance, а не в материале: параметр перекрывает материал только для
+     * своего меша, поэтому общий материал тайла остаётся нетронутым.
+     */
+    private tileLodTinted = new Map<MeshInstance, number>();
+
+    /**
      * Слепок содержимого легенды: DOM пересобирается только когда состав уровней изменился.
      * `null` — легенда скрыта и не отрисована, поэтому отличается от пустого состава.
      */
@@ -2311,6 +2318,7 @@ class Viewer {
                 this.app.scene.gsplat.colorizeLod = enabled;
                 this.renderNextFrame();
             },
+            'debug.tileLodColor': () => this.renderNextFrame(),
             'debug.gsplatNodeBounds': () => this.renderNextFrame(),
             'debug.gsplatDebugMode': () => this.renderNextFrame(),
             'debug.gsplatFreeze': (enabled: boolean) => {
@@ -2752,6 +2760,10 @@ class Viewer {
     // reset the viewer, unloading resources
     resetScene() {
         const app = this.app;
+
+        // Раскраска по LOD висит на мешах тайлов: при сбросе сцены они уничтожаются,
+        // поэтому карту нужно очистить, иначе она удержит мёртвые ссылки.
+        this.clearTileLodColors();
 
         this.fragmentClipMaterials.clear();
         this.observer.set('fragment.enabled', false);
@@ -5582,6 +5594,7 @@ class Viewer {
         this.observer.set('debug.tileLodLock', false);
         this.observer.set('debug.tilePick', false);
         this.observer.set('debug.tileIsolatePick', false);
+        this.observer.set('debug.tileLodColor', false);
         this.observer.set('debug.gsplatLodColor', false);
         this.observer.set('debug.gsplatNodeBounds', false);
         this.observer.set('debug.gsplatDebugMode', 'state');
@@ -5737,6 +5750,59 @@ class Viewer {
             this.fragmentWorldToLocal,
             !!this.observer.get('fragment.invert')
         );
+    }
+
+    /**
+     * Раскраска блоков тайлсета по уровню детализации.
+     *
+     * Работает как раскраска сплатов у движка: цвет уровня не заменяет исходный, а умножается
+     * на него (`color.xyz *= uColorMultiply` в шейдере сплатов), поэтому текстура остаётся
+     * видна. У фотограмметрии материалы unlit — цвет приходит из emissive, у обычных
+     * PBR-тайлов из diffuse, поэтому подменяем оба: у lit-материала emissive чёрный и от
+     * умножения не меняется, а у unlit diffuse не используется.
+     */
+    private syncTileLodColors() {
+        const enabled = !!this.tileManager && !!this.observer.get('debug.tileLodColor');
+        if (!enabled) {
+            if (this.tileLodTinted.size > 0) {
+                this.clearTileLodColors();
+                this.renderNextFrame();
+            }
+            return;
+        }
+
+        this.tileManager?.forEachVisibleTile((depth, meshInstances) => {
+            meshInstances.forEach((meshInstance) => {
+                // Меш принадлежит одному тайлу, глубина у него не меняется: уже покрашенный
+                // меш пропускаем, чтобы не трогать параметры каждый кадр.
+                if (this.tileLodTinted.get(meshInstance) === depth) {
+                    return;
+                }
+                const material = meshInstance.material as StandardMaterial | undefined;
+                if (!material) {
+                    return;
+                }
+                const [r, g, b] = lodColorRgb(depth);
+                // Цветовые униформы движок передаёт в линейном пространстве (`Color.linear`).
+                const tint = (color: Color | undefined) => (color ? [
+                    Math.pow(color.r, 2.2) * r,
+                    Math.pow(color.g, 2.2) * g,
+                    Math.pow(color.b, 2.2) * b
+                ] : [0, 0, 0]);
+                meshInstance.setParameter('material_emissive', tint(material.emissive));
+                meshInstance.setParameter('material_diffuse', tint(material.diffuse));
+                this.tileLodTinted.set(meshInstance, depth);
+            });
+        });
+    }
+
+    /** Снять раскраску по LOD со всех мешей, которым она была проставлена. */
+    private clearTileLodColors() {
+        this.tileLodTinted.forEach((_depth, meshInstance) => {
+            meshInstance.deleteParameter('material_emissive');
+            meshInstance.deleteParameter('material_diffuse');
+        });
+        this.tileLodTinted.clear();
     }
 
     private updatePickCursor() {
@@ -7500,6 +7566,7 @@ class Viewer {
         // Exact production clipping and its persistent oriented-box contour. Newly
         // streamed materials are discovered here before the frame is submitted.
         this.syncFragmentMaterials();
+        this.syncTileLodColors();
         this.debugFragmentBoxSolid.clear();
         this.debugFragmentBox.clear();
         if (this.observer.get('fragment.initialized')) {
@@ -7547,7 +7614,10 @@ class Viewer {
 
     /** Живой DOM-оверлей со статистикой тайлов; создаётся лениво, прячется когда выключен. */
     private updateTileHud() {
-        const tileEnabled = !!this.tileManager && !!this.observer.get('debug.tileDebug');
+        // Раскраска блоков по LOD включает HUD сама по себе: цвета на экране есть, значит
+        // нужна и легенда, даже если контуры OBB выключены.
+        const tileLodColor = !!this.observer.get('debug.tileLodColor');
+        const tileEnabled = !!this.tileManager && (!!this.observer.get('debug.tileDebug') || tileLodColor);
         const gsplatEnabled = !!this.gsplatDebugStats;
         const enabled = tileEnabled || gsplatEnabled;
         if (!enabled) {
@@ -7607,7 +7677,7 @@ class Viewer {
             this.observer.get('debug.tileFreeze') ? 'FROZEN' : '',
             this.observer.get('debug.tilePaused') ? 'PAUSED' : ''
         ].filter(Boolean).join(' ');
-        this.renderLodLegend(s.depthCounts, mode === 'lod');
+        this.renderLodLegend(s.depthCounts, mode === 'lod' || tileLodColor);
         this.setHudText(
             `TILES ${s.tiles}   mode: ${mode}${flags ? `   ${flags}` : ''}\n` +
             `ready ${s.ready}  loading ${s.loading}  queued ${s.queued}  failed ${s.failed}\n` +

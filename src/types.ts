@@ -160,6 +160,8 @@ export interface ObserverData {
         /** Выбранная глубина LOD при зажиме. */
         tileLodLevel?: number,
         /** Раскрашивать потоковый GSplat по реально выбранному движком LOD. */
+        /** Красить блоки тайлсета в цвет их уровня детализации. */
+        tileLodColor?: boolean,
         gsplatLodColor?: boolean,
         /** Показывать границы leaf-узлов spatial LOD и диагностический HUD. */
         gsplatNodeBounds?: boolean,

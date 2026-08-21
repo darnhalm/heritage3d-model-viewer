@@ -994,6 +994,25 @@ export class TileManager {
     }
 
     /**
+     * Пройти по видимым сейчас тайлам вместе с их глубиной в дереве.
+     *
+     * Нужно раскраске блоков по LOD: цвет выбирается по глубине, а меши приходится брать
+     * заново каждый кадр — набор видимого меняется при стриминге.
+     *
+     * @param callback - Вызывается для каждого видимого тайла: глубина и его меши.
+     */
+    forEachVisibleTile(callback: (depth: number, meshInstances: MeshInstance[]) => void) {
+        const visibleTiles = this.debugIsolatePicked && this.debugPickedTile ?
+            [this.debugPickedTile] : this.prevSelection;
+        visibleTiles.forEach((tile) => {
+            if (!tile.entity?.enabled) {
+                return;
+            }
+            callback(tile.depth, this.getTileMeshInstances(tile));
+        });
+    }
+
+    /**
      * Габариты реально загруженной геометрии, а не служебных tile bounding volumes.
      *
      * Кэшированные LOD могут дублировать одни и те же участки, но объединённый
