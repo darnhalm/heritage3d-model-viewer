@@ -100,6 +100,7 @@ import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { t } from './i18n/translations';
+import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
@@ -554,6 +555,9 @@ class Viewer {
 
     lastAlignmentContentTransform: Mat4 | null;
 
+    // World position the geometry must keep while the pivot itself is being dragged.
+    private pivotDragContentPosition: Vec3 | null = null;
+
     helperEntities: Map<string, Entity>;
 
     activeHelperId: string | null;
@@ -698,6 +702,17 @@ class Viewer {
     /** DOM-оверлей со статистикой тайлов; создаётся лениво при первом включении. */
     private tileHud: HTMLDivElement | null = null;
 
+    /** Текстовая часть HUD; рядом с ней живёт легенда LOD, поэтому это отдельный узел. */
+    private tileHudText: HTMLDivElement | null = null;
+
+    private tileHudLegend: HTMLDivElement | null = null;
+
+    /**
+     * Слепок содержимого легенды: DOM пересобирается только когда состав уровней изменился.
+     * `null` — легенда скрыта и не отрисована, поэтому отличается от пустого состава.
+     */
+    private tileHudLegendKey: string | null = null;
+
     /** Последний read-only снимок spatial LOD; обновляется только при включённой диагностике. */
     private gsplatDebugStats: GSplatDebugStats | null = null;
 
@@ -805,7 +820,6 @@ class Viewer {
     // Навигационный куб (как в 3ds Max) + иконка орто/перспектива для выравнивания и Tiles Debug.
     private viewCube: ViewCube | null = null;
 
-    private orthoButton: HTMLButtonElement | null = null;
 
     miniStats: MiniStats;
 
@@ -1383,8 +1397,19 @@ class Viewer {
             this.cameraControls.enabled = false;
             this.lastAlignmentContentTransform = this.getAlignmentTarget() === 'model' ?
                 this.captureSceneContentTransform() : null;
+            // Pivot drag moves sceneRoot, which would drag the geometry along as its child.
+            // Remember where the geometry sits so every frame can put it back.
+            this.pivotDragContentPosition = this.getAlignmentTarget() === 'pivot' ?
+                this.sceneContentRoot.getPosition().clone() : null;
         });
         this.translateGizmo.on('transform:move', () => {
+            if (this.getAlignmentTarget() === 'pivot') {
+                if (this.pivotDragContentPosition) {
+                    this.sceneContentRoot.setPosition(this.pivotDragContentPosition);
+                }
+                this.renderNextFrame();
+                return;
+            }
             if (this.getAlignmentTarget() === 'box') {
                 this.syncDimensionBoxObserverFromEntity();
                 return;
@@ -1411,6 +1436,17 @@ class Viewer {
             this.renderNextFrame();
         });
         this.translateGizmo.on('transform:end', () => {
+            if (this.getAlignmentTarget() === 'pivot') {
+                if (this.pivotDragContentPosition) {
+                    this.sceneContentRoot.setPosition(this.pivotDragContentPosition);
+                    this.pivotDragContentPosition = null;
+                }
+                // Geometry never moved, so POIs and the dimension box need no compensation.
+                this.commitPivotTransformFromEntities();
+                this.cameraControls.enabled = true;
+                this.renderNextFrame();
+                return;
+            }
             if (this.getAlignmentTarget() === 'box') {
                 this.syncDimensionBoxObserverFromEntity();
                 this.cameraControls.enabled = true;
@@ -2798,6 +2834,7 @@ class Viewer {
         this.observer.set('scene.texelDensitySummary', '');
         this.observer.set('scene.texelDensityReport', '[]');
         this.observer.set('scene.hasGsplat', false);
+        this.observer.set('scene.unlit', false);
         this.observer.set('scene.isTileset', false);
         this.updateViewCubeVisibility();
         this.observer.set('scene.tilesetLit', null);
@@ -3460,6 +3497,9 @@ class Viewer {
         let vertexCount = 0;
         let primitiveCount = 0;
         let materialCount = 0;
+        // Материалы с KHR_materials_unlit приходят с useLighting === false. Считаем их
+        // отдельно: сцена целиком unlit → свет на картинку не влияет.
+        let litMaterialCount = 0;
         let textureCount = 0;
         let textureVRAM = 0;
         let variants: string[] = [];
@@ -3517,6 +3557,12 @@ class Viewer {
                 });
 
                 materialCount += resource.materials.length ?? 0;
+                (resource.materials ?? []).forEach((materialAsset: Asset) => {
+                    const material = materialAsset?.resource as { useLighting?: boolean } | null;
+                    if (material && material.useLighting !== false) {
+                        litMaterialCount++;
+                    }
+                });
                 textureCount += resource.textures.length ?? 0;
                 (resource.textures ?? []).forEach((texture: Asset) => {
                     textureVRAM += (texture.resource as Texture).gpuSize;
@@ -3556,6 +3602,10 @@ class Viewer {
         this.observer.set('scene.textureVRAM', textureVRAM);
         this.observer.set('scene.meshVRAM', meshVRAM);
         this.observer.set('scene.hasGsplat', this.entities.some(entity => entity.findComponents('gsplat').length > 0));
+        // Считаем по исходным материалам контейнера, а не по mesh instances: отладочные
+        // режимы (UV checker, texel density) подменяют материалы своими, тоже unlit.
+        this.observer.set('scene.unlit', materialCount > 0 && litMaterialCount === 0);
+        this.applyUnlitShadowCatcherDefault();
 
         // variant stats
         this.observer.set('scene.variants.list', JSON.stringify(variants));
@@ -4051,6 +4101,18 @@ class Viewer {
         this.renderNextFrame();
     }
 
+    /**
+     * Reset only the view: back to the scene's initial camera (or the default direction
+     * with the model framed). Unlike resetCamera(), the scene transform is left alone, so
+     * this is safe to offer next to the alignment tools.
+     */
+    resetCameraView() {
+        this.stopCameraFlyTransition();
+        this.focus(true);
+        this.fitCameraClipPlanes();
+        this.renderNextFrame();
+    }
+
     /** Reset the camera to default position (same as pressing R). */
     resetCamera() {
         this.stopCameraFlyTransition();
@@ -4230,20 +4292,40 @@ class Viewer {
     }
 
     setObjectPivotToCenter() {
-        const previousTransform = this.captureSceneContentTransform();
-        const centered = this.observer.get('centerScene');
         this.tileManager?.syncTransform();
         if (!this.tileManager?.getGeometryBounds(this.sceneBounds)) {
             this.calcSceneBounds(this.sceneBounds);
         }
-        const pivotWorldPosition = this.sceneBounds.center.clone();
+        this.setObjectPivotToWorldPosition(this.sceneBounds.center.clone());
+    }
+
+    /**
+     * Move the transform pivot to a world position, keeping the geometry where it is.
+     *
+     * @param pivotWorldPosition - Target world position for the pivot.
+     */
+    setObjectPivotToWorldPosition(pivotWorldPosition: Vec3) {
+        const previousTransform = this.captureSceneContentTransform();
         const contentWorldPosition = this.sceneContentRoot.getPosition().clone();
 
-        // sceneRoot is the transform gizmo pivot. Move it to the geometry center,
+        // sceneRoot is the transform gizmo pivot. Move it to the requested position,
         // then compensate on sceneContentRoot so the geometry stays in place.
         this.sceneRoot.setPosition(pivotWorldPosition);
         this.sceneContentRoot.setPosition(contentWorldPosition);
 
+        this.commitPivotTransformFromEntities();
+        this.transformPoisBetween(previousTransform, this.captureSceneContentTransform());
+        this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
+        this.renderNextFrame();
+    }
+
+    /**
+     * Write the current sceneRoot/sceneContentRoot split back into sceneTransform as
+     * position + pivotOffset. The entities must already be positioned; this only records
+     * the result so setCenterScene() can rebuild the same hierarchy later.
+     */
+    private commitPivotTransformFromEntities() {
+        const centered = this.observer.get('centerScene');
         const rootPosition = this.sceneRoot.getLocalPosition();
         const contentPosition = this.sceneContentRoot.getLocalPosition().clone();
         let pivotOffset: [number, number, number] = [
@@ -4271,19 +4353,14 @@ class Viewer {
             pivotOffset
         };
         this.dirtyBounds = true;
-        this.transformPoisBetween(previousTransform, this.captureSceneContentTransform());
-        this.setAlignmentGizmoMode(this.observer.get('debug.alignmentGizmoMode') ?? 'rotate');
-        this.renderNextFrame();
     }
 
+    /**
+     * Put the pivot back on the model's own origin. The geometry stays where it is —
+     * only the transform origin moves, which is what the user expects from a pivot reset.
+     */
     resetObjectPivot() {
-        const previousTransform = this.captureSceneContentTransform();
-        this.sceneTransform = {
-            ...this.sceneTransform,
-            pivotOffset: [0, 0, 0]
-        };
-        this.setCenterScene(this.observer.get('centerScene'));
-        this.transformPoisBetween(previousTransform, this.captureSceneContentTransform());
+        this.setObjectPivotToWorldPosition(this.sceneContentRoot.getPosition().clone());
     }
 
     resetObjectTransform() {
@@ -4337,9 +4414,9 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    private getAlignmentTarget(): 'model' | 'helper' | 'box' {
+    private getAlignmentTarget(): 'model' | 'helper' | 'box' | 'pivot' {
         const target = this.observer.get('debug.alignmentTarget');
-        return target === 'helper' || target === 'box' ? target : 'model';
+        return target === 'helper' || target === 'box' || target === 'pivot' ? target : 'model';
     }
 
     selectHelper(id: string | null) {
@@ -4663,6 +4740,9 @@ class Viewer {
     /** Тип проекции камеры: ortho (true) / perspective (false). */
     setCameraProjection(ortho: boolean) {
         this.camera.camera.projection = ortho ? 1 : 0; // 1 = ORTHOGRAPHIC, 0 = PERSPECTIVE
+        if (this.observer.get('camera.ortho') !== ortho) {
+            this.observer.set('camera.ortho', ortho);
+        }
         if (ortho) {
             const bbox = new BoundingBox();
             this.calcSceneBounds(bbox);
@@ -4677,64 +4757,48 @@ class Viewer {
         return this.camera.camera.projection === 1;
     }
 
-    /** Навигационный куб + иконка орто/перспектива (создаётся скрытым, показывается в режиме выравнивания). */
+    /** Навигационный куб (создаётся скрытым, показывается в режиме выравнивания). */
     private initViewCube() {
         // Отказоустойчиво: если ViewCube недоступен/падает — НЕ роняем весь вьюер
         // (иначе модели перестают грузиться). Куб опционален.
         try {
-        const wrapper = document.getElementById('canvas-wrapper');
-        if (!wrapper) return;
-        if (typeof ViewCube !== 'function') return;
+            const wrapper = document.getElementById('canvas-wrapper');
+            if (!wrapper) return;
+            if (typeof ViewCube !== 'function') return;
 
-        // Куб ориентации в правом верхнем углу. Клик по грани → выравнивание камеры.
-        this.viewCube = new ViewCube(new Vec4(1, 1, 0, 0));
-        this.viewCube.dom.style.position = 'absolute';
-        this.viewCube.dom.style.zIndex = '24';
-        this.viewCube.dom.style.display = 'none';
-        wrapper.appendChild(this.viewCube.dom);
-        this.viewCube.on(ViewCube.EVENT_CAMERAALIGN, (dir: Vec3) => this.alignCameraToDir(dir));
+            // Куб ориентации в правом верхнем углу. Клик по грани → выравнивание камеры.
+            this.viewCube = new ViewCube(new Vec4(1, 1, 0, 0));
+            this.viewCube.dom.style.position = 'absolute';
+            this.viewCube.dom.style.zIndex = '24';
+            this.viewCube.dom.style.display = 'none';
+            wrapper.appendChild(this.viewCube.dom);
+            this.viewCube.on(ViewCube.EVENT_CAMERAALIGN, (dir: Vec3) => this.alignCameraToDir(dir));
 
-        // Отдельная иконка переключения проекции (орто/перспектива).
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'viewcube-proj-btn';
-        btn.title = 'Проекция: перспектива / ортогональная';
-        btn.textContent = '⟂'; // обновляется в updateOrthoButton
-        Object.assign(btn.style, {
-            position: 'absolute', top: '92px', right: '8px', zIndex: '24', display: 'none',
-            width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer',
-            border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(13,27,42,0.9)',
-            color: '#fff', fontSize: '14px', lineHeight: '1'
-        } as CSSStyleDeclaration);
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.setCameraProjection(!this.isOrthographic());
-            this.updateOrthoButton();
-        });
-        wrapper.appendChild(btn);
-        this.orthoButton = btn;
-        this.updateOrthoButton();
+            // Кнопка проекции стоит под кубом и центруется по нему. Размер куба считается из
+            // его собственных радиуса и длины осей, поэтому отдаём его в CSS переменной, а не
+            // хардкодим отступы: при другом размере куба кнопка не наедет на оси.
+            const cubeSize = parseFloat(this.viewCube.dom.style.width) || this.viewCube.dom.offsetWidth;
+            if (cubeSize > 0) {
+                wrapper.style.setProperty('--view-cube-size', `${cubeSize}px`);
+            }
         } catch (e) {
             // eslint-disable-next-line no-console
             console.warn('ViewCube init failed (пропускаем, плеер работает):', e);
             this.viewCube = null;
-            this.orthoButton = null;
         }
     }
 
-    private updateOrthoButton() {
-        if (!this.orthoButton) return;
-        const ortho = this.isOrthographic();
-        this.orthoButton.textContent = ortho ? '▱' : '◹';
-        this.orthoButton.title = ortho ? 'Проекция: ортогональная (клик → перспектива)' : 'Проекция: перспектива (клик → ортогональная)';
-    }
-
-    /** Показать/скрыть навигационный куб и иконку проекции. */
+    /**
+     * Показать/скрыть навигационный куб. Переключатель проекции живёт рядом с ним в React
+     * и следит за тем же флагом `camera.viewCube`.
+     *
+     * @param visible - Показывать ли куб.
+     */
     setViewCubeVisible(visible: boolean) {
         if (this.viewCube) this.viewCube.dom.style.display = visible ? '' : 'none';
-        if (this.orthoButton) this.orthoButton.style.display = visible ? '' : 'none';
-        if (visible) this.updateOrthoButton();
+        if (this.observer.get('camera.viewCube') !== visible) {
+            this.observer.set('camera.viewCube', visible);
+        }
     }
 
     /** Куб ориентации нужен в выравнивании, визуализации тайлов и инспекторе камеры. */
@@ -5429,7 +5493,14 @@ class Viewer {
                     this.postSceneLoad();
 
                     this.tryFetchAndApplySettings(firstModelUrl, files)
-                    .then(() => this.renderNextFrame())
+                    .then((settingsApplied) => {
+                        // Без sidecar-настроек сброс к умолчаниям снова включает ловушку теней —
+                        // для unlit-сцены возвращаем её выключенной.
+                        if (!settingsApplied) {
+                            this.applyUnlitShadowCatcherDefault();
+                        }
+                        this.renderNextFrame();
+                    })
                     .catch(err => console.warn('[model-viewer] Background settings apply failed:', err));
                 })
                 .catch((err) => {
@@ -6191,6 +6262,18 @@ class Viewer {
         this.renderNextFrame();
     }
 
+    /**
+     * Unlit-контент светом не затеняется, но тень на ловушку он всё равно отбрасывает — под
+     * фотограмметрией с уже запечённым освещением она выглядит инородно, а раздела света,
+     * где её выключают, для unlit-сцены больше нет. Поэтому гасим ловушку по умолчанию;
+     * явная настройка из settings JSON применяется позже и побеждает.
+     */
+    private applyUnlitShadowCatcherDefault() {
+        if (this.observer.get('scene.unlit')) {
+            this.observer.set('shadowCatcher.enabled', false);
+        }
+    }
+
     private captureSceneContentTransform() {
         return new Mat4().copy(this.sceneContentRoot.getWorldTransform());
     }
@@ -6376,6 +6459,21 @@ class Viewer {
             // Крупнее (2×) для хелпера: подпись «Слушатель» перекрывает стандартный размер.
             this.translateGizmo.size = 2;
             this.translateGizmo.attach([entity]);
+            this.translateGizmo.enabled = true;
+            this.translateGizmo.update();
+            this.renderNextFrame();
+            return;
+        }
+
+        // Pivot uses the same sceneRoot as the model, but only translation: the drag
+        // handlers hold the geometry in place so just the transform origin moves.
+        if (target === 'pivot') {
+            if (mode !== 'move') {
+                this.renderNextFrame();
+                return;
+            }
+            this.translateGizmo.size = 1;
+            this.translateGizmo.attach([this.sceneRoot]);
             this.translateGizmo.enabled = true;
             this.translateGizmo.update();
             this.renderNextFrame();
@@ -7463,10 +7561,20 @@ class Viewer {
             el.id = 'tile-debug-hud';
             el.style.cssText = 'position:absolute;left:8px;bottom:8px;z-index:100;pointer-events:none;' +
                 'font:11px/1.45 ui-monospace,Menlo,monospace;color:#e8e8e8;background:rgba(0,0,0,0.62);' +
-                'padding:6px 9px;border-radius:5px;white-space:pre;letter-spacing:0.2px;';
+                'padding:6px 9px;border-radius:5px;letter-spacing:0.2px;';
+            const text = document.createElement('div');
+            text.style.cssText = 'white-space:pre;';
+            const legend = document.createElement('div');
+            // Легенда над текстом: цвета — первое, что нужно глазу, а строки статистики
+            // меняются по высоте (выбранный тайл добавляет блок) и сдвигали бы её.
+            legend.style.cssText = 'display:none;flex-wrap:wrap;align-items:center;gap:4px;margin:0 0 5px;';
+            el.appendChild(legend);
+            el.appendChild(text);
             const canvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
             (canvas.parentElement ?? document.body).appendChild(el);
             this.tileHud = el;
+            this.tileHudText = text;
+            this.tileHudLegend = legend;
         }
         this.tileHud.style.display = 'block';
 
@@ -7478,11 +7586,17 @@ class Viewer {
                 this.observer.get('debug.gsplatFreeze') ? 'FROZEN' : '',
                 this.observer.get('debug.gsplatPaused') ? 'PAUSED' : ''
             ].filter(Boolean).join(' ');
-            this.tileHud.textContent =
+            // Легенда имеет смысл, только когда на экране действительно цвета LOD: это либо
+            // раскраска самих сплатов, либо режим `lod` у границ узлов. В режиме `state`
+            // границы окрашены по состоянию загрузки, и палитра уровней там ни при чём.
+            const lodColored = !!this.observer.get('debug.gsplatLodColor') || mode === 'lod';
+            this.renderLodLegend(s.lodCounts, lodColored);
+            this.setHudText(
                 `GSPLAT SPATIAL LOD   mode: ${mode}${flags ? `   ${flags}` : ''}${s.awaitingLodUpdate ? '   UPDATING' : ''}\n` +
                 `nodes ${s.nodes}   visible ${s.visibleNodes}   transitioning ${s.transitioningNodes}\n` +
                 `files loaded ${s.loadedFiles}   running ${s.runningFiles}   queued ${s.queuedFiles}\n` +
-                `splats ${s.activeSplats.toLocaleString()} / ${s.budget.toLocaleString()}\n${lods || 'LOD selection pending'}`;
+                `splats ${s.activeSplats.toLocaleString()} / ${s.budget.toLocaleString()}${lodColored ? '' : `\n${lods || 'LOD selection pending'}`}`
+            );
             return;
         }
 
@@ -7493,10 +7607,12 @@ class Viewer {
             this.observer.get('debug.tileFreeze') ? 'FROZEN' : '',
             this.observer.get('debug.tilePaused') ? 'PAUSED' : ''
         ].filter(Boolean).join(' ');
-        this.tileHud.textContent =
+        this.renderLodLegend(s.depthCounts, mode === 'lod');
+        this.setHudText(
             `TILES ${s.tiles}   mode: ${mode}${flags ? `   ${flags}` : ''}\n` +
             `ready ${s.ready}  loading ${s.loading}  queued ${s.queued}  failed ${s.failed}\n` +
-            `selected ${s.selected}   depth ${s.maxSelectedDepth}   ${mb} MB`;
+            `selected ${s.selected}   depth ${s.maxSelectedDepth}   ${mb} MB`
+        );
 
         const picked = this.tileManager.getDebugPickedTileInfo();
         if (picked) {
@@ -7512,14 +7628,97 @@ class Viewer {
             if (displayUrl.length > 76) {
                 displayUrl = `…${displayUrl.slice(-75)}`;
             }
-            this.tileHud.textContent +=
+            this.appendHudText(
                 `\n\nPICKED TILE   LOD ${picked.depth}   ${picked.state.toUpperCase()}   ${picked.refine}\n` +
                 `SSE ${picked.screenSpaceError.toFixed(2)} px   error ${picked.geometricError.toFixed(2)}   distance ${picked.distance.toFixed(2)}\n` +
                 `content ${picked.contentCount}   ${pickedMb} MB   triangles ${picked.triangles.toLocaleString()}\n` +
-                `${displayUrl}`;
+                `${displayUrl}`
+            );
         } else if (this.observer.get('debug.tilePick')) {
-            this.tileHud.textContent += '\n\nPICK TILE: click model surface';
+            this.appendHudText('\n\nPICK TILE: click model surface');
         }
+    }
+
+    /**
+     * Записать текстовую часть HUD.
+     *
+     * @param text - Готовые строки статистики.
+     */
+    private setHudText(text: string) {
+        if (this.tileHudText) this.tileHudText.textContent = text;
+    }
+
+    /**
+     * Дописать блок к тексту HUD.
+     *
+     * @param text - Дополнительные строки.
+     */
+    private appendHudText(text: string) {
+        if (this.tileHudText) this.tileHudText.textContent += text;
+    }
+
+    /**
+     * Легенда уровней детализации: ряд квадратов цвета LOD с номером уровня внутри и
+     * количеством узлов/тайлов рядом. Палитра общая со сплатами и тайлами, поэтому одна и
+     * та же легенда объясняет и раскраску сплатов, и контуры блоков.
+     *
+     * @param counts - Количество элементов по уровням; индекс массива — номер уровня.
+     * @param visible - Показывать ли легенду (на экране действительно цвета LOD).
+     */
+    private renderLodLegend(counts: number[], visible: boolean) {
+        const legend = this.tileHudLegend;
+        if (!legend) return;
+        if (!visible) {
+            if (legend.style.display !== 'none') {
+                legend.style.display = 'none';
+                legend.replaceChildren();
+                this.tileHudLegendKey = null;
+            }
+            return;
+        }
+
+        const levels = counts
+        .map((count, lod) => ({ lod, count: Number(count) || 0 }))
+        .filter(entry => entry.count > 0);
+        const key = levels.map(entry => `${entry.lod}:${entry.count}`).join(',');
+        legend.style.display = 'flex';
+        // HUD обновляется каждый кадр — пересобираем DOM только при изменении состава.
+        if (key === this.tileHudLegendKey) return;
+        this.tileHudLegendKey = key;
+        legend.replaceChildren();
+
+        if (levels.length === 0) {
+            const empty = document.createElement('span');
+            empty.style.cssText = 'color:#b9b9b9;';
+            empty.textContent = 'LOD selection pending';
+            legend.appendChild(empty);
+            return;
+        }
+
+        levels.forEach(({ lod, count }) => {
+            const item = document.createElement('span');
+            item.style.cssText = 'display:inline-flex;align-items:center;gap:3px;';
+
+            const swatch = document.createElement('span');
+            const color = lodColorCss(lod);
+            // Подпись внутри квадрата: на жёлтом и голубом белый текст не читается,
+            // поэтому цвет цифры выбираем по яркости фона.
+            const [r, g, b] = lodColorRgb(lod);
+            const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+            swatch.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;' +
+                'width:15px;height:15px;border-radius:3px;font-size:10px;line-height:1;font-weight:700;' +
+                `background:${color};color:${luminance > 0.55 ? '#101010' : '#ffffff'};` +
+                'box-shadow:inset 0 0 0 1px rgba(255,255,255,0.35);';
+            swatch.textContent = String(lod);
+
+            const label = document.createElement('span');
+            label.style.cssText = 'color:#cfcfcf;';
+            label.textContent = String(count);
+
+            item.appendChild(swatch);
+            item.appendChild(label);
+            legend.appendChild(item);
+        });
     }
 
     /**
@@ -7546,10 +7745,6 @@ class Viewer {
         };
         const managers = this.getGSplatManagers();
 
-        const lodPalette = [
-            0xff0000ff, 0xff00ff00, 0xffff0000, 0xff00ffff,
-            0xffff00ff, 0xffffff00, 0xff0080ff, 0xffff0080
-        ];
         const stateColors = {
             optimal: 0xff52d273,
             coarser: 0xffbfd42d,
@@ -7600,7 +7795,7 @@ class Viewer {
                     const ay = worldMat.transformVector(new Vec3(0, half.y, 0), new Vec3());
                     const az = worldMat.transformVector(new Vec3(0, 0, half.z), new Vec3());
                     const mode = this.observer.get('debug.gsplatDebugMode') ?? 'state';
-                    let color = lodPalette[Math.max(0, current) % lodPalette.length];
+                    let color = lodColorAbgr(current);
                     if (mode === 'state') {
                         const pending = inst.pendingVisibleAdds?.has?.(i) ||
                             (current >= 0 && inst.pendingDecrements?.has?.(i));

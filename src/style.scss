@@ -1071,6 +1071,49 @@ body:not(.ui-ready) #panel-left {
     margin: 0;
 }
 
+/* Переключатель проекции под навигационным кубом (правый верхний угол вьюпорта). */
+/* Под кубом и ровно по его центру. Размер куба приходит из viewer в --view-cube-size,
+   поэтому кнопка не наезжает на оси, каким бы куб ни был. */
+.projection-toggle-slot {
+    position: absolute;
+    top: calc(var(--view-cube-size, 104px) + 8px);
+    right: calc(var(--view-cube-size, 104px) / 2);
+    transform: translateX(50%);
+    z-index: 24;
+    display: block;
+}
+
+/* Оформление как у нижней панели вьюпорта, а не как у кнопок левой панели. */
+.projection-toggle.pcui-button {
+    min-width: 58px;
+    min-height: 26px;
+    height: 26px;
+    padding: 0 8px !important;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 6px;
+    background-color: rgba(32, 32, 32, 0.4) !important;
+    color: white !important;
+    font-size: 11px !important;
+    line-height: 26px;
+    text-align: center;
+    transition: background-color 250ms ease, box-shadow 0.2s ease;
+}
+
+.projection-toggle.pcui-button:hover,
+.projection-toggle.pcui-button.pcui-focus {
+    background-color: rgba(32, 32, 32, 0.8) !important;
+    box-shadow:
+        0 0 0 1px rgba(var(--theme-glow-rgb), 0.34),
+        0 0 8px 1px rgba(var(--theme-glow-rgb), 0.24) !important;
+}
+
+/* Ортография — не режим по умолчанию, поэтому состояние видно не только по подписи. */
+.projection-toggle.pcui-button.active {
+    background-color: rgba(32, 32, 32, 0.8) !important;
+    box-shadow: inset 0 0 0 1px var(--theme-primary);
+}
+
 .ripple-container {
     position: absolute;
     inset: 0;
@@ -2360,36 +2403,56 @@ input {
     margin: 0 0 8px;
 }
 
-/* Alignment icon toolbar — compact icons with tooltip/aria names */
+/* Alignment icon toolbar — one labelled row per group, icons with tooltip/aria names */
 #alignment-panel .alignment-toolbar {
     display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     box-sizing: border-box;
     width: 100%;
     padding: 8px;
-    gap: 6px;
+    gap: 12px;
+}
+
+#alignment-panel .alignment-toolbar-row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Caption column: group names readable without hovering every icon. */
+#alignment-panel .alignment-toolbar-caption {
+    flex: 0 0 auto;
+    /* 68px keeps four 40px icons on one line inside the default 310px panel; the
+       10px caption still fits the longest label (OPERATION / ОПЕРАЦИЯ).
+       !important: a global rule forces 12px white on every .pcui-label. */
+    width: 68px;
+    /* pcui labels ship a 6px margin; it stole the 12px the fourth icon needs. */
+    margin: 0 !important;
+    color: #888 !important;
+    font-size: 10px !important;
+    line-height: 1.2;
+    letter-spacing: 0.2px !important;
+    text-transform: uppercase;
+}
+
+/* Scene reset is destructive — a rule separates it from the tools above. */
+#alignment-panel .alignment-toolbar-row-scene {
+    margin-top: 2px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 #alignment-panel .alignment-toolbar-group {
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;
+    /* Fill the row instead of shrink-to-fit, so the fourth target icon keeps its place
+       on the first line. */
+    flex: 1 1 auto;
+    min-width: 0;
     gap: 6px;
-}
-
-#alignment-panel .alignment-toolbar-sep {
-    flex: 0 0 auto;
-    width: 1px;
-    align-self: stretch;
-    min-height: 24px;
-    background-color: rgba(255, 255, 255, 0.12);
-}
-
-/* Reset lives at the far end, visually separated to avoid accidental resets. */
-#alignment-panel .alignment-toolbar-sep-reset {
-    margin-left: auto;
 }
 
 #alignment-panel .alignment-icon-btn {
@@ -2399,6 +2462,9 @@ input {
     min-width: 40px;
     height: 36px;
     padding: 0;
+    /* Drop the pcui button margin: the row gap does the spacing, and the margin
+       pushed the four target icons onto a second line at the default panel width. */
+    margin: 0;
 }
 
 #alignment-panel .alignment-icon-btn::before {
@@ -2444,6 +2510,11 @@ input {
     mask: url('static/icons/alignment-box-icon.svg') no-repeat center / contain;
 }
 
+#alignment-panel .align-icon-pivot::before {
+    -webkit-mask: url('static/icons/alignment-pivot-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/alignment-pivot-icon.svg') no-repeat center / contain;
+}
+
 #alignment-panel .align-icon-move::before {
     -webkit-mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
     mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
@@ -2477,6 +2548,19 @@ input {
 #alignment-panel .align-icon-box-fit::before {
     -webkit-mask: url('static/icons/alignment-box-fit-icon.svg') no-repeat center / contain;
     mask: url('static/icons/alignment-box-fit-icon.svg') no-repeat center / contain;
+}
+
+/* Box back to model bounds and pivot back to default reuse the reset glyph; the tooltip
+   and the row they sit in tell them apart. */
+#alignment-panel .align-icon-box-bounds::before,
+#alignment-panel .align-icon-pivot-reset::before {
+    -webkit-mask: url('static/icons/alignment-reset-object-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/alignment-reset-object-icon.svg') no-repeat center / contain;
+}
+
+#alignment-panel .align-icon-reset-view::before {
+    -webkit-mask: url('static/icons/reset-camera-icon.svg') no-repeat center / contain;
+    mask: url('static/icons/reset-camera-icon.svg') no-repeat center / contain;
 }
 
 #alignment-panel .align-icon-reset::before {

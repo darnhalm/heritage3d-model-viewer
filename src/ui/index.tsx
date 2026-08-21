@@ -1,5 +1,5 @@
 import { Observer } from '@playcanvas/observer';
-import { Container, Progress } from '@playcanvas/pcui/react';
+import { Button, Container, Progress } from '@playcanvas/pcui/react';
 import React from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
@@ -344,6 +344,9 @@ class App extends React.Component<{ observer: Observer }> {
         const showEmbedStartOverlay = !!(embed?.enabled && embed?.waiting);
         const showEmbedLoadingBackdrop = !!(embed?.enabled && !embed?.waiting && embed?.placeholderUrl && this.state?.ui?.spinner);
         const showPoiPlayer = poiList.length > 0 && !(embed?.enabled && !embed?.tour);
+        // Переключатель проекции живёт под навигационным кубом и показывается вместе с ним.
+        const showProjectionToggle = !!this.state?.camera?.viewCube;
+        const orthographic = !!this.state?.camera?.ortho;
         const showLoadProgressBackdrop = !!this.state?.ui?.spinner;
         const loadProgressBackdropColor = this.state?.ui?.loadingBackgroundReady && this.state?.skybox?.background === 'Solid Color' ?
             rgbToCssColor(this.state.skybox.backgroundColor) :
@@ -418,6 +421,27 @@ class App extends React.Component<{ observer: Observer }> {
                             <img src='static/icons/embed-play.svg' alt='Start' />
                         </button>
                     </div>
+                )}
+                {showProjectionToggle && (
+                    <span
+                        className='projection-toggle-slot'
+                        title={orthographic ?
+                            t('Orthographic projection (click for perspective)', lang) :
+                            t('Perspective projection (click for orthographic)', lang)}
+                    >
+                        <Button
+                            class={['projection-toggle', ...(orthographic ? ['active'] : [])]}
+                            text={orthographic ? t('Ortho', lang) : t('Persp', lang)}
+                            onClick={() => {
+                                // Состояние читаем в момент клика, а не из замыкания рендера:
+                                // React-обёртка pcui привязывает onClick один раз при монтировании
+                                // и больше его не переустанавливает, поэтому захваченное значение
+                                // навсегда осталось бы от первого рендера.
+                                const viewer = window.viewer;
+                                viewer?.setCameraProjection?.(!viewer?.isOrthographic?.());
+                            }}
+                        />
+                    </span>
                 )}
                 {showLoadControls && <LoadControls observerData={this.state} setProperty={this._setStateProperty}/>}
                 {showSelectedNode && <SelectedNode observerData={this.state} setProperty={this._setStateProperty} />}

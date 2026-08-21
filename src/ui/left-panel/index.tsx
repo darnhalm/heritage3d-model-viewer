@@ -44,8 +44,10 @@ type ViewerApi = {
     };
     setObjectToCenter?: () => void;
     setObjectPivotToCenter?: () => void;
+    resetObjectPivot?: () => void;
     resetObjectTransform?: () => void;
     frameScene?: () => void;
+    resetCameraView?: () => void;
     setDimensionBoxFromModelBounds?: () => void;
     setDimensionBoxFittedToModel?: () => void;
     setStandardView?: (view: string) => void;
@@ -603,7 +605,7 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
             active?: boolean;
             extraClass?: string;
         }) => (
-            <span title={opts.label} style={{ display: 'contents' }}>
+            <span key={opts.icon} title={opts.label} style={{ display: 'contents' }}>
                 <Button
                     class={[
                         'secondary', 'alignment-icon-btn', opts.icon,
@@ -617,20 +619,36 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
             </span>
         );
 
+        // One labelled row per group: the caption column keeps the groups readable in a
+        // narrow panel without hovering every icon. An empty group drops out entirely.
+        const toolRow = (caption: string, rowClass: string, buttons: (React.ReactElement | null)[]) => {
+            const items = buttons.filter(Boolean);
+            return items.length ? (
+                <Container class={['alignment-toolbar-row', rowClass]}>
+                    <Label class='alignment-toolbar-caption' text={caption} />
+                    <Container class='alignment-toolbar-group'>{items}</Container>
+                </Container>
+            ) : null;
+        };
+
         return (
             <Container id='alignment-panel' class='tab-panel'>
                 <Container class='alignment-toolbar'>
-                    <Container class='alignment-toolbar-group'>
-                        {toolBtn({
+                    {toolRow(t('Object', lang), 'alignment-toolbar-row-target', [
+                        toolBtn({
                             icon: 'align-icon-model',
                             label: t('Model', lang),
                             active: target === 'model',
                             onClick: () => {
                                 props.setProperty('debug.alignmentTarget', 'model');
-                                if (gizmoMode === 'resize') props.setProperty('debug.alignmentGizmoMode', 'move');
+                                // Режим читаем живым: pcui привязывает onClick один раз при
+                                // монтировании, поэтому значение из замыкания рендера устаревает.
+                                if (getViewer()?.observer?.get?.('debug.alignmentGizmoMode') === 'resize') {
+                                    props.setProperty('debug.alignmentGizmoMode', 'move');
+                                }
                             }
-                        })}
-                        {toolBtn({
+                        }),
+                        toolBtn({
                             icon: 'align-icon-helper',
                             label: t('Helper', lang),
                             active: target === 'helper',
@@ -638,8 +656,8 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                                 props.setProperty('debug.alignmentTarget', 'helper');
                                 props.setProperty('debug.alignmentGizmoMode', 'move');
                             }
-                        })}
-                        {toolBtn({
+                        }),
+                        toolBtn({
                             icon: 'align-icon-box',
                             label: t('Box', lang),
                             active: target === 'box',
@@ -651,63 +669,86 @@ class AlignmentPanel extends React.Component <{ observerData: ObserverData, setP
                                 }
                                 props.setProperty('debug.alignmentTarget', 'box');
                             }
-                        })}
-                    </Container>
-                    <Container class='alignment-toolbar-sep' />
-                    <Container class='alignment-toolbar-group'>
-                        {toolBtn({
+                        }),
+                        toolBtn({
+                            icon: 'align-icon-pivot',
+                            label: t('Object Pivot', lang),
+                            active: target === 'pivot',
+                            onClick: () => {
+                                props.setProperty('debug.alignmentTarget', 'pivot');
+                                // The pivot can only be translated, so never leave a
+                                // rotate/resize mode selected — the gizmo would vanish.
+                                props.setProperty('debug.alignmentGizmoMode', 'move');
+                            }
+                        })
+                    ])}
+                    {toolRow(t('Operation', lang), 'alignment-toolbar-row-operation', [
+                        toolBtn({
                             icon: 'align-icon-move',
                             label: t('Move', lang),
                             active: gizmoMode === 'move',
                             onClick: () => props.setProperty('debug.alignmentGizmoMode', 'move')
-                        })}
-                        {toolBtn({
+                        }),
+                        target === 'model' || target === 'box' ? toolBtn({
                             icon: 'align-icon-rotate',
                             label: t('Rotate', lang),
                             active: gizmoMode === 'rotate',
                             onClick: () => props.setProperty('debug.alignmentGizmoMode', 'rotate')
-                        })}
-                        {target === 'box' ? toolBtn({
+                        }) : null,
+                        target === 'box' ? toolBtn({
                             icon: 'align-icon-scale',
                             label: t('Resize box', lang),
                             active: gizmoMode === 'resize',
                             onClick: () => props.setProperty('debug.alignmentGizmoMode', 'resize')
-                        }) : null}
-                    </Container>
-                    <Container class='alignment-toolbar-sep' />
-                    <Container class='alignment-toolbar-group'>
-                        {toolBtn({
+                        }) : null
+                    ])}
+                    {toolRow(t('Actions', lang), 'alignment-toolbar-row-actions', [
+                        target === 'model' ? toolBtn({
                             icon: 'align-icon-object-center',
                             label: t('Object to Center', lang),
                             onClick: () => getViewer()?.setObjectToCenter?.()
-                        })}
-                        {toolBtn({
+                        }) : null,
+                        target === 'model' || target === 'pivot' ? toolBtn({
                             icon: 'align-icon-pivot-center',
                             label: t('Pivot Point: Center to Object', lang),
                             onClick: () => getViewer()?.setObjectPivotToCenter?.()
-                        })}
-                        {toolBtn({
-                            icon: 'align-icon-fit',
-                            label: t('Fit to Screen', lang),
-                            onClick: () => getViewer()?.frameScene?.()
-                        })}
-                        {target === 'box' ? toolBtn({
+                        }) : null,
+                        target === 'pivot' ? toolBtn({
+                            icon: 'align-icon-pivot-reset',
+                            label: t('Reset Pivot', lang),
+                            onClick: () => getViewer()?.resetObjectPivot?.()
+                        }) : null,
+                        target === 'box' ? toolBtn({
                             icon: 'align-icon-box-fit',
                             label: t('Fit Box to Model', lang),
                             onClick: () => getViewer()?.setDimensionBoxFittedToModel?.()
-                        }) : null}
-                    </Container>
-                    <Container class={['alignment-toolbar-sep', 'alignment-toolbar-sep-reset']} />
-                    <Container class={['alignment-toolbar-group', 'alignment-toolbar-group-reset']}>
-                        {toolBtn({
+                        }) : null,
+                        target === 'box' ? toolBtn({
+                            icon: 'align-icon-box-bounds',
+                            label: t('Box from Model Bounds', lang),
+                            onClick: () => getViewer()?.setDimensionBoxFromModelBounds?.()
+                        }) : null
+                    ])}
+                    {toolRow(t('Camera', lang), 'alignment-toolbar-row-camera', [
+                        toolBtn({
+                            icon: 'align-icon-fit',
+                            label: t('Fit to Screen', lang),
+                            onClick: () => getViewer()?.frameScene?.()
+                        }),
+                        toolBtn({
+                            icon: 'align-icon-reset-view',
+                            label: t('Reset View', lang),
+                            onClick: () => getViewer()?.resetCameraView?.()
+                        })
+                    ])}
+                    {toolRow(t('Scene', lang), 'alignment-toolbar-row-scene', [
+                        toolBtn({
                             icon: 'align-icon-reset',
-                            label: target === 'box' ? t('Box from Model Bounds', lang) : t('Reset Object', lang),
+                            label: t('Reset Object', lang),
                             extraClass: 'alignment-reset',
-                            onClick: () => target === 'box' ?
-                                getViewer()?.setDimensionBoxFromModelBounds?.() :
-                                getViewer()?.resetObjectTransform?.()
-                        })}
-                    </Container>
+                            onClick: () => getViewer()?.resetObjectTransform?.()
+                        })
+                    ])}
                 </Container>
                 {/* Ternary → null (not `&&` → '') so pcui Container never receives a falsy child. */}
                 {this.state.flashLabel ?
@@ -744,7 +785,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.isTileset', 'scene.tilesetLit', 'scene.tilesetMaxDepth', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'ui.language', 'animation.list'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.unlit', 'scene.isTileset', 'scene.tilesetLit', 'scene.tilesetMaxDepth', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'ui.language', 'animation.list'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) ||
@@ -930,6 +971,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         })();
         const embedEnabled = !!observerData?.ui?.embed?.enabled;
         const embedPreset = observerData?.ui?.embed?.preset;
+        // Unlit-сцена (KHR_materials_unlit или unlit-тайлсет фотограмметрии) не затеняется
+        // светом, поэтому раздел света для неё скрыт. Окружение при этом остаётся.
+        const unlitScene = observerData?.scene?.unlit === true ||
+            (!!observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false);
         const showMaterialsTab = !embedEnabled;
         const tabLabels: Record<LeftPanelTab, string> = {
             scene: t('Settings', lang),
@@ -1053,8 +1098,12 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             <CameraPanel observerData={observerData} setProperty={setProperty} />
                             {!embedEnabled && !observerData?.scene?.hasGsplat && (
                                 <>
+                                    {/* Окружение остаётся и для unlit: модель его не учитывает,
+                                        но фон и HDRI-подложка сцены им по-прежнему задаются. */}
                                     <SkyboxPanel observerData={observerData} setProperty={setProperty} />
-                                    <LightPanel observerData={observerData} setProperty={setProperty} />
+                                    {!unlitScene && (
+                                        <LightPanel observerData={observerData} setProperty={setProperty} />
+                                    )}
                                 </>
                             )}
                             {(!embedEnabled || embedPreset === 'full') && (

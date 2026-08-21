@@ -156,4 +156,6 @@ export type TileStats = {
     bytes: number;
     /** Максимальная глубина среди выбранных тайлов. */
     maxSelectedDepth: number;
+    /** Сколько выбранных тайлов на каждой глубине; индекс массива — глубина. Для легенды LOD. */
+    depthCounts: number[];
 };

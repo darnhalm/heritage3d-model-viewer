@@ -278,9 +278,19 @@ class SettingsService {
             const c = theme.primaryColor as { r?: number; g?: number; b?: number };
             theme.primaryColor = SettingsService.rgbToHex(Number(c.r ?? 0), Number(c.g ?? 0), Number(c.b ?? 0));
         }
+        // Проекция и видимость куба — сеансовое состояние режима выравнивания, а не
+        // настройка сцены: в settings JSON они создали бы рассинхрон между подписью кнопки
+        // и реальной камерой (обработчика, включающего ортографию по этому полю, нет).
+        const camera = (options.camera && typeof options.camera === 'object') ?
+            { ...(options.camera as Record<string, unknown>) } :
+            options.camera;
+        if (camera && typeof camera === 'object') {
+            delete (camera as Record<string, unknown>).ortho;
+            delete (camera as Record<string, unknown>).viewCube;
+        }
         const data: Record<string, unknown> = {
             modelViewerSettingsVersion: 1,
-            camera: options.camera,
+            camera,
             skybox,
             light,
             theme,

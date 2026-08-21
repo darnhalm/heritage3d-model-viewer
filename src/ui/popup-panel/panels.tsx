@@ -513,7 +513,8 @@ class MeasurementsPanel extends React.Component <{
                a.measure?.lastArea !== b.measure?.lastArea ||
                a.measure?.areaPlanarity !== b.measure?.areaPlanarity ||
                a.measure?.mode !== b.measure?.mode ||
-               a.measure?.pointCount !== b.measure?.pointCount;
+               a.measure?.pointCount !== b.measure?.pointCount ||
+               a.helpers?.visible !== b.helpers?.visible;
     }
 
     render() {
@@ -595,6 +596,13 @@ class MeasurementsPanel extends React.Component <{
                         label={t('Enable measuring', lang)}
                         value={measureData.enabled}
                         setProperty={(value: boolean) => props.setProperty('measure.enabled', value)}
+                    />
+                    {/* Часть измерений будет привязана к хелперам сцены, поэтому их показ
+                        включается прямо здесь. Пока это только видимость во вьюпорте. */}
+                    <Toggle
+                        label={t('Show helpers', lang)}
+                        value={!!props.observerData?.helpers?.visible}
+                        setProperty={(value: boolean) => props.setProperty('helpers.visible', value)}
                     />
                     <Button
                         class='secondary'

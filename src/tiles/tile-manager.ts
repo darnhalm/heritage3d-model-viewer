@@ -24,6 +24,7 @@ import {
 } from 'playcanvas';
 
 import type { DebugLines, DebugSolid } from '../debug-lines';
+import { lodColorAbgr } from '../lod-palette';
 import { expandSubtree, loadSubtreeAt, readImplicitTiling } from './implicit-tiling';
 import { destroyTileContent, gltfUpAxisTransform, loadTileContent, type TileContentResult } from './tile-content';
 import { distanceToObb, makeWorldObb, screenSpaceError } from './tile-math';
@@ -72,17 +73,15 @@ const STATE_COLORS: Record<string, number> = {
 const SELECTED_COLOR = 0xffffff00;
 /** Белый контур — тайл, выбранный кликом в инспекторе. */
 const PICKED_COLOR = 0xffffffff;
-/** Палитра LOD по глубине (0xAABBGGRR), циклится по модулю. */
-const LOD_COLORS = [
-    0xff4444ff, // 0 — красный
-    0xff44aaff, // 1 — оранжевый
-    0xff44ffff, // 2 — жёлтый
-    0xff44ff44, // 3 — зелёный
-    0xffffaa44, // 4 — голубой
-    0xffff4444, // 5 — синий
-    0xffff44aa, // 6 — фиолетовый
-    0xffff44ff // 7 — розовый
-];
+/**
+ * Цвет уровня детализации по глубине тайла. Палитра общая с гауссовыми сплатами
+ * (`src/lod-palette.ts`), чтобы отладка тайлов и сплатов читалась одинаково и обходилась
+ * одной легендой в HUD.
+ *
+ * @param depth - Глубина тайла в дереве.
+ * @returns Цвет 0xAABBGGRR для DebugLines/DebugSolid.
+ */
+const lodColor = (depth: number) => lodColorAbgr(depth);
 
 /** Единица полуширины контурных лент в долях расстояния до камеры. Значение UI 2 = прежние 0.002. */
 const EDGE_WIDTH_UNIT = 0.001;
@@ -313,7 +312,8 @@ export class TileManager {
         failed: 0,
         selected: 0,
         bytes: 0,
-        maxSelectedDepth: 0
+        maxSelectedDepth: 0,
+        depthCounts: []
     };
 
     /** Габариты всего тайлсета в мировых координатах — стабильные, не зависят от LOD. */
@@ -949,7 +949,8 @@ export class TileManager {
             failed: 0,
             selected: selection.length,
             bytes: 0,
-            maxSelectedDepth: 0
+            maxSelectedDepth: 0,
+            depthCounts: []
         };
 
         if (this.rootTile) {
@@ -964,6 +965,7 @@ export class TileManager {
         }
         selection.forEach((tile) => {
             stats.maxSelectedDepth = Math.max(stats.maxSelectedDepth, tile.depth);
+            stats.depthCounts[tile.depth] = (stats.depthCounts[tile.depth] ?? 0) + 1;
         });
 
         this.stats = stats;
@@ -1223,9 +1225,7 @@ export class TileManager {
             if (!tile.obb || (!tile.selected && !picked)) {
                 continue;
             }
-            const schemeColor = mode === 'lod' ?
-                LOD_COLORS[tile.depth % LOD_COLORS.length] :
-                SELECTED_COLOR;
+            const schemeColor = mode === 'lod' ? lodColor(tile.depth) : SELECTED_COLOR;
             const color = picked ? PICKED_COLOR : schemeColor;
             const { center, halfAxes } = tile.obb;
 

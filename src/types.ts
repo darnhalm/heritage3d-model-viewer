@@ -77,7 +77,11 @@ export interface ObserverData {
         mode: 'orbit' | 'fly',
         flySpeed: number,
         position?: [number, number, number] | null,
-        focus?: [number, number, number] | null
+        focus?: [number, number, number] | null,
+        /** Проекция камеры ортогональна. */
+        ortho?: boolean,
+        /** Показан ли навигационный куб (и рядом с ним переключатель проекции). */
+        viewCube?: boolean
     },
     skybox: {
         value: string,
@@ -127,7 +131,7 @@ export interface ObserverData {
         grid: boolean,
         alignmentMode?: boolean,
         alignmentGizmoMode?: 'move' | 'rotate' | 'resize',
-        alignmentTarget?: 'model' | 'helper' | 'box',
+        alignmentTarget?: 'model' | 'helper' | 'box' | 'pivot',
         normals: number,
         uvCheckerScale: number,
         selectedUvSet: number,
@@ -243,6 +247,8 @@ export interface ObserverData {
         cameras: string,
         selectedCamera: string,
         hasGsplat?: boolean,
+        /** Все материалы сцены unlit (KHR_materials_unlit): свет на затенение не влияет. */
+        unlit?: boolean,
         isTileset?: boolean,
         tilesetLit?: boolean | null,
         /** Глубина дерева тайлов — верх ползунка LOD в панели. */

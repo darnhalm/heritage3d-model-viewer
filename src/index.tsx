@@ -167,7 +167,9 @@ const observerData: ObserverData = {
         mode: 'orbit',
         flySpeed: 1,
         position: null,
-        focus: null
+        focus: null,
+        ortho: false,
+        viewCube: false
     },
     skybox: {
         value: 'Paul Lobe Haus',
@@ -294,6 +296,7 @@ const observerData: ObserverData = {
         cameras: '[]',
         selectedCamera: '',
         hasGsplat: false,
+        unlit: false,
         isTileset: false,
         tilesetLit: null,
         tilesetMaxDepth: 0
@@ -363,8 +366,16 @@ const saveOptions = (observer: Observer, name: string) => {
         ...options.debug,
         alignmentMode: false
     } : options.debug;
+    // `ortho` и `viewCube` — состояние текущего сеанса, а не настройка: проекцию включает
+    // сам пользователь в режиме выравнивания, а куб виден только в нём. Сохранять их нельзя —
+    // при следующей загрузке подпись кнопки говорила бы «Орто» при перспективной камере.
+    const camera = options.camera ? { ...options.camera } : options.camera;
+    if (camera) {
+        delete camera.ortho;
+        delete camera.viewCube;
+    }
     window.localStorage.setItem(`model-viewer-${name}`, JSON.stringify({
-        camera: options.camera,
+        camera,
         skybox: options.skybox,
         light: options.light,
         debug,
@@ -380,7 +391,10 @@ const saveOptions = (observer: Observer, name: string) => {
 const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, string>) => {
     // The backend is a runtime capability, not a scene/user preference. Ignore both the old and
     // current persisted keys so stale storage can never override automatic device selection.
-    const filter = ['skybox.options', 'debug.renderMode', 'debug.alignmentMode', 'enableWebGPU', 'graphicsBackend'];
+    const filter = ['skybox.options', 'debug.renderMode', 'debug.alignmentMode', 'enableWebGPU', 'graphicsBackend',
+        // Сеансовое состояние проекции и навигационного куба: в старом localStorage оно
+        // могло сохраниться, поэтому отбрасываем и на загрузке.
+        'camera.ortho', 'camera.viewCube'];
 
     const loadRec = (path: string, value: unknown) => {
         if (filter.indexOf(path) !== -1) {

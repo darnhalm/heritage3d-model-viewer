@@ -8,6 +8,7 @@ import {
     PIXELFORMAT_RGBA8,
     PIXELFORMAT_RGBA16F,
     PIXELFORMAT_RGBA32F,
+    PROJECTION_ORTHOGRAPHIC,
     SEMANTIC_POSITION,
     BlendState,
     CameraComponent,
@@ -154,6 +155,18 @@ class Multiframe {
 
         // just before rendering the scene we apply a subpixel jitter
         // to the camera's projection matrix.
+        //
+        // Where the jitter goes depends on the projection. In a perspective matrix the
+        // skew terms m[8]/m[9] are divided by w = -z, so the shift is the same at every
+        // depth. An orthographic matrix has w = 1, so those same terms would shift each
+        // fragment proportionally to its view depth — a deep scene (a 3D Tiles set, say)
+        // smears into overlapping ghost copies instead of anti-aliasing. Orthographic
+        // therefore jitters the translation terms m[12]/m[13], which are plain NDC offsets.
+        // Both pairs are zero in an un-jittered symmetric frustum, so clearing them is safe.
+        const jitterIndices = (): [number, number] => {
+            return this.camera.camera.projection === PROJECTION_ORTHOGRAPHIC ? [12, 13] : [8, 9];
+        };
+
         const preRender = (c: CameraComponent) => {
             if (c !== this.camera) {
                 return;
@@ -161,17 +174,24 @@ class Multiframe {
 
             const camera = this.camera.camera;
             const pmat = camera.projectionMatrix;
+            const [ix, iy] = jitterIndices();
+
+            pmat.data[8] = 0;
+            pmat.data[9] = 0;
+            pmat.data[12] = 0;
+            pmat.data[13] = 0;
 
             if (this.enabled && this.accumTexture) {
                 const sample = this.sampleArray[this.sampleId];
-                pmat.data[8] = sample.x / this.accumTexture.width;
-                pmat.data[9] = sample.y / this.accumTexture.height;
+                // m[12]/m[13] shift NDC directly, m[8]/m[9] shift it through the -z divide,
+                // so the orthographic pair takes the opposite sign to jitter the same way.
+                const sign = ix === 12 ? -1 : 1;
+                pmat.data[ix] = sign * sample.x / this.accumTexture.width;
+                pmat.data[iy] = sign * sample.y / this.accumTexture.height;
                 resolve(device.scope, {
                     textureBias: this.sampleId === 0 ? 0.0 : this.textureBias
                 });
             } else {
-                pmat.data[8] = 0;
-                pmat.data[9] = 0;
                 resolve(device.scope, {
                     textureBias: 0
                 });
@@ -188,6 +208,8 @@ class Multiframe {
             const pmat = camera.projectionMatrix;
             pmat.data[8] = 0;
             pmat.data[9] = 0;
+            pmat.data[12] = 0;
+            pmat.data[13] = 0;
         };
 
         this.camera.system.app.scene.on(EVENT_PRERENDER, preRender);
