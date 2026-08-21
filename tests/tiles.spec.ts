@@ -78,11 +78,11 @@ test('tile material debug buttons switch off on a second click', async ({ page }
 });
 
 /** Дождаться, пока обход выберет хотя бы один тайл с готовым контентом. */
-const waitForTiles = async (page: Page) => {
+const waitForTiles = async (page: Page, timeout = 20000) => {
     await page.waitForFunction(() => {
         const stats = (window as any).viewer?.getTileStats?.();
         return !!stats && stats.selected > 0;
-    }, undefined, { timeout: 20000 });
+    }, undefined, { timeout });
     // Первые кадры вьюер успевает отрисовать сам (загрузка и вызовы renderNextFrame
     // создают изменения на экране), но дальше цикл встаёт — см. pumpFrames.
     await pumpFrames(page, 30);
@@ -388,7 +388,8 @@ test('разворачивает неявное дерево (implicit tiling, C
 
     await page.goto(`/?load=${encodeURIComponent(HRAM)}`);
     await waitForViewer(page);
-    await waitForTiles(page);
+    // Набор тяжёлый: общих 20 секунд на первый выбранный тайл ему не хватает.
+    await waitForTiles(page, 120000);
 
     // Октодерево: 5 уровней в корневом файле масок и вложенные поддеревья глубже. В JSON
     // тайлов нет вообще — если разбор масок сломается, дерево останется из одного узла.
@@ -740,19 +741,26 @@ test('production fragment box clips tile geometry exactly and restores materials
     });
     expect(moveMode).toEqual({ mode: 'move', coordSpace: 'local', rotateEnabled: false, moveEnabled: true });
 
-    await page.keyboard.press('f');
-    await pumpFrames(page, 1);
-    const fragmentFocusDistance = await page.evaluate(() => {
+    // Вне изоляции F кадрирует всю сцену, а не бокс: бокс здесь ещё настраивают, и прыжок
+    // камеры на него мешал бы. Внутри изоляции наоборот — кадрируется сам фрагмент.
+    const focusDistanceToBox = () => page.evaluate(() => {
         const viewer = (window as any).viewer;
         return viewer.cameraControls.getFocus().distance(viewer.fragmentBoxEntity.getPosition());
     });
-    expect(fragmentFocusDistance).toBeLessThan(0.0001);
+
+    await page.keyboard.press('f');
+    await pumpFrames(page, 1);
+    expect(await focusDistanceToBox()).toBeGreaterThan(0.0001);
 
     await page.locator('.fragment-isolate-button').click();
     await pumpFrames(page, 3);
     const isolatedOverlayVertices = await page.evaluate(() =>
         (window as any).viewer.debugFragmentBoxSolid.mesh.primitive[0].count);
     expect(isolatedOverlayVertices).toBe(72);
+
+    await page.keyboard.press('f');
+    await pumpFrames(page, 1);
+    expect(await focusDistanceToBox()).toBeLessThan(0.0001);
 
     const clipped = await page.evaluate((initialSize) => {
         const viewer = (window as any).viewer;
