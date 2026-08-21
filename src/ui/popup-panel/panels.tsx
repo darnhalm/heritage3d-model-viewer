@@ -1072,6 +1072,13 @@ export const FragmentPanel = (props: { observerData: ObserverData, setProperty: 
                         onClick={() => window.viewer?.toggleFragmentIsolation?.()}
                     />
                 </Container>
+                {data.enabled && (
+                    <Toggle
+                        label={t('Highlight section outline', lang)}
+                        value={!!data.outline}
+                        setProperty={(value: boolean) => props.setProperty('fragment.outline', value)}
+                    />
+                )}
                 {data.initialized && (
                     <Container class='fragment-mode-toolbar'>
                         {([

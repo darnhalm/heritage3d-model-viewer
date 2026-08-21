@@ -45,6 +45,12 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                 if (target instanceof Node && this.popupPanelElement?.contains(target)) {
                     return;
                 }
+                // Куб ориентации и переключатель проекции лежат поверх канваса, но это
+                // инструменты просмотра, а не «клик мимо панели»: закрывать по ним панель
+                // нельзя — вместе с ней исчезли бы они сами.
+                if (target instanceof Element && target.closest('#view-cube-container, .projection-toggle-slot')) {
+                    return;
+                }
                 // Choosing a fragment is intentionally a click on the canvas outside
                 // the popup. Keep the panel and selection mode alive for that click.
                 if (document.querySelector('.fragment-panel.fragment-selecting') && target instanceof HTMLCanvasElement) {

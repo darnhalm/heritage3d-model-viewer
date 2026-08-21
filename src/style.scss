@@ -2128,6 +2128,16 @@ input {
     pointer-events: auto;
 }
 
+/* Фрагмент изолирован — ручки берут цвет темы; на полной модели остаются серыми. */
+.fragment-handles-isolated .fragment-face-handle {
+    background: var(--theme-primary);
+}
+
+.fragment-handles-isolated .fragment-face-handle:hover,
+.fragment-handles-isolated .fragment-face-handle:focus-visible {
+    background: var(--theme-bright);
+}
+
 .fragment-face-handle:hover,
 .fragment-face-handle:focus-visible {
     width: 22px;

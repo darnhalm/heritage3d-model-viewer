@@ -127,6 +127,9 @@ const MIC_HELPER_NODE_RE = /^mic(?:[_-]|$)/i;
 const MIC_CAMEL_HELPER_NODE_RE = /^mic[A-Z0-9]/;
 
 const doubleTapDelay = 400;
+
+/** Толщина подсветки контура сечения в пикселях: тоньше — теряется, толще — «жирнит» срез. */
+const FRAGMENT_OUTLINE_WIDTH_PX = 1.6;
 const doubleTapRadius = 45;
 const RIPPLE_CAMERA_DELAY_MS = 380;
 const RIPPLE_REMOVE_MS = 900;
@@ -1330,7 +1333,9 @@ class Viewer {
         this.debugTilesSolid = new DebugSolid(app, camera);
         this.debugTileCamera = new DebugLines(app, camera);
         this.debugTileCameraSolid = new DebugSolid(app, camera);
-        this.debugFragmentBoxSolid = new DebugSolid(app, camera);
+        // false → обычный тест глубины: рёбра бокса скрываются за геометрией, и видно, где
+        // именно бокс входит в модель. С overlay-режимом бокс лежал поверх модели целиком.
+        this.debugFragmentBoxSolid = new DebugSolid(app, camera, false);
         this.debugFragmentBox = new DebugLines(app, camera);
 
         // construct ministats, default off
@@ -2177,6 +2182,8 @@ class Viewer {
                     this.observer.set('fragment.selecting', false);
                 }
                 this.updateFragmentGizmo();
+                // Куб и переключатель проекции живут вместе с панелью изолированного просмотра.
+                this.updateViewCubeVisibility();
             },
             // camera
             'camera.fov': this.setFov.bind(this),
@@ -2261,6 +2268,9 @@ class Viewer {
                 this.renderNextFrame();
             },
             'fragment.invert': () => this.syncFragmentClipping(),
+            // Подсветка контура живёт в параметрах материалов, которые обновляются в кадре:
+            // без запроса кадра переключатель не дал бы видимого эффекта.
+            'fragment.outline': () => this.renderNextFrame(),
             'fragment.center': () => {
                 this.syncFragmentEntityFromObserver();
                 this.syncFragmentClipping();
@@ -4811,11 +4821,21 @@ class Viewer {
         if (this.observer.get('camera.viewCube') !== visible) {
             this.observer.set('camera.viewCube', visible);
         }
+        // Переключатель проекции скрывается вместе с кубом, поэтому оставить камеру в
+        // ортографии значило бы отобрать у пользователя способ вернуть перспективу.
+        if (!visible && this.isOrthographic()) {
+            this.setCameraProjection(false);
+        }
     }
 
-    /** Куб ориентации нужен в выравнивании, визуализации тайлов и инспекторе камеры. */
+    /**
+     * Куб ориентации нужен в выравнивании, изолированном просмотре, визуализации тайлов и
+     * инспекторе камеры. В изолированном просмотре он особенно уместен: срезы ставят по
+     * стандартным видам сверху/спереди/сбоку и в ортографии.
+     */
     private updateViewCubeVisibility() {
         const visible = !!this.observer.get('debug.alignmentMode') ||
+            this.observer.get('ui.active') === 'fragment' ||
             (!!this.observer.get('scene.isTileset') &&
                 (!!this.observer.get('debug.tileDebug') || !!this.observer.get('debug.tileFreeze')));
         this.setViewCubeVisible(visible);
@@ -5745,10 +5765,15 @@ class Viewer {
     private syncFragmentMaterials() {
         if (!this.observer.get('fragment.enabled')) return;
         this.fragmentWorldToLocal.copy(this.fragmentBoxEntity.getWorldTransform()).invert();
+        // Контур сечения красим в цвет темы: тонкий срез иначе почти не читается на модели.
+        const theme = normalizeThemeColor(this.observer.get('theme.primaryColor'));
         this.fragmentClipMaterials.apply(
             this.getPickableMeshInstances(),
             this.fragmentWorldToLocal,
-            !!this.observer.get('fragment.invert')
+            !!this.observer.get('fragment.invert'),
+            this.observer.get('fragment.outline') ?
+                { color: [theme.r, theme.g, theme.b], widthPx: FRAGMENT_OUTLINE_WIDTH_PX } :
+                null
         );
     }
 
@@ -5829,6 +5854,12 @@ class Viewer {
             return;
         }
         this.fragmentHandleLayer.style.display = 'block';
+        // Пока бокс только ставят на полной модели, ручки нейтрально-серые; когда фрагмент
+        // изолирован — красим их в цвет темы, чтобы состояние читалось прямо во вьюпорте.
+        this.fragmentHandleLayer.classList.toggle(
+            'fragment-handles-isolated',
+            !!this.observer.get('fragment.enabled')
+        );
         const transform = this.fragmentBoxEntity.getWorldTransform();
         const handles = this.fragmentHandleLayer.querySelectorAll<HTMLButtonElement>('.fragment-face-handle');
         handles.forEach((handle) => {

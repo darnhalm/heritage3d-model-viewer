@@ -303,6 +303,8 @@ export interface ObserverData {
         enabled: boolean,
         selecting: boolean,
         invert: boolean,
+        /** Подсвечивать линию, по которой бокс рассекает поверхность модели. */
+        outline?: boolean,
         editMode: 'move' | 'resize' | 'rotate',
         center: [number, number, number],
         size: [number, number, number],
