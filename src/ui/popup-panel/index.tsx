@@ -21,6 +21,19 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
 
     removeDeselectEvents: (() => void) | null = null;
 
+    /** Панель, под которую сейчас стоит подписка на «клик мимо»: без неё подписались бы дважды. */
+    armedFor: string | null = null;
+
+    componentDidUpdate() {
+        // Панель открывает не только тулбар: двойной клик по боксу фрагмента возвращает её
+        // прямо из вьюера, минуя обработчик кнопки. Без этой досылки такая панель осталась бы
+        // висеть — закрыть её кликом мимо было бы нечем.
+        const active = this.props.observerData.ui.active;
+        if (this.armedFor !== active) {
+            this.armDeselect(active);
+        }
+    }
+
     componentWillUnmount() {
         this.removeDeselectEvents?.();
         this.removeDeselectEvents = null;
@@ -29,13 +42,22 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
     private handleClick = (value: string) => {
         const nextActive = this.props.observerData.ui.active === value ? null : value;
         this.props.setProperty('ui.active', nextActive);
+        this.armDeselect(nextActive);
+    };
 
+    /**
+     * Переподписаться на закрытие панели кликом мимо неё.
+     *
+     * @param active - Панель, которая теперь открыта, либо `null`, если открытой нет.
+     */
+    private armDeselect = (active: string | null) => {
+        this.armedFor = active;
         if (this.removeDeselectEvents) {
             this.removeDeselectEvents();
             this.removeDeselectEvents = null;
         }
 
-        if (!nextActive) return;
+        if (!active) return;
 
         if (!this.popupPanelElement) this.popupPanelElement = document.getElementById('popup');
 

@@ -120,6 +120,10 @@ const UV_SEMANTICS = ['TEXCOORD0', 'TEXCOORD1', 'TEXCOORD2', 'TEXCOORD3', 'TEXCO
 
 const vec = new Vec3();
 const bbox = new BoundingBox();
+// Скретч для проверки попадания луча в бокс фрагмента — переиспользуется между вызовами.
+const fragmentHitMat = new Mat4();
+const fragmentHitOrigin = new Vec3();
+const fragmentHitDir = new Vec3();
 
 const FOCUS_FOV = 75;
 const ZOOM_SCALE_MIN = 0.01;
@@ -1648,6 +1652,7 @@ class Viewer {
         // double click: pick → ripple → after 380ms center camera
         canvas.addEventListener('dblclick', (event: MouseEvent) => {
             if (this.observer.get('measure.enabled') || this.observer.get('debug.tilePick')) return;
+            if (this.reopenFragmentPanelAt(event.offsetX, event.offsetY)) return;
             this._pickAndCenterAt(event.offsetX, event.offsetY);
         });
 
@@ -1662,7 +1667,9 @@ class Viewer {
             const now = Date.now();
             if (now - this.lastTapTime < doubleTapDelay &&
                 Math.hypot(x - this.lastTapX, y - this.lastTapY) <= doubleTapRadius) {
-                this._pickAndCenterAt(x, y);
+                if (!this.reopenFragmentPanelAt(x, y)) {
+                    this._pickAndCenterAt(x, y);
+                }
                 this.lastTapTime = 0;
             } else {
                 this.lastTapTime = now;
@@ -5890,6 +5897,61 @@ class Viewer {
             handle.style.left = `${screen.x}px`;
             handle.style.top = `${screen.y}px`;
         });
+    }
+
+    /**
+     * Вернуть панель фрагмента с гизмо по двойному клику внутри бокса.
+     *
+     * Панель закрывается любым кликом мимо неё, а вместе с ней уходят и ручки бокса — так
+     * потерять контролы легко случайно. Двойной клик по самому боксу возвращает режим редактирования
+     * без похода в тулбар.
+     *
+     * @param x - Координата курсора по горизонтали в CSS-пикселях канваса.
+     * @param y - Координата курсора по вертикали в CSS-пикселях канваса.
+     * @returns `true`, если клик попал в бокс и панель открыта — тогда камера не центрируется.
+     */
+    private reopenFragmentPanelAt(x: number, y: number): boolean {
+        if (!this.fragmentBoxEntity || !this.observer.get('fragment.initialized')) return false;
+        if (this.observer.get('fragment.selecting')) return false;
+        if (this.observer.get('ui.active') === 'fragment') return false;
+        const ray = this.getPickRay(x, y);
+        if (!this.fragmentBoxHit(ray.origin, ray.direction)) return false;
+        this.observer.set('ui.active', 'fragment');
+        this.renderNextFrame();
+        return true;
+    }
+
+    /**
+     * Пересекает ли луч объём бокса.
+     *
+     * Луч переводится в локальные координаты бокса, где тот — единичный куб с полуразмером 0.5,
+     * поэтому поворот и масштаб учитываются сами собой.
+     *
+     * @param origin - Начало луча в мировых координатах.
+     * @param direction - Направление луча в мировых координатах.
+     * @returns `true`, если луч входит в бокс перед камерой.
+     */
+    private fragmentBoxHit(origin: Vec3, direction: Vec3): boolean {
+        fragmentHitMat.copy(this.fragmentBoxEntity.getWorldTransform()).invert();
+        fragmentHitMat.transformPoint(origin, fragmentHitOrigin);
+        fragmentHitMat.transformVector(direction, fragmentHitDir);
+        const o = [fragmentHitOrigin.x, fragmentHitOrigin.y, fragmentHitOrigin.z];
+        const d = [fragmentHitDir.x, fragmentHitDir.y, fragmentHitDir.z];
+        let near = 0;
+        let far = Infinity;
+        for (let axis = 0; axis < 3; axis++) {
+            // Луч параллелен паре граней: попадание возможно, только если он между ними.
+            if (Math.abs(d[axis]) < 1e-9) {
+                if (Math.abs(o[axis]) > 0.5) return false;
+                continue;
+            }
+            const t0 = (-0.5 - o[axis]) / d[axis];
+            const t1 = (0.5 - o[axis]) / d[axis];
+            near = Math.max(near, Math.min(t0, t1));
+            far = Math.min(far, Math.max(t0, t1));
+            if (near > far) return false;
+        }
+        return far >= near;
     }
 
     private updateFragmentGizmo() {

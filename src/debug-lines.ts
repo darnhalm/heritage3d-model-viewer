@@ -151,8 +151,10 @@ fn fragmentMain(input: FragmentInput) -> FragmentOutput {
 
     output.color = input.vColor * uniform.uColor;
 
-    // clamp depth in Z to [0, 1] range
-    output.fragDepth = max(0.0, min(1.0, (zw.x / zw.y + 1.0) * 0.5));
+    // В WebGPU z клипового пространства уже лежит в [0, 1] — пересчёт из диапазона GL
+    // [-1, 1] здесь не нужен, иначе вся отладочная геометрия уезжает в дальнюю
+    // половину буфера глубины и прячется за моделью.
+    output.fragDepth = clamp(zw.x / zw.y, 0.0, 1.0);
 
     return output;
 }
