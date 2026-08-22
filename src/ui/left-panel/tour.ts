@@ -1,5 +1,6 @@
 import { driver, type DriveStep } from 'driver.js';
 
+import { hasSeenTour, markTourSeen } from './tour-seen';
 import { t } from '../../i18n/translations';
 
 // Inlined driver.js CSS (v1.4.0) + small dark-theme tweaks for HERITAGE3D viewer.
@@ -54,7 +55,6 @@ const THEME_CSS = `
 `;
 
 const STYLE_ID = 'h3d-tour-styles';
-const TOUR_SEEN_KEY = 'h3d.tour.v1.seen';
 
 let stylesInjected = false;
 const ensureStyles = () => {
@@ -299,32 +299,12 @@ export const startLeftPanelTour = async (lang: Lang): Promise<void> => {
         progressText: '{{current}} / {{total}}',
         steps: driveSteps,
         onDestroyed: () => {
-            try {
-                window.localStorage?.setItem(TOUR_SEEN_KEY, '1');
-            } catch {
-                /* storage may be unavailable */
-            }
+            markTourSeen();
             activeDriver = null;
         }
     });
 
     activeDriver.drive();
-};
-
-export const hasSeenTour = (): boolean => {
-    try {
-        return window.localStorage?.getItem(TOUR_SEEN_KEY) === '1';
-    } catch {
-        return true;
-    }
-};
-
-export const markTourSeen = (): void => {
-    try {
-        window.localStorage?.setItem(TOUR_SEEN_KEY, '1');
-    } catch {
-        /* no-op */
-    }
 };
 
 // Fires once per browser (persisted in localStorage) and is intended to be

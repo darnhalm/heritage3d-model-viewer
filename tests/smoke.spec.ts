@@ -755,13 +755,13 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
         };
     });
     expect(stillPaused.activeId).toBe('tour-2');
-    // Точность 2, а не 10: `pauseCameraFly` останавливает перелёт и возвращает управление
-    // контроллеру камеры, а тот доводит себя затуханием — за 800 мс набегает хвост порядка
-    // 3e-4. Настоящий «тур продолжился» это не пропустит: соседние точки разнесены на 10
-    // единиц, то есть в тысячи раз больше допуска.
-    stillPaused.position.forEach((value: number, index: number) => {
-        expect(value).toBeCloseTo(paused.position[index], 2);
-    });
+    // Проверяем смысл, а не знаки после запятой. `pauseCameraFly` останавливает перелёт и
+    // возвращает управление контроллеру камеры, а тот доводит себя затуханием — камера ещё
+    // немного оседает. Замеры этого хвоста разнились от 3e-4 до 2.4e-2, так что подбирать
+    // точность бессмысленно. Важно другое: соседние точки тура разнесены на 10 единиц, и
+    // продолжившийся перелёт сместил бы камеру на порядки больше любого оседания.
+    const pausedDrift = Math.hypot(...stillPaused.position.map((v: number, i: number) => v - paused.position[i]));
+    expect(pausedDrift).toBeLessThan(0.1);
     expect(stillPaused.progress).toBeCloseTo(paused.progress, 3);
     expect(paused.progress).toBeGreaterThan(50);
 
@@ -802,11 +802,47 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
         };
     });
     // Тот же затухающий хвост, что и на паузе: камера после Stop доводится контроллером.
-    stopped.position.forEach((value: number, index: number) => {
-        expect(value).toBeCloseTo(stoppedPosition[index], 2);
-    });
+    const stoppedDrift = Math.hypot(...stopped.position.map((v: number, i: number) => v - stoppedPosition[i]));
+    expect(stoppedDrift).toBeLessThan(0.1);
     expect(stopped.activeId).toBe('tour-1');
     expect(stopped.playing).toBe(false);
+});
+
+test('полоса прогресса просыпается от команды извне, а не только от клика', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => {
+        const filenames = (window as any).viewer?.observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
+    });
+
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const p = viewer.cameraControls.getPosition();
+        const f = viewer.cameraControls.getFocus();
+        const camera = { position: [p.x, p.y, p.z], focus: [f.x, f.y, f.z], fov: viewer.camera.camera.fov };
+        viewer.observer.set('poi.list', JSON.stringify([
+            { id: 'wake-1', number: 1, title: 'Wake 1', duration: 4, holdTime: 0.2, camera },
+            { id: 'wake-2', number: 2, title: 'Wake 2', duration: 4, holdTime: 0.2, camera }
+        ]));
+        viewer.focusPoi('wake-1');
+    });
+    await expect(page.locator('.poi-player-title')).toHaveText('Wake 1');
+
+    // Тур стоит — цикл прогресса спит: он останавливается, когда обновлять нечего.
+    await page.waitForTimeout(600);
+    const idle = await page.evaluate(() => parseFloat(
+        (document.getElementById('poi-player-progress-fill') as HTMLElement)?.style.width || '0'));
+    expect(idle).toBe(0);
+
+    // Команда приходит не кликом, а прямо в observer — так же, как приезжает по API.
+    await page.evaluate(() => (window as any).viewer.observer.set('poi.playing', true));
+
+    // Полоса должна поехать: значит цикл проснулся.
+    await expect.poll(() => page.evaluate(() => parseFloat(
+        (document.getElementById('poi-player-progress-fill') as HTMLElement)?.style.width || '0')),
+    { timeout: 10000 }).toBeGreaterThan(0);
 });
 
 test('alignment tab toggles alignment mode safely without runtime errors', async ({ page }) => {

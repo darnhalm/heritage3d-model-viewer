@@ -9,7 +9,7 @@ import { DEFAULT_POI_DURATION_SECONDS, DEFAULT_POI_HOLD_TIME_SECONDS } from '../
 import { DEFAULT_THEME_COLOR } from '../../theme';
 import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
-import { maybeAutoStartTour } from './tour';
+import { hasSeenTour } from './tour-seen';
 
 type PoiItem = {
     id: string;
@@ -824,8 +824,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                 getViewer()?.pulsePois?.();
             }
             // First time the user opens the panel — run the guided tour.
-            if (isExpanded && !this.props.observerData?.ui?.embed?.enabled) {
-                maybeAutoStartTour(this.props.observerData?.ui?.language);
+            // Сам тур тянет driver.js и лежит отдельным чанком: грузим его только когда
+            // он и правда понадобится, а «уже видели» проверяем без загрузки.
+            if (isExpanded && !this.props.observerData?.ui?.embed?.enabled && !hasSeenTour()) {
+                const lang = this.props.observerData?.ui?.language;
+                import('./tour').then(m => m.maybeAutoStartTour(lang)).catch(() => {});
             }
         };
         document.getElementById('panel-toggle')?.addEventListener('click', this.collapseHandler);

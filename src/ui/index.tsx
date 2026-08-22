@@ -10,7 +10,6 @@ import { DEFAULT_POI_DURATION_SECONDS, DEFAULT_POI_HOLD_TIME_SECONDS } from '../
 import { ObserverData } from '../types';
 import { ErrorBox, WarningsBox } from './errors';
 import LeftPanel from './left-panel';
-import { startLeftPanelTour } from './left-panel/tour';
 import LoadControls from './load-controls';
 import PopupPanel from './popup-panel';
 import SelectedNode from './selected-node';
@@ -18,6 +17,9 @@ import SelectedNode from './selected-node';
 // Через сколько применить изменения observer, если кадр так и не наступил.
 // Полтора кадра при 60 Гц: пока кадры идут, страховка никогда не срабатывает первой.
 const STATE_UPDATE_FALLBACK_MS = 25;
+
+// Тот же приём для полосы прогресса: без кадров её двигает таймер.
+const POI_PROGRESS_FALLBACK_MS = 25;
 
 type PoiUiEntry = {
     id: string;
@@ -48,6 +50,9 @@ class App extends React.Component<{ observer: Observer }> {
 
     // Страховочный таймер к кадру: см. `scheduleStateUpdate`.
     private stateUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Страховочный таймер цикла прогресса: см. `schedulePoiProgressTick`.
+    private poiProgressTimer: ReturnType<typeof setTimeout> | null = null;
 
     private poiSlideshowTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -90,17 +95,60 @@ class App extends React.Component<{ observer: Observer }> {
         if (fill) fill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
     };
 
+    /**
+     * Разбудить цикл прогресса, если он спит.
+     *
+     * Цикл останавливается, когда тур стоит, поэтому каждый запуск воспроизведения должен
+     * его завести заново — иначе полоса осталась бы неподвижной.
+     */
+    private ensurePoiProgressLoop = () => {
+        this.schedulePoiProgressTick();
+    };
+
+    /**
+     * Назначить следующий шаг полосы прогресса.
+     *
+     * Кадр и страховочный таймер соревнуются, как и в `scheduleStateUpdate`, и по той же
+     * причине: у приложения `autoRender = false`, и когда сцене нечего рисовать, браузер
+     * кадров не производит. На чистом `requestAnimationFrame` полоса могла не тронуться
+     * вовсе — полный прогон это и поймал: тур запустили командой, а полоса осталась на нуле.
+     */
+    private schedulePoiProgressTick = () => {
+        if (this.poiProgressRaf !== null || this.poiProgressTimer !== null) return;
+
+        const tick = () => {
+            this.cancelPoiProgressTick();
+            this.updatePoiProgress();
+        };
+        this.poiProgressRaf = requestAnimationFrame(tick);
+        this.poiProgressTimer = setTimeout(tick, POI_PROGRESS_FALLBACK_MS);
+    };
+
+    /** Снять назначенный шаг: и кадр, и таймер. */
+    private cancelPoiProgressTick = () => {
+        if (this.poiProgressRaf !== null) {
+            cancelAnimationFrame(this.poiProgressRaf);
+            this.poiProgressRaf = null;
+        }
+        if (this.poiProgressTimer !== null) {
+            clearTimeout(this.poiProgressTimer);
+            this.poiProgressTimer = null;
+        }
+    };
+
     private updatePoiProgress = () => {
         const paused = this.poiPausedElapsed !== null;
         const playing = !!this.state?.poi?.playing;
 
-        // Idle/Stop: ни воспроизведения, ни паузы — всё в ноль.
+        // Idle/Stop: ни воспроизведения, ни паузы — всё в ноль, и цикл останавливаем.
+        // Раньше он крутился всегда: 60 раз в секунду опрашивал DOM на пустой сцене, где
+        // ничего не происходит, и не давал вкладке заснуть — при том что у приложения
+        // `autoRender = false` и кадры ради самой сцены не запрашиваются.
         if ((!playing && !paused) || !this.activePoiId) {
             document.querySelectorAll('.poi-progress-transition, .poi-progress-hold').forEach((el) => {
                 (el as HTMLElement).style.width = '0%';
             });
             this.setOverallProgress(0);
-            this.poiProgressRaf = requestAnimationFrame(this.updatePoiProgress);
             return;
         }
 
@@ -143,7 +191,7 @@ class App extends React.Component<{ observer: Observer }> {
         const overallElapsed = before + Math.min(elapsed, cardTotal);
         this.setOverallProgress(total > 0 ? (overallElapsed / total) * 100 : 0);
 
-        this.poiProgressRaf = requestAnimationFrame(this.updatePoiProgress);
+        this.schedulePoiProgressTick();
     };
 
     componentWillUnmount(): void {
@@ -155,10 +203,7 @@ class App extends React.Component<{ observer: Observer }> {
             clearTimeout(this.poiSlideshowTimeout);
             this.poiSlideshowTimeout = null;
         }
-        if (this.poiProgressRaf !== null) {
-            cancelAnimationFrame(this.poiProgressRaf);
-            this.poiProgressRaf = null;
-        }
+        this.cancelPoiProgressTick();
     }
 
     /**
@@ -256,6 +301,13 @@ class App extends React.Component<{ observer: Observer }> {
             // синхронизируем метрики карточки (прогресс покажет исходное состояние).
             this.poiPausedElapsed = null;
             this.syncCardMetrics(activeId, list);
+        }
+
+        // Цикл прогресса останавливается, когда тур стоит, поэтому будим его здесь. Сюда
+        // приходит и команда извне (по API она меняет observer, а не жмёт кнопку) — без
+        // этого полоса осталась бы неподвижной, хотя тур пошёл.
+        if (playing || this.poiPausedElapsed !== null) {
+            this.ensurePoiProgressLoop();
         }
     }
 
@@ -424,7 +476,12 @@ class App extends React.Component<{ observer: Observer }> {
                                 aria-label={t('Tour: Help button', lang)}
                                 onClick={() => {
                                     document.querySelector<HTMLElement>('.left-panel-tab-scene')?.click();
-                                    window.setTimeout(() => startLeftPanelTour(lang), 0);
+                                    // Модуль тура лежит отдельным чанком — по кнопке и грузим.
+                                    window.setTimeout(() => {
+                                        import('./left-panel/tour')
+                                        .then(m => m.startLeftPanelTour(lang))
+                                        .catch(() => {});
+                                    }, 0);
                                 }}
                             >
                                 ?

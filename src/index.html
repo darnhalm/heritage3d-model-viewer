@@ -17,6 +17,11 @@
 <body>
     <a id='ar-link' rel='ar' download='asset.usdz'><img /></a>
     <div id='app'></div>
-    <script src="index.js"></script>
+    <!-- Бандл собирается как ESM (format: 'esm' в rollup.config.mjs), и подключать его
+         обычным скриптом можно было лишь пока главный чанк ничего не экспортировал. Стоило
+         ленивому чанку разделить код с бандлом — rollup добавил `export`, и страница легла
+         с `Unexpected token 'export'`. Объявляем модулем: это соответствует сборке и
+         убирает мину, на которую напоролась бы любая будущая ленивая загрузка. -->
+    <script type="module" src="index.js"></script>
 </body>
 </html>
