@@ -527,7 +527,16 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
         // One switch, two positions. Switching the graphics backend restarts the device, so we
         // persist the device-local preference (never in settings JSON) and reload the viewer.
         const switchTo = (backend: GraphicsBackend) => {
-            if (backend === active) return;
+            // Сверяемся с живым бэкендом в момент вызова, а не с `active` из замыкания.
+            // pcui шлёт `change` и когда значение переключателя меняют программно, а меняем
+            // мы его сами: до создания устройства тумблер показывает предполагаемый бэкенд, а
+            // как только устройство завелось — реальный. Там, где вместо WebGPU стартует
+            // WebGL 2 (Firefox и Safari без WebGPU, старый Chrome, заблокированная
+            // видеокарта), значение переезжает, приходит `change`, а `active` в замыкании
+            // остаётся прежним — и проверка ниже пропускала мнимое переключение: вьюер молча
+            // записывал пользователю webgl и перезагружал страницу. Модель качалась дважды.
+            const live = getViewer()?.graphicsBackend ?? active;
+            if (backend === live) return;
             persistRequestedBackend(backend);
             props.setProperty('runtime.requestedBackend', backend);
             window.location.reload();

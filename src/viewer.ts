@@ -4198,6 +4198,18 @@ class Viewer {
     }
 
     flyToCameraView(view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }, duration = 1.0) {
+        // Ракурсы точек интереса приходят из `.model-viewer-settings.json`, а его пишет
+        // пользователь и может править руками. Точка с недописанным `camera` (скажем,
+        // `{}` или обрезанным массивом) раньше валила вьюер прямо здесь, на `position[0]`.
+        // Теперь такой ракурс считаем несохранённым: точка становится активной, камера
+        // остаётся на месте — ровно как у точки, у которой вида и не было.
+        const isTriple = (value: unknown): value is [number, number, number] => Array.isArray(value) &&
+            value.length >= 3 && value.slice(0, 3).every(n => typeof n === 'number' && Number.isFinite(n));
+        if (!isTriple(view?.position) || !isTriple(view?.focus)) {
+            this.renderNextFrame();
+            return;
+        }
+
         const endPosition = new Vec3(view.position[0], view.position[1], view.position[2]);
         const endFocus = new Vec3(view.focus[0], view.focus[1], view.focus[2]);
         const endFov = typeof view.fov === 'number' && Number.isFinite(view.fov) ? view.fov : this.camera.camera.fov;

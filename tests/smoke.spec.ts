@@ -288,7 +288,12 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Hide embed code' })).toHaveCSS('color', 'rgb(255, 255, 255)');
     await expect(page.locator('.share-parent-origin-input')).toHaveClass(/pcui-text-input/);
     await expect(page.locator('.embed-code-input')).toHaveClass(/pcui-text-area-input/);
-    await page.getByRole('textbox', { name: 'Parent origin' }).fill('https://portal.example/path');
+    // Печатаем, а не `fill()`: pcui слушает у поля `change` и `keyup`
+    // (см. InputElement, опция `keyChange`), а `fill()` шлёт только `input` — его pcui
+    // не видит, значение в состояние не попадает и в код встройки не приходит.
+    const parentOriginInput = page.getByRole('textbox', { name: 'Parent origin' });
+    await parentOriginInput.click();
+    await parentOriginInput.pressSequentially('https://portal.example/path');
 
     const embedCode = page.locator('#embed-code-wrapper textarea');
     await expect(embedCode).toBeVisible();
@@ -526,7 +531,12 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     expect(Math.max(...tabTops) - Math.min(...tabTops)).toBeLessThanOrEqual(1);
 
     await page.locator('.left-panel-tab-poi').click();
-    await page.locator('#application-canvas').click({ position: { x: 320, y: 240 } });
+    // Рядом с моделью лежит файл настроек с `camera.fov: 150`: при таком угле коробка
+    // занимает считанные пиксели в центре кадра, и клик по фиксированному смещению
+    // приходился в пустоту — точка не ставилась. Возвращаем обычный угол и бьём в центр
+    // холста, куда кадрирование и помещает модель.
+    await page.evaluate(() => (window as any).viewer?.observer?.set('camera.fov', 45));
+    await page.locator('#application-canvas').click();
     await expect(page.locator('.poi-list-item')).toHaveCount(1);
     const newPoiDefaults = await page.evaluate(() => {
         const raw = (window as any).viewer?.observer?.get('poi.list');
@@ -562,8 +572,10 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     await expect(page.locator('.poi-list-secondary-button-retake-view')).toHaveCSS('font-size', '0px');
     await expect(page.locator('.poi-list-delete')).toHaveClass(/pcui-button/);
 
-    const poiDescription = page.locator('.poi-list-description').first();
-    await poiDescription.fill('Smoke description');
+    // `.poi-list-description` — обёртка pcui, само поле лежит внутри неё.
+    const poiDescription = page.locator('.poi-list-description textarea').first();
+    await poiDescription.click();
+    await poiDescription.pressSequentially('Smoke description');
     await poiDescription.blur();
 
     const poiState = await page.evaluate(() => {
@@ -773,7 +785,10 @@ test('alignment tab toggles alignment mode safely without runtime errors', async
     pivotAfter.pivot.forEach((value, index) => expect(value).toBeCloseTo(pivotBefore.center[index], 5));
     pivotAfter.contentTransform.forEach((value, index) => expect(value).toBeCloseTo(pivotBefore.contentTransform[index], 5));
 
-    await page.locator('.alignment-box-button').click();
+    // Кнопки панели выравнивания давно строятся общим `toolBtn` и различаются классом
+    // иконки (`alignment-icon-btn align-icon-*`); отдельного `.alignment-box-button` в
+    // разметке нет с тех пор, как панель переехала на строки OBJECT/OPERATION/ACTIONS.
+    await page.locator('.align-icon-box').click();
     const liveBox = await page.evaluate(() => {
         const viewer = (window as any).viewer;
         viewer.calcSceneBounds(viewer.dynamicSceneBounds);
@@ -893,6 +908,10 @@ test('materials by objects mode selects a real node and clears its scope when di
 });
 
 test('materials debug buttons toggle off on a second click', async ({ page }) => {
+    // Каждое переключение отладочного режима перестраивает материалы и ждёт кадра, а кадр
+    // на софтверном ANGLE/SwiftShader идёт неспешно. Четыре переключения подряд не влезают
+    // в общие 30 секунд: прогон занимает около минуты, оставаясь при этом зелёным.
+    test.setTimeout(90000);
     await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => {
