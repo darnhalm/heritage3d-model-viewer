@@ -38,7 +38,25 @@ jobs:
       - name: Smoke
         run: |
           sleep 5
-          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 \
-            https://playcanvasviewer.website.yandexcloud.net/)
+          base=https://playcanvasviewer.website.yandexcloud.net
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$base/")
           echo "viewer → $code"
           test "$code" = "200"
+
+          # Хранилище не жмёт на лету: сжатие приезжает вместе с файлом из
+          # scripts/deploy-viewer.py. Если правку однажды откатят, деплой пройдёт зелёным
+          # и молча вернёт посетителям сырые мегабайты — поэтому проверяем заголовок.
+          hdr=$(curl -sI --max-time 30 -H 'Accept-Encoding: gzip' "$base/index.js" | tr -d '\r')
+          enc=$(echo "$hdr" | awk 'tolower($1) == "content-encoding:" { print tolower($2) }')
+          len=$(echo "$hdr" | awk 'tolower($1) == "content-length:" { print $2 }')
+          echo "index.js → content-encoding: ${enc:-<нет>}, по сети ${len} байт"
+          test "$enc" = "gzip"
+          # Сжатый бандл — сотни килобайт; сырой больше двух мегабайт. Границы широкие
+          # намеренно: проверяем факт сжатия, а не конкретный размер сборки.
+          test "$len" -gt 100000
+          test "$len" -lt 1500000
+
+          # И распаковка должна давать осмысленный файл. Берём index.html: он крошечный,
+          # так что проверка не зависит от скорости канала до хранилища.
+          curl -sf --max-time 30 --compressed -o /tmp/index.html "$base/index.html"
+          grep -q "HERITAGE3D Viewer" /tmp/index.html
