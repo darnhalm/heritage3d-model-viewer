@@ -113,16 +113,16 @@ class MicrophoneController {
 
         const label = helper.name || helper.id;
         // Material-иконка, если задана; иначе эмодзи по типу (микрофон/прочее).
-        const iconHtml = helper.icon
-            ? `<span class="mic-icon material-icons">${helper.icon}</span>`
-            : `<span class="mic-icon">${isMicHelper(helper.id) || isMicHelper(label) ? '🎤' : '●'}</span>`;
+        const iconHtml = helper.icon ?
+            `<span class="mic-icon material-icons">${helper.icon}</span>` :
+            `<span class="mic-icon">${isMicHelper(helper.id) || isMicHelper(label) ? '🎤' : '●'}</span>`;
         marker.innerHTML = `${iconHtml}<span class="mic-name">${label}</span>`;
         marker.style.setProperty('--helper-color', helper.color || '#f5b642');
     }
 
     clearMicrophones() {
         [...this.helpers.keys()]
-        .filter(id => {
+        .filter((id) => {
             const helper = this.helpers.get(id);
             return helper?.group === 'mic' || helper?.type === 'audio-source' || isMicHelper(id) || isMicHelper(helper?.name ?? '');
         })
@@ -130,7 +130,7 @@ class MicrophoneController {
     }
 
     clearHelpers(group?: string) {
-        const ids = [...this.helpers.keys()].filter((id) => !group || this.helpers.get(id)?.group === group);
+        const ids = [...this.helpers.keys()].filter(id => !group || this.helpers.get(id)?.group === group);
         ids.forEach(id => this.removeHelper(id));
     }
 

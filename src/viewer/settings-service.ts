@@ -308,16 +308,16 @@ class SettingsService {
                 const m = options.measure;
                 // Калибровку/единицы/точки сохраняем, но активность режима — нет
                 // (сессионный инструмент, не должен «висеть» в плеере).
-                return m && typeof m === 'object' && !Array.isArray(m)
-                    ? { ...(m as Record<string, unknown>), enabled: false }
-                    : m;
+                return m && typeof m === 'object' && !Array.isArray(m) ?
+                    { ...(m as Record<string, unknown>), enabled: false } :
+                    m;
             })(),
             dimensionBox: (() => {
                 const d = options.dimensionBox;
                 // Размеры/центр сохраняем, но включённость — нет (сессионный инструмент).
-                return d && typeof d === 'object' && !Array.isArray(d)
-                    ? { ...(d as Record<string, unknown>), enabled: false }
-                    : d;
+                return d && typeof d === 'object' && !Array.isArray(d) ?
+                    { ...(d as Record<string, unknown>), enabled: false } :
+                    d;
             })(),
             poi: {
                 list: (() => {
@@ -480,8 +480,8 @@ class SettingsService {
                 case 'dimensionBox.center':
                 case 'dimensionBox.rotation': {
                     if (!Array.isArray(value) || value.length < 3) return null;
-                    const tuple = value.slice(0, 3).map((entry) => Number(entry));
-                    return tuple.every((entry) => Number.isFinite(entry)) ? tuple : null;
+                    const tuple = value.slice(0, 3).map(entry => Number(entry));
+                    return tuple.every(entry => Number.isFinite(entry)) ? tuple : null;
                 }
                 default:
                     return value;
@@ -808,12 +808,11 @@ class SettingsService {
                     this.applyViewerSettings(r.data);
                     this.syncSkyboxAndLightFromObserver();
                     return true;
-                } else {
-                    this.observer.set('camera.position', null);
-                    this.observer.set('camera.focus', null);
-                    this.resetViewerSettingsToDefaults();
-                    return false;
                 }
+                this.observer.set('camera.position', null);
+                this.observer.set('camera.focus', null);
+                this.resetViewerSettingsToDefaults();
+                return false;
             });
         }
 

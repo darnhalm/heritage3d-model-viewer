@@ -259,7 +259,7 @@ class PoiController {
         // Тур нумеруется ТОЛЬКО по обычным точкам. Триггеры — отдельный тип
         // (звукоизвлечение), в нумерацию/последовательность тура не входят.
         let tourN = 0;
-        const renumbered = list.map((poi) => (
+        const renumbered = list.map(poi => (
             poi.trigger ? { ...poi, number: 0 } : { ...poi, number: ++tourN }
         ));
         const raw = JSON.stringify(renumbered);
@@ -483,30 +483,22 @@ class PoiController {
 
     updatePoiAnimClip(id: string, value: string) {
         const clip = String(value ?? '').slice(0, 256);
-        const updated = this.getPoiList().map(poi =>
-            poi.id !== id ? poi : { ...poi, animClip: clip || undefined }
-        );
+        const updated = this.getPoiList().map(poi => (poi.id !== id ? poi : { ...poi, animClip: clip || undefined }));
         this.setPoiList(updated);
     }
 
     updatePoiAnimFrom(id: string, value: number | null) {
-        const updated = this.getPoiList().map(poi =>
-            poi.id !== id ? poi : { ...poi, animFrom: value ?? undefined }
-        );
+        const updated = this.getPoiList().map(poi => (poi.id !== id ? poi : { ...poi, animFrom: value ?? undefined }));
         this.setPoiList(updated);
     }
 
     updatePoiAnimTo(id: string, value: number | null) {
-        const updated = this.getPoiList().map(poi =>
-            poi.id !== id ? poi : { ...poi, animTo: value ?? undefined }
-        );
+        const updated = this.getPoiList().map(poi => (poi.id !== id ? poi : { ...poi, animTo: value ?? undefined }));
         this.setPoiList(updated);
     }
 
     updatePoiAnimFps(id: string, value: number | null) {
-        const updated = this.getPoiList().map(poi =>
-            poi.id !== id ? poi : { ...poi, animFps: value ?? undefined }
-        );
+        const updated = this.getPoiList().map(poi => (poi.id !== id ? poi : { ...poi, animFps: value ?? undefined }));
         this.setPoiList(updated);
     }
 
@@ -694,9 +686,9 @@ class PoiController {
             // в нашем случае это нота), обычные точки — номер.
             const hasShortName = !!(poi.trigger && poi.systemName);
             // Обычные точки — номер тура; триггеры — короткое имя (ноту), без номера.
-            marker.textContent = hasShortName
-                ? String(poi.systemName)
-                : (poi.trigger ? '♪' : String(poi.number));
+            marker.textContent = hasShortName ?
+                String(poi.systemName) :
+                (poi.trigger ? '♪' : String(poi.number));
             marker.classList.toggle('poi-marker-trigger', !!poi.trigger);
             marker.style.cursor = editEnabled ? 'grab' : 'default';
             marker.style.backgroundColor = poi.color || '#111111';

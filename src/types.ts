@@ -329,8 +329,10 @@ export interface ObserverData {
         group: string,
         activeId?: string
     },
-    /** Legacy observer field kept for state compatibility. Runtime selection is always automatic;
-     * `?webgl` is the only supported override. */
+    /**
+     * Legacy observer field kept for state compatibility. Runtime selection is always
+     * automatic; `?webgl` is the only supported override.
+     */
     graphicsBackend: 'auto' | 'webgl',
     centerScene: boolean,
     /**

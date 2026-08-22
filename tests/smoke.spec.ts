@@ -681,8 +681,13 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
     });
 
     const playButton = page.locator('.poi-player-play-button');
+    // Клик через `document.querySelector(...)?.click()` молча пропадал, если кнопки в этот
+    // момент не было в разметке: optional chaining глотает промах, тест едет дальше и падает
+    // на следующей проверке, обвиняя не то место. Теперь промах — это явная ошибка.
     const clickTourButton = async (selector: string) => page.evaluate((buttonSelector) => {
-        (document.querySelector(buttonSelector) as HTMLButtonElement | null)?.click();
+        const button = document.querySelector(buttonSelector) as HTMLButtonElement | null;
+        if (!button) throw new Error(`Кнопка тура не найдена: ${buttonSelector}`);
+        button.click();
     }, selector);
     await expect(page.locator('.poi-player-title')).toHaveText('Tour 1');
 
@@ -697,6 +702,15 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
 
     await clickTourButton('.poi-player-play-button');
     await expect(playButton).toHaveAttribute('aria-label', 'Play');
+
+    // Полосу прогресса рисует отдельный rAF-цикл, а замереть ей велит обновление React.
+    // Между коммитом React (по нему и ждали смену `aria-label`) и следующим тиком цикла в
+    // полосе лежит значение последнего играющего кадра. Опорный снимок берём после того,
+    // как цикл успел записать замершее значение, — иначе сравниваем с докадровым мусором и
+    // видим дрейф в тысячные доли процента там, где время уже стоит.
+    await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
 
     const paused = await page.evaluate(() => {
         const viewer = (window as any).viewer;

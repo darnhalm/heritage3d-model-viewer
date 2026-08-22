@@ -76,7 +76,7 @@ type ViewerApi = {
 
 const getViewer = (): ViewerApi | undefined => (window as Window & { viewer?: ViewerApi }).viewer;
 const isHTMLElement = (value: EventTarget | null): value is HTMLElement => value instanceof HTMLElement;
-const unitDisplayFactor = (unit: string | undefined) => unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
+const unitDisplayFactor = (unit: string | undefined) => (unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1));
 const safeUnitScale = (value: unknown) => {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? n : 1;
@@ -88,13 +88,13 @@ const displayToSceneSize = (displayValue: number, unitScale: number, unit: strin
 };
 const parseVec3String = (value: unknown): [number, number, number] | null => {
     if (Array.isArray(value) && value.length >= 3) {
-        const tuple = value.slice(0, 3).map((entry) => Number(entry));
-        return tuple.every((entry) => Number.isFinite(entry)) ? tuple as [number, number, number] : null;
+        const tuple = value.slice(0, 3).map(entry => Number(entry));
+        return tuple.every(entry => Number.isFinite(entry)) ? tuple as [number, number, number] : null;
     }
     const matches = String(value ?? '').match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi);
     if (!matches || matches.length < 3) return null;
-    const tuple = matches.slice(0, 3).map((entry) => Number(entry));
-    return tuple.every((entry) => Number.isFinite(entry)) ? tuple as [number, number, number] : null;
+    const tuple = matches.slice(0, 3).map(entry => Number(entry));
+    return tuple.every(entry => Number.isFinite(entry)) ? tuple as [number, number, number] : null;
 };
 
 const parseJsonArray = <T, >(raw: string | undefined, mapItem?: (value: unknown) => T | null): T[] => {
@@ -975,8 +975,11 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const { observerData, setProperty } = this.props;
         const lang = observerData?.ui?.language;
         const animTracks: string[] = (() => {
-            try { const l = JSON.parse(observerData?.animation?.list ?? '[]'); return Array.isArray(l) ? l.filter((s: unknown) => typeof s === 'string' && s !== 'ALL_TRACKS') : []; }
-            catch { return []; }
+            try {
+                const l = JSON.parse(observerData?.animation?.list ?? '[]'); return Array.isArray(l) ? l.filter((s: unknown) => typeof s === 'string' && s !== 'ALL_TRACKS') : [];
+            } catch {
+                return [];
+            }
         })();
         const embedEnabled = !!observerData?.ui?.embed?.enabled;
         const embedPreset = observerData?.ui?.embed?.preset;
@@ -1173,10 +1176,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     onClick={() => setProperty('debug.renderMode', item.value)}
                                                 >
                                                     <span className='materials-layer-item-label'>
-                                                        {item.value === 'default' && observerData?.scene?.isTileset
-                                                            ? `${item.label} — ${observerData?.scene?.tilesetLit === true ? 'Lit (PBR)' :
-                                                                (observerData?.scene?.tilesetLit === false ? 'Unlit' : 'Detecting…')}`
-                                                            : item.label}
+                                                        {item.value === 'default' && observerData?.scene?.isTileset ?
+                                                            `${item.label} — ${observerData?.scene?.tilesetLit === true ? 'Lit (PBR)' :
+                                                                (observerData?.scene?.tilesetLit === false ? 'Unlit' : 'Detecting…')}` :
+                                                            item.label}
                                                         {observerData?.debug?.withTextureOnly && item.filename ? <span className='materials-layer-item-filename' title={item.filename}> {item.filename}</span> : null}
                                                     </span>
                                                 </button>
@@ -1526,42 +1529,42 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             )}
                                             <div className='poi-list-actions'>
                                                 {!poi.trigger && (
-                                                <div className='poi-list-sliders' style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                    <div className='poi-list-duration'>
-                                                        <span title={t('Transition', lang)} style={{ width: 24, display: 'inline-block', textAlign: 'center' }}>
-                                                            <img src='static/icons/poi-transition.svg' alt='' className='poi-list-duration-icon' style={{ margin: 0 }} />
-                                                        </span>
-                                                        <div style={{ position: 'relative', width: 120 }}>
-                                                            <div id={`poi-progress-transition-${String(poi.id)}`} className='poi-progress-transition' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', pointerEvents: 'none', borderRadius: 2 }} />
-                                                            <NakedSlider
-                                                                class='poi-list-duration-slider'
-                                                                width={120}
-                                                                precision={1}
-                                                                min={0}
-                                                                max={10}
-                                                                value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : DEFAULT_POI_DURATION_SECONDS}
-                                                                setProperty={(value: number) => getViewer()?.updatePoiDuration?.(String(poi.id), value)}
-                                                            />
+                                                    <div className='poi-list-sliders' style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                        <div className='poi-list-duration'>
+                                                            <span title={t('Transition', lang)} style={{ width: 24, display: 'inline-block', textAlign: 'center' }}>
+                                                                <img src='static/icons/poi-transition.svg' alt='' className='poi-list-duration-icon' style={{ margin: 0 }} />
+                                                            </span>
+                                                            <div style={{ position: 'relative', width: 120 }}>
+                                                                <div id={`poi-progress-transition-${String(poi.id)}`} className='poi-progress-transition' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', pointerEvents: 'none', borderRadius: 2 }} />
+                                                                <NakedSlider
+                                                                    class='poi-list-duration-slider'
+                                                                    width={120}
+                                                                    precision={1}
+                                                                    min={0}
+                                                                    max={10}
+                                                                    value={Number.isFinite(Number(poi.duration)) ? Number(poi.duration) : DEFAULT_POI_DURATION_SECONDS}
+                                                                    setProperty={(value: number) => getViewer()?.updatePoiDuration?.(String(poi.id), value)}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        <div className='poi-list-duration'>
+                                                            <span title={t('Hold time', lang)} style={{ width: 24, display: 'inline-block', textAlign: 'center' }}>
+                                                                <img src='static/icons/poi-duration.svg' alt='' className='poi-list-duration-icon' style={{ margin: 0 }} />
+                                                            </span>
+                                                            <div style={{ position: 'relative', width: 120 }}>
+                                                                <div id={`poi-progress-hold-${String(poi.id)}`} className='poi-progress-hold' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', pointerEvents: 'none', borderRadius: 2 }} />
+                                                                <NakedSlider
+                                                                    class='poi-list-duration-slider'
+                                                                    width={120}
+                                                                    precision={1}
+                                                                    min={0}
+                                                                    max={60}
+                                                                    value={Number.isFinite(Number(poi.holdTime)) ? Number(poi.holdTime) : DEFAULT_POI_HOLD_TIME_SECONDS}
+                                                                    setProperty={(value: number) => getViewer()?.updatePoiHoldTime?.(String(poi.id), value)}
+                                                                />
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    <div className='poi-list-duration'>
-                                                        <span title={t('Hold time', lang)} style={{ width: 24, display: 'inline-block', textAlign: 'center' }}>
-                                                            <img src='static/icons/poi-duration.svg' alt='' className='poi-list-duration-icon' style={{ margin: 0 }} />
-                                                        </span>
-                                                        <div style={{ position: 'relative', width: 120 }}>
-                                                            <div id={`poi-progress-hold-${String(poi.id)}`} className='poi-progress-hold' style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '0%', pointerEvents: 'none', borderRadius: 2 }} />
-                                                            <NakedSlider
-                                                                class='poi-list-duration-slider'
-                                                                width={120}
-                                                                precision={1}
-                                                                min={0}
-                                                                max={60}
-                                                                value={Number.isFinite(Number(poi.holdTime)) ? Number(poi.holdTime) : DEFAULT_POI_HOLD_TIME_SECONDS}
-                                                                setProperty={(value: number) => getViewer()?.updatePoiHoldTime?.(String(poi.id), value)}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
                                                 )}
                                                 <Button
                                                     class='poi-list-delete'

@@ -11,8 +11,8 @@ import {
     revision as engineRevision
 } from 'playcanvas';
 
-import { resolveRequestedBackend, persistRequestedBackend } from './graphics-backend';
 import { isTrustedViewerMessage, postToViewerParent } from './embed-messaging';
+import { resolveRequestedBackend, persistRequestedBackend } from './graphics-backend';
 import { initMaterials } from './material';
 import { applyThemeColor, DEFAULT_THEME_COLOR } from './theme';
 import { ObserverData, File as ViewerFile } from './types';
@@ -553,8 +553,7 @@ const main = () => {
             const orangeDefault = [221 / 255, 111 / 255, 0];
             const heritageOrangeDefault = [238 / 255, 75 / 255, 24 / 255];
             const channels = [Number(color?.r), Number(color?.g), Number(color?.b)];
-            if ([legacy, previousDefault, orangeDefault, heritageOrangeDefault].some(candidate =>
-                channels.every((channel, index) => Math.abs(channel - candidate[index]) < 1e-6))) {
+            if ([legacy, previousDefault, orangeDefault, heritageOrangeDefault].some(candidate => channels.every((channel, index) => Math.abs(channel - candidate[index]) < 1e-6))) {
                 observer.set('theme.primaryColor', { ...DEFAULT_THEME_COLOR });
             }
             window.localStorage.setItem(migrationKey, '1');
@@ -691,9 +690,9 @@ const main = () => {
                 };
                 const id = typeof helper.id === 'string' ? helper.id : '';
                 if (!id) return null;
-                const p = helper.position && typeof helper.position === 'object'
-                    ? helper.position as { x?: unknown; y?: unknown; z?: unknown }
-                    : null;
+                const p = helper.position && typeof helper.position === 'object' ?
+                    helper.position as { x?: unknown; y?: unknown; z?: unknown } :
+                    null;
                 if (!p) return null;
                 const x = Number(p.x);
                 const y = Number(p.y);
@@ -722,9 +721,9 @@ const main = () => {
                     if (number !== null) {
                         try {
                             const list = JSON.parse(String(observer.get('poi.list') ?? '[]'));
-                            const entry = Array.isArray(list)
-                                ? list.find((p: { number?: number; trigger?: boolean }) => !p.trigger && p.number === number)
-                                : null;
+                            const entry = Array.isArray(list) ?
+                                list.find((p: { number?: number; trigger?: boolean }) => !p.trigger && p.number === number) :
+                                null;
                             if (entry?.id) {
                                 viewer.focusPoi(entry.id);
                                 break;
@@ -747,9 +746,9 @@ const main = () => {
                     if (name) {
                         try {
                             const list = JSON.parse(String(observer.get('poi.list') ?? '[]'));
-                            const entry = Array.isArray(list)
-                                ? list.find((p: { systemName?: string }) => p.systemName === name)
-                                : null;
+                            const entry = Array.isArray(list) ?
+                                list.find((p: { systemName?: string }) => p.systemName === name) :
+                                null;
                             if (entry?.id) viewer.pulsePoi(entry.id);
                         } catch { /* ignore */ }
                     }
@@ -822,9 +821,9 @@ const main = () => {
                     observer.set('helpers.group', 'mic');
                     const id = typeof data.id === 'string' ? data.id : '';
                     const name = typeof data.name === 'string' ? data.name : '';
-                    const position = data.position && typeof data.position === 'object'
-                        ? { x: Number(data.position.x), y: Number(data.position.y), z: Number(data.position.z) }
-                        : null;
+                    const position = data.position && typeof data.position === 'object' ?
+                        { x: Number(data.position.x), y: Number(data.position.y), z: Number(data.position.z) } :
+                        null;
                     if (id && position) {
                         viewer.moveMicrophone(id, name, position);
                     }
@@ -840,9 +839,9 @@ const main = () => {
                     break;
                 }
                 case 'helper:set-many': {
-                    const helpers = Array.isArray(data.helpers)
-                        ? data.helpers.map(parseHelper).filter(Boolean)
-                        : [];
+                    const helpers = Array.isArray(data.helpers) ?
+                        data.helpers.map(parseHelper).filter(Boolean) :
+                        [];
                     viewer.setHelpers(helpers);
                     break;
                 }
@@ -1029,9 +1028,9 @@ const main = () => {
                 // Заставка-заглушка: приоритет — явный ?poster= (ручной/авто URL с
                 // хоста), иначе ищем по имени файла модели (model.png рядом).
                 const posterParam = url.searchParams.get('poster'); // get() уже декодирует
-                const placeholder: Promise<string | null> = posterParam
-                    ? Promise.resolve(posterParam)
-                    : (embedConfig.enabled ? findEmbedPlaceholder(files) : Promise.resolve(null));
+                const placeholder: Promise<string | null> = posterParam ?
+                    Promise.resolve(posterParam) :
+                    (embedConfig.enabled ? findEmbedPlaceholder(files) : Promise.resolve(null));
                 if (embedConfig.enabled && !embedConfig.autoplay) {
                     // Здесь заставка — это ровно то, что зритель видит до клика, поэтому её
                     // дожидаемся: иначе экран ожидания успеет мигнуть пустотой.

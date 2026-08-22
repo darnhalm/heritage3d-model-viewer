@@ -96,9 +96,9 @@ import { serializeCompressedPly } from 'spz-js';
 import { App } from './app';
 import { CameraControls } from './camera-controls';
 import { ClipBoxMaterials } from './clip-box';
-import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
+import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
 import { t } from './i18n/translations';
 import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
@@ -129,6 +129,9 @@ const loadMeshoptDecoder = (): Promise<MeshoptDecoderModule> => {
     });
     return meshoptDecoderPromise;
 };
+
+/** Обёрнутый на время freeze метод `GSplatWorld.update` — сигнатуру движок не раскрывает. */
+type GSplatWorldUpdate = (...args: any[]) => any;
 
 // model filename extensions
 const modelExtensions = ['gltf', 'glb', 'vox'];
@@ -762,7 +765,7 @@ class Viewer {
     private gsplatFrozenLodCamera: GSplatFrozenLodCamera | null = null;
 
     /** Оригинальные методы GSplatWorld.update, временно обёрнутые при freeze. */
-    private readonly gsplatWorldUpdates = new WeakMap<object, (...args: any[]) => any>();
+    private readonly gsplatWorldUpdates = new WeakMap<object, GSplatWorldUpdate>();
 
     /** Штатный лимит каждого загрузчика, восстанавливаемый после pause. */
     private readonly gsplatLoaderConcurrency = new WeakMap<object, number>();
@@ -1086,7 +1089,9 @@ class Viewer {
                     // Барьер: даём async-cleanup'у cover'а (.finally восстанавливает
                     // camera.renderTarget на канвас-RT) полностью отработать ДО topdown,
                     // иначе он перетирает наш квадратный RT уже после его установки.
-                    await new Promise<void>(r => requestAnimationFrame(() => r()));
+                    await new Promise<void>((r) => {
+                        requestAnimationFrame(() => r());
+                    });
                     const topdown = await this.captureTopDownImage();
                     const model = d.includeModel ? await getModelExport() : null;
                     reply({
@@ -1643,7 +1648,7 @@ class Viewer {
         this.microphoneController = new MicrophoneController({
             canvas: this.canvas,
             observer: this.observer,
-            onSelect: (id) => this.selectHelper(id)
+            onSelect: id => this.selectHelper(id)
         });
         this.selectionController = new SelectionController({
             canvas: this.canvas,
@@ -1883,8 +1888,8 @@ class Viewer {
         }
     }
 
-    /** Soft translucent fill for the fragment box, tinted with the active theme accent.
-     *  DebugSolid packs colors as 0xAABBGGRR, so bytes are laid out A,B,G,R. */
+    // Soft translucent fill for the fragment box, tinted with the active theme accent.
+    //  DebugSolid packs colors as 0xAABBGGRR, so bytes are laid out A,B,G,R.
     private fragmentFillColor(): number {
         const color = normalizeThemeColor(this.observer.get('theme.primaryColor'));
         const r = Math.round(color.r * 255) & 0xff;
@@ -2026,7 +2031,11 @@ class Viewer {
         document.removeEventListener('mouseup', this.onTilePickMouseUp);
     }
 
-    /** Camera that actually draws the viewport (glTF scene camera or viewer camera). */
+    /**
+     * Camera that actually draws the viewport (glTF scene camera or viewer camera).
+     *
+     * @returns Активная камера кадра.
+     */
     private getRenderingCamera(): CameraComponent {
         return this.activeSceneCamera ?? this.camera.camera;
     }
@@ -2120,7 +2129,11 @@ class Viewer {
         this.poiController?.pulseMarkers();
     }
 
-    /** Пульснуть конкретный маркер (напр. реакция зоны-триггера на ноту). */
+    /**
+     * Пульснуть конкретный маркер (напр. реакция зоны-триггера на ноту).
+     *
+     * @param id - Идентификатор точки интереса.
+     */
     pulsePoi(id: string) {
         this.poiController?.pulsePoi(id);
     }
@@ -4525,7 +4538,7 @@ class Viewer {
     private helperIdFromNodeName(name: string, usedIds: Set<string>) {
         const base = name
         .trim()
-        .replace(/[^a-zA-Z0-9_-]+/g, '_')
+        .replace(/[^\w-]+/g, '_')
         .replace(/^_+|_+$/g, '') || 'mic_helper';
         let id = base;
         let index = 2;
@@ -4633,6 +4646,8 @@ class Viewer {
      * Углы AABB всей загруженной геометрии в мировых координатах — облако точек для
      * подгонки ориентированного бокса. Для тайлсета берутся все `loaded` тайлы, для
      * обычной модели — её mesh instances.
+     *
+     * @returns Углы AABB в мировых координатах.
      */
     private collectGeometryCorners(): Vec3[] {
         const points: Vec3[] = [];
@@ -4745,7 +4760,7 @@ class Viewer {
     private dimensionBoxTuple(path: string, fallback: [number, number, number]): [number, number, number] {
         const value = this.observer.get(path) as number[] | undefined;
         if (!Array.isArray(value) || value.length < 3) return fallback;
-        return [0, 1, 2].map(index => {
+        return [0, 1, 2].map((index) => {
             const channel = Number(value[index]);
             return Number.isFinite(channel) ? channel : fallback[index];
         }) as [number, number, number];
@@ -4783,7 +4798,11 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    /** Жёсткий стандартный вид камеры: top/bottom/front/back/left/right. */
+    /**
+     * Жёсткий стандартный вид камеры: top/bottom/front/back/left/right.
+     *
+     * @param view - Имя вида: `top`, `bottom`, `front`, `back`, `left` или `right`.
+     */
     setStandardView(view: string) {
         const bbox = new BoundingBox();
         this.calcSceneBounds(bbox);
@@ -4807,7 +4826,11 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    /** Тип проекции камеры: ortho (true) / perspective (false). */
+    /**
+     * Тип проекции камеры: ortho (true) / perspective (false).
+     *
+     * @param ortho - `true` — ортогональная проекция, `false` — перспективная.
+     */
     setCameraProjection(ortho: boolean) {
         this.camera.camera.projection = ortho ? 1 : 0; // 1 = ORTHOGRAPHIC, 0 = PERSPECTIVE
         if (this.observer.get('camera.ortho') !== ortho) {
@@ -4822,7 +4845,11 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    /** Текущая проекция камеры ортогональна? */
+    /**
+     * Текущая проекция камеры ортогональна?
+     *
+     * @returns `true`, если камера в ортогональной проекции.
+     */
     isOrthographic(): boolean {
         return this.camera.camera.projection === 1;
     }
@@ -4852,7 +4879,7 @@ class Viewer {
                 wrapper.style.setProperty('--view-cube-size', `${cubeSize}px`);
             }
         } catch (e) {
-            // eslint-disable-next-line no-console
+
             console.warn('ViewCube init failed (пропускаем, плеер работает):', e);
             this.viewCube = null;
         }
@@ -4889,7 +4916,11 @@ class Viewer {
         this.setViewCubeVisible(visible);
     }
 
-    /** Выровнять камеру по направлению (от ViewCube): сохраняем дистанцию орбиты. */
+    /**
+     * Выровнять камеру по направлению (от ViewCube): сохраняем дистанцию орбиты.
+     *
+     * @param dir - Направление взгляда в мировых координатах.
+     */
     private alignCameraToDir(dir: Vec3) {
         const bbox = new BoundingBox();
         this.calcSceneBounds(bbox);
@@ -5684,7 +5715,9 @@ class Viewer {
                     }
                     this.observer.set('ui.error', err?.toString() || err);
                     // Ошибка → модель не отрисуется, первого кадра не будет: гасим тут.
-                    if (this.loadCreepTimer) { clearInterval(this.loadCreepTimer); this.loadCreepTimer = null; }
+                    if (this.loadCreepTimer) {
+                        clearInterval(this.loadCreepTimer); this.loadCreepTimer = null;
+                    }
                     this.observer.set('ui.loadProgress', 100);
                     this.observer.set('ui.spinner', false);
                     this.observer.set('ui.loadingBackgroundReady', false);
@@ -5693,7 +5726,9 @@ class Viewer {
                     // В норме индикатор гасит ПЕРВЫЙ КАДР модели (onPostrender/firstFrame).
                     // Здесь — только подстраховка: если кадр по какой-то причине не наступит.
                     setTimeout(() => {
-                        if (this.loadCreepTimer) { clearInterval(this.loadCreepTimer); this.loadCreepTimer = null; }
+                        if (this.loadCreepTimer) {
+                            clearInterval(this.loadCreepTimer); this.loadCreepTimer = null;
+                        }
                         this.observer.set('ui.spinner', false);
                         this.observer.set('ui.loadingBackgroundReady', false);
                     }, 10000);
@@ -6123,6 +6158,8 @@ class Viewer {
      * Реакция на изменение набора видимых тайлов: перерисовать кадр и, пока не определено,
      * выяснить, освещён ли контент (unlit-сплаты из фотограмметрии vs лит-PBR). Флаг
      * читает панель, чтобы подписать режим и убрать неприменимые каналы.
+     *
+     * @param transformChanged - Сдвинулся ли сам тайлсет: тогда пересчитываем границы сцены.
      */
     private handleTileChange(transformChanged = false) {
         if (transformChanged && this.tileManager) {
@@ -6179,6 +6216,7 @@ class Viewer {
      * двигается как инспектор, а менеджер тайлов продолжает считать выбор от того же вида.
      *
      * @param enabled - Создать или удалить снимок камеры.
+     * @param requireTileManager - Снимать только при живом менеджере тайлов.
      */
     private captureFrozenTileCamera(enabled: boolean, requireTileManager = true) {
         if (!enabled || (requireTileManager && !this.tileManager)) {
@@ -6368,6 +6406,8 @@ class Viewer {
     /**
      * Задать время (сек) автостопа анимации. Цикл обновления остановит
      * проигрывание, когда текущее время клипа достигнет цели. null — снять.
+     *
+     * @param time - Время остановки в секундах или `null`, чтобы снять автостоп.
      */
     setAnimationStopTime(time: number | null) {
         this.animStopTime = time;
@@ -8292,7 +8332,9 @@ class Viewer {
 
             // Модель РЕАЛЬНО отрисована на этом кадре → только теперь гасим индикатор
             // загрузки (прогресс-бар держался до появления модели, без паузы «пусто»).
-            if (this.loadCreepTimer) { clearInterval(this.loadCreepTimer); this.loadCreepTimer = null; }
+            if (this.loadCreepTimer) {
+                clearInterval(this.loadCreepTimer); this.loadCreepTimer = null;
+            }
             this.observer.set('ui.loadProgress', 100);
             this.observer.set('ui.spinner', false);
             this.observer.set('ui.loadingBackgroundReady', false);
