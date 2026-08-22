@@ -233,6 +233,39 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
     expect(state.polluted).toBeUndefined();
 });
 
+test('looks for nearby settings by climbing versions, not by spraying requests', async ({ page }) => {
+    const requested: string[] = [];
+    page.on('request', (request) => {
+        if (request.url().includes('model-viewer-settings')) requested.push(request.url());
+    });
+    // Бэкенд задан явно: на неудачном создании устройства вьюер перезагружает страницу с
+    // `auto`, и в счётчик попали бы запросы двух загрузок вместо одной.
+    // Рядом с BoxTextured лежит базовый файл настроек, нумерованных копий нет: лесенка
+    // поднимается на одну ступень и упирается. Два запроса, ровно один промах.
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.observer?.get('camera.fov') === 150);
+    await page.waitForFunction(() => (window as any).viewer?.observer?.get('ui.spinner') === false);
+
+    expect(requested.filter(u => u.endsWith('BoxTextured.model-viewer-settings.json'))).toHaveLength(1);
+    expect(requested.filter(u => u.includes('model-viewer-settings(1).json'))).toHaveLength(1);
+    expect(requested).toHaveLength(2);
+
+    // У MultiPrimitive настроек рядом нет вовсе — дальше базового файла спрашивать нечего.
+    requested.length = 0;
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FMultiPrimitive.gltf');
+    await waitForViewer(page);
+    await page.waitForFunction(() => {
+        const filenames = (window as any).viewer?.observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('MultiPrimitive.gltf');
+    });
+    await page.waitForFunction(() => (window as any).viewer?.observer?.get('ui.spinner') === false);
+
+    expect(requested).toEqual([
+        expect.stringContaining('MultiPrimitive.model-viewer-settings.json')
+    ]);
+});
+
 test('encodes model URLs in the embed generator', async ({ page }) => {
     test.setTimeout(60000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');

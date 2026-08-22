@@ -32,6 +32,8 @@ type SettingsServiceArgs = {
     resetSceneTransform: () => void;
 };
 
+type SettingsLookupResult = { data: Record<string, unknown>; version: number } | null;
+
 class SettingsService {
     private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'theme', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi'];
 
@@ -80,6 +82,12 @@ class SettingsService {
     private resetSceneTransform: () => void;
 
     private remoteSettingsMissCache = new Map<string, number>();
+
+    // Один поиск настроек на загрузку модели. Подложка загрузки и применение настроек
+    // спрашивают у сервера одно и то же, но приходят в разное время: подложка нужна
+    // как можно раньше, настройки — когда модель уже разобрана. Держим начатый поиск
+    // здесь, чтобы второй спрашивающий получил тот же ответ, а не повторил запросы.
+    private remoteSettingsLookup: { key: string; promise: Promise<SettingsLookupResult> } | null = null;
 
     constructor(args: SettingsServiceArgs) {
         this.observer = args.observer;
@@ -574,6 +582,72 @@ class SettingsService {
         }
     }
 
+    /**
+     * Ищет настройки рядом с моделью, поднимаясь по нумерованным копиям, и отдаёт самую свежую.
+     *
+     * Раньше отсюда уходил веер из 21 запроса разом — базовый файл и `(1)..(20)`. У модели без
+     * настроек ровно столько же ответов было 404: два десятка красных строк в консоли на каждой
+     * загрузке и столько же холостых обращений к хранилищу. Нумерованные копии заводит сам
+     * браузер, когда файл скачивают повторно: они идут подряд и никогда не появляются раньше
+     * базового. Поэтому идём лесенкой и останавливаемся на первом промахе — нет базового,
+     * значит искать нечего. Платим ровно одним промахом в конце цепочки.
+     *
+     * У файлов, брошенных в окно, порядок другой: там весь список известен заранее и версия
+     * выбирается по именам, без сети (см. `settingsVersionFromFilename`).
+     *
+     * @param firstModelUrl - URL модели, рядом с которой ищем файл настроек.
+     * @param signal - сигнал отмены поиска.
+     * @returns Самая старшая найденная версия настроек или `null`, если рядом ничего нет.
+     */
+    private async fetchBestRemoteSettings(firstModelUrl: string, signal?: AbortSignal): Promise<SettingsLookupResult> {
+        const candidates = SettingsService.settingsUrlCandidatesForModelUrl(firstModelUrl);
+        let best: SettingsLookupResult = null;
+        for (const candidate of candidates) {
+            // Ступени лесенки зависят одна от другой: следующий номер имеет смысл спрашивать,
+            // только если предыдущий нашёлся, поэтому запросы идут по очереди, а не веером.
+            // eslint-disable-next-line no-await-in-loop
+            const data = await this.fetchJsonWithSizeLimit(candidate.url, signal);
+            if (!data) break;
+            best = { data, version: candidate.version };
+        }
+        return best;
+    }
+
+    /**
+     * Отдаёт поиск настроек, общий для подложки загрузки и применения настроек.
+     *
+     * Оба спрашивают у сервера одно и то же, просто в разные моменты, и раньше каждый ходил
+     * в сеть сам — запросы удваивались. Начатый поиск живёт до конца загрузки: его забирает
+     * `tryFetchAndApplySettings`, после чего следующая загрузка спросит заново.
+     *
+     * @param firstModelUrl - URL модели, рядом с которой ищем файл настроек.
+     * @param restart - начать поиск заново, не оглядываясь на прошлый ответ.
+     * @returns Настройки рядом с моделью или `null`, если их нет.
+     */
+    private remoteSettingsFor(firstModelUrl: string, restart = false): Promise<SettingsLookupResult> {
+        const key = this.resolveAbsoluteHttpUrl(firstModelUrl) ?? firstModelUrl;
+        const started = this.remoteSettingsLookup;
+        // Границу проводит начало загрузки, а не таймер: между подложкой и применением
+        // настроек лежит скачивание модели, а оно бывает и минутным. Ограничь мы переиспользование
+        // по времени — на тяжёлой модели применение снова пошло бы в сеть уже после первого кадра,
+        // ровно там, где настройки и заметны рывком.
+        if (!restart && started?.key === key) return started.promise;
+
+        // Свежая отметка «рядом ничего нет» экономит поход в сеть обоим спрашивающим.
+        const cacheKey = this.resolveAbsoluteHttpUrl(firstModelUrl);
+        if (cacheKey && !this.shouldBypassSettingsMissCache(cacheKey) && this.hasFreshSettingsMissCache(cacheKey)) {
+            return Promise.resolve(null);
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), SettingsService.SETTINGS_FETCH_TIMEOUT_MS);
+        const promise = this.fetchBestRemoteSettings(firstModelUrl, controller.signal)
+        .catch((): SettingsLookupResult => null)
+        .finally(() => clearTimeout(timeoutId));
+        this.remoteSettingsLookup = { key, promise };
+        return promise;
+    }
+
     private static settingsVersionFromFilename(filename: string, baseName: string): number {
         const name = filename.split('/').pop() || '';
         if (name === `${baseName}.model-viewer-settings.json`) return 0;
@@ -649,11 +723,16 @@ class SettingsService {
             return this.fetchJsonWithSizeLimit(best.file.url);
         };
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), SettingsService.SETTINGS_LOADING_BACKGROUND_TIMEOUT_MS);
-        const candidates = SettingsService.settingsUrlCandidatesForModelUrl(firstModelUrl);
-        const fetchOne = (url: string) => this.fetchJsonWithSizeLimit(url, controller.signal);
-        const sources = [fromDroppedFiles(), ...candidates.map(c => fetchOne(c.url))];
+        // Поиск в сети общий с `tryFetchAndApplySettings`, поэтому здесь его не обрываем:
+        // подложка ждёт ответ не дольше своего таймаута, а сам запрос доживает до применения
+        // настроек. Раньше эта отмена вместе с собственным веером запросов означала, что одну
+        // и ту же пачку файлов страница спрашивала дважды за загрузку.
+        const sources: Promise<Record<string, unknown> | null>[] = [
+            fromDroppedFiles(),
+            // Загрузка началась — поиск заводим заново, чтобы применение настроек ниже по
+            // течению получило ответ про эту загрузку, а не про предыдущую.
+            this.remoteSettingsFor(firstModelUrl, true).then(result => result?.data ?? null)
+        ];
 
         return new Promise<void>((resolve) => {
             let pending = sources.length;
@@ -661,8 +740,6 @@ class SettingsService {
             const finish = () => {
                 if (resolved) return;
                 resolved = true;
-                clearTimeout(timeoutId);
-                controller.abort();
                 resolve();
             };
             setTimeout(finish, SettingsService.SETTINGS_LOADING_BACKGROUND_TIMEOUT_MS);
@@ -740,16 +817,7 @@ class SettingsService {
             });
         }
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), SettingsService.SETTINGS_FETCH_TIMEOUT_MS);
-        const fetchOne = (c: { url: string; version: number }): Promise<{ data: Record<string, unknown>; version: number } | null> => this.fetchJsonWithSizeLimit(c.url, controller.signal)
-        .then((data) => {
-            if (!data) return null;
-            return { data, version: c.version };
-        })
-        .catch((): null => null);
-
-        return Promise.all([...candidates.map(fetchOne), fromDroppedFiles()])
+        return Promise.all([this.remoteSettingsFor(firstModelUrl), fromDroppedFiles()])
         .then((results) => {
             if (warnings.length > 0) {
                 this.observer.set('ui.warnings', warnings);
@@ -764,7 +832,7 @@ class SettingsService {
                     this.markSettingsMissCache(cacheKey);
                 }
                 if (typeof console !== 'undefined' && console.warn) {
-                    console.warn('[model-viewer] Settings file not found. Tried:', candidates.slice(0, 3).map(c => c.url));
+                    console.warn('[model-viewer] Settings file not found. Tried:', candidates[0].url);
                 }
                 this.observer.set('camera.position', null);
                 this.observer.set('camera.focus', null);
@@ -790,8 +858,7 @@ class SettingsService {
             this.observer.set('camera.focus', null);
             this.resetViewerSettingsToDefaults();
             return false;
-        })
-        .finally(() => clearTimeout(timeoutId));
+        });
     }
 
     syncSkyboxAndLightFromObserver() {
