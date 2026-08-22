@@ -111,7 +111,24 @@ import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from 
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry, intersectMeshTriangles } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
-import { MeshoptDecoder } from '../lib/meshopt_decoder.module.js';
+
+type MeshoptDecoderModule = typeof import('../lib/meshopt_decoder.module.js')['MeshoptDecoder'];
+
+// Декодер meshopt заводит свой wasm прямо при импорте модуля: браузер компилирует и
+// инстанцирует его на каждой загрузке страницы, даже когда модель не сжата — а
+// EXT_meshopt_compression встречается заметно реже, чем не встречается. Статический
+// импорт делал эту работу всегда и заодно оставлял в главном бандле wasm-блоб.
+// Теперь тянем по требованию, из processBufferView, куда движок и так заходит
+// асинхронно. Промис общий на все буферы модели: wasm заводится ровно один раз.
+let meshoptDecoderPromise: Promise<MeshoptDecoderModule> | null = null;
+const loadMeshoptDecoder = (): Promise<MeshoptDecoderModule> => {
+    meshoptDecoderPromise ??= import('../lib/meshopt_decoder.module.js')
+    .then(async ({ MeshoptDecoder }) => {
+        await MeshoptDecoder.ready;
+        return MeshoptDecoder;
+    });
+    return meshoptDecoderPromise;
+};
 
 // model filename extensions
 const modelExtensions = ['gltf', 'glb', 'vox'];
@@ -4903,9 +4920,7 @@ class Viewer {
                 if (gltfBuffer.extensions?.EXT_meshopt_compression) {
                     const extensionDef = gltfBuffer.extensions.EXT_meshopt_compression;
 
-                    Promise.all([MeshoptDecoder.ready, buffers[extensionDef.buffer]]).then((promiseResult) => {
-                        const buffer = promiseResult[1] as Uint8Array;
-
+                    Promise.all([loadMeshoptDecoder(), buffers[extensionDef.buffer]]).then(([decoder, buffer]) => {
                         const byteOffset = extensionDef.byteOffset || 0;
                         const byteLength = extensionDef.byteLength || 0;
 
@@ -4915,7 +4930,7 @@ class Viewer {
                         const result = new Uint8Array(count * stride);
                         const source = new Uint8Array(buffer.buffer, buffer.byteOffset + byteOffset, byteLength);
 
-                        MeshoptDecoder.decodeGltfBuffer(
+                        decoder.decodeGltfBuffer(
                             result,
                             count,
                             stride,
@@ -4925,6 +4940,12 @@ class Viewer {
                         );
 
                         continuation(null, result);
+                    })
+                    .catch((err) => {
+                        // Раньше сюда было не попасть: декодер уже лежал в бандле. Теперь он
+                        // догружается по сети, и без этой ветки сорванная догрузка оставила бы
+                        // разбор glTF ждать continuation вечно — те самые молчаливые 98%.
+                        continuation(`Не удалось распаковать геометрию (meshopt): ${err}`, null);
                     });
                 } else {
                     continuation(null, null);
