@@ -475,6 +475,16 @@ class Viewer {
 
     private static readonly REMOTE_HEAD_TIMEOUT_MS = 5000;
 
+    /**
+     * Сколько ждать байтов, прежде чем считать закачку зависшей.
+     *
+     * Загрузчик движка сообщает только `load` и `error`: если соединение живо, но данные
+     * перестали идти, не приходит ни то, ни другое — промис не оседает никогда, и индикатор
+     * остаётся на месте до перезагрузки страницы. Порог заведомо больше любой сетевой паузы:
+     * пока байты идут хотя бы по чуть-чуть, счётчик сбрасывается.
+     */
+    private static readonly MODEL_DOWNLOAD_STALL_MS = 45000;
+
     canvas: HTMLCanvasElement;
 
     app: App;
@@ -4875,7 +4885,13 @@ class Viewer {
     }
 
     // load gltf model given its url and list of external urls
-    private loadGltf(gltfUrl: File, externalUrls: Array<File>, warnings: string[], onProgress?: (progress: number) => void) {
+    private loadGltf(
+        gltfUrl: File,
+        externalUrls: Array<File>,
+        warnings: string[],
+        onProgress?: (progress: number) => void,
+        onTexture?: (seenDelta: number, doneDelta: number) => void
+    ) {
         return new Promise((resolve, reject) => {
         // provide buffer view callback so we can handle models compressed with MeshOptimizer
         // https://github.com/zeux/meshoptimizer
@@ -5027,8 +5043,34 @@ class Viewer {
             const containerAsset = new Asset(gltfUrl.filename, 'container', gltfUrl, null, {
                 ...(containerAssetOptions as object)
             });
-            containerAsset.on('load', () => resolve(containerAsset));
-            containerAsset.on('error', (err: string) => reject(err));
+            // Картинки внутри .glb разбирает сам движок: сюда (`processImage`) он за ними не
+            // заходит, поэтому считаем текстуры по реестру ассетов. Это единственный честный
+            // прогресс между «файл скачан» и «первый кадр»: распаковка PNG и заливка в GPU.
+            const onAssetAdd = (asset: Asset) => {
+                if (asset.type !== 'texture' || asset.loaded) {
+                    return;
+                }
+                onTexture?.(1, 0);
+                asset.once('load', () => onTexture?.(0, 1));
+                asset.once('error', () => onTexture?.(0, 1));
+            };
+            if (onTexture) {
+                this.app.assets.on('add', onAssetAdd);
+            }
+            const stopCountingTextures = () => {
+                if (onTexture) {
+                    this.app.assets.off('add', onAssetAdd);
+                }
+            };
+
+            containerAsset.on('load', () => {
+                stopCountingTextures();
+                resolve(containerAsset);
+            });
+            containerAsset.on('error', (err: string) => {
+                stopCountingTextures();
+                reject(err);
+            });
             this.attachSizeGuard(containerAsset, gltfUrl, reject, onProgress);
             this.app.assets.add(containerAsset);
             this.app.assets.load(containerAsset);
@@ -5217,6 +5259,19 @@ class Viewer {
         return t(key, lang)
         .replace('{filename}', filename)
         .replace('{size}', this.formatBytes(sizeBytes));
+    }
+
+    /**
+     * Текст для зависшей закачки.
+     *
+     * @param filename - Файл, на котором остановились байты.
+     * @returns Готовое сообщение на языке интерфейса.
+     */
+    private formatStallMessage(filename: string): string {
+        const lang = this.observer.get('ui.language') as string | undefined;
+        return t('Download of "{filename}" stalled: no data for {seconds} s.', lang)
+        .replace('{filename}', filename)
+        .replace('{seconds}', String(Math.round(Viewer.MODEL_DOWNLOAD_STALL_MS / 1000)));
     }
 
     private formatMissingRemoteFileMessage(filename: string, status: number): string {
@@ -5448,6 +5503,14 @@ class Viewer {
                 const progressPerFile: number[] = new Array(total).fill(0);
                 let lastProgressValue = 0;
                 let lastSet = -1;
+                // Сторож зависшей закачки: когда байты приходили в последний раз и осела ли
+                // уже вся загрузка (после этого сторож молчит — дальше идёт разбор файла).
+                let lastBytesAt = Date.now();
+                let settled = false;
+                // Текстуры, замеченные и уже загруженные разбором glTF: единственный реальный
+                // прогресс на участке между «файл скачан» и «первый кадр».
+                let texturesSeen = 0;
+                let texturesDone = 0;
                 // Монотонно (бар не откатывается назад), потолок 98 — ровно 100 ставит .finally.
                 const setProgress = (v: number) => {
                     const nv = Math.max(lastProgressValue, Math.min(98, v));
@@ -5465,12 +5528,44 @@ class Viewer {
                     setProgress(pct);
                 };
 
+                // Разбор glTF заводит по ассету на каждую картинку. Их готовность — настоящая
+                // мера того, что происходит после скачивания: распаковка PNG и заливка в GPU.
+                // Отсюда диапазон 90..98, тот самый, где индикатор раньше просто замирал.
+                const onTexture = (seenDelta: number, doneDelta: number) => {
+                    texturesSeen += seenDelta;
+                    texturesDone += doneDelta;
+                    if (texturesSeen > 0) {
+                        setProgress(90 + 8 * (texturesDone / texturesSeen));
+                    }
+                };
+
+                /** Оборвать ожидание: закачка не отвечает, ждать дальше нечего. */
+                const failStalled = () => {
+                    settled = true;
+                    if (this.loadCreepTimer) {
+                        clearInterval(this.loadCreepTimer);
+                        this.loadCreepTimer = null;
+                    }
+                    const stuckIndex = progressPerFile.findIndex(p => p < 1);
+                    const stuck = modelFiles[stuckIndex < 0 ? 0 : stuckIndex];
+                    this.observer.set('ui.error', this.formatStallMessage(stuck?.filename ?? stuck?.url ?? ''));
+                    this.observer.set('ui.loadProgress', 100);
+                    this.observer.set('ui.spinner', false);
+                    this.observer.set('ui.loadingBackgroundReady', false);
+                };
+
                 // Непрерывный «ползунок»: бар никогда не застывает. Во время скачивания
                 // подбираемся к 90; ПОСЛЕ него (парсинг GLB, применение настроек, загрузка
                 // неба — там прогресса нет) продолжаем ползти к 98. Реальный прогресс, если
                 // он выше, перепрыгивает вперёд через setProgress(max). Мин. шаг = не замираем.
                 if (this.loadCreepTimer) clearInterval(this.loadCreepTimer);
                 const creepInterval = setInterval(() => {
+                    // Байты не идут, а файл ещё не докачан — ждать больше нечего.
+                    if (!settled && progressPerFile.some(p => p < 1) &&
+                        Date.now() - lastBytesAt > Viewer.MODEL_DOWNLOAD_STALL_MS) {
+                        failStalled();
+                        return;
+                    }
                     const target = lastProgressValue < 90 ? 90 : 98;
                     if (lastProgressValue < target) {
                         const step = Math.max(0.25, (target - lastProgressValue) * 0.06);
@@ -5481,11 +5576,14 @@ class Viewer {
 
                 const promises = modelFiles.map((file, modelIndex) => {
                     const onProgress = (p: number) => {
+                        if (p > progressPerFile[modelIndex]) {
+                            lastBytesAt = Date.now();
+                        }
                         progressPerFile[modelIndex] = p;
                         setAggregateProgress();
                     };
                     return this.isModelFilename(file.filename) ?
-                        this.loadGltf(file, files, warnings, onProgress) :
+                        this.loadGltf(file, files, warnings, onProgress, onTexture) :
                         this.loadPly(file, files, onProgress);
                 });
 
@@ -5497,6 +5595,7 @@ class Viewer {
 
                 Promise.all(wrappedPromises)
                 .then((assets: Asset[]) => {
+                    settled = true;
                     this.loadTimestamp = loadTimestamp;
 
                     // add assets to the scene
@@ -5545,6 +5644,7 @@ class Viewer {
                     .catch(err => console.warn('[model-viewer] Background settings apply failed:', err));
                 })
                 .catch((err) => {
+                    settled = true;
                     console.log(err);
                     if (warnings.length > 0) {
                         this.observer.set('ui.warnings', warnings);
