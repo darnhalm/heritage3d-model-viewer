@@ -15,6 +15,10 @@ import LoadControls from './load-controls';
 import PopupPanel from './popup-panel';
 import SelectedNode from './selected-node';
 
+// Через сколько применить изменения observer, если кадр так и не наступил.
+// Полтора кадра при 60 Гц: пока кадры идут, страховка никогда не срабатывает первой.
+const STATE_UPDATE_FALLBACK_MS = 25;
+
 type PoiUiEntry = {
     id: string;
     number: number;
@@ -41,6 +45,9 @@ class App extends React.Component<{ observer: Observer }> {
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
 
     private stateUpdateRaf: number | null = null;
+
+    // Страховочный таймер к кадру: см. `scheduleStateUpdate`.
+    private stateUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 
     private poiSlideshowTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -73,14 +80,7 @@ class App extends React.Component<{ observer: Observer }> {
         this.canvasRef = React.createRef();
         this.state = { ...this._retrieveState() };
 
-        props.observer.on('*:set', () => {
-            if (this.stateUpdateRaf !== null) return;
-            // Coalesce bursty observer updates into a single React state update per frame.
-            this.stateUpdateRaf = window.requestAnimationFrame(() => {
-                this.stateUpdateRaf = null;
-                this.setState(this._retrieveState());
-            });
-        });
+        props.observer.on('*:set', this.scheduleStateUpdate);
 
         this.updatePoiProgress();
     }
@@ -160,6 +160,39 @@ class App extends React.Component<{ observer: Observer }> {
             this.poiProgressRaf = null;
         }
     }
+
+    /**
+     * Свести всплеск изменений observer в одно обновление React.
+     *
+     * Раньше обновление висело только на `requestAnimationFrame` — и терялось насовсем,
+     * если кадра не случалось. У приложения `autoRender = false`: когда рисовать нечего,
+     * браузер кадров не производит, и запрошенный callback просто не вызывается. Поймано
+     * счётчиками на живом сценарии: `scheduled: 1, ran: 0` — в туре нажали «следующая
+     * точка», камера улетела, `poi.activeId` сменился, а подпись осталась от прежней точки
+     * и висела так, пока в интерфейсе случайно не менялось что-нибудь ещё.
+     *
+     * Теперь кадр и таймер соревнуются: кто первым, тот и применяет, второй снимается. Пока
+     * кадры идут, всё как было — одно обновление на кадр; когда их нет, состояние доезжает
+     * с задержкой таймера, а не теряется.
+     */
+    private scheduleStateUpdate = () => {
+        if (this.stateUpdateRaf !== null || this.stateUpdateTimer !== null) return;
+
+        const apply = () => {
+            if (this.stateUpdateRaf !== null) {
+                window.cancelAnimationFrame(this.stateUpdateRaf);
+                this.stateUpdateRaf = null;
+            }
+            if (this.stateUpdateTimer !== null) {
+                clearTimeout(this.stateUpdateTimer);
+                this.stateUpdateTimer = null;
+            }
+            this.setState(this._retrieveState());
+        };
+
+        this.stateUpdateRaf = window.requestAnimationFrame(apply);
+        this.stateUpdateTimer = setTimeout(apply, STATE_UPDATE_FALLBACK_MS);
+    };
 
     _retrieveState = () => {
         return this.props.observer.json() as ObserverData;

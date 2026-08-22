@@ -737,8 +737,12 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
         };
     });
     expect(stillPaused.activeId).toBe('tour-2');
+    // Точность 2, а не 10: `pauseCameraFly` останавливает перелёт и возвращает управление
+    // контроллеру камеры, а тот доводит себя затуханием — за 800 мс набегает хвост порядка
+    // 3e-4. Настоящий «тур продолжился» это не пропустит: соседние точки разнесены на 10
+    // единиц, то есть в тысячи раз больше допуска.
     stillPaused.position.forEach((value: number, index: number) => {
-        expect(value).toBeCloseTo(paused.position[index], 10);
+        expect(value).toBeCloseTo(paused.position[index], 2);
     });
     expect(stillPaused.progress).toBeCloseTo(paused.progress, 3);
     expect(paused.progress).toBeGreaterThan(50);
@@ -779,8 +783,9 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
             playing: viewer.observer.get('poi.playing')
         };
     });
+    // Тот же затухающий хвост, что и на паузе: камера после Stop доводится контроллером.
     stopped.position.forEach((value: number, index: number) => {
-        expect(value).toBeCloseTo(stoppedPosition[index], 10);
+        expect(value).toBeCloseTo(stoppedPosition[index], 2);
     });
     expect(stopped.activeId).toBe('tour-1');
     expect(stopped.playing).toBe(false);
