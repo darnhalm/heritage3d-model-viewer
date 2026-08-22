@@ -1,5 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
+// Палитра берётся из того же модуля, что и у приложения. Раньше здесь лежал её список
+// копией, и когда вьюер перешёл на палитру движка (её задаёт PlayCanvas по `colorizeLod`
+// и из приложения не поменять), копия осталась со старой пастельной гаммой — тест ждал
+// `0xff44ffff` там, где вьюер честно рисовал синий `0xffff0000`.
+import { lodColorAbgr } from '../src/lod-palette';
+
 /**
  * Тайловый слой 3D Tiles на публичных сэмплах CesiumGS.
  *
@@ -579,11 +585,7 @@ test('отладочный оверлей тайлов: OBB активных т�
     await pumpFrames(page, 5);
     const uniform = await tileDebugState(page);
     const uniformDepth = (await getStats(page)).maxSelectedDepth;
-    const lodColors = [
-        0xff4444ff, 0xff44aaff, 0xff44ffff, 0xff44ff44,
-        0xffffaa44, 0xffff4444, 0xffff44aa, 0xffff44ff
-    ];
-    expect(uniform.edgeColor).toBe(lodColors[uniformDepth % lodColors.length]);
+    expect(uniform.edgeColor).toBe(lodColorAbgr(uniformDepth));
     expect(uniform.fillVisible).toBe(false);
 
     // В шахматном режиме заливка включается отдельно и не влияет на число рёбер.
