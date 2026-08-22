@@ -7147,6 +7147,9 @@ class Viewer {
     }
 
     clearCta() {
+        // Флаг убирает экран из разметки; классы ниже оставлены — на них завязаны
+        // соседние правила стилей (отступы панели и канваса без приглашения).
+        this.observer.set('ui.cta', false);
         document.querySelector('#panel-left')?.classList.add('no-cta');
         document.querySelector('#application-canvas')?.classList.add('no-cta');
         document.querySelector('.load-button-panel')?.classList.add('hide');

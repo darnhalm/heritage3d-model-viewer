@@ -11,16 +11,17 @@ import {
     revision as engineRevision
 } from 'playcanvas';
 
+import { DummyWebGPU } from './dummy-webgpu';
 import { isTrustedViewerMessage, postToViewerParent } from './embed-messaging';
 import { resolveRequestedBackend, persistRequestedBackend } from './graphics-backend';
 import { initMaterials } from './material';
+import { warmPanelIcons } from './panel-icons';
 import { applyThemeColor, DEFAULT_THEME_COLOR } from './theme';
 import { ObserverData, File as ViewerFile } from './types';
 import initializeUI from './ui';
 import Viewer from './viewer';
 import './style.scss';
 import { version as modelViewerVersion } from '../package.json';
-import { DummyWebGPU } from './dummy-webgpu';
 
 // Google Material Icons — для иконок в лейблах хелперов (слушатель/микрофон).
 // Подключаем рантаймом (в style.scss мешает порядок @use/@import).
@@ -141,6 +142,9 @@ const observerData: ObserverData = {
         loadProgress: 0,
         error: null,
         language: 'en',
+        // Экран «перетащите модель». Нужен только пустому плееру: если модель уже
+        // названа в адресе, показывать его нечего — см. ниже, где флаг снимают.
+        cta: true,
         embed: {
             enabled: false,
             preset: 'full',
@@ -445,6 +449,14 @@ const main = () => {
 
     // global url
     const url = new URL(window.location.href);
+
+    // Экран приглашения раньше прятался императивно (`clearCta`), и только когда загрузка
+    // уже началась: до этого React успевал его показать, и на доли секунды мигал пустой
+    // «перетащите модель» поверх открывающейся сцены. Модель, названная в адресе, известна
+    // здесь — задолго до первого рендера, так что просто не показываем его вовсе.
+    if (url.searchParams.has('load') || url.searchParams.has('assetUrl')) {
+        observer.set('ui.cta', false);
+    }
     const perfParam = url.searchParams.get('perf');
     const perfEnabled = perfParam !== null && perfParam.toLowerCase() !== '0' && perfParam.toLowerCase() !== 'false';
 
@@ -564,6 +576,12 @@ const main = () => {
     observer.on('theme.primaryColor:set', (color: unknown) => applyThemeColor(color));
 
     observer.set('ui.embed', embedConfig);
+
+    // Подогреваем иконки панели только там, где панель показывают. Условие то же, по
+    // которому её рендерит интерфейс (см. `showLeftPanel` в src/ui/index.tsx).
+    if (!(embedConfig.enabled && !embedConfig.panel)) {
+        warmPanelIcons();
+    }
     if (embedConfig.enabled) {
         observer.set('ui.active', null);
         if (!embedConfig.measure) {

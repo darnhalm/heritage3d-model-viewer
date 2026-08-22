@@ -39,6 +39,8 @@ export interface ObserverData {
         active?: string,
         spinner: boolean,
         loadProgress?: number,
+        /** Показывать ли экран «перетащите модель»: он для пустого плеера. */
+        cta?: boolean,
         loadingBackgroundReady?: boolean,
         error?: string,
         warnings?: string[],

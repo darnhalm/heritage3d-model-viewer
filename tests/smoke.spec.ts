@@ -266,6 +266,24 @@ test('looks for nearby settings by climbing versions, not by spraying requests',
     ]);
 });
 
+test('приглашение «перетащите модель» не мигает, когда модель названа в адресе', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => {
+        const filenames = (window as any).viewer?.observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
+    });
+    // Экрана нет в разметке вовсе. Раньше он рендерился и прятался классом уже после
+    // старта загрузки — этот зазор и был видимым миганием.
+    await expect(page.locator('.load-button-panel')).toHaveCount(0);
+
+    // Пустому плееру приглашение по-прежнему нужно — ради него экран и существует.
+    await page.goto('/?webgl');
+    await waitForViewer(page);
+    await expect(page.locator('.load-button-panel')).toBeVisible();
+});
+
 test('encodes model URLs in the embed generator', async ({ page }) => {
     test.setTimeout(60000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
