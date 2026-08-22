@@ -314,6 +314,48 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
     await expect(page.locator('.share-flag-label').first()).toHaveCSS('color', 'rgb(255, 255, 255)');
 });
 
+test('embed poster candidates are probed at once and never hold up the model', async ({ page }) => {
+    test.setTimeout(60000);
+    // Однопиксельный PNG: единственный кандидат, который «существует».
+    const onePixelPng = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64'
+    );
+    const posterStarts: number[] = [];
+    let modelStartedAt = 0;
+
+    // Медленный хост: каждый кандидат отвечает через 800 мс. При переборе лесенкой четыре
+    // кандидата растянулись бы на три секунды с лишним, и всё это время модель бы ждала.
+    await page.route(/BoxTextured\.(jpg|jpeg|png|webp)$/, async (route) => {
+        posterStarts.push(Date.now());
+        await new Promise(resolve => setTimeout(resolve, 800));
+        if (route.request().url().endsWith('.png')) {
+            await route.fulfill({ contentType: 'image/png', body: onePixelPng });
+        } else {
+            await route.fulfill({ status: 404, contentType: 'text/plain', body: '' });
+        }
+    });
+    page.on('request', (request) => {
+        if (!modelStartedAt && request.url().endsWith('BoxTextured.glb')) modelStartedAt = Date.now();
+    });
+
+    await page.goto('/?webgl&embed=1&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => {
+        const filenames = (window as any).viewer?.observer?.get('scene.filenames');
+        return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
+    });
+
+    expect(posterStarts.length).toBeGreaterThan(1);
+    // Кандидаты уходят разом, а не по одному вслед за чужой ошибкой.
+    expect(Math.max(...posterStarts) - Math.min(...posterStarts)).toBeLessThan(500);
+    // Модель начинает качаться, не дожидаясь, пока кандидаты провалятся.
+    expect(modelStartedAt - Math.min(...posterStarts)).toBeLessThan(700);
+    // Приоритет расширений сохранён: jpg и jpeg не нашлись, победил png, а не webp.
+    await expect.poll(() => page.evaluate(() => (window as any).viewer?.observer?.get('ui.embed.placeholderUrl')))
+    .toMatch(/BoxTextured\.png$/);
+});
+
 test('none embed preset hides every configurable interface element', async ({ page }) => {
     test.setTimeout(60000);
     await page.goto('/?webgl&embed=1&ui=none');

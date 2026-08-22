@@ -88,17 +88,24 @@ const getEmbedPlaceholderCandidates = (file: { url: string, filename?: string })
     return Array.from(candidates);
 };
 
-const findEmbedPlaceholder = (files: Array<{ url: string, filename?: string }>) => {
+// Кандидаты проверяются разом, а ответ берётся по приоритету списка. Раньше здесь была
+// лесенка: следующий `Image` создавался только после ошибки предыдущего, и на медленном
+// хосте перебор восьми кандидатов (их строят и от `url`, и от `filename`) растягивался на
+// секунды — а модель всё это время не начинала качаться. Порядок расширений сохранён:
+// цепочка ниже отдаёт первого удачного кандидата и не ждёт тех, кто ниже по списку.
+const findEmbedPlaceholder = (files: Array<{ url: string, filename?: string }>): Promise<string | null> => {
     const firstModel = files[0];
-    if (!firstModel) return null;
+    if (!firstModel) return Promise.resolve(null);
 
-    const candidates = getEmbedPlaceholderCandidates(firstModel);
-    const tryCandidateAt = (index: number): Promise<string | null> => {
-        if (index >= candidates.length) return Promise.resolve(null);
-        return loadImage(candidates[index]).catch(() => tryCandidateAt(index + 1));
-    };
+    const attempts = getEmbedPlaceholderCandidates(firstModel)
+    .map((candidate): Promise<string | null> => loadImage(candidate)
+    .then((): string | null => candidate)
+    .catch((): string | null => null));
 
-    return tryCandidateAt(0);
+    return attempts.reduce(
+        (found, attempt) => found.then(url => url ?? attempt),
+        Promise.resolve<string | null>(null)
+    );
 };
 
 const skyboxes = [
@@ -1022,11 +1029,13 @@ const main = () => {
                 // Заставка-заглушка: приоритет — явный ?poster= (ручной/авто URL с
                 // хоста), иначе ищем по имени файла модели (model.png рядом).
                 const posterParam = url.searchParams.get('poster'); // get() уже декодирует
-                const placeholderUrl = posterParam
-                    ? posterParam
-                    : (embedConfig.enabled ? await findEmbedPlaceholder(files) : null);
-                observer.set('ui.embed.placeholderUrl', placeholderUrl);
+                const placeholder: Promise<string | null> = posterParam
+                    ? Promise.resolve(posterParam)
+                    : (embedConfig.enabled ? findEmbedPlaceholder(files) : Promise.resolve(null));
                 if (embedConfig.enabled && !embedConfig.autoplay) {
+                    // Здесь заставка — это ровно то, что зритель видит до клика, поэтому её
+                    // дожидаемся: иначе экран ожидания успеет мигнуть пустотой.
+                    observer.set('ui.embed.placeholderUrl', await placeholder);
                     observer.set('ui.embed.waiting', true);
                     window.startEmbedPlayback = () => {
                         observer.set('ui.embed.waiting', false);
@@ -1034,6 +1043,10 @@ const main = () => {
                         viewer.loadFiles(files);
                     };
                 } else {
+                    // А здесь заставка — лишь подложка под индикатором загрузки, и держать
+                    // ради неё скачивание модели незачем: ставим её, когда найдётся.
+                    placeholder.then(found => observer.set('ui.embed.placeholderUrl', found))
+                    .catch(() => observer.set('ui.embed.placeholderUrl', null));
                     viewer.loadFiles(files);
                 }
             }
