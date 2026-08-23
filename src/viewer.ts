@@ -1259,16 +1259,6 @@ class Viewer {
         material.update();
         this.wireframeMaterial = material;
 
-        // Обводка выделенного объекта. Свой слой обязателен: камера сцены его не рисует
-        // (в её списке слоёв его нет), рисует только внутренняя камера обводки — в свою
-        // цель за кадром, откуда результат подмешивается поверх сцены. Раньше выделение
-        // рисовалось каркасом поверх поверхности: на фотограмметрии в сто тысяч
-        // треугольников сетка закрывала саму текстуру, ради которой её и включают.
-        const outlineLayer = new Layer({ name: 'SelectionOutline' });
-        app.scene.layers.push(outlineLayer);
-        this.outlineLayer = outlineLayer;
-        this.outlineRenderer = new OutlineRenderer(app, outlineLayer);
-
         const uvCheckerCanvas = createUvMapCheckerCanvas(1024, 8);
         const uvCheckerTexture = new Texture(this.app.graphicsDevice, {
             name: 'uv-map-checker',
@@ -7715,13 +7705,45 @@ class Viewer {
      * отдельную цель, откуда силуэт подмешивается поверх сцены. Работает только со
      * `StandardMaterial` — этого хватает: glTF даёт именно их.
      */
+    /**
+     * Обводчик по требованию.
+     *
+     * Не создаётся, пока режимом «по объектам» не воспользовались: конструктор заводит
+     * камеру, две цели отрисовки и компилирует пару шейдеров — платить за это тем, кто
+     * выделением не пользуется, незачем.
+     *
+     * @returns Обводчик, готовый к работе.
+     */
+    private ensureOutlineRenderer(): OutlineRenderer {
+        if (!this.outlineRenderer) {
+            // Свой слой обязателен: камера сцены его не рисует (в её списке слоёв его нет),
+            // рисует только внутренняя камера обводки — в свою цель за кадром, откуда
+            // результат подмешивается поверх сцены.
+            const layer = new Layer({ name: 'SelectionOutline' });
+            this.app.scene.layers.push(layer);
+            this.outlineLayer = layer;
+            this.outlineRenderer = new OutlineRenderer(this.app, layer);
+        }
+        return this.outlineRenderer;
+    }
+
     private updateSelectionOutline() {
         this.clearSelectionOutline();
-        if (!this.outlineRenderer || !this.selectedNode || !this.observer.get('debug.withTextureOnly')) {
+        if (!this.selectedNode || !this.observer.get('debug.withTextureOnly')) {
+            // Камера обводки рисует КАЖДЫЙ кадр, даже когда обводить нечего: чистит свою
+            // цель и вхолостую гоняет проходы. На загрузке доспеха (125 МБ) это стоило
+            // 1.8 секунды до первого кадра — замерено сравнением сборок. Поэтому пока
+            // ничего не выделено, камера выключена, а сам обводчик и вовсе не создаётся,
+            // если режимом «по объектам» не пользовались.
+            if (this.outlineRenderer) {
+                this.outlineRenderer.outlineCameraEntity.enabled = false;
+            }
             return;
         }
+        this.ensureOutlineRenderer().outlineCameraEntity.enabled = true;
+        const renderer = this.outlineRenderer as OutlineRenderer;
         this.outlinedEntity = this.selectedNode as Entity;
-        this.outlineRenderer.addEntity(this.outlinedEntity, SELECTION_OUTLINE_COLOR);
+        renderer.addEntity(this.outlinedEntity, SELECTION_OUTLINE_COLOR);
 
         // Заплатка на изъян движка (playcanvas 2.21.4). `addEntity` собирает для прохода
         // обводки СВЕЖИЕ `StandardMaterialOptions` и переносит туда лишь горстку полей —
@@ -7733,7 +7755,7 @@ class Viewer {
         // Проверено опытом: без этих строк выделение под `?webgl` роняет компиляцию шейдера.
         const clustered = this.app.scene.clusteredLightingEnabled;
         const patched = new Set<unknown>();
-        this.outlineRenderer.getMeshInstances(this.outlinedEntity, true).forEach((mi) => {
+        renderer.getMeshInstances(this.outlinedEntity, true).forEach((mi) => {
             const material = mi.material;
             if (!material || patched.has(material)) return;
             patched.add(material);
