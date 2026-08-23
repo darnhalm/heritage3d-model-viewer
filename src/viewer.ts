@@ -522,6 +522,14 @@ class Viewer {
 
     private static readonly STAGE_ASSEMBLY = 99;   // сцена собрана, ждём первый кадр
 
+    // Через сколько сказать хосту «готов», если первого кадра всё нет. Кадр — честный
+    // признак готовности, но он приходит только когда браузер соглашается рисовать, а
+    // сторонней встройке ниже сгиба Firefox не даёт ни кадров, ни сети по полминуты и
+    // дольше (замерено на живой странице каталога). Хост при этом ждёт сигнала вечно.
+    // Полосу по этому таймеру НЕ гасим: за ней пустой холст, и погасить её значило бы
+    // подменить честное «идёт работа» на пустоту.
+    private static readonly VIEWER_READY_FALLBACK_MS = 10000;
+
     // Какую долю незавершённого отрезка разрешено занять ползунку-таймеру. Он нужен, чтобы
     // полоса не замирала там, где настоящего прогресса нет, но обгонять реальные события
     // ему нельзя: обогнав, он показывает почти готово и создаёт впечатление зависания.
@@ -682,6 +690,12 @@ class Viewer {
     animationMap: Record<string, string>;
 
     firstFrame: boolean;
+
+    /** Сигнал `viewer-ready` уже отправлен — второй раз хосту слать нечего. */
+    private viewerReadySent = false;
+
+    /** Страховка сигнала готовности на случай, если первого кадра так и не будет. */
+    private viewerReadyTimer: ReturnType<typeof setTimeout> | null = null;
 
     // Таймер «ползущего» прогресса загрузки; гасится на первом кадре модели.
     loadCreepTimer: ReturnType<typeof setInterval> | null = null;
@@ -5404,6 +5418,23 @@ class Viewer {
         .replace('{seconds}', String(Math.round(Viewer.MODEL_DOWNLOAD_STALL_MS / 1000)));
     }
 
+    /**
+     * Сообщение о том, что модель скачалась, но так и не собралась.
+     *
+     * Отдельно от `formatStallMessage`: там оборвалась сеть, здесь сеть отработала, а
+     * встала подготовка — чаще всего потому, что браузер отложил встройку, которой не
+     * видно на экране, и не отдал ей ни распаковку картинок, ни кадры.
+     *
+     * @param filename - Имя файла модели.
+     * @returns Готовая строка на языке интерфейса.
+     */
+    private formatPrepareStallMessage(filename: string): string {
+        const lang = this.observer.get('ui.language') as string | undefined;
+        return t('Model "{filename}" did not finish preparing: no progress for {seconds} s.', lang)
+        .replace('{filename}', filename)
+        .replace('{seconds}', String(Math.round(Viewer.MODEL_DOWNLOAD_STALL_MS / 1000)));
+    }
+
     private formatMissingRemoteFileMessage(filename: string, status: number): string {
         const lang = this.observer.get('ui.language') as string | undefined;
         const key = status === 403 ? 'File "{filename}" is not accessible on the server (HTTP {status}).' :
@@ -5635,7 +5666,7 @@ class Viewer {
                 let lastSet = -1;
                 // Сторож зависшей закачки: когда байты приходили в последний раз и осела ли
                 // уже вся загрузка (после этого сторож молчит — дальше идёт разбор файла).
-                let lastBytesAt = Date.now();
+                let lastProgressAt = Date.now();
                 let settled = false;
                 // Текстуры, замеченные и уже загруженные разбором glTF: единственный реальный
                 // прогресс на участке между «файл скачан» и «первый кадр».
@@ -5674,6 +5705,9 @@ class Viewer {
                 const onTexture = (seenDelta: number, doneDelta: number) => {
                     texturesSeen += seenDelta;
                     texturesDone += doneDelta;
+                    // Готовность картинок — тоже прогресс. Без этого сторож считал бы
+                    // тишиной весь участок после скачивания, где идёт распаковка.
+                    lastProgressAt = Date.now();
                     if (texturesSeen > 0) {
                         setProgress(textureBase());
                     }
@@ -5688,7 +5722,12 @@ class Viewer {
                     }
                     const stuckIndex = progressPerFile.findIndex(p => p < 1);
                     const stuck = modelFiles[stuckIndex < 0 ? 0 : stuckIndex];
-                    this.observer.set('ui.error', this.formatStallMessage(stuck?.filename ?? stuck?.url ?? ''));
+                    const name = stuck?.filename ?? stuck?.url ?? '';
+                    // Не докачалось и не доготовилось — разные беды, и посетителю стоит
+                    // сказать, какая именно: одна про сеть, другая про саму модель.
+                    this.observer.set('ui.error', stuckIndex < 0 ?
+                        this.formatPrepareStallMessage(name) :
+                        this.formatStallMessage(name));
                     this.observer.set('ui.loadProgress', 100);
                     this.observer.set('ui.spinner', false);
                     this.observer.set('ui.loadingBackgroundReady', false);
@@ -5700,9 +5739,12 @@ class Viewer {
                 // он выше, перепрыгивает вперёд через setProgress(max). Мин. шаг = не замираем.
                 if (this.loadCreepTimer) clearInterval(this.loadCreepTimer);
                 const creepInterval = setInterval(() => {
-                    // Байты не идут, а файл ещё не докачан — ждать больше нечего.
-                    if (!settled && progressPerFile.some(p => p < 1) &&
-                        Date.now() - lastBytesAt > Viewer.MODEL_DOWNLOAD_STALL_MS) {
+                    // Прогресса нет вовсе — ни байтов, ни готовых картинок. Раньше условие
+                    // требовало недокачанного файла, и потому не видело самый коварный случай:
+                    // модель скачалась и распаковалась, а сборка контейнера так и не
+                    // завершилась. Полоса тогда доползала до своего потолка 96 и парковалась
+                    // там навсегда — ровно то, что видели посетители во встройках.
+                    if (!settled && Date.now() - lastProgressAt > Viewer.MODEL_DOWNLOAD_STALL_MS) {
                         failStalled();
                         return;
                     }
@@ -5724,7 +5766,7 @@ class Viewer {
                 const promises = modelFiles.map((file, modelIndex) => {
                     const onProgress = (p: number) => {
                         if (p > progressPerFile[modelIndex]) {
-                            lastBytesAt = Date.now();
+                            lastProgressAt = Date.now();
                         }
                         progressPerFile[modelIndex] = p;
                         setAggregateProgress();
@@ -7389,6 +7431,13 @@ class Viewer {
         // we perform some special processing on the first frame
         this.firstFrame = true;
 
+        // Сцена собрана. Дальше остался только кадр — но если браузер его не даст
+        // (отложенная встройка), хост не должен ждать вечно.
+        if (this.viewerReadyTimer) {
+            clearTimeout(this.viewerReadyTimer);
+        }
+        this.viewerReadyTimer = setTimeout(() => this.announceViewerReady(), Viewer.VIEWER_READY_FALLBACK_MS);
+
         // Schedule the frame only after the flag is set. This guarantees that even
         // engines which consume renderNextFrame immediately will run first-frame cleanup.
         this.renderNextFrame();
@@ -8408,6 +8457,24 @@ class Viewer {
         this.debugRuler.update();
     }
 
+    /**
+     * Сообщить хосту, что вьюер поднялся и принимает команды.
+     *
+     * Зовётся из двух мест: с первого отрисованного кадра (честный путь) и по таймеру,
+     * если кадра не случилось. Идемпотентен — хост получит ровно одно сообщение.
+     */
+    private announceViewerReady() {
+        if (this.viewerReadyTimer) {
+            clearTimeout(this.viewerReadyTimer);
+            this.viewerReadyTimer = null;
+        }
+        if (this.viewerReadySent) {
+            return;
+        }
+        this.viewerReadySent = true;
+        postToViewerParent({ type: 'viewer-ready' });
+    }
+
     private onPostrender() {
         const perfStart = this.perfEnabled ? performance.now() : 0;
         if (this.firstFrame) {
@@ -8429,7 +8496,7 @@ class Viewer {
             // (helper/microphone/poi). До этого вьюер НЕ слал родителю ни одного
             // сообщения, поэтому встройка не знала о готовности и не отправляла,
             // например, микрофоны пространственной записи на пассивной странице.
-            postToViewerParent({ type: 'viewer-ready' });
+            this.announceViewerReady();
         }
 
         // resolve the (possibly multisampled) render target

@@ -1,4 +1,4 @@
-import { MeshInstance, PRIMITIVE_TRIANGLES, SEMANTIC_POSITION, Vec3 } from 'playcanvas';
+import { Mat4, MeshInstance, PRIMITIVE_TRIANGLES, SEMANTIC_POSITION, Vec3 } from 'playcanvas';
 
 type CachedMeshGeometry = {
     positions: Float32Array;
@@ -73,31 +73,88 @@ const getCachedMeshGeometry = (mi: MeshInstance, cache: WeakMap<object, CachedMe
     return geometry;
 };
 
-const intersectTriangle = (origin: Vec3, direction: Vec3, a: Vec3, b: Vec3, c: Vec3) => {
-    const epsilon = 1e-8;
-    const edge1 = new Vec3().sub2(b, a);
-    const edge2 = new Vec3().sub2(c, a);
-    const pvec = new Vec3().cross(direction, edge2);
-    const det = edge1.dot(pvec);
-    if (Math.abs(det) < epsilon) return null;
-
-    const invDet = 1 / det;
-    const tvec = new Vec3().sub2(origin, a);
-    const u = tvec.dot(pvec) * invDet;
-    if (u < 0 || u > 1) return null;
-
-    const qvec = new Vec3().cross(tvec, edge1);
-    const v = direction.dot(qvec) * invDet;
-    if (v < 0 || u + v > 1) return null;
-
-    const t = edge2.dot(qvec) * invDet;
-    return t >= 0 ? t : null;
-};
-
 const computeTriangleNormal = (a: Vec3, b: Vec3, c: Vec3) => {
     const edge1 = new Vec3().sub2(b, a);
     const edge2 = new Vec3().sub2(c, a);
     return new Vec3().cross(edge1, edge2).normalize();
+};
+
+// Пересечение считается в ЛОКАЛЬНОМ пространстве меша: луч переносится туда один раз
+// обратной мировой матрицей, вместо того чтобы гнать в мир по три вершины на каждый
+// треугольник. Параметр `t` от этого не меняется — направление переносится как вектор и
+// НЕ нормализуется заново, поэтому `origin + t * direction` в обоих пространствах
+// описывает одну и ту же точку. На доспехе (миллион треугольников) клик занимал около
+// секунды на WebGL2, и весь главный поток стоял.
+const invWorld = new Mat4();
+const localOrigin = new Vec3();
+const localDirection = new Vec3();
+const worldA = new Vec3();
+const worldB = new Vec3();
+const worldC = new Vec3();
+
+/**
+ * Пересечь луч с треугольником (Мёллер—Трумбор) на «сырых» числах.
+ *
+ * Вершины передаются координатами, а не `Vec3`, чтобы в цикле по сотням тысяч
+ * треугольников не рождалось по пять временных объектов на итерацию.
+ *
+ * @param ox - X начала луча.
+ * @param oy - Y начала луча.
+ * @param oz - Z начала луча.
+ * @param dx - X направления луча (не нормализуется — от этого зависит масштаб `t`).
+ * @param dy - Y направления луча.
+ * @param dz - Z направления луча.
+ * @param ax - X первой вершины.
+ * @param ay - Y первой вершины.
+ * @param az - Z первой вершины.
+ * @param bx - X второй вершины.
+ * @param by - Y второй вершины.
+ * @param bz - Z второй вершины.
+ * @param cx - X третьей вершины.
+ * @param cy - Y третьей вершины.
+ * @param cz - Z третьей вершины.
+ * @returns Параметр `t` вдоль луча или `null`, если попадания нет.
+ */
+const intersectTriangleRaw = (
+    ox: number, oy: number, oz: number,
+    dx: number, dy: number, dz: number,
+    ax: number, ay: number, az: number,
+    bx: number, by: number, bz: number,
+    cx: number, cy: number, cz: number
+) => {
+    const epsilon = 1e-8;
+
+    const e1x = bx - ax;
+    const e1y = by - ay;
+    const e1z = bz - az;
+    const e2x = cx - ax;
+    const e2y = cy - ay;
+    const e2z = cz - az;
+
+    const px = dy * e2z - dz * e2y;
+    const py = dz * e2x - dx * e2z;
+    const pz = dx * e2y - dy * e2x;
+
+    const det = e1x * px + e1y * py + e1z * pz;
+    if (Math.abs(det) < epsilon) return null;
+
+    const invDet = 1 / det;
+    const tx = ox - ax;
+    const ty = oy - ay;
+    const tz = oz - az;
+
+    const u = (tx * px + ty * py + tz * pz) * invDet;
+    if (u < 0 || u > 1) return null;
+
+    const qx = ty * e1z - tz * e1y;
+    const qy = tz * e1x - tx * e1z;
+    const qz = tx * e1y - ty * e1x;
+
+    const v = (dx * qx + dy * qy + dz * qz) * invDet;
+    if (v < 0 || u + v > 1) return null;
+
+    const t = (e2x * qx + e2y * qy + e2z * qz) * invDet;
+    return t >= 0 ? t : null;
 };
 
 const intersectMeshTrianglesDetailed = (
@@ -113,10 +170,22 @@ const intersectMeshTrianglesDetailed = (
     const world = mi.node?.getWorldTransform();
     if (!world) return null;
 
-    let bestHit: MeshRaycastHit | null = null;
-    const p0 = new Vec3();
-    const p1 = new Vec3();
-    const p2 = new Vec3();
+    invWorld.copy(world).invert();
+    invWorld.transformPoint(origin, localOrigin);
+    invWorld.transformVector(direction, localDirection);
+
+    const ox = localOrigin.x;
+    const oy = localOrigin.y;
+    const oz = localOrigin.z;
+    const dx = localDirection.x;
+    const dy = localDirection.y;
+    const dz = localDirection.z;
+
+    const positions = geometry.positions;
+    let bestT = Number.POSITIVE_INFINITY;
+    let bestI0 = -1;
+    let bestI1 = -1;
+    let bestI2 = -1;
 
     geometry.primitives.forEach((primitive) => {
         if (primitive.indexed && !geometry.indices) return;
@@ -126,22 +195,40 @@ const intersectMeshTrianglesDetailed = (
             const i2 = ((primitive.indexed ? geometry.indices?.[i + 2] : i + 2) ?? (i + 2)) + primitive.baseVertex;
             if (i0 < 0 || i1 < 0 || i2 < 0 || i0 >= geometry.vertexCount || i1 >= geometry.vertexCount || i2 >= geometry.vertexCount) continue;
 
-            p0.set(geometry.positions[i0 * 3], geometry.positions[i0 * 3 + 1], geometry.positions[i0 * 3 + 2]);
-            p1.set(geometry.positions[i1 * 3], geometry.positions[i1 * 3 + 1], geometry.positions[i1 * 3 + 2]);
-            p2.set(geometry.positions[i2 * 3], geometry.positions[i2 * 3 + 1], geometry.positions[i2 * 3 + 2]);
-            world.transformPoint(p0, p0);
-            world.transformPoint(p1, p1);
-            world.transformPoint(p2, p2);
+            const a = i0 * 3;
+            const b = i1 * 3;
+            const c = i2 * 3;
 
-            const t = intersectTriangle(origin, direction, p0, p1, p2);
-            if (t == null || t > maxDistance || (bestHit && t >= bestHit.t)) continue;
-            const point = origin.clone().add(direction.clone().mulScalar(t));
-            const normal = computeTriangleNormal(p0, p1, p2);
-            bestHit = { t, point, normal };
+            const t = intersectTriangleRaw(
+                ox, oy, oz,
+                dx, dy, dz,
+                positions[a], positions[a + 1], positions[a + 2],
+                positions[b], positions[b + 1], positions[b + 2],
+                positions[c], positions[c + 1], positions[c + 2]
+            );
+            if (t == null || t > maxDistance || t >= bestT) continue;
+
+            bestT = t;
+            bestI0 = i0;
+            bestI1 = i1;
+            bestI2 = i2;
         }
     });
 
-    return bestHit;
+    if (bestI0 < 0) return null;
+
+    // Наружу точка и нормаль отдаются в мировом пространстве — на них завязаны измерения
+    // и точки интереса. Переводим ровно один раз, для победившего треугольника.
+    worldA.set(positions[bestI0 * 3], positions[bestI0 * 3 + 1], positions[bestI0 * 3 + 2]);
+    worldB.set(positions[bestI1 * 3], positions[bestI1 * 3 + 1], positions[bestI1 * 3 + 2]);
+    worldC.set(positions[bestI2 * 3], positions[bestI2 * 3 + 1], positions[bestI2 * 3 + 2]);
+    world.transformPoint(worldA, worldA);
+    world.transformPoint(worldB, worldB);
+    world.transformPoint(worldC, worldC);
+
+    const point = origin.clone().add(direction.clone().mulScalar(bestT));
+    const normal = computeTriangleNormal(worldA, worldB, worldC);
+    return { t: bestT, point, normal } satisfies MeshRaycastHit;
 };
 
 const intersectMeshTriangles = (

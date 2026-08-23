@@ -271,6 +271,14 @@ class SelectionController {
                 return;
             }
 
+            // Ближняя грань AABB уже дальше найденного попадания — треугольники этого меша
+            // смотреть незачем, ближе они не окажутся. Условие `tMin >= 0` обязательно:
+            // при отрицательном `tMin` луч начинается ВНУТРИ коробки, и там треугольник
+            // вполне может лежать ближе, чем `hitT` (тогда равный дальней грани).
+            if (tMin >= 0 && tMin > bestT + 1e-6) {
+                return;
+            }
+
             const exactHitT = this.intersectMeshTriangles(mi, origin, direction, bestT);
             const resolvedT = exactHitT ?? (mi.mesh ? null : hitT);
             if (!Number.isFinite(resolvedT as number) || (resolvedT as number) < 0 || (resolvedT as number) > bestT + 1e-6) {
