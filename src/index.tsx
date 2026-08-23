@@ -443,6 +443,62 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
 // print out versions of dependent packages
 console.log(`HERITAGE3D Viewer v${modelViewerVersion} | PCUI v${pcuiVersion} (${pcuiRevision}) | PlayCanvas Engine v${engineVersion} (${engineRevision})`);
 
+/** Промежуток между кадрами, ниже которого считаем, что нас рисуют по-настоящему. */
+const PAINT_CADENCE_MS = 120;
+
+/** Сколько ждать кадров, прежде чем грузить всё равно. */
+const PAINT_WAIT_TIMEOUT_MS = 120000;
+
+/**
+ * Отложить работу до момента, когда браузер действительно нас рисует.
+ *
+ * Зачем. Сторонняя встройка ниже сгиба не получает от браузера ни кадров, ни сети:
+ * замерено на живой странице каталога — 24 секунды полной тишины, а в части прогонов и
+ * за минуту ничего. Загрузка модели идёт с тика приложения, а тик — с
+ * `requestAnimationFrame`, поэтому без кадров вьюер не делает ровно ничего. Полоса же
+ * ползёт по обычному таймеру, доходит до своего потолка 96 и там стоит — снаружи это
+ * выглядит намертво зависшим плеером. Отложив саму загрузку, мы вместо лживой полосы
+ * оставляем заставку, а работу начинаем тогда, когда её кто-то увидит.
+ *
+ * Почему не `IntersectionObserver`. Внутри стороннего iframe он меряет пересечение с
+ * СОБСТВЕННЫМ окном встройки, а не с окном страницы-хозяина, и для встройки за пределами
+ * экрана честно отвечает «видно». Для этой задачи он бесполезен.
+ *
+ * Почему два кадра, а не один. Придушенной встройке может достаться редкий одиночный
+ * тик; начав по нему, мы вернулись бы к ползущей полосе при стоящей работе. Два кадра
+ * подряд с промежутком меньше `PAINT_CADENCE_MS` — это уже настоящая отрисовка.
+ *
+ * @param run - Что запустить, когда нас начнут рисовать.
+ */
+const whenPainted = (run: () => void) => {
+    if (typeof requestAnimationFrame !== 'function') {
+        run();
+        return;
+    }
+    let done = false;
+    let previous = 0;
+    // Страховка: если кадров так и не случилось, грузим всё равно. Долгая загрузка
+    // всё-таки лучше, чем плеер, который не начнёт работу никогда.
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const fire = () => {
+        if (done) return;
+        done = true;
+        if (timer !== null) clearTimeout(timer);
+        run();
+    };
+    timer = setTimeout(fire, PAINT_WAIT_TIMEOUT_MS);
+    const tick = (now: number) => {
+        if (done) return;
+        if (previous && now - previous < PAINT_CADENCE_MS) {
+            fire();
+            return;
+        }
+        previous = now;
+        requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+};
+
 const main = () => {
     // initialize the apps state
     const observer: Observer = new Observer(observerData);
@@ -525,6 +581,7 @@ const main = () => {
         'lang',
         'perf',
         'poster',
+        'eager',
         'parentOrigin'
     ]);
 
@@ -1064,7 +1121,15 @@ const main = () => {
                     // ради неё скачивание модели незачем: ставим её, когда найдётся.
                     placeholder.then(found => observer.set('ui.embed.placeholderUrl', found))
                     .catch(() => observer.set('ui.embed.placeholderUrl', null));
-                    viewer.loadFiles(files);
+                    // Ждать кадров имеет смысл только во встройке: полноэкранный вьюер
+                    // виден всегда, и откладывать его загрузку в фоновой вкладке значило
+                    // бы менять поведение без нужды. `?eager=1` снимает отсрочку — на
+                    // случай, если хост показывает встройку способом, который мы не учли.
+                    if (embedConfig.enabled && !url.searchParams.has('eager')) {
+                        whenPainted(() => viewer.loadFiles(files));
+                    } else {
+                        viewer.loadFiles(files);
+                    }
                 }
             }
         });
