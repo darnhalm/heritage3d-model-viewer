@@ -4,7 +4,6 @@ import {
     Mat4,
     math,
     MeshInstance,
-    ShaderMaterial,
     Vec3
 } from 'playcanvas';
 
@@ -12,20 +11,16 @@ import { CachedMeshGeometry, intersectMeshTriangles } from './mesh-raycast';
 import { Picker } from '../../picker';
 
 const SELECT_CLICK_DRAG_THRESHOLD = 5;
-const FLASH_DURATION_MS = 500;
-const FLASH_COLOR: [number, number, number] = [0.224, 1.0, 0.078];
 
 type SelectionControllerArgs = {
     canvas: HTMLCanvasElement;
     observer: Observer;
     picker: Picker;
-    selectionHighlightMaterial: ShaderMaterial;
     getMeshInstances: () => Array<MeshInstance>;
     getCameraPosition: () => Vec3;
     getPickRay: (x: number, y: number) => { origin: Vec3; direction: Vec3 };
     getSelectedNode: () => GraphNode | null;
     setSelectedNodePath: (path: string) => void;
-    resetSelectionHighlightMeshes: () => void;
     renderNextFrame: () => void;
 };
 
@@ -35,8 +30,6 @@ class SelectionController {
     private observer: Observer;
 
     private picker: Picker;
-
-    private selectionHighlightMaterial: ShaderMaterial;
 
     private getMeshInstances: () => Array<MeshInstance>;
 
@@ -48,17 +41,11 @@ class SelectionController {
 
     private setSelectedNodePath: (path: string) => void;
 
-    private resetSelectionHighlightMeshes: () => void;
-
     private renderNextFrame: () => void;
 
     private selectClickDown: { clientX: number; clientY: number; canvasX: number; canvasY: number } | null = null;
 
     private selectIsPotentialClick = false;
-
-    private selectionFlashStartMs = 0;
-
-    private selectionFlashRaf: number | null = null;
 
     private meshGeometryCache = new WeakMap<object, CachedMeshGeometry | null>();
 
@@ -72,13 +59,11 @@ class SelectionController {
         this.canvas = args.canvas;
         this.observer = args.observer;
         this.picker = args.picker;
-        this.selectionHighlightMaterial = args.selectionHighlightMaterial;
         this.getMeshInstances = args.getMeshInstances;
         this.getCameraPosition = args.getCameraPosition;
         this.getPickRay = args.getPickRay;
         this.getSelectedNode = args.getSelectedNode;
         this.setSelectedNodePath = args.setSelectedNodePath;
-        this.resetSelectionHighlightMeshes = args.resetSelectionHighlightMeshes;
         this.renderNextFrame = args.renderNextFrame;
         this.bindEvents();
     }
@@ -306,70 +291,15 @@ class SelectionController {
         return intersectMeshTriangles(mi, origin, direction, maxDistance, this.meshGeometryCache);
     }
 
-    private stopSelectionFlash() {
-        this.selectionFlashStartMs = 0;
-        if (this.selectionFlashRaf !== null) {
-            cancelAnimationFrame(this.selectionFlashRaf);
-            this.selectionFlashRaf = null;
-        }
-        this.selectionHighlightMaterial.setParameter('uColor', [...FLASH_COLOR, 0]);
-        this.selectionHighlightMaterial.update();
-        this.resetSelectionHighlightMeshes();
-    }
-
-    private startSelectionFlash() {
-        this.stopSelectionFlash();
-
-        if (!this.getSelectedNode() || !this.observer.get('debug.withTextureOnly')) return;
-
-        this.selectionFlashStartMs = performance.now();
-        this.selectionHighlightMaterial.setParameter('uColor', [...FLASH_COLOR, 1]);
-        this.selectionHighlightMaterial.update();
-
-        const tick = () => {
-            if (!this.selectionFlashStartMs) return;
-            const elapsed = performance.now() - this.selectionFlashStartMs;
-            this.renderNextFrame();
-            if (elapsed < FLASH_DURATION_MS) {
-                this.selectionFlashRaf = requestAnimationFrame(tick);
-            } else {
-                this.stopSelectionFlash();
-                this.renderNextFrame();
-            }
-        };
-
-        this.selectionFlashRaf = requestAnimationFrame(tick);
-    }
-
-    updateFlashMaterial(highlightMeshCount: number) {
-        if (this.selectionFlashStartMs > 0 && highlightMeshCount > 0) {
-            const elapsed = performance.now() - this.selectionFlashStartMs;
-            const fade = math.clamp(1 - (elapsed / FLASH_DURATION_MS), 0, 1);
-            this.selectionHighlightMaterial.setParameter('uColor', [...FLASH_COLOR, fade]);
-            this.selectionHighlightMaterial.update();
-        }
-    }
-
-    onTextureSelectionModeChange(enabled: boolean) {
-        if (!enabled) {
-            this.stopSelectionFlash();
-        }
-    }
-
-    onSelectionNodeChanged() {
-        this.startSelectionFlash();
-    }
-
-    onPrerender(highlightMeshCount: number) {
-        this.updateFlashMaterial(highlightMeshCount);
-    }
-
-    isFlashActive() {
-        return this.selectionFlashStartMs > 0;
-    }
-
+    /**
+     * Сбросить незавершённый клик.
+     *
+     * Зовётся при сбросе сцены: если её убрали между нажатием и отпусканием, отпускание
+     * не должно ничего выделять в уже другой сцене.
+     */
     reset() {
-        this.stopSelectionFlash();
+        this.selectIsPotentialClick = false;
+        this.selectClickDown = null;
     }
 }
 

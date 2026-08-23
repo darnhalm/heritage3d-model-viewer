@@ -71,7 +71,9 @@ import {
     MorphInstance,
     MorphTarget,
     Mouse,
+    Layer,
     MiniStats,
+    OutlineRenderer,
     Quat,
     RotateGizmo,
     ScaleGizmo,
@@ -81,6 +83,7 @@ import {
     SEMANTIC_TEXCOORD0,
     ShaderMaterial,
     StandardMaterial,
+    StandardMaterialOptions,
     Texture,
     TouchDevice,
     TranslateGizmo,
@@ -272,44 +275,6 @@ const pickDepthWgsl = /* wgsl */ `
     }
 `;
 
-const overlayVertexGLSL = /* glsl */ `
-attribute vec3 vertex_position;
-uniform mat4 matrix_model;
-uniform mat4 matrix_viewProjection;
-void main(void) {
-    gl_Position = matrix_viewProjection * matrix_model * vec4(vertex_position, 1.0);
-}
-`;
-
-const overlayFragmentGLSL = /* glsl */ `
-precision highp float;
-uniform vec4 uColor;
-void main(void) {
-    gl_FragColor = uColor;
-}
-`;
-
-const overlayVertexWGSL = /* wgsl */ `
-attribute vertex_position: vec3f;
-uniform matrix_model: mat4x4f;
-uniform matrix_viewProjection: mat4x4f;
-@vertex
-fn vertexMain(input: VertexInput) -> VertexOutput {
-    var output: VertexOutput;
-    output.position = uniform.matrix_viewProjection * uniform.matrix_model * vec4(input.vertex_position, 1.0);
-    return output;
-}
-`;
-
-const overlayFragmentWGSL = /* wgsl */ `
-uniform uColor: vec4f;
-@fragment
-fn fragmentMain(input: FragmentInput) -> FragmentOutput {
-    var output: FragmentOutput;
-    output.color = uColor;
-    return output;
-}
-`;
 
 const uvCheckerVertexGLSL = /* glsl */ `
 attribute vec3 vertex_position;
@@ -490,6 +455,9 @@ const createUvColorCanvas = (size = 1024): HTMLCanvasElement => {
  */
 class FormattedLoadError extends Error {}
 
+/** Цвет обводки выделенного объекта — тот же зелёный, что был у прежнего каркаса. */
+const SELECTION_OUTLINE_COLOR = new Color(0.224, 1.0, 0.078);
+
 class Viewer {
     private static readonly MODEL_FILE_SIZE_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
 
@@ -644,9 +612,14 @@ class Viewer {
 
     wireframeMaterial: StandardMaterial;
 
-    selectionHighlightMeshInstances: Array<MeshInstance>;
+    /** Обводка выделенного объекта. */
+    private outlineRenderer: OutlineRenderer | null = null;
 
-    selectionHighlightMaterial: ShaderMaterial;
+    /** Слой, в который обводка рисует себя; камера сцены его не видит. */
+    private outlineLayer: Layer | null = null;
+
+    /** Узел, чьи меши сейчас обведены, — чтобы снять обводку адресно. */
+    private outlinedEntity: Entity | null = null;
 
     texelDensityHeatmapMeshInstances: Array<MeshInstance>;
 
@@ -1262,7 +1235,6 @@ class Viewer {
         this.assets = [];
         this.meshInstances = [];
         this.wireframeMeshInstances = [];
-        this.selectionHighlightMeshInstances = [];
         this.texelDensityHeatmapMeshInstances = [];
         this.texelDensityHeatmapMaterials = [];
         this.uvColorMeshInstances = [];
@@ -1287,25 +1259,15 @@ class Viewer {
         material.update();
         this.wireframeMaterial = material;
 
-        const overlayShaderArgs = {
-            uniqueName: 'selection-overlay',
-            attributes: {
-                vertex_position: SEMANTIC_POSITION
-            },
-            vertexGLSL: overlayVertexGLSL,
-            fragmentGLSL: overlayFragmentGLSL,
-            vertexWGSL: overlayVertexWGSL,
-            fragmentWGSL: overlayFragmentWGSL
-        };
-
-        const selectionMat = new ShaderMaterial(overlayShaderArgs);
-        selectionMat.setParameter('uColor', [0.224, 1.0, 0.078, 1.0]);
-        selectionMat.blendType = BLEND_NORMAL;
-        selectionMat.depthState.write = false;
-        selectionMat.depthBias = -2.0;
-        selectionMat.slopeDepthBias = 2.0;
-        selectionMat.update();
-        this.selectionHighlightMaterial = selectionMat;
+        // Обводка выделенного объекта. Свой слой обязателен: камера сцены его не рисует
+        // (в её списке слоёв его нет), рисует только внутренняя камера обводки — в свою
+        // цель за кадром, откуда результат подмешивается поверх сцены. Раньше выделение
+        // рисовалось каркасом поверх поверхности: на фотограмметрии в сто тысяч
+        // треугольников сетка закрывала саму текстуру, ради которой её и включают.
+        const outlineLayer = new Layer({ name: 'SelectionOutline' });
+        app.scene.layers.push(outlineLayer);
+        this.outlineLayer = outlineLayer;
+        this.outlineRenderer = new OutlineRenderer(app, outlineLayer);
 
         const uvCheckerCanvas = createUvMapCheckerCanvas(1024, 8);
         const uvCheckerTexture = new Texture(this.app.graphicsDevice, {
@@ -1690,13 +1652,11 @@ class Viewer {
             canvas: this.canvas,
             observer: this.observer,
             picker: this.picker,
-            selectionHighlightMaterial: this.selectionHighlightMaterial,
             getMeshInstances: () => this.getPickableMeshInstances(),
             getCameraPosition: () => this.camera.getPosition(),
             getPickRay: this.getPickRay.bind(this),
             getSelectedNode: () => this.selectedNode,
             setSelectedNodePath: (path: string) => this.setSelectedNode(path),
-            resetSelectionHighlightMeshes: this.resetSelectionHighlightMeshes.bind(this),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
         this.canvas.addEventListener('mousedown', this.onTilePickMouseDown);
@@ -2393,7 +2353,6 @@ class Viewer {
             'debug.selectedUvSet': this.setSelectedUvSet.bind(this),
             'debug.withTextureOnly': () => {
                 const enabled = !!this.observer.get('debug.withTextureOnly');
-                this.selectionController?.onTextureSelectionModeChange(enabled);
                 // `By objects` is a scoped inspection mode. Keeping the old node after
                 // leaving it made material names/channels continue to come from that node,
                 // and could leave the same stale path selected after another model load.
@@ -2904,7 +2863,7 @@ class Viewer {
         });
         this.selectionController.reset();
         this.resetWireframeMeshes();
-        this.resetSelectionHighlightMeshes();
+        this.clearSelectionOutline();
         this.resetTexelDensityHeatmapMeshes();
         this.resetUvColorMeshes();
         this.resetUvCheckerMeshes();
@@ -6607,7 +6566,6 @@ class Viewer {
         }
 
         this.selectedNode = graphNode;
-        this.selectionController?.onSelectionNodeChanged();
         this.updateMaterialChannelInfo();
         this.updateSelectedMaterialFactors();
         this.updateSelectedMaterialColor();
@@ -7641,12 +7599,18 @@ class Viewer {
         this.uvCheckerOriginalVisibility.clear();
     }
 
-    private resetSelectionHighlightMeshes() {
-        this.app.scene.layers.getLayerByName('World').removeMeshInstances(this.selectionHighlightMeshInstances);
-        this.selectionHighlightMeshInstances.forEach((mi) => {
-            mi.clearShaders();
-        });
-        this.selectionHighlightMeshInstances = [];
+    /**
+     * Снять обводку с ранее выделенного узла.
+     *
+     * Именно `removeEntity`, а не `removeAllEntities`: последний только вычищает слой, но
+     * оставляет на материалах хук `onUpdateShader` и параметр `pcOutlineColor`, и они
+     * копятся от выделения к выделению.
+     */
+    private clearSelectionOutline() {
+        if (this.outlinedEntity && this.outlineRenderer) {
+            this.outlineRenderer.removeEntity(this.outlinedEntity);
+        }
+        this.outlinedEntity = null;
     }
 
     private resetTexelDensityHeatmapMeshes() {
@@ -7744,18 +7708,43 @@ class Viewer {
         this.app.scene.layers.getLayerByName('World').addMeshInstances(this.wireframeMeshInstances);
     }
 
-    private buildSelectionHighlightMeshes() {
-        if (!this.selectedNode || !this.observer.get('debug.withTextureOnly')) return;
+    /**
+     * Обвести выделенный узел.
+     *
+     * Обводка берёт меши узла и его потомков и рисует их своей внутренней камерой в
+     * отдельную цель, откуда силуэт подмешивается поверх сцены. Работает только со
+     * `StandardMaterial` — этого хватает: glTF даёт именно их.
+     */
+    private updateSelectionOutline() {
+        this.clearSelectionOutline();
+        if (!this.outlineRenderer || !this.selectedNode || !this.observer.get('debug.withTextureOnly')) {
+            return;
+        }
+        this.outlinedEntity = this.selectedNode as Entity;
+        this.outlineRenderer.addEntity(this.outlinedEntity, SELECTION_OUTLINE_COLOR);
 
-        const selectedMeshes = this.collectMeshInstances(this.selectedNode as Entity);
-        this.selectionHighlightMeshInstances = selectedMeshes.map((mi) => {
-            const meshInstance = new MeshInstance(mi.mesh, this.selectionHighlightMaterial, mi.node);
-            meshInstance.renderStyle = PRIMITIVE_LINES;
-            meshInstance.skinInstance = mi.skinInstance;
-            meshInstance.morphInstance = mi.morphInstance;
-            return meshInstance;
+        // Заплатка на изъян движка (playcanvas 2.21.4). `addEntity` собирает для прохода
+        // обводки СВЕЖИЕ `StandardMaterialOptions` и переносит туда лишь горстку полей —
+        // `clusteredLightingEnabled` среди них нет, а по умолчанию он `true`. У нас
+        // кластерное освещение выключено (см. `clusteredLightingEnabled = false`), поэтому
+        // куска `lightBufferDefinesPS` в наборе нет вовсе. Препроцессор GLSL спотыкается о
+        // неразрешённое включение, бросает работу — и в компилятор уходит сырой
+        // `#include "litMainVS"` с ошибкой «invalid directive name». Под WGSL не всплывает.
+        // Проверено опытом: без этих строк выделение под `?webgl` роняет компиляцию шейдера.
+        const clustered = this.app.scene.clusteredLightingEnabled;
+        const patched = new Set<unknown>();
+        this.outlineRenderer.getMeshInstances(this.outlinedEntity, true).forEach((mi) => {
+            const material = mi.material;
+            if (!material || patched.has(material)) return;
+            patched.add(material);
+            const inner = (material as unknown as { onUpdateShader?: (o: StandardMaterialOptions) => StandardMaterialOptions }).onUpdateShader;
+            if (typeof inner !== 'function') return;
+            (material as unknown as { onUpdateShader: (o: StandardMaterialOptions) => StandardMaterialOptions }).onUpdateShader = (options) => {
+                const opts = inner(options);
+                opts.litOptions.clusteredLightingEnabled = clustered;
+                return opts;
+            };
         });
-        this.app.scene.layers.getLayerByName('World').addMeshInstances(this.selectionHighlightMeshInstances);
     }
 
     private onFrameRender() {
@@ -7794,18 +7783,16 @@ class Viewer {
             return;
         }
 
-        // selected-object highlight (green contour only)
+        // Обводка выделенного объекта.
         if (this.dirtySelectionHighlight) {
             this.dirtySelectionHighlight = false;
-            this.resetSelectionHighlightMeshes();
-            this.buildSelectionHighlightMeshes();
+            this.updateSelectionOutline();
         }
-        this.selectionController.onPrerender(this.selectionHighlightMeshInstances.length);
-        if (this.showWireframe && this.observer.get('debug.withTextureOnly')) {
-            const showWireframeOverlay = !this.selectionController.isFlashActive();
-            this.wireframeMeshInstances.forEach((mi) => {
-                mi.visible = showWireframeOverlay;
-            });
+        // Обводке нужен свой проход каждый кадр, и только когда есть что обводить:
+        // вхолостую он стоил бы очистки полноэкранной цели на каждом кадре.
+        if (this.outlinedEntity && this.outlineRenderer) {
+            const cameraEntity = this.getRenderingCamera().entity as Entity;
+            this.outlineRenderer.frameUpdate(cameraEntity, this.app.scene.layers.getLayerByName('World'), true);
         }
 
         if (this.dirtyTexelDensityHeatmap) {
