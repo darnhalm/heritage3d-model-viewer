@@ -89,7 +89,9 @@ import {
     Vec4,
     ViewCube,
     CameraComponent,
-    platform
+    platform,
+    isCompressedPixelFormat,
+    pixelFormatInfo
 } from 'playcanvas';
 import { serializeCompressedPly } from 'spz-js';
 
@@ -196,6 +198,8 @@ type GSplatFrozenLodCamera = {
     getPosition: () => Vec3;
 };
 type TextureAssetFile = { filename?: string };
+/** Формат текстуры канала: имя, сжатость для GPU и размер в пикселях. */
+type ChannelFormat = { container: string; gpu: string; compressed: boolean; width: number; height: number } | undefined;
 type TextureLike = {
     name?: string;
 };
@@ -504,6 +508,24 @@ class Viewer {
      * пока байты идут хотя бы по чуть-чуть, счётчик сбрасывается.
      */
     private static readonly MODEL_DOWNLOAD_STALL_MS = 45000;
+
+    // Рубежи шкалы загрузки. Раньше вся работа после скачивания жила в одном отрезке 90..98,
+    // и три её этапа — разбор glTF, заливка в видеопамять, сборка сцены — не были видны вовсе.
+    // Показать их «изнутри» нельзя: они держат главный поток, а пока он занят, браузер не
+    // рисует. Поэтому у каждого этапа свой рубеж, выставляемый ПЕРЕД работой: полоса называет
+    // то, на чём стоит, вместо выдуманных 98.
+    private static readonly STAGE_DOWNLOAD = 85;   // скачано, начинается разбор glTF
+
+    private static readonly STAGE_PARSED = 88;     // разбор позади, пошла распаковка картинок
+
+    private static readonly STAGE_TEXTURES = 96;   // картинки распакованы, идёт заливка в GPU
+
+    private static readonly STAGE_ASSEMBLY = 99;   // сцена собрана, ждём первый кадр
+
+    // Какую долю незавершённого отрезка разрешено занять ползунку-таймеру. Он нужен, чтобы
+    // полоса не замирала там, где настоящего прогресса нет, но обгонять реальные события
+    // ему нельзя: обогнав, он показывает почти готово и создаёт впечатление зависания.
+    private static readonly LOAD_CREEP_SHARE = 0.45;
 
     canvas: HTMLCanvasElement;
 
@@ -2918,7 +2940,29 @@ class Viewer {
     private updateMaterialChannelInfo() {
         const channelsWithTextures = new Set<string>();
         const channelFilenames: Record<string, string> = {};
+        const channelFormats: Record<string, ChannelFormat> = {};
         const materialNames = new Set<string>();
+
+        // Формат текстуры — единственный способ увидеть в плеере, что конвертация в KTX2
+        // действительно применилась: сжатые форматы (BC, ASTC, ETC) видеокарта читает как
+        // есть, обычные PNG и JPEG разворачиваются в сырые пиксели. Раньше панель об этом
+        // молчала, и проверить конвертацию было нечем.
+        const getTextureFormat = (tex: TextureLike | null | undefined): ChannelFormat | undefined => {
+            const texture = tex as unknown as { format?: number; width?: number; height?: number } | null | undefined;
+            if (typeof texture?.format !== 'number') return undefined;
+            // Показываем формат ФАЙЛА, а не формат в видеопамяти: вопрос, на который отвечает
+            // значок, — «применилась ли конвертация», а это про то, что лежит в glTF. Разбор
+            // glTF даёт картинке имя с расширением по её mime, отсюда и берём.
+            const ext = (getTextureFilename(tex) ?? '').split('.').pop()?.toLowerCase() ?? '';
+            const container = ({ ktx2: 'KTX2', ktx: 'KTX', basis: 'BASIS', dds: 'DDS', png: 'PNG', jpg: 'JPEG', jpeg: 'JPEG', webp: 'WEBP' })[ext];
+            return {
+                container: container ?? '—',
+                gpu: pixelFormatInfo.get(texture.format)?.name ?? `формат ${texture.format}`,
+                compressed: isCompressedPixelFormat(texture.format),
+                width: texture.width ?? 0,
+                height: texture.height ?? 0
+            };
+        };
 
         const getTextureFilename = (tex: TextureLike | null | undefined): string | undefined => {
             if (!tex) return undefined;
@@ -2934,28 +2978,44 @@ class Viewer {
                 materialNames.add(mat.name.trim());
             }
             if (mat.diffuseMap) {
-                channelsWithTextures.add('albedo'); if (!channelFilenames.albedo) channelFilenames.albedo = getTextureFilename(mat.diffuseMap) ?? '';
+                channelsWithTextures.add('albedo');
+                if (!channelFilenames.albedo) channelFilenames.albedo = getTextureFilename(mat.diffuseMap) ?? '';
+                if (!channelFormats.albedo) channelFormats.albedo = getTextureFormat(mat.diffuseMap);
             }
             if (mat.metalnessMap) {
-                channelsWithTextures.add('metalness'); if (!channelFilenames.metalness) channelFilenames.metalness = getTextureFilename(mat.metalnessMap) ?? '';
+                channelsWithTextures.add('metalness');
+                if (!channelFilenames.metalness) channelFilenames.metalness = getTextureFilename(mat.metalnessMap) ?? '';
+                if (!channelFormats.metalness) channelFormats.metalness = getTextureFormat(mat.metalnessMap);
             }
             if (mat.glossMap) {
-                channelsWithTextures.add('gloss'); if (!channelFilenames.gloss) channelFilenames.gloss = getTextureFilename(mat.glossMap) ?? '';
+                channelsWithTextures.add('gloss');
+                if (!channelFilenames.gloss) channelFilenames.gloss = getTextureFilename(mat.glossMap) ?? '';
+                if (!channelFormats.gloss) channelFormats.gloss = getTextureFormat(mat.glossMap);
             }
             if (mat.normalMap) {
-                channelsWithTextures.add('world_normal'); if (!channelFilenames.world_normal) channelFilenames.world_normal = getTextureFilename(mat.normalMap) ?? '';
+                channelsWithTextures.add('world_normal');
+                if (!channelFilenames.world_normal) channelFilenames.world_normal = getTextureFilename(mat.normalMap) ?? '';
+                if (!channelFormats.world_normal) channelFormats.world_normal = getTextureFormat(mat.normalMap);
             }
             if (mat.specularMap) {
-                channelsWithTextures.add('specularity'); if (!channelFilenames.specularity) channelFilenames.specularity = getTextureFilename(mat.specularMap) ?? '';
+                channelsWithTextures.add('specularity');
+                if (!channelFilenames.specularity) channelFilenames.specularity = getTextureFilename(mat.specularMap) ?? '';
+                if (!channelFormats.specularity) channelFormats.specularity = getTextureFormat(mat.specularMap);
             }
             if (mat.emissiveMap) {
-                channelsWithTextures.add('emission'); if (!channelFilenames.emission) channelFilenames.emission = getTextureFilename(mat.emissiveMap) ?? '';
+                channelsWithTextures.add('emission');
+                if (!channelFilenames.emission) channelFilenames.emission = getTextureFilename(mat.emissiveMap) ?? '';
+                if (!channelFormats.emission) channelFormats.emission = getTextureFormat(mat.emissiveMap);
             }
             if (mat.aoMap) {
-                channelsWithTextures.add('ao'); if (!channelFilenames.ao) channelFilenames.ao = getTextureFilename(mat.aoMap) ?? '';
+                channelsWithTextures.add('ao');
+                if (!channelFilenames.ao) channelFilenames.ao = getTextureFilename(mat.aoMap) ?? '';
+                if (!channelFormats.ao) channelFormats.ao = getTextureFormat(mat.aoMap);
             }
             if (mat.opacityMap) {
-                channelsWithTextures.add('opacity'); if (!channelFilenames.opacity) channelFilenames.opacity = getTextureFilename(mat.opacityMap) ?? '';
+                channelsWithTextures.add('opacity');
+                if (!channelFilenames.opacity) channelFilenames.opacity = getTextureFilename(mat.opacityMap) ?? '';
+                if (!channelFormats.opacity) channelFormats.opacity = getTextureFormat(mat.opacityMap);
             }
         };
 
@@ -2975,6 +3035,7 @@ class Viewer {
 
         this.observer.set('scene.materialChannelsWithTextures', JSON.stringify([...channelsWithTextures]));
         this.observer.set('scene.materialChannelFilenames', JSON.stringify(channelFilenames));
+        this.observer.set('scene.materialChannelFormats', JSON.stringify(channelFormats));
         this.observer.set('scene.selectedMaterialNames', JSON.stringify([...materialNames]));
     }
 
@@ -5114,9 +5175,14 @@ class Viewer {
                 if (asset.type !== 'texture' || asset.loaded) {
                     return;
                 }
-                onTexture?.(1, 0);
-                asset.once('load', () => onTexture?.(0, 1));
-                asset.once('error', () => onTexture?.(0, 1));
+                // Вес — байты картинки, а не штука. Текстуры в одной модели отличаются на
+                // порядки: у черепа карта нормалей 117 МБ из 152, и по счёту «одна из
+                // четырёх» она даёт те же 25%, что и файл в 0.2 МБ. По байтам полоса
+                // показывает, сколько работы действительно осталось.
+                const weight = (asset.file as { contents?: ArrayBuffer } | undefined)?.contents?.byteLength || 1;
+                onTexture?.(weight, 0);
+                asset.once('load', () => onTexture?.(0, weight));
+                asset.once('error', () => onTexture?.(0, weight));
             };
             if (onTexture) {
                 this.app.assets.on('add', onAssetAdd);
@@ -5575,9 +5641,9 @@ class Viewer {
                 // прогресс на участке между «файл скачан» и «первый кадр».
                 let texturesSeen = 0;
                 let texturesDone = 0;
-                // Монотонно (бар не откатывается назад), потолок 98 — ровно 100 ставит .finally.
+                // Монотонно (бар не откатывается назад), потолок 99 — ровно 100 ставит первый кадр.
                 const setProgress = (v: number) => {
-                    const nv = Math.max(lastProgressValue, Math.min(98, v));
+                    const nv = Math.max(lastProgressValue, Math.min(Viewer.STAGE_ASSEMBLY, v));
                     lastProgressValue = nv;
                     if (Math.round(nv) !== lastSet) {
                         lastSet = Math.round(nv);
@@ -5585,21 +5651,31 @@ class Viewer {
                     }
                 };
 
-                // Реальный прогресс скачивания файлов модели → диапазон 0..90.
+                // Реальный прогресс скачивания файлов модели → диапазон 0..85.
                 const setAggregateProgress = () => {
                     const sum = progressPerFile.reduce((a, b) => a + b, 0);
-                    const pct = total > 0 ? (sum / total) * 90 : 0;
+                    const pct = total > 0 ? (sum / total) * Viewer.STAGE_DOWNLOAD : 0;
                     setProgress(pct);
                 };
+
+                // Рубежи слепых этапов. Показать сам этап невозможно: разбор glTF, заливка в
+                // видеопамять и сборка сцены держат главный поток, а пока он занят, браузер не
+                // рисует вообще — никакая полоса там не сдвинется. Что можно — выставить число
+                // ПЕРЕД тяжёлой работой, чтобы зритель видел, на чём стоим, а не выдуманные 98.
+                const markStage = (value: number) => setProgress(value);
 
                 // Разбор glTF заводит по ассету на каждую картинку. Их готовность — настоящая
                 // мера того, что происходит после скачивания: распаковка PNG и заливка в GPU.
                 // Отсюда диапазон 90..98, тот самый, где индикатор раньше просто замирал.
+                // Считаем байтами (см. `onAssetAdd`), поэтому доля отражает объём работы.
+                const textureBase = () => (texturesSeen > 0 ?
+                    Viewer.STAGE_PARSED + (Viewer.STAGE_TEXTURES - Viewer.STAGE_PARSED) * (texturesDone / texturesSeen) :
+                    Viewer.STAGE_PARSED);
                 const onTexture = (seenDelta: number, doneDelta: number) => {
                     texturesSeen += seenDelta;
                     texturesDone += doneDelta;
                     if (texturesSeen > 0) {
-                        setProgress(90 + 8 * (texturesDone / texturesSeen));
+                        setProgress(textureBase());
                     }
                 };
 
@@ -5630,7 +5706,14 @@ class Viewer {
                         failStalled();
                         return;
                     }
-                    const target = lastProgressValue < 90 ? 90 : 98;
+                    // Пока идут текстуры, потолок ползунка считается от реально готовых
+                    // байтов, и таймеру достаётся лишь часть незавершённого отрезка. Раньше
+                    // он шёл прямо к 98 и добегал туда за пару секунд — а распаковка длилась
+                    // ещё семь. Полоса стояла на 98 и выглядела зависшей, хотя работа шла.
+                    const ceiling = texturesSeen > 0 ?
+                        textureBase() + (Viewer.STAGE_TEXTURES - textureBase()) * Viewer.LOAD_CREEP_SHARE :
+                        Viewer.STAGE_TEXTURES;
+                    const target = lastProgressValue < Viewer.STAGE_DOWNLOAD ? Viewer.STAGE_DOWNLOAD : ceiling;
                     if (lastProgressValue < target) {
                         const step = Math.max(0.25, (target - lastProgressValue) * 0.06);
                         setProgress(lastProgressValue + step);

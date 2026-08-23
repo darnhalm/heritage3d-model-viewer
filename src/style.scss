@@ -996,6 +996,41 @@ body:not(.ui-ready) #panel-left {
     flex: 0 1 auto;
 }
 
+.materials-layer-item-texinfo {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+    padding-left: 8px;
+    flex: none;
+}
+
+.materials-layer-item-size {
+    font-size: 0.72em;
+    opacity: 0.55;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* Значок формата: сжатый для видеокарты или сырые пиксели. Единственное место, где видно,
+   применилась ли конвертация текстур — сам файл модели об этом не рассказывает. */
+.materials-layer-item-format {
+    font-size: 0.66em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    opacity: 0.65;
+}
+
+.materials-layer-item-format.compressed {
+    border-color: rgba(var(--theme-primary-rgb), 0.75);
+    background: rgba(var(--theme-primary-rgb), 0.18);
+    opacity: 1;
+}
+
 .materials-layer-item-filename {
     display: inline-block;
     min-width: 0;

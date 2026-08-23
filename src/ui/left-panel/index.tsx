@@ -481,17 +481,37 @@ const MATERIAL_CHANNEL_ITEMS: Array<{ label: string; value: string }> = [
     { label: 'Opacity', value: 'opacity' }
 ];
 
+/** Формат текстуры канала, как его отдаёт вьюер. */
+type ChannelFormat = { container: string; gpu: string; compressed: boolean; width: number; height: number };
+
+/**
+ * Разобрать карту форматов каналов из observer.
+ *
+ * @param raw - JSON, записанный вьюером.
+ * @returns Формат по каналу; при неразборчивом значении — пустая карта.
+ */
+const parseFormatRecord = (raw: unknown): Record<string, ChannelFormat> => {
+    try {
+        const parsed = JSON.parse(String(raw ?? '{}'));
+        return parsed && typeof parsed === 'object' ? parsed as Record<string, ChannelFormat> : {};
+    } catch {
+        return {};
+    }
+};
+
 const renderModeCategories = (
     channelsWithTextures: Set<string>,
     _withTextureOnly: boolean,
-    channelFilenames: Record<string, string>
+    channelFilenames: Record<string, string>,
+    channelFormats: Record<string, ChannelFormat>
 ): Array<{
     title: string;
-    items: Array<{ label: string; value: string; filename?: string }>;
+    items: Array<{ label: string; value: string; filename?: string; format?: ChannelFormat }>;
 }> => {
     const materialItems = MATERIAL_CHANNEL_ITEMS.map(item => ({
         ...item,
-        filename: channelsWithTextures.has(item.value) ? (channelFilenames[item.value] || undefined) : undefined
+        filename: channelsWithTextures.has(item.value) ? (channelFilenames[item.value] || undefined) : undefined,
+        format: channelsWithTextures.has(item.value) ? channelFormats[item.value] : undefined
     }));
     return [
         { title: 'RENDER', items: [{ label: 'Final Render', value: 'default' }] },
@@ -794,7 +814,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     private previousAlignmentVisibilitySaved = false;
 
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>, nextState: { tab: LeftPanelTab, poiSaved: boolean, draggingPoiId: string | null, dragOverPoiId: string | null, dragX: number, dragY: number, activePoiCardId: string | null }): boolean {
-        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.unlit', 'scene.isTileset', 'scene.tilesetLit', 'scene.tilesetMaxDepth', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'ui.language', 'animation.list'];
+        const keys = ['camera', 'debug', 'measure.unit', 'scene.cameras', 'scene.selectedCamera', 'scene.selectedNode', 'scene.hasGsplat', 'scene.unlit', 'scene.isTileset', 'scene.tilesetLit', 'scene.tilesetMaxDepth', 'scene.materialChannelsWithTextures', 'scene.materialChannelFilenames', 'scene.materialChannelFormats', 'scene.selectedMaterialNames', 'scene.selectedMaterialFactors', 'scene.selectedMaterialColor', 'scene.selectedSpecularColor', 'scene.availableUvSets', 'scene.variants', 'scene.variant', 'scene.texelDensitySummary', 'scene.texelDensityReport', 'runtime', 'poi', 'skybox', 'light', 'shadowCatcher', 'ui.language', 'animation.list'];
         const a = extract(nextProps.observerData, keys);
         const b = extract(this.props.observerData, keys);
         return JSON.stringify(a) !== JSON.stringify(b) ||
@@ -1053,7 +1073,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         const materialRenderCategories = observerData?.scene?.hasGsplat ? [] : renderModeCategories(
             new Set(parseStringArray(observerData?.scene?.materialChannelsWithTextures)),
             observerData?.debug?.withTextureOnly ?? false,
-            parseStringRecord(observerData?.scene?.materialChannelFilenames)
+            parseStringRecord(observerData?.scene?.materialChannelFilenames),
+            parseFormatRecord(observerData?.scene?.materialChannelFormats)
         )
         // На тайлсете прячем категорию UV: её раскладки строятся из
         // статического `meshInstances`, которого у потоковых тайлов нет.
@@ -1185,6 +1206,26 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                             item.label}
                                                         {observerData?.debug?.withTextureOnly && item.filename ? <span className='materials-layer-item-filename' title={item.filename}> {item.filename}</span> : null}
                                                     </span>
+                                                    {item.format ? (
+                                                        <span className='materials-layer-item-texinfo'>
+                                                            <span
+                                                                className='materials-layer-item-size'
+                                                                title={t('Texture resolution in pixels', lang)}
+                                                            >
+                                                                {item.format.width === item.format.height ?
+                                                                    `${item.format.width}²` :
+                                                                    `${item.format.width}×${item.format.height}`}
+                                                            </span>
+                                                            <span
+                                                                className={`materials-layer-item-format${item.format.compressed ? ' compressed' : ''}`}
+                                                                title={`${item.format.gpu} — ${item.format.compressed ?
+                                                                    t('GPU-compressed texture: the card reads it as is, no CPU unpacking', lang) :
+                                                                    t('Uncompressed pixels: unpacked by the CPU and uploaded raw', lang)}`}
+                                                            >
+                                                                {item.format.container}
+                                                            </span>
+                                                        </span>
+                                                    ) : null}
                                                 </button>
                                                 {cat.title === 'MATERIAL CHANNELS' && observerData?.debug?.renderMode === item.value && materialFactorByRenderMode[item.value] && (
                                                     <>

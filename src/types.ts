@@ -222,6 +222,8 @@ export interface ObserverData {
         boundsCenter?: any,
         materialChannelsWithTextures?: string,
         materialChannelFilenames?: string,
+        /** Формат текстуры по каналу (JSON): имя, сжатость для GPU, размер в пикселях. */
+        materialChannelFormats?: string,
         selectedMaterialNames?: string,
         selectedMaterialFactors?: {
             metallicPercent: number | null,
