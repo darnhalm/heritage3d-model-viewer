@@ -2943,6 +2943,14 @@ class Viewer {
         const channelFormats: Record<string, ChannelFormat> = {};
         const materialNames = new Set<string>();
 
+        const getTextureFilename = (tex: TextureLike | null | undefined): string | undefined => {
+            if (!tex) return undefined;
+            const texAssets = this.app.assets.filter((a: Asset) => a.type === 'texture');
+            const texAsset = texAssets.find((a: Asset) => a.resource === tex);
+            const file = texAsset?.file as TextureAssetFile | undefined;
+            return file?.filename;
+        };
+
         // Формат текстуры — единственный способ увидеть в плеере, что конвертация в KTX2
         // действительно применилась: сжатые форматы (BC, ASTC, ETC) видеокарта читает как
         // есть, обычные PNG и JPEG разворачиваются в сырые пиксели. Раньше панель об этом
@@ -2962,14 +2970,6 @@ class Viewer {
                 width: texture.width ?? 0,
                 height: texture.height ?? 0
             };
-        };
-
-        const getTextureFilename = (tex: TextureLike | null | undefined): string | undefined => {
-            if (!tex) return undefined;
-            const texAssets = this.app.assets.filter((a: Asset) => a.type === 'texture');
-            const texAsset = texAssets.find((a: Asset) => a.resource === tex);
-            const file = texAsset?.file as TextureAssetFile | undefined;
-            return file?.filename;
         };
 
         const collectFromMaterial = (mat: MaterialLike | null | undefined) => {

@@ -7,7 +7,7 @@
  * переключением уровней детализации (`TilesetWithDiscreteLOD`).
  */
 
-import { Asset, Entity, FILTER_LINEAR, Mat4, Quat, Vec3, type AppBase, type Texture } from 'playcanvas';
+import { Asset, Entity, Mat4, Quat, Vec3, type AppBase } from 'playcanvas';
 
 /** Результат загрузки контента тайла. */
 export type TileContentResult = {
@@ -96,94 +96,6 @@ function loadContainerAsset(app: AppBase, url: string, filename: string): Promis
     });
 }
 
-/** Слоты StandardMaterial, в которых может лежать текстура тайла. */
-const MATERIAL_MAP_SLOTS = [
-    'diffuseMap', 'emissiveMap', 'opacityMap', 'normalMap', 'metalnessMap',
-    'glossMap', 'aoMap', 'specularMap', 'sheenMap', 'clearCoatMap'
-] as const;
-
-/**
- * Обезвредить трилинейную фильтрацию у одноуровневых сжатых текстур entity.
- *
- * Тайлы из Cesium ion несут текстуры KTX2 (Basis) **без мип-цепочки** — один уровень, — но
- * glTF-парсер всё равно ставит `mipmaps = true` и трилинейный `minFilter`. На WebGPU это
- * приводит к тому, что под скользящим углом сэмплер выбирает несуществующий мип-уровень и
- * возвращает чёрный: тайл покрывается чёрным ровно там, где камера смотрит вдоль
- * поверхности. WebGL2 такую текстуру прощает, поэтому в headless-тестах дефект не всплывал.
- *
- * Мип-цепочку для сжатого формата не сгенерировать (движок умеет это только для несжатых),
- * поэтому единственный выход — отключить выбор мип-уровней. На качество это не влияет:
- * детализацию у тайлов даёт сама иерархия, а не мипы одного тайла.
- *
- * Вызывается после события `load` (Basis-транскод к этому моменту завершён, `_levels`
- * заполнены) и до того, как entity включена и отрисована, — иначе GPU-текстура уже создана
- * с трилинейным сэмплером, и менять параметры поздно.
- *
- * @param entity - Корневая entity контента тайла.
- */
-function fixCompressedTileTextures(entity: Entity) {
-    const seen = new Set<Texture>();
-    entity.findComponents('render').forEach((component) => {
-        (component as unknown as { meshInstances: { material: Record<string, unknown> }[] }).meshInstances
-        .forEach((meshInstance) => {
-            const material = meshInstance.material;
-            MATERIAL_MAP_SLOTS.forEach((slot) => {
-                const texture = material[slot] as Texture | null | undefined;
-                if (texture && !seen.has(texture)) {
-                    seen.add(texture);
-                    fixCompressedTexture(texture);
-                }
-            });
-        });
-    });
-}
-
-/**
- * Отключить мип-фильтрацию у одноуровневой сжатой текстуры.
- *
- * Важная тонкость WebGPU: публичный сеттер `texture.mipmaps = false` там **ничего не
- * делает** — в движке (playcanvas 2.20.6) это пустая ветка `if (this.device.isWebGPU) {}`.
- * Мало того, к моменту этого вызова GPU-текстура уже создана (Basis-транскод происходит
- * во время загрузки контейнера) — с полной мип-цепочкой, где залит только уровень 0, а
- * верхние остаются чёрными. Поэтому: (1) правим внутренние поля `_mipmaps` / `_numLevels`
- * напрямую в обход сеттера-заглушки; (2) на WebGPU пересоздаём сам GPU-объект
- * (`recreateImpl`), чтобы он выделил ровно один уровень. Без пересоздания дефект остаётся:
- * на скользящем угле сэмплер выбирает несуществующий (чёрный) мип, и дальняя часть модели
- * чернеет. Multiframe маскирует это на неподвижной камере отрицательным LOD-биасом, потому
- * баг виден именно при вращении/зуме. На WebGL2 всё работает и без пересоздания.
- *
- * @param texture - Текстура.
- */
-function fixCompressedTexture(texture: Texture) {
-    // `_compressed` / `_levels` — внутренние поля движка: публичных геттеров под них нет,
-    // а именно они говорят, что это одноуровневая сжатая текстура без мипов.
-    const internal = texture as unknown as {
-        _compressed?: boolean;
-        _levels?: unknown[];
-        _mipmaps?: boolean;
-        _numLevels?: number;
-        device?: { isWebGPU?: boolean };
-        recreateImpl?: () => void;
-    };
-    if (!internal._compressed) {
-        return;
-    }
-    const levels = internal._levels;
-    if (!levels || levels.length > 1) {
-        return;
-    }
-    internal._mipmaps = false;
-    internal._numLevels = 1;
-    // minFilter меняется штатным сеттером (на WebGPU он, в отличие от mipmaps, работает).
-    texture.minFilter = FILTER_LINEAR;
-    texture.magFilter = FILTER_LINEAR;
-    // GPU-текстуру пересоздаём только на WebGPU: на WebGL2 регрессий нет, а лишняя
-    // перезаливка ни к чему.
-    if (internal.device?.isWebGPU) {
-        internal.recreateImpl?.();
-    }
-}
-
 /**
  * Загрузить контент тайла (один или несколько файлов) и собрать из него entity.
  *
@@ -253,8 +165,6 @@ export async function loadTileContent(
         parts.forEach(({ asset, rtcCenter }) => {
             const resource = asset.resource as ContainerResourceLike | null;
             const entity = resource?.instantiateRenderEntity?.() ?? new Entity();
-            // До первого рендера чиним одноуровневые сжатые текстуры (см. функцию).
-            fixCompressedTileTextures(entity);
             if (rtcCenter) {
                 // RTC_CENTER задан в системе тайла (Z-вверх), а контент под ним уже
                 // повёрнут в Y-вверх, поэтому сдвиг ставится НАД поворотом — на
