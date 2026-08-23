@@ -13,7 +13,7 @@ import {
 
 import { DummyWebGPU } from './dummy-webgpu';
 import { isTrustedViewerMessage, postToViewerParent } from './embed-messaging';
-import { resolveRequestedBackend, persistRequestedBackend } from './graphics-backend';
+import { resolveRequestedBackend, resolveEffectiveBackend, persistRequestedBackend } from './graphics-backend';
 import { initMaterials } from './material';
 import { warmPanelIcons } from './panel-icons';
 import { applyThemeColor, DEFAULT_THEME_COLOR } from './theme';
@@ -676,7 +676,12 @@ const main = () => {
     // create the canvas
     const canvas = document.getElementById('application-canvas') as HTMLCanvasElement;
 
-    const forceWebGL = requestedBackend === 'webgl';
+    // В `runtime.requestedBackend` остаётся ВЫБОР пользователя — его показывает
+    // переключатель. Здесь же решается, что просить у браузера на самом деле: в Firefox
+    // «авто» означает WebGL 2, кроме сцен со сплатами (см. `resolveEffectiveBackend`).
+    // Что в итоге стартовало, видно в `runtime.activeDeviceType`.
+    const effectiveBackend = resolveEffectiveBackend(url, requestedBackend);
+    const forceWebGL = effectiveBackend === 'webgl';
 
     // create the graphics device
     createGraphicsDevice(canvas, {
