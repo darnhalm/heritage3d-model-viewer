@@ -8,6 +8,8 @@ const TOUCH_DRAG_THRESHOLD = 8;
 
 type SurfaceInput = 'mouse' | 'touch' | 'pen';
 
+type SurfaceGesture = 'orbit' | 'pan';
+
 type SurfacePivotState =
     | { state: 'idle' }
     | {
@@ -15,6 +17,7 @@ type SurfacePivotState =
         pointerId: number;
         requestId: number;
         input: SurfaceInput;
+        gesture: SurfaceGesture;
         startClientX: number;
         startClientY: number;
         canvasX: number;
@@ -27,6 +30,7 @@ type SurfacePivotState =
         pointerId: number;
         requestId: number;
         input: SurfaceInput;
+        gesture: SurfaceGesture;
         worldPoint: Vec3;
         lastClientX: number;
         lastClientY: number;
@@ -42,7 +46,8 @@ type SurfacePivotControllerArgs = {
 };
 
 /**
- * Resolves one depth point per drag and uses it as a temporary off-axis orbit pivot.
+ * Resolves one depth point per drag. Orbit uses it as a temporary off-axis pivot while pan
+ * keeps it as a visible surface reference without changing the existing translation math.
  *
  * Pointer tracking lives outside CameraControls so clicks, async pick cancellation and tool
  * priority remain explicit. CameraControls owns only the cheap transform math.
@@ -77,17 +82,19 @@ class SurfacePivotController {
             return;
         }
         if (event.target !== this.canvas || !this.canStart()) return;
-        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (event.pointerType === 'mouse' && event.button !== 0 && event.button !== 2) return;
         if (event.pointerType !== 'mouse' && event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
 
         const rect = this.canvas.getBoundingClientRect();
         const input = event.pointerType as SurfaceInput;
+        const gesture: SurfaceGesture = event.pointerType === 'mouse' && event.button === 2 ? 'pan' : 'orbit';
         this.requestId++;
         this.state = {
             state: 'tracking',
             pointerId: event.pointerId,
             requestId: this.requestId,
             input,
+            gesture,
             startClientX: event.clientX,
             startClientY: event.clientY,
             canvasX: event.clientX - rect.left,
@@ -95,7 +102,7 @@ class SurfacePivotController {
             lastClientX: event.clientX,
             lastClientY: event.clientY
         };
-        this.cameraControls.beginSurfaceOrbit();
+        if (gesture === 'orbit') this.cameraControls.beginSurfaceOrbit();
     };
 
     private readonly onPointerMove = (event: PointerEvent) => {
@@ -112,7 +119,7 @@ class SurfacePivotController {
         state.lastClientY = event.clientY;
 
         if (state.state === 'active') {
-            this.cameraControls.queueSurfaceOrbit(dx, dy);
+            if (state.gesture === 'orbit') this.cameraControls.queueSurfaceOrbit(dx, dy);
             this.renderNextFrame();
             return;
         }
@@ -192,11 +199,12 @@ class SurfacePivotController {
             pointerId: current.pointerId,
             requestId,
             input: current.input,
+            gesture: current.gesture,
             worldPoint: point.clone(),
             lastClientX: current.lastClientX,
             lastClientY: current.lastClientY
         };
-        this.cameraControls.activateSurfaceOrbit(point);
+        if (current.gesture === 'orbit') this.cameraControls.activateSurfaceOrbit(point);
         this.marker?.classList.toggle('touch', current.input !== 'mouse');
         this.marker?.classList.add('visible');
         this.updateMarker();
@@ -234,6 +242,7 @@ class SurfacePivotController {
     getDebugState() {
         return {
             state: this.state.state,
+            gesture: this.state.state === 'idle' ? null : this.state.gesture,
             pickCount: this.pickCount,
             lastPickLatencyMs: this.lastPickLatencyMs,
             worldPoint: this.state.state === 'active' ? this.state.worldPoint.toArray() : null

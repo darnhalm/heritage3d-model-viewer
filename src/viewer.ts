@@ -161,7 +161,6 @@ const doubleTapDelay = 400;
 const FRAGMENT_OUTLINE_WIDTH_MIN_PX = 0.5;
 const FRAGMENT_OUTLINE_WIDTH_MAX_PX = 8;
 const doubleTapRadius = 45;
-const RIPPLE_REMOVE_MS = 900;
 const DOUBLE_CLICK_ZOOM_DURATION_SECONDS = 0.25;
 const DOUBLE_CLICK_ZOOM_FACTOR = 2;
 
@@ -928,8 +927,6 @@ class Viewer {
 
     private tmpRulerV1 = new Vec3();
 
-    rippleContainer: HTMLDivElement | null = null;
-
     captureFlashEl: HTMLDivElement | null = null;
 
     lastTapTime = 0;
@@ -978,6 +975,21 @@ class Viewer {
         endFocus: Vec3;
         endFov: number;
     } | null = null;
+
+    private doubleClickZoomTransition: {
+        elapsed: number;
+        duration: number;
+        startPosition: Vec3;
+        zoomDirection: Vec3;
+        viewDirection: Vec3;
+        travelDistance: number;
+        startOrbitDistance: number;
+        endOrbitDistance: number;
+    } | null = null;
+
+    private readonly doubleClickZoomPosition = new Vec3();
+
+    private readonly doubleClickZoomFocus = new Vec3();
 
     // Прерванный паузой тура перелёт камеры: сохраняем цель и остаток времени,
     // чтобы Play продолжил движение к той же точке за оставшуюся длительность, а
@@ -1664,12 +1676,8 @@ class Viewer {
         document.addEventListener('mousemove', this.onTilePickMouseMove);
         document.addEventListener('mouseup', this.onTilePickMouseUp);
 
-        // ripple container over canvas (pointer-events: none)
         const wrapper = this.canvas.parentElement;
         if (wrapper) {
-            this.rippleContainer = document.createElement('div');
-            this.rippleContainer.className = 'ripple-container';
-            wrapper.appendChild(this.rippleContainer);
             this.captureFlashEl = document.createElement('div');
             this.captureFlashEl.className = 'capture-flash';
             this.captureFlashEl.addEventListener('animationend', () => {
@@ -1796,42 +1804,33 @@ class Viewer {
         return this.app.graphicsDevice.deviceType === DEVICETYPE_WEBGPU ? 'webgpu' : 'webgl';
     }
 
-    private _showRipple(x: number, y: number) {
-        if (!this.rippleContainer) return;
-        const el = document.createElement('div');
-        el.className = 'ripple-element';
-        el.style.left = `${x}px`;
-        el.style.top = `${y}px`;
-        const dot = document.createElement('div');
-        dot.className = 'ripple-dot';
-        el.appendChild(dot);
-        const delays = [0, 0.12, 0.24];
-        for (let i = 0; i < 3; i++) {
-            const ring = document.createElement('div');
-            ring.className = 'ripple-ring';
-            ring.style.animationDelay = `${delays[i]}s`;
-            el.appendChild(ring);
-        }
-        this.rippleContainer.appendChild(el);
-        setTimeout(() => {
-            el.remove();
-        }, RIPPLE_REMOVE_MS);
-    }
-
     private async _pickAndCenterAt(x: number, y: number) {
         const result = await this.picker.pick(x, y);
         if (!result) return;
-        this._showRipple(x, y);
-        const currentPosition = this.cameraControls.getPosition();
-        const nextPosition = currentPosition.clone().lerp(
-            currentPosition,
-            result,
-            1 / DOUBLE_CLICK_ZOOM_FACTOR
-        );
-        this.flyToCameraView({
-            position: [nextPosition.x, nextPosition.y, nextPosition.z],
-            focus: [result.x, result.y, result.z]
-        }, DOUBLE_CLICK_ZOOM_DURATION_SECONDS);
+        const startPosition = this.cameraControls.getPosition();
+        const startFocus = this.cameraControls.getFocus();
+        const zoomDirection = result.clone().sub(startPosition);
+        const hitDistance = zoomDirection.length();
+        const viewDirection = startFocus.clone().sub(startPosition);
+        const startOrbitDistance = viewDirection.length();
+        if (hitDistance <= 1e-6 || startOrbitDistance <= 1e-6) return;
+
+        // NASA EnvironmentControls keeps the view direction fixed and moves the camera directly
+        // along the picked ray. Keeping this separate from camera-fly avoids curved-looking motion
+        // and the per-frame Vec3 allocations of the general position/focus interpolation.
+        this.stopCameraFlyTransition();
+        this.doubleClickZoomTransition = {
+            elapsed: 0,
+            duration: DOUBLE_CLICK_ZOOM_DURATION_SECONDS,
+            startPosition,
+            zoomDirection: zoomDirection.mulScalar(1 / hitDistance),
+            viewDirection: viewDirection.mulScalar(1 / startOrbitDistance),
+            travelDistance: hitDistance * (1 - 1 / DOUBLE_CLICK_ZOOM_FACTOR),
+            startOrbitDistance,
+            endOrbitDistance: startOrbitDistance / DOUBLE_CLICK_ZOOM_FACTOR
+        };
+        this.cameraControls.enabled = false;
+        this.renderNextFrame();
     }
 
     private canUseSurfacePivot() {
@@ -1840,6 +1839,7 @@ class Viewer {
             this.cameraControls.mode === 'orbit' &&
             !this.activeSceneCamera &&
             !this.cameraFlyTransition &&
+            !this.doubleClickZoomTransition &&
             !this.observer.get('measure.enabled') &&
             !this.observer.get('poi.enabled') &&
             !this.observer.get('debug.tilePick') &&
@@ -4285,6 +4285,7 @@ class Viewer {
         const endFocus = new Vec3(view.focus[0], view.focus[1], view.focus[2]);
         const endFov = typeof view.fov === 'number' && Number.isFinite(view.fov) ? view.fov : this.camera.camera.fov;
 
+        this.stopCameraFlyTransition();
         this.cameraFlyTransition = {
             elapsed: 0,
             duration: Math.max(0.01, duration),
@@ -4301,6 +4302,7 @@ class Viewer {
 
     private stopCameraFlyTransition() {
         this.cameraFlyTransition = null;
+        this.doubleClickZoomTransition = null;
         this.cameraControls.enabled = true;
     }
 
@@ -4315,6 +4317,7 @@ class Viewer {
         const tr = this.cameraFlyTransition;
         if (!tr) {
             this.pausedCameraFly = null;
+            if (this.doubleClickZoomTransition) this.stopCameraFlyTransition();
             return 0;
         }
         const remaining = Math.max(0, tr.duration - tr.elapsed);
@@ -4360,6 +4363,28 @@ class Viewer {
 
         if (alpha >= 1) {
             this.observer.set('camera.fov', transition.endFov);
+            this.fitCameraClipPlanes();
+            this.stopCameraFlyTransition();
+        }
+    }
+
+    private updateDoubleClickZoomTransition(dt: number) {
+        const transition = this.doubleClickZoomTransition;
+        if (!transition) return;
+
+        transition.elapsed = Math.min(transition.elapsed + dt, transition.duration);
+        const alpha = transition.elapsed / transition.duration;
+        const eased = 1 - Math.pow(1 - alpha, 3);
+        const orbitDistance = math.lerp(transition.startOrbitDistance, transition.endOrbitDistance, eased);
+        const position = this.doubleClickZoomPosition.copy(transition.zoomDirection);
+        position.mulScalar(transition.travelDistance * eased).add(transition.startPosition);
+        const focus = this.doubleClickZoomFocus.copy(transition.viewDirection);
+        focus.mulScalar(orbitDistance).add(position);
+
+        this.cameraControls.reset(focus, position);
+        this.renderNextFrame();
+
+        if (alpha >= 1) {
             this.fitCameraClipPlanes();
             this.stopCameraFlyTransition();
         }
@@ -7189,11 +7214,12 @@ class Viewer {
 
     update(deltaTime: number) {
         this.updateCameraFlyTransition(deltaTime);
+        this.updateDoubleClickZoomTransition(deltaTime);
 
         this.surfacePivotController?.update();
 
         // update the orbit camera
-        if (!this.cameraFlyTransition) {
+        if (!this.cameraFlyTransition && !this.doubleClickZoomTransition) {
             this.cameraControls.update(deltaTime);
         }
 

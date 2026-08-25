@@ -122,7 +122,46 @@ test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and
     expect(await page.evaluate(() => (window as any).viewer.surfacePivotController.getDebugState().state)).toBe('idle');
 });
 
-test('double click performs a smooth two-times zoom to the picked point', async ({ page }) => {
+test('surface marker uses one pick during mouse pan without replacing pan movement', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const point = viewer.cameraControls.getFocus().clone().add(viewer.camera.right.clone().mulScalar(0.2));
+        viewer.picker.pick = async () => point.clone();
+    });
+
+    const canvas = page.locator('#application-canvas');
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box!.x + box!.width / 2;
+    const startY = box!.y + box!.height / 2;
+    const focusBefore = await page.evaluate(() => (window as any).viewer.cameraControls.getFocus().toArray());
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down({ button: 'right' });
+    await page.mouse.move(startX + 20, startY + 8);
+    await expect(page.locator('.surface-pivot-marker')).toHaveClass(/visible/);
+    await page.mouse.move(startX + 120, startY + 60, { steps: 12 });
+    await page.waitForTimeout(100);
+
+    const active = await page.evaluate(() => ({
+        debug: (window as any).viewer.surfacePivotController.getDebugState(),
+        focus: (window as any).viewer.cameraControls.getFocus().toArray()
+    }));
+    expect(active.debug.state).toBe('active');
+    expect(active.debug.gesture).toBe('pan');
+    expect(active.debug.pickCount).toBe(1);
+    expect(Math.hypot(...active.focus.map((value: number, index: number) => value - focusBefore[index]))).toBeGreaterThan(0.05);
+
+    await page.mouse.up({ button: 'right' });
+    await expect(page.locator('.surface-pivot-marker')).not.toHaveClass(/visible/);
+    expect(await page.evaluate(() => (window as any).viewer.surfacePivotController.getDebugState().state)).toBe('idle');
+});
+
+test('double click performs a direct two-times dolly without the ripple animation', async ({ page }) => {
     test.setTimeout(60000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
@@ -130,38 +169,55 @@ test('double click performs a smooth two-times zoom to the picked point', async 
 
     await page.evaluate(() => {
         const viewer = (window as any).viewer;
-        const target = viewer.cameraControls.getFocus();
+        const target = viewer.cameraControls.getFocus().clone().add(viewer.camera.right.clone().mulScalar(0.35));
         viewer.picker.pick = async () => target.clone();
     });
 
     await page.locator('#application-canvas').dblclick({ position: { x: 500, y: 350 } });
     const mid = await page.evaluate(() => {
         const viewer = (window as any).viewer;
-        const transition = viewer.cameraFlyTransition;
-        const startDistance = transition.startPosition.distance(transition.startFocus);
-        const endDistance = transition.endPosition.distance(transition.endFocus);
-        viewer.updateCameraFlyTransition(0.125);
+        const transition = viewer.doubleClickZoomTransition;
+        const startPosition = transition.startPosition.clone();
+        const endPosition = transition.startPosition.clone()
+            .add(transition.zoomDirection.clone().mulScalar(transition.travelDistance));
+        viewer.updateDoubleClickZoomTransition(0.125);
+        const position = viewer.cameraControls.getPosition();
+        const focus = viewer.cameraControls.getFocus();
+        const traveled = position.clone().sub(startPosition);
+        const fullTravel = endPosition.clone().sub(startPosition);
         return {
-            distance: viewer.cameraControls.getPosition().distance(viewer.cameraControls.getFocus()),
-            duration: viewer.cameraFlyTransition?.duration ?? null,
-            startDistance,
-            endDistance
+            duration: viewer.doubleClickZoomTransition?.duration ?? null,
+            orbitDistance: position.distance(focus),
+            startOrbitDistance: transition.startOrbitDistance,
+            endOrbitDistance: transition.endOrbitDistance,
+            lineAlignment: traveled.normalize().dot(fullTravel.normalize()),
+            viewAlignment: focus.clone().sub(position).normalize().dot(transition.viewDirection),
+            remainingDistance: position.distance(endPosition),
+            fullDistance: startPosition.distance(endPosition)
         };
     });
     expect(mid.duration).toBeCloseTo(0.25, 4);
-    expect(mid.distance).toBeLessThan(mid.startDistance);
-    expect(mid.distance).toBeGreaterThan(mid.endDistance);
+    expect(mid.orbitDistance).toBeLessThan(mid.startOrbitDistance);
+    expect(mid.orbitDistance).toBeGreaterThan(mid.endOrbitDistance);
+    expect(mid.lineAlignment).toBeCloseTo(1, 5);
+    expect(mid.viewAlignment).toBeCloseTo(1, 5);
+    expect(mid.remainingDistance).toBeLessThan(mid.fullDistance);
+    await expect(page.locator('.ripple-element')).toHaveCount(0);
 
     const end = await page.evaluate(() => {
         const viewer = (window as any).viewer;
-        viewer.updateCameraFlyTransition(0.2);
+        const endDistance = viewer.doubleClickZoomTransition.endOrbitDistance;
+        viewer.updateDoubleClickZoomTransition(0.2);
         return {
             distance: viewer.cameraControls.getPosition().distance(viewer.cameraControls.getFocus()),
-            transition: viewer.cameraFlyTransition
+            endDistance,
+            transition: viewer.doubleClickZoomTransition,
+            cameraFlyTransition: viewer.cameraFlyTransition
         };
     });
     expect(end.transition).toBeNull();
-    expect(end.distance).toBeCloseTo(mid.endDistance, 2);
+    expect(end.cameraFlyTransition).toBeNull();
+    expect(end.distance).toBeCloseTo(end.endDistance, 2);
 });
 
 test('theme color drives accents, active tools, progress colors and settings export', async ({ page }) => {
