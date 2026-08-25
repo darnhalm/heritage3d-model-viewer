@@ -284,6 +284,11 @@ class InfoPanel extends React.Component <{
                                     <ControlDetail label={t('Pan', lang)} value={t('Right Mouse', lang)} useMouseIcon icons={['left_click']} />
                                     <ControlDetail label={t('Zoom', lang)} value={t('Mouse Wheel', lang)} useMouseIcon icons={['swap_vert']} />
                                     <ControlDetail label={t('Set Focus', lang)} value={t('Double Click', lang)} useMouseIcon icons={['touch_double']} />
+                                    <Toggle
+                                        label={t('Surface pivot', lang)}
+                                        value={observerData.camera.surfacePivot ?? true}
+                                        setProperty={(value: boolean) => setProperty('camera.surfacePivot', value)}
+                                    />
                                     <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
                                     <ControlDetail label={t('Look Around', lang)} value={t('Left Mouse', lang)} useMouseIcon icons={['right_click']} />
                                     <ControlDetail label={t('Fly', lang)} value='W, S, A, D' icon='keyboard' />

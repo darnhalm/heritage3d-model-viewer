@@ -78,6 +78,8 @@ export interface ObserverData {
         hq: boolean,
         mode: 'orbit' | 'fly',
         flySpeed: number,
+        /** Orbit around the model surface under the initial drag point. */
+        surfacePivot?: boolean,
         position?: [number, number, number] | null,
         focus?: [number, number, number] | null,
         /** Проекция камеры ортогональна. */

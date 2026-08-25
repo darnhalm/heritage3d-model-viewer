@@ -177,6 +177,7 @@ const observerData: ObserverData = {
         hq: true,
         mode: 'orbit',
         flySpeed: 1,
+        surfacePivot: true,
         position: null,
         focus: null,
         ortho: false,

@@ -11,6 +11,7 @@ import {
     OrbitController,
     Pose,
     PROJECTION_PERSPECTIVE,
+    Quat,
     Vec2,
     Vec3,
     type CameraComponent,
@@ -28,6 +29,12 @@ type CameraControlsState = {
 
 const tmpV1 = new Vec3();
 const tmpV2 = new Vec3();
+const surfaceOffset = new Vec3();
+const surfaceAngles = new Vec3();
+const surfaceOldRotation = new Quat();
+const surfaceNewRotation = new Quat();
+const surfaceInverseRotation = new Quat();
+const surfaceDeltaRotation = new Quat();
 
 /** Keyboard fly speed: normal WASD is precise, Shift restores the former cruising speed. */
 const FLY_KEYBOARD_SPEED = 1 / 3;
@@ -123,6 +130,10 @@ class CameraControls {
 
     private _mode: 'orbit' | 'fly';
 
+    private _surfaceOrbit: { phase: 'pending' | 'active'; pivot: Vec3 | null } | null = null;
+
+    private _surfaceOrbitDelta: Vec2 = new Vec2();
+
     private _state: CameraControlsState = {
         axis: new Vec3(),
         mouse: [0, 0, 0],
@@ -152,6 +163,9 @@ class CameraControls {
     flySpeed = 1;
 
     orbitSpeed = 18;
+
+    /** Degrees per CSS pixel for the event-driven off-axis surface orbit. */
+    surfaceOrbitSpeed = 0.25;
 
     pinchSpeed = 0.4;
 
@@ -207,6 +221,7 @@ class CameraControls {
         if (this._mode === mode) {
             return;
         }
+        if (mode !== 'orbit') this.endSurfaceOrbit();
         this._mode = mode;
 
         // detach old controller
@@ -262,6 +277,58 @@ class CameraControls {
         return this._pose.getFocus(out);
     }
 
+    beginSurfaceOrbit() {
+        if (!this.enabled || this._mode !== 'orbit') return;
+        this._orbitController.attach(this._pose, false);
+        this._surfaceOrbit = { phase: 'pending', pivot: null };
+        this._surfaceOrbitDelta.set(0, 0);
+    }
+
+    activateSurfaceOrbit(pivot: Vec3) {
+        if (!this._surfaceOrbit || this._mode !== 'orbit') return;
+        this._surfaceOrbit.phase = 'active';
+        this._surfaceOrbit.pivot = pivot.clone();
+        this._surfaceOrbitDelta.set(0, 0);
+    }
+
+    queueSurfaceOrbit(dx: number, dy: number) {
+        if (this._surfaceOrbit?.phase !== 'active') return;
+        this._surfaceOrbitDelta.x += dx;
+        this._surfaceOrbitDelta.y += dy;
+    }
+
+    endSurfaceOrbit() {
+        if (!this._surfaceOrbit) return;
+        this._surfaceOrbit = null;
+        this._surfaceOrbitDelta.set(0, 0);
+        if (this._mode === 'orbit') this._orbitController.attach(this._pose, false);
+    }
+
+    private applySurfaceOrbit() {
+        const pivot = this._surfaceOrbit?.pivot;
+        const dx = this._surfaceOrbitDelta.x;
+        const dy = this._surfaceOrbitDelta.y;
+        this._surfaceOrbitDelta.set(0, 0);
+        if (!pivot || (dx === 0 && dy === 0)) return;
+
+        surfaceAngles.copy(this._pose.angles);
+        surfaceAngles.x = math.clamp(
+            surfaceAngles.x - dy * this.surfaceOrbitSpeed,
+            this._orbitController.pitchRange.x,
+            this._orbitController.pitchRange.y
+        );
+        surfaceAngles.y = (surfaceAngles.y - dx * this.surfaceOrbitSpeed) % 360;
+
+        surfaceOldRotation.setFromEulerAngles(this._pose.angles);
+        surfaceNewRotation.setFromEulerAngles(surfaceAngles);
+        surfaceInverseRotation.copy(surfaceOldRotation).invert();
+        surfaceDeltaRotation.mul2(surfaceNewRotation, surfaceInverseRotation);
+        surfaceOffset.sub2(this._pose.position, pivot);
+        surfaceDeltaRotation.transformVector(surfaceOffset, surfaceOffset);
+
+        this._pose.set(surfaceOffset.add(pivot), surfaceAngles, this._pose.distance);
+    }
+
     update(dt: number) {
         // read inputs (to clear their state) even when disabled
         const { key, button, mouse, wheel } = this._desktopInput.read();
@@ -272,6 +339,8 @@ class CameraControls {
         if (!this.enabled) {
             return;
         }
+
+        if (this._surfaceOrbit && this._mode !== 'orbit') this.endSurfaceOrbit();
 
         const { keyCode } = KeyboardMouseSource;
         const el = document.activeElement as HTMLElement | null;
@@ -373,8 +442,14 @@ class CameraControls {
         v.add(stickRotate.mulScalar(this.orbitSpeed * dt));
         deltas.rotate.append([v.x, v.y, v.z]);
 
-        // update controller by consuming frame
-        this._pose.copy(this._controller.update(frame, dt));
+        // Pending/active surface gestures consume ordinary input so the stock OrbitController
+        // cannot rotate around its old central focus at the same time.
+        if (this._surfaceOrbit) {
+            frame.read();
+            if (this._surfaceOrbit.phase === 'active') this.applySurfaceOrbit();
+        } else {
+            this._pose.copy(this._controller.update(frame, dt));
+        }
         this._camera.entity.setPosition(this._pose.position);
         this._camera.entity.setEulerAngles(this._pose.angles);
 

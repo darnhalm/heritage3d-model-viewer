@@ -113,7 +113,7 @@ import { ShadowCatcher } from './shadow-catcher';
 import { normalizeThemeColor } from './theme';
 import { TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
-import { MeasurementController, PoiController, SelectionController, MicrophoneController, type SceneHelperEntry } from './viewer/controllers';
+import { MeasurementController, PoiController, SelectionController, MicrophoneController, SurfacePivotController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry, intersectMeshTriangles } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
 
@@ -161,8 +161,9 @@ const doubleTapDelay = 400;
 const FRAGMENT_OUTLINE_WIDTH_MIN_PX = 0.5;
 const FRAGMENT_OUTLINE_WIDTH_MAX_PX = 8;
 const doubleTapRadius = 45;
-const RIPPLE_CAMERA_DELAY_MS = 380;
 const RIPPLE_REMOVE_MS = 900;
+const DOUBLE_CLICK_ZOOM_DURATION_SECONDS = 0.25;
+const DOUBLE_CLICK_ZOOM_FACTOR = 2;
 
 type FrozenTileCamera = {
     world: Mat4;
@@ -885,6 +886,8 @@ class Viewer {
 
     selectionController: SelectionController;
 
+    surfacePivotController: SurfacePivotController;
+
     microphoneController: MicrophoneController;
 
     settingsService: SettingsService;
@@ -1605,6 +1608,14 @@ class Viewer {
         // construct the depth reader
         this.picker = new Picker(app, camera);
         this.cursorWorld = new Vec3();
+        this.surfacePivotController = new SurfacePivotController({
+            canvas: this.canvas,
+            picker: this.picker,
+            cameraControls: this.cameraControls,
+            canStart: () => this.canUseSurfacePivot(),
+            worldToScreen: point => this.fragmentWorldToCssScreen(point),
+            renderNextFrame: this.renderNextFrame.bind(this)
+        });
         this.measurementController = new MeasurementController({
             canvas: this.canvas,
             observer: this.observer,
@@ -1667,7 +1678,7 @@ class Viewer {
             wrapper.appendChild(this.captureFlashEl);
         }
 
-        // double click: pick → ripple → after 380ms center camera
+        // Double click: one depth pick followed by the same short 2x zoom-to-point as NASA-AMMOS.
         canvas.addEventListener('dblclick', (event: MouseEvent) => {
             if (this.observer.get('measure.enabled') || this.observer.get('debug.tilePick')) return;
             if (this.reopenFragmentPanelAt(event.offsetX, event.offsetY)) return;
@@ -1811,9 +1822,29 @@ class Viewer {
         const result = await this.picker.pick(x, y);
         if (!result) return;
         this._showRipple(x, y);
-        setTimeout(() => {
-            this.cameraControls.reset(result, this.camera.getPosition());
-        }, RIPPLE_CAMERA_DELAY_MS);
+        const currentPosition = this.cameraControls.getPosition();
+        const nextPosition = currentPosition.clone().lerp(
+            currentPosition,
+            result,
+            1 / DOUBLE_CLICK_ZOOM_FACTOR
+        );
+        this.flyToCameraView({
+            position: [nextPosition.x, nextPosition.y, nextPosition.z],
+            focus: [result.x, result.y, result.z]
+        }, DOUBLE_CLICK_ZOOM_DURATION_SECONDS);
+    }
+
+    private canUseSurfacePivot() {
+        return (this.observer.get('camera.surfacePivot') ?? true) &&
+            this.cameraControls.enabled &&
+            this.cameraControls.mode === 'orbit' &&
+            !this.activeSceneCamera &&
+            !this.cameraFlyTransition &&
+            !this.observer.get('measure.enabled') &&
+            !this.observer.get('poi.enabled') &&
+            !this.observer.get('debug.tilePick') &&
+            !this.observer.get('fragment.selecting') &&
+            !this.fragmentHandleDrag;
     }
 
     private getPickRay(x: number, y: number) {
@@ -2011,6 +2042,7 @@ class Viewer {
         this.measurementController?.dispose?.();
         this.poiController?.dispose?.();
         this.selectionController?.dispose?.();
+        this.surfacePivotController?.dispose?.();
         this.microphoneController?.dispose?.();
         this.canvas.removeEventListener('mousedown', this.onTilePickMouseDown);
         document.removeEventListener('mousemove', this.onTilePickMouseMove);
@@ -2804,6 +2836,8 @@ class Viewer {
     // reset the viewer, unloading resources
     resetScene() {
         const app = this.app;
+
+        this.surfacePivotController?.reset();
 
         // Раскраска по LOD висит на мешах тайлов: при сбросе сцены они уничтожаются,
         // поэтому карту нужно очистить, иначе она удержит мёртвые ссылки.
@@ -7155,6 +7189,8 @@ class Viewer {
 
     update(deltaTime: number) {
         this.updateCameraFlyTransition(deltaTime);
+
+        this.surfacePivotController?.update();
 
         // update the orbit camera
         if (!this.cameraFlyTransition) {

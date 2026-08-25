@@ -35,23 +35,133 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
     await expect(page.locator('.info-subtab').first()).toHaveCSS('height', '30px');
     await expect(page.locator('.fly-speed-control')).toBeVisible();
     await expect(page.locator('.fly-speed-control')).toContainText('Movement speed');
+    await expect(page.locator('.info-controls-content')).toContainText('Surface pivot');
 
     const state = await page.evaluate(() => {
         const viewer = (window as any).viewer;
         viewer.observer.set('camera.flySpeed', 2.5);
+        viewer.observer.set('camera.surfacePivot', false);
         const settings = viewer.settingsService.getSettingsData();
         return {
             observerSpeed: viewer.observer.get('camera.flySpeed'),
             controllerSpeed: viewer.cameraControls.flySpeed,
-            savedSpeed: settings.camera.flySpeed
+            savedSpeed: settings.camera.flySpeed,
+            savedSurfacePivot: settings.camera.surfacePivot
         };
     });
 
     expect(state).toEqual({
         observerSpeed: 2.5,
         controllerSpeed: 2.5,
-        savedSpeed: 2.5
+        savedSpeed: 2.5,
+        savedSurfacePivot: false
     });
+});
+
+test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and cleans up', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const pivot = viewer.cameraControls.getFocus().clone().add(viewer.camera.right.clone().mulScalar(0.2));
+        viewer.picker.pick = async () => pivot.clone();
+    });
+
+    const canvas = page.locator('#application-canvas');
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box!.x + box!.width / 2;
+    const startY = box!.y + box!.height / 2;
+
+    // A click stays a click: the expensive depth pass starts only past the drag threshold.
+    await page.mouse.click(startX, startY);
+    expect(await page.evaluate(() => (window as any).viewer.surfacePivotController.getDebugState().pickCount)).toBe(0);
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down({ button: 'left' });
+    await page.mouse.move(startX + 20, startY + 8);
+    await expect(page.locator('.surface-pivot-marker')).toHaveClass(/visible/);
+
+    const before = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const debug = viewer.surfacePivotController.getDebugState();
+        const point = new (viewer.cameraControls.getPosition().constructor)(...debug.worldPoint);
+        const screen = viewer.camera.camera.worldToScreen(point);
+        const position = viewer.cameraControls.getPosition();
+        return {
+            screen: [screen.x, screen.y],
+            position: [position.x, position.y, position.z]
+        };
+    });
+
+    await page.mouse.move(startX + 130, startY + 65, { steps: 12 });
+    await page.waitForTimeout(100);
+    const active = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const debug = viewer.surfacePivotController.getDebugState();
+        const point = new (viewer.cameraControls.getPosition().constructor)(...debug.worldPoint);
+        const screen = viewer.camera.camera.worldToScreen(point);
+        const position = viewer.cameraControls.getPosition();
+        return {
+            debug,
+            screen: [screen.x, screen.y],
+            position: [position.x, position.y, position.z]
+        };
+    });
+
+    expect(active.debug.state).toBe('active');
+    expect(active.debug.pickCount).toBe(1);
+    expect(active.debug.lastPickLatencyMs).toBeLessThan(100);
+    expect(Math.hypot(active.screen[0] - before.screen[0], active.screen[1] - before.screen[1])).toBeLessThan(2);
+    expect(Math.hypot(...active.position.map((value: number, index: number) => value - before.position[index]))).toBeGreaterThan(0.05);
+
+    await page.mouse.up({ button: 'left' });
+    await expect(page.locator('.surface-pivot-marker')).not.toHaveClass(/visible/);
+    expect(await page.evaluate(() => (window as any).viewer.surfacePivotController.getDebugState().state)).toBe('idle');
+});
+
+test('double click performs a smooth two-times zoom to the picked point', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
+
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const target = viewer.cameraControls.getFocus();
+        viewer.picker.pick = async () => target.clone();
+    });
+
+    await page.locator('#application-canvas').dblclick({ position: { x: 500, y: 350 } });
+    const mid = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const transition = viewer.cameraFlyTransition;
+        const startDistance = transition.startPosition.distance(transition.startFocus);
+        const endDistance = transition.endPosition.distance(transition.endFocus);
+        viewer.updateCameraFlyTransition(0.125);
+        return {
+            distance: viewer.cameraControls.getPosition().distance(viewer.cameraControls.getFocus()),
+            duration: viewer.cameraFlyTransition?.duration ?? null,
+            startDistance,
+            endDistance
+        };
+    });
+    expect(mid.duration).toBeCloseTo(0.25, 4);
+    expect(mid.distance).toBeLessThan(mid.startDistance);
+    expect(mid.distance).toBeGreaterThan(mid.endDistance);
+
+    const end = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.updateCameraFlyTransition(0.2);
+        return {
+            distance: viewer.cameraControls.getPosition().distance(viewer.cameraControls.getFocus()),
+            transition: viewer.cameraFlyTransition
+        };
+    });
+    expect(end.transition).toBeNull();
+    expect(end.distance).toBeCloseTo(mid.endDistance, 2);
 });
 
 test('theme color drives accents, active tools, progress colors and settings export', async ({ page }) => {

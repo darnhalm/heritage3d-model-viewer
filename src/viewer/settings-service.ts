@@ -369,6 +369,7 @@ class SettingsService {
         o.set('camera.hq', true);
         o.set('camera.mode', 'orbit');
         o.set('camera.flySpeed', 1);
+        o.set('camera.surfacePivot', true);
         o.set('theme.primaryColor', { ...DEFAULT_THEME_COLOR });
         o.set('skybox.value', this.skyboxUrls.has('Paul Lobe Haus') ? 'Paul Lobe Haus' : 'None');
         o.set('skybox.exposure', 0);
