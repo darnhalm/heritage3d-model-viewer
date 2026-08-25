@@ -134,6 +134,8 @@ class CameraControls {
 
     private _surfaceOrbitDelta: Vec2 = new Vec2();
 
+    private _mouseButtonsInverted = false;
+
     private _state: CameraControlsState = {
         axis: new Vec3(),
         mouse: [0, 0, 0],
@@ -177,6 +179,7 @@ class CameraControls {
         this._app = app;
         this._camera = camera;
         this._observer = observer;
+        this._mouseButtonsInverted = observer.get('camera.mouseButtonsInverted') === true;
 
         // set orbit controller defaults
         this._orbitController.zoomRange = new Vec2(0, Infinity);
@@ -214,6 +217,18 @@ class CameraControls {
 
     get zoomRange() {
         return this._zoomRange;
+    }
+
+    set mouseButtonsInverted(value: boolean) {
+        const next = !!value;
+        if (next === this._mouseButtonsInverted) return;
+        this._mouseButtonsInverted = next;
+        this._state.mouse.fill(0);
+        this.endSurfaceOrbit();
+    }
+
+    get mouseButtonsInverted() {
+        return this._mouseButtonsInverted;
     }
 
     set mode(mode: 'orbit' | 'fly') {
@@ -335,6 +350,12 @@ class CameraControls {
         const { touch, pinch, count } = this._orbitMobileInput.read();
         const { leftInput, rightInput } = this._flyMobileInput.read();
         const { leftStick, rightStick } = this._gamepadInput.read();
+
+        if (this._mouseButtonsInverted) {
+            const leftButton = button[0];
+            button[0] = button[2];
+            button[2] = leftButton;
+        }
 
         if (!this.enabled) {
             return;

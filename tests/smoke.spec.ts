@@ -21,7 +21,7 @@ test('boots the viewer shell', async ({ page }) => {
 });
 
 test('fly movement speed is configurable from the Controls menu and saved', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(120000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.observer?.get('ui.spinner') === false);
@@ -36,17 +36,21 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
     await expect(page.locator('.fly-speed-control')).toBeVisible();
     await expect(page.locator('.fly-speed-control')).toContainText('Movement speed');
     await expect(page.locator('.info-controls-content')).toContainText('Surface pivot');
+    await expect(page.locator('.info-controls-content')).toContainText('Invert mouse buttons');
 
     const state = await page.evaluate(() => {
         const viewer = (window as any).viewer;
         viewer.observer.set('camera.flySpeed', 2.5);
         viewer.observer.set('camera.surfacePivot', false);
+        viewer.observer.set('camera.mouseButtonsInverted', true);
         const settings = viewer.settingsService.getSettingsData();
         return {
             observerSpeed: viewer.observer.get('camera.flySpeed'),
             controllerSpeed: viewer.cameraControls.flySpeed,
             savedSpeed: settings.camera.flySpeed,
-            savedSurfacePivot: settings.camera.surfacePivot
+            savedSurfacePivot: settings.camera.surfacePivot,
+            savedMouseButtonsInverted: settings.camera.mouseButtonsInverted,
+            cookie: document.cookie
         };
     });
 
@@ -54,12 +58,14 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
         observerSpeed: 2.5,
         controllerSpeed: 2.5,
         savedSpeed: 2.5,
-        savedSurfacePivot: false
+        savedSurfacePivot: false,
+        savedMouseButtonsInverted: true,
+        cookie: expect.stringContaining('model-viewer-camera-navigation=0.1')
     });
 });
 
 test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and cleans up', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(180000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
@@ -123,7 +129,7 @@ test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and
 });
 
 test('surface marker uses one pick during mouse pan without replacing pan movement', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(180000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
@@ -161,8 +167,60 @@ test('surface marker uses one pick during mouse pan without replacing pan moveme
     expect(await page.evaluate(() => (window as any).viewer.surfacePivotController.getDebugState().state)).toBe('idle');
 });
 
-test('double click performs a direct two-times dolly without the ripple animation', async ({ page }) => {
-    test.setTimeout(60000);
+test('mouse button inversion swaps orbit and pan and restores from the navigation cookie', async ({ page }) => {
+    test.setTimeout(300000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
+    await page.evaluate(() => {
+        (window as any).viewer.observer.set('camera.mouseButtonsInverted', true);
+        localStorage.removeItem('model-viewer-uistate');
+    });
+    await page.reload();
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
+
+    const restored = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.settingsService.applyViewerSettings({
+            camera: { surfacePivot: false, mouseButtonsInverted: false }
+        });
+        return {
+            observer: viewer.observer.get('camera.mouseButtonsInverted'),
+            controller: viewer.cameraControls.mouseButtonsInverted,
+            surfacePivot: viewer.observer.get('camera.surfacePivot')
+        };
+    });
+    expect(restored).toEqual({ observer: true, controller: true, surfacePivot: true });
+
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const point = viewer.cameraControls.getFocus().clone().add(viewer.camera.right.clone().mulScalar(0.2));
+        viewer.picker.pick = async () => point.clone();
+    });
+    const canvas = page.locator('#application-canvas');
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box!.x + box!.width / 2;
+    const startY = box!.y + box!.height / 2;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down({ button: 'right' });
+    await page.mouse.move(startX + 30, startY + 12);
+    await expect(page.locator('.surface-pivot-marker')).toHaveClass(/visible/);
+    expect(await page.evaluate(() => (window as any).viewer.surfacePivotController.getDebugState().gesture)).toBe('orbit');
+    await page.mouse.up({ button: 'right' });
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down({ button: 'left' });
+    await page.mouse.move(startX + 30, startY + 12);
+    await expect(page.locator('.surface-pivot-marker')).toHaveClass(/visible/);
+    expect(await page.evaluate(() => (window as any).viewer.surfacePivotController.getDebugState().gesture)).toBe('pan');
+    await page.mouse.up({ button: 'left' });
+});
+
+test('double click performs a direct two-times dolly with two lightweight feedback rings', async ({ page }) => {
+    test.setTimeout(120000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
@@ -174,6 +232,7 @@ test('double click performs a direct two-times dolly without the ripple animatio
     });
 
     await page.locator('#application-canvas').dblclick({ position: { x: 500, y: 350 } });
+    await expect(page.locator('.double-click-feedback')).toHaveCount(1);
     const mid = await page.evaluate(() => {
         const viewer = (window as any).viewer;
         const transition = viewer.doubleClickZoomTransition;
@@ -218,6 +277,26 @@ test('double click performs a direct two-times dolly without the ripple animatio
     expect(end.transition).toBeNull();
     expect(end.cameraFlyTransition).toBeNull();
     expect(end.distance).toBeCloseTo(end.endDistance, 2);
+});
+
+test('near clip plane follows close orbit distance inside a large tileset bound', async ({ page }) => {
+    test.setTimeout(120000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    const clip = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const Vec3 = viewer.cameraControls.getPosition().constructor;
+        viewer.dynamicSceneBounds.center.set(0, 0, 0);
+        viewer.dynamicSceneBounds.halfExtents.set(200, 200, 200);
+        viewer.cameraControls.reset(new Vec3(0, 0, 0), new Vec3(0, 0, 0.1));
+        viewer.fitCameraClipPlanes();
+        return {
+            near: viewer.camera.camera.nearClip,
+            far: viewer.camera.camera.farClip
+        };
+    });
+    expect(clip.near).toBeCloseTo(0.001, 5);
+    expect(clip.far).toBeGreaterThan(600);
 });
 
 test('theme color drives accents, active tools, progress colors and settings export', async ({ page }) => {

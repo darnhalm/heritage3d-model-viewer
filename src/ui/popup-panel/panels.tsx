@@ -219,6 +219,7 @@ class InfoPanel extends React.Component <{
         const showAboutTab = !(embed?.enabled) || embed.info;
         const showFitControl = !(embed?.enabled) || embed.fit;
         const showResetControl = !(embed?.enabled) || embed.reset;
+        const mouseButtonsInverted = observerData.camera.mouseButtonsInverted ?? false;
         const activeTab = (() => {
             if (this.state.tab === 'controls' && showControlsTab) return 'controls';
             if (this.state.tab === 'model' && showModelTab) return 'model';
@@ -280,8 +281,8 @@ class InfoPanel extends React.Component <{
                             {this.state.controlsSubTab === 'desktop' ? (
                                 <div className='info-controls-content'>
                                     <Label text={t('Orbit Mode', lang)} class='popup-panel-heading' />
-                                    <ControlDetail label={t('Orbit', lang)} value={t('Left Mouse', lang)} useMouseIcon icons={['right_click']} />
-                                    <ControlDetail label={t('Pan', lang)} value={t('Right Mouse', lang)} useMouseIcon icons={['left_click']} />
+                                    <ControlDetail label={t('Orbit', lang)} value={t(mouseButtonsInverted ? 'Right Mouse' : 'Left Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'right_click' : 'left_click']} />
+                                    <ControlDetail label={t('Pan', lang)} value={t(mouseButtonsInverted ? 'Left Mouse' : 'Right Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'left_click' : 'right_click']} />
                                     <ControlDetail label={t('Zoom', lang)} value={t('Mouse Wheel', lang)} useMouseIcon icons={['swap_vert']} />
                                     <ControlDetail label={t('Set Focus', lang)} value={t('Double Click', lang)} useMouseIcon icons={['touch_double']} />
                                     <Toggle
@@ -289,8 +290,13 @@ class InfoPanel extends React.Component <{
                                         value={observerData.camera.surfacePivot ?? true}
                                         setProperty={(value: boolean) => setProperty('camera.surfacePivot', value)}
                                     />
+                                    <Toggle
+                                        label={t('Invert mouse buttons', lang)}
+                                        value={mouseButtonsInverted}
+                                        setProperty={(value: boolean) => setProperty('camera.mouseButtonsInverted', value)}
+                                    />
                                     <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
-                                    <ControlDetail label={t('Look Around', lang)} value={t('Left Mouse', lang)} useMouseIcon icons={['right_click']} />
+                                    <ControlDetail label={t('Look Around', lang)} value={t(mouseButtonsInverted ? 'Right Mouse' : 'Left Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'right_click' : 'left_click']} />
                                     <ControlDetail label={t('Fly', lang)} value='W, S, A, D' icon='keyboard' />
                                     <div className='fly-speed-control'>
                                         <Slider

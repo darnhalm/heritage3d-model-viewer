@@ -1174,6 +1174,43 @@ body:not(.ui-ready) #panel-left {
     opacity: 1;
 }
 
+/* One lightweight node, two pseudo-element pulses: immediate double-click feedback without
+ * rebuilding the former three-ring DOM animation. */
+.double-click-feedback {
+    position: absolute;
+    z-index: 27;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.double-click-feedback::before,
+.double-click-feedback::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 18px;
+    height: 18px;
+    box-sizing: border-box;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    border-radius: 50%;
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.65);
+    animation: double-click-ring 0.34s ease-out forwards;
+}
+
+.double-click-feedback::after {
+    animation-delay: 0.08s;
+}
+
+@keyframes double-click-ring {
+    to {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1.7);
+    }
+}
+
 .capture-flash {
     position: absolute;
     inset: 0;

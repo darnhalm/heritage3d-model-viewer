@@ -178,6 +178,7 @@ const observerData: ObserverData = {
         mode: 'orbit',
         flySpeed: 1,
         surfacePivot: true,
+        mouseButtonsInverted: false,
         position: null,
         focus: null,
         ortho: false,
@@ -375,6 +376,37 @@ const observerData: ObserverData = {
     }
 };
 
+const NAVIGATION_COOKIE = 'model-viewer-camera-navigation';
+const NAVIGATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+let lastNavigationCookieValue: string | null = null;
+
+const saveNavigationCookie = (observer: Observer) => {
+    try {
+        const surfacePivot = observer.get('camera.surfacePivot') !== false ? '1' : '0';
+        const mouseButtonsInverted = observer.get('camera.mouseButtonsInverted') === true ? '1' : '0';
+        const value = `${surfacePivot}.${mouseButtonsInverted}`;
+        // The global observer listener also receives render/runtime changes. Avoid rewriting the
+        // same cookie on each of them; navigation preferences change only from explicit UI input.
+        if (value === lastNavigationCookieValue) return;
+        document.cookie = `${NAVIGATION_COOKIE}=${value}; Max-Age=${NAVIGATION_COOKIE_MAX_AGE}; Path=/; SameSite=Lax`;
+        lastNavigationCookieValue = value;
+    } catch { /* cookies unavailable */ }
+};
+
+const loadNavigationCookie = (observer: Observer) => {
+    try {
+        const prefix = `${NAVIGATION_COOKIE}=`;
+        const value = document.cookie.split(';').map(part => part.trim()).find(part => part.startsWith(prefix))?.slice(prefix.length);
+        if (!value) return;
+        lastNavigationCookieValue = value;
+        const [surfacePivot, mouseButtonsInverted] = value.split('.');
+        if (surfacePivot === '0' || surfacePivot === '1') observer.set('camera.surfacePivot', surfacePivot === '1');
+        if (mouseButtonsInverted === '0' || mouseButtonsInverted === '1') {
+            observer.set('camera.mouseButtonsInverted', mouseButtonsInverted === '1');
+        }
+    } catch { /* cookies unavailable */ }
+};
+
 const saveOptions = (observer: Observer, name: string) => {
     const options = observer.json() as Partial<ObserverData>;
     const debug = options.debug ? {
@@ -401,6 +433,7 @@ const saveOptions = (observer: Observer, name: string) => {
         metadata: options.metadata ?? {},
         ui: { language: options.ui?.language }
     }));
+    saveNavigationCookie(observer);
 };
 
 const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, string>) => {
@@ -439,6 +472,9 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
             loadRec('', JSON.parse(options));
         } catch { }
     }
+    // Navigation preferences are deliberately duplicated in a compact cookie so they survive
+    // localStorage cleanup and are shared by every model URL on this viewer origin.
+    loadNavigationCookie(observer);
 };
 
 // print out versions of dependent packages

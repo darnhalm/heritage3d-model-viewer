@@ -163,6 +163,7 @@ const FRAGMENT_OUTLINE_WIDTH_MAX_PX = 8;
 const doubleTapRadius = 45;
 const DOUBLE_CLICK_ZOOM_DURATION_SECONDS = 0.25;
 const DOUBLE_CLICK_ZOOM_FACTOR = 2;
+const DOUBLE_CLICK_FEEDBACK_MS = 450;
 
 type FrozenTileCamera = {
     world: Mat4;
@@ -991,6 +992,10 @@ class Viewer {
 
     private readonly doubleClickZoomFocus = new Vec3();
 
+    private readonly clipCameraPosition = new Vec3();
+
+    private readonly clipCameraFocus = new Vec3();
+
     // Прерванный паузой тура перелёт камеры: сохраняем цель и остаток времени,
     // чтобы Play продолжил движение к той же точке за оставшуюся длительность, а
     // не начинал карточку заново.
@@ -1625,6 +1630,7 @@ class Viewer {
             picker: this.picker,
             cameraControls: this.cameraControls,
             canStart: () => this.canUseSurfacePivot(),
+            mouseButtonsInverted: () => this.cameraControls.mouseButtonsInverted,
             worldToScreen: point => this.fragmentWorldToCssScreen(point),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
@@ -1805,6 +1811,7 @@ class Viewer {
     }
 
     private async _pickAndCenterAt(x: number, y: number) {
+        this.showDoubleClickFeedback(x, y);
         const result = await this.picker.pick(x, y);
         if (!result) return;
         const startPosition = this.cameraControls.getPosition();
@@ -1831,6 +1838,18 @@ class Viewer {
         };
         this.cameraControls.enabled = false;
         this.renderNextFrame();
+    }
+
+    private showDoubleClickFeedback(x: number, y: number) {
+        const wrapper = this.canvas.parentElement;
+        if (!wrapper) return;
+        const feedback = document.createElement('div');
+        feedback.className = 'double-click-feedback';
+        feedback.style.left = `${x}px`;
+        feedback.style.top = `${y}px`;
+        feedback.setAttribute('aria-hidden', 'true');
+        wrapper.appendChild(feedback);
+        setTimeout(() => feedback.remove(), DOUBLE_CLICK_FEEDBACK_MS);
     }
 
     private canUseSurfacePivot() {
@@ -2271,6 +2290,10 @@ class Viewer {
             },
             'camera.flySpeed': (speed: number) => {
                 this.cameraControls.flySpeed = Math.max(0.1, Math.min(5, Number(speed) || 1));
+            },
+            'camera.mouseButtonsInverted': (inverted: boolean) => {
+                this.surfacePivotController?.reset();
+                this.cameraControls.mouseButtonsInverted = inverted;
             },
 
             // skybox
@@ -4199,8 +4222,16 @@ class Viewer {
         vec.sub2(boundCenter, cameraPosition);
         const dist = -vec.dot(cameraForward);
 
-        const far = dist + boundRadius;
-        const near = Math.max(0.001, dist < boundRadius ? far / 1024 : dist - boundRadius);
+        const far = Math.max(0.01, dist + boundRadius);
+        this.cameraControls.getPosition(this.clipCameraPosition);
+        this.cameraControls.getFocus(this.clipCameraFocus);
+        const focusDistance = this.clipCameraPosition.distance(this.clipCameraFocus);
+        // Inside a large tileset bound, `far / 1024` can be tens of centimetres even when the
+        // camera is millimetres from a terminal tile. Scale the near plane with the live orbit
+        // distance so the final LOD remains visible during close inspection, while retaining the
+        // more precise far/near ratio at ordinary viewing distances.
+        const closeNear = Math.min(far / 1024, Math.max(0.001, focusDistance * 0.01));
+        const near = Math.min(far * 0.5, Math.max(0.001, dist < boundRadius ? closeNear : dist - boundRadius));
 
         this.camera.camera.nearClip = near;
         this.camera.camera.farClip = far;

@@ -37,7 +37,14 @@ type SettingsLookupResult = { data: Record<string, unknown>; version: number } |
 class SettingsService {
     private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'theme', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi'];
 
-    private static readonly SETTINGS_FILTER_PATHS = ['skybox.options', 'debug.renderMode'];
+    private static readonly SETTINGS_FILTER_PATHS = [
+        'skybox.options',
+        'debug.renderMode',
+        // Per-user navigation preferences come from the compact cookie and must not change when
+        // a model-specific settings sidecar is applied.
+        'camera.surfacePivot',
+        'camera.mouseButtonsInverted'
+    ];
 
     private static readonly SETTINGS_CANDIDATE_VERSIONS = 20;
 
@@ -369,7 +376,8 @@ class SettingsService {
         o.set('camera.hq', true);
         o.set('camera.mode', 'orbit');
         o.set('camera.flySpeed', 1);
-        o.set('camera.surfacePivot', true);
+        // Surface pivot and mouse-button mapping are user navigation preferences, not model
+        // settings. Keep the cookie-restored values while loading or resetting scene settings.
         o.set('theme.primaryColor', { ...DEFAULT_THEME_COLOR });
         o.set('skybox.value', this.skyboxUrls.has('Paul Lobe Haus') ? 'Paul Lobe Haus' : 'None');
         o.set('skybox.exposure', 0);

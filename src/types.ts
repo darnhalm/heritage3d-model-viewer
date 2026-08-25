@@ -80,6 +80,8 @@ export interface ObserverData {
         flySpeed: number,
         /** Orbit around the model surface under the initial drag point. */
         surfacePivot?: boolean,
+        /** Swap the orbit and pan assignments of the left and right mouse buttons. */
+        mouseButtonsInverted?: boolean,
         position?: [number, number, number] | null,
         focus?: [number, number, number] | null,
         /** Проекция камеры ортогональна. */

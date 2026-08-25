@@ -41,6 +41,7 @@ type SurfacePivotControllerArgs = {
     picker: Picker;
     cameraControls: CameraControls;
     canStart: () => boolean;
+    mouseButtonsInverted: () => boolean;
     worldToScreen: (point: Vec3) => Vec3;
     renderNextFrame: () => void;
 };
@@ -60,6 +61,8 @@ class SurfacePivotController {
     private readonly cameraControls: CameraControls;
 
     private readonly canStart: () => boolean;
+
+    private readonly mouseButtonsInverted: () => boolean;
 
     private readonly worldToScreen: (point: Vec3) => Vec3;
 
@@ -87,7 +90,9 @@ class SurfacePivotController {
 
         const rect = this.canvas.getBoundingClientRect();
         const input = event.pointerType as SurfaceInput;
-        const gesture: SurfaceGesture = event.pointerType === 'mouse' && event.button === 2 ? 'pan' : 'orbit';
+        const inverted = event.pointerType === 'mouse' && this.mouseButtonsInverted();
+        const orbitButton = inverted ? 2 : 0;
+        const gesture: SurfaceGesture = event.pointerType === 'mouse' && event.button !== orbitButton ? 'pan' : 'orbit';
         this.requestId++;
         this.state = {
             state: 'tracking',
@@ -146,6 +151,7 @@ class SurfacePivotController {
         this.picker = args.picker;
         this.cameraControls = args.cameraControls;
         this.canStart = args.canStart;
+        this.mouseButtonsInverted = args.mouseButtonsInverted;
         this.worldToScreen = args.worldToScreen;
         this.renderNextFrame = args.renderNextFrame;
         this.initMarker();
