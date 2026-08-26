@@ -219,7 +219,7 @@ class InfoPanel extends React.Component <{
         const showAboutTab = !(embed?.enabled) || embed.info;
         const showFitControl = !(embed?.enabled) || embed.fit;
         const showResetControl = !(embed?.enabled) || embed.reset;
-        const mouseButtonsInverted = observerData.camera.mouseButtonsInverted ?? false;
+        const mouseButtonsInverted = observerData.camera.mouseButtonsInverted ?? true;
         const activeTab = (() => {
             if (this.state.tab === 'controls' && showControlsTab) return 'controls';
             if (this.state.tab === 'model' && showModelTab) return 'model';
@@ -284,7 +284,7 @@ class InfoPanel extends React.Component <{
                                     <ControlDetail label={t('Orbit', lang)} value={t(mouseButtonsInverted ? 'Right Mouse' : 'Left Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'right_click' : 'left_click']} />
                                     <ControlDetail label={t('Pan', lang)} value={t(mouseButtonsInverted ? 'Left Mouse' : 'Right Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'left_click' : 'right_click']} />
                                     <ControlDetail label={t('Zoom', lang)} value={t('Mouse Wheel', lang)} useMouseIcon icons={['swap_vert']} />
-                                    <ControlDetail label={t('Set Focus', lang)} value={t('Double Click', lang)} useMouseIcon icons={['touch_double']} />
+                                    <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Click', lang)} useMouseIcon icons={['touch_double']} />
                                     <Toggle
                                         label={t('Surface pivot', lang)}
                                         value={observerData.camera.surfacePivot ?? true}
@@ -346,10 +346,10 @@ class InfoPanel extends React.Component <{
                             ) : (
                                 <div className='info-controls-content'>
                                     <Label text={t('Orbit Mode', lang)} class='popup-panel-heading' />
-                                    <ControlDetail label={t('Orbit', lang)} value={t('One Finger Drag', lang)} trackpadIcon='1' />
-                                    <ControlDetail label={t('Pan', lang)} value={t('Two Finger Drag', lang)} trackpadIcon='2' />
+                                    <ControlDetail label={t('Orbit', lang)} value={t(mouseButtonsInverted ? 'Two Finger Drag' : 'One Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '2' : '1'} />
+                                    <ControlDetail label={t('Pan', lang)} value={t(mouseButtonsInverted ? 'One Finger Drag' : 'Two Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '1' : '2'} />
                                     <ControlDetail label={t('Zoom', lang)} value={t('Pinch', lang)} icon='pinch' />
-                                    <ControlDetail label={t('Set Focus', lang)} value={t('Double Tap', lang)} icon='touch_double' />
+                                    <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Tap', lang)} icon='touch_double' />
                                     <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
                                     <ControlDetail label={t('Look Around', lang)} value={t('Touch on Right', lang)} swipeIcon='right' />
                                     <ControlDetail label={t('Fly', lang)} value={t('Touch on Left', lang)} swipeIcon='left' />

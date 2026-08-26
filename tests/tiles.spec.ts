@@ -292,6 +292,92 @@ test('переключает уровни детализации по экран
     expect(pageErrors).toEqual([]);
 });
 
+test('держит последний доступный LOD и не заменяет его пустой веткой при приближении', async ({ page }) => {
+    test.setTimeout(300000);
+    const box = (centerX: number, halfSize: number) => [
+        centerX, 0, 0,
+        halfSize, 0, 0,
+        0, halfSize, 0,
+        0, 0, halfSize
+    ];
+    const content = { uri: '/static/test-assets/BoxTextured.glb' };
+
+    await page.route('**/terminal-lod/tileset.json', route => route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+            asset: { version: '1.1' },
+            geometricError: 200,
+            root: {
+                boundingVolume: { box: box(0, 10) },
+                geometricError: 100,
+                refine: 'REPLACE',
+                content,
+                children: [
+                    // Structural leaf with the same non-zero error pattern as Syria depth 5.
+                    {
+                        boundingVolume: { box: box(-2, 2) },
+                        geometricError: 25,
+                        content
+                    },
+                    // This is the deepest renderable tile for the current view. Its only child is
+                    // far outside the frustum, so replacing it would create an empty hole.
+                    {
+                        boundingVolume: { box: box(2, 2) },
+                        geometricError: 50,
+                        content,
+                        children: [{
+                            boundingVolume: { box: box(1000, 1) },
+                            geometricError: 25,
+                            content
+                        }]
+                    }
+                ]
+            }
+        })
+    }));
+
+    await page.goto('/?webgl&load=models%2Ftest%2Fterminal-lod%2Ftileset.json');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.observer?.get('scene.isTileset') === true);
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const Vec3 = viewer.camera.getPosition().constructor;
+        viewer.cameraControls.reset(new Vec3(0, 0, 0), new Vec3(0, 0, 15));
+        viewer.fitCameraClipPlanes();
+    });
+    await pumpFrames(page, 120);
+    await page.waitForFunction(() => {
+        const manager = (window as any).viewer?.tileManager;
+        const [leaf, fallback] = manager?.rootTile?.children ?? [];
+        return leaf?.state === 'ready' && fallback?.state === 'ready';
+    }, undefined, { timeout: 120000 });
+    await pumpFrames(page, 10);
+
+    const lod = await page.evaluate(() => {
+        const manager = (window as any).viewer.tileManager;
+        const root = manager.rootTile;
+        const [leaf, fallback] = root.children;
+        const unavailableChild = fallback.children[0];
+        return {
+            rootSelected: root.selected,
+            leafSelected: leaf.selected,
+            leafGeometricError: leaf.geometricError,
+            leafScreenSpaceError: leaf.error,
+            fallbackSelected: fallback.selected,
+            unavailableChildSelected: unavailableChild.selected,
+            selectedDepth: manager.getStats().maxSelectedDepth
+        };
+    });
+
+    expect(lod.rootSelected).toBe(false);
+    expect(lod.leafSelected).toBe(true);
+    expect(lod.leafGeometricError).toBe(25);
+    expect(lod.leafScreenSpaceError).toBe(0);
+    expect(lod.fallbackSelected).toBe(true);
+    expect(lod.unavailableChildSelected).toBe(false);
+    expect(lod.selectedDepth).toBe(1);
+});
+
 test('отбор LOD следует за pivot, переносом и поворотом тайлсета', async ({ page }) => {
     test.skip(!await samplesAvailable(page, DISCRETE_LOD),
         'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');

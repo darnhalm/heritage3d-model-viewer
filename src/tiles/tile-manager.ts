@@ -551,12 +551,6 @@ export class TileManager {
             return true;
         }
 
-        tile.lastUsedFrame = this.frame;
-        tile.distance = tile.obb ? distanceToObb(tile.obb, this.view.cameraPos) : 0;
-        tile.error = tile.obb ?
-            screenSpaceError(tile.geometricError, tile.distance, this.view.sseDenominator, this.view.viewportHeight) :
-            Infinity;
-
         if (tile.externalTilesetUri && !tile.externalRoot && tile.state === TILE_UNLOADED) {
             this.requestExternalTileset(tile);
         }
@@ -572,6 +566,22 @@ export class TileManager {
         this.requestContent(tile);
 
         const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
+        // A JSON leaf with renderable content is the final available LOD even when the exporter
+        // left a non-zero geometricError on it (the Syria set does this for every depth-5 leaf).
+        // External and unexpanded implicit nodes are not leaves yet: their children are pending.
+        const terminal = children.length === 0 && !tile.externalTilesetUri &&
+            (!tile.implicit || tile.implicit.expanded);
+
+        tile.lastUsedFrame = this.frame;
+        tile.distance = tile.obb ? distanceToObb(tile.obb, this.view.cameraPos) : 0;
+        tile.error = terminal ? 0 : (tile.obb ?
+            screenSpaceError(tile.geometricError, tile.distance, this.view.sseDenominator, this.view.viewportHeight) :
+            Infinity);
+
+        if (terminal) {
+            tile.wasRefined = false;
+            return this.selectSelf(tile, selection);
+        }
 
         // Гистерезис: чтобы на границе порога уровень не мигал туда-сюда каждый кадр,
         // начинать уточнение дороже, чем его продолжать.
@@ -604,17 +614,22 @@ export class TileManager {
         for (const child of children) {
             covered = this.visit(child, sub) && covered;
         }
-        if (covered) {
+        if (covered && sub.length > 0) {
             selection.push(...sub);
             return true;
         }
-        // Своим контентом закрываем дыру только если он вообще есть. У тайлсетов с пустым
-        // корнем (Obj2Tiles умеет так — `--no-root-content`) закрывать нечем, и ждать
-        // готовности всех детей значило бы держать пустой экран вместо постепенного
-        // проявления сцены.
+        // If refinement produced no visible/renderable child, keep the deepest ready ancestor.
+        // Sparse trees and imperfect child bounds otherwise make a detailed tile disappear as
+        // the camera approaches even though no finer content exists for the current view.
         if (tile.contentUris.length > 0 && this.selectSelf(tile, selection)) {
             return true;
         }
+        if (covered) {
+            return true;
+        }
+        // У тайлсетов с пустым корнем (Obj2Tiles умеет так — `--no-root-content`) закрывать
+        // нечем, и ждать готовности всех детей значило бы держать пустой экран вместо
+        // постепенного проявления сцены.
         // Ни дети, ни родитель не готовы — показываем то, что есть.
         selection.push(...sub);
         return false;

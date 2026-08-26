@@ -90,9 +90,11 @@ class SurfacePivotController {
 
         const rect = this.canvas.getBoundingClientRect();
         const input = event.pointerType as SurfaceInput;
-        const inverted = event.pointerType === 'mouse' && this.mouseButtonsInverted();
+        const inverted = this.mouseButtonsInverted();
         const orbitButton = inverted ? 2 : 0;
-        const gesture: SurfaceGesture = event.pointerType === 'mouse' && event.button !== orbitButton ? 'pan' : 'orbit';
+        const gesture: SurfaceGesture = event.pointerType === 'mouse' ?
+            (event.button === orbitButton ? 'orbit' : 'pan') :
+            (inverted ? 'pan' : 'orbit');
         this.requestId++;
         this.state = {
             state: 'tracking',

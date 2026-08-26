@@ -13,11 +13,15 @@ test('boots the viewer shell', async ({ page }) => {
 
     const state = await page.evaluate(() => ({
         urls: (window as any).viewer.observer.get('scene.urls'),
-        active: (window as any).viewer.observer.get('ui.active')
+        active: (window as any).viewer.observer.get('ui.active'),
+        surfacePivot: (window as any).viewer.observer.get('camera.surfacePivot'),
+        mouseButtonsInverted: (window as any).viewer.observer.get('camera.mouseButtonsInverted')
     }));
 
     expect(state.urls).toEqual([]);
     expect(state.active).toBe(null);
+    expect(state.surfacePivot).toBe(true);
+    expect(state.mouseButtonsInverted).toBe(true);
 });
 
 test('fly movement speed is configurable from the Controls menu and saved', async ({ page }) => {
@@ -37,6 +41,25 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
     await expect(page.locator('.fly-speed-control')).toContainText('Movement speed');
     await expect(page.locator('.info-controls-content')).toContainText('Surface pivot');
     await expect(page.locator('.info-controls-content')).toContainText('Invert mouse buttons');
+    const orbitControl = page.locator('.control-detail').filter({ hasText: 'Orbit' }).first();
+    const panControl = page.locator('.control-detail').filter({ hasText: 'Pan' }).first();
+    await expect(orbitControl).toContainText('Right Mouse');
+    await expect(panControl).toContainText('Left Mouse');
+    await expect(page.locator('.info-controls-content')).toContainText('Set Focus and Zoom One Step');
+
+    await page.getByRole('button', { name: 'Touch', exact: true }).click();
+    const touchOrbitControl = page.locator('.control-detail').filter({ hasText: 'Orbit' }).first();
+    const touchPanControl = page.locator('.control-detail').filter({ hasText: 'Pan' }).first();
+    await expect(touchOrbitControl).toContainText('Two Finger Drag');
+    await expect(touchPanControl).toContainText('One Finger Drag');
+
+    await page.evaluate(() => (window as any).viewer.observer.set('camera.mouseButtonsInverted', false));
+    await expect(touchOrbitControl).toContainText('One Finger Drag');
+    await expect(touchPanControl).toContainText('Two Finger Drag');
+
+    await page.getByRole('button', { name: 'Desktop', exact: true }).click();
+    await expect(orbitControl).toContainText('Left Mouse');
+    await expect(panControl).toContainText('Right Mouse');
 
     const state = await page.evaluate(() => {
         const viewer = (window as any).viewer;
@@ -60,7 +83,7 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
         savedSpeed: 2.5,
         savedSurfacePivot: false,
         savedMouseButtonsInverted: true,
-        cookie: expect.stringContaining('model-viewer-camera-navigation=0.1')
+        cookie: expect.stringContaining('model-viewer-camera-navigation-v2=0.1')
     });
 });
 
@@ -71,6 +94,7 @@ test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
     await page.evaluate(() => {
         const viewer = (window as any).viewer;
+        viewer.observer.set('camera.mouseButtonsInverted', false);
         const pivot = viewer.cameraControls.getFocus().clone().add(viewer.camera.right.clone().mulScalar(0.2));
         viewer.picker.pick = async () => pivot.clone();
     });
@@ -135,6 +159,7 @@ test('surface marker uses one pick during mouse pan without replacing pan moveme
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
     await page.evaluate(() => {
         const viewer = (window as any).viewer;
+        viewer.observer.set('camera.mouseButtonsInverted', false);
         const point = viewer.cameraControls.getFocus().clone().add(viewer.camera.right.clone().mulScalar(0.2));
         viewer.picker.pick = async () => point.clone();
     });
@@ -173,7 +198,9 @@ test('mouse button inversion swaps orbit and pan and restores from the navigatio
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
     await page.evaluate(() => {
-        (window as any).viewer.observer.set('camera.mouseButtonsInverted', true);
+        const viewer = (window as any).viewer;
+        viewer.observer.set('camera.mouseButtonsInverted', false);
+        viewer.observer.set('camera.mouseButtonsInverted', true);
         localStorage.removeItem('model-viewer-uistate');
     });
     await page.reload();
@@ -279,24 +306,30 @@ test('double click performs a direct two-times dolly with two lightweight feedba
     expect(end.distance).toBeCloseTo(end.endDistance, 2);
 });
 
-test('near clip plane follows close orbit distance inside a large tileset bound', async ({ page }) => {
+test('double click respects the same closest zoom limit as wheel navigation', async ({ page }) => {
     test.setTimeout(120000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
-    const clip = await page.evaluate(() => {
+    const clamped = await page.evaluate(async () => {
         const viewer = (window as any).viewer;
         const Vec3 = viewer.cameraControls.getPosition().constructor;
-        viewer.dynamicSceneBounds.center.set(0, 0, 0);
-        viewer.dynamicSceneBounds.halfExtents.set(200, 200, 200);
-        viewer.cameraControls.reset(new Vec3(0, 0, 0), new Vec3(0, 0, 0.1));
-        viewer.fitCameraClipPlanes();
-        return {
-            near: viewer.camera.camera.nearClip,
-            far: viewer.camera.camera.farClip
+        const Vec2 = viewer.cameraControls.zoomRange.constructor;
+        const position = new Vec3(0, 0, 0);
+        const target = new Vec3(0, 0, -3);
+        viewer.cameraControls.zoomRange = new Vec2(2, 100);
+        viewer.cameraControls.reset(target, position);
+        viewer.picker.pick = async () => target.clone();
+        await viewer._pickAndCenterAt(100, 100);
+        const result = {
+            travelDistance: viewer.doubleClickZoomTransition?.travelDistance,
+            endOrbitDistance: viewer.doubleClickZoomTransition?.endOrbitDistance
         };
+        viewer.stopCameraFlyTransition();
+        return result;
     });
-    expect(clip.near).toBeCloseTo(0.001, 5);
-    expect(clip.far).toBeGreaterThan(600);
+    // Half of 3 would be 1.5, but the configured closest distance is 2.
+    expect(clamped.travelDistance).toBeCloseTo(1, 5);
+    expect(clamped.endOrbitDistance).toBeCloseTo(2, 5);
 });
 
 test('theme color drives accents, active tools, progress colors and settings export', async ({ page }) => {

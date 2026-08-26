@@ -9,6 +9,10 @@ const backends = (process.env.BENCH_BACKENDS ?? 'webgpu,webgl')
     .split(',')
     .map(value => value.trim())
     .filter(Boolean);
+const mouseButton = process.env.BENCH_MOUSE_BUTTON ?? 'left';
+if (!['left', 'right'].includes(mouseButton)) {
+    throw new Error(`BENCH_MOUSE_BUTTON must be "left" or "right", got: ${mouseButton}`);
+}
 
 const quantile = (values, q) => {
     if (!values.length) return 0;
@@ -114,7 +118,7 @@ try {
             const startY = box.y + box.height * 0.5;
 
             await page.mouse.move(startX, startY);
-            await page.mouse.down({ button: 'left' });
+            await page.mouse.down({ button: mouseButton });
             for (let step = 1; step <= 120; step++) {
                 const phase = step / 120;
                 await page.mouse.move(
@@ -123,7 +127,7 @@ try {
                 );
                 await page.waitForTimeout(10);
             }
-            await page.mouse.up({ button: 'left' });
+            await page.mouse.up({ button: mouseButton });
             await page.waitForTimeout(750);
 
             const sample = await page.evaluate(({ backend, run }) => {
@@ -175,4 +179,4 @@ const summary = backends.map((backend) => {
     };
 });
 
-console.log(JSON.stringify({ runs, summary }, null, 2));
+console.log(JSON.stringify({ runs, mouseButton, summary }, null, 2));

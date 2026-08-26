@@ -178,7 +178,7 @@ const observerData: ObserverData = {
         mode: 'orbit',
         flySpeed: 1,
         surfacePivot: true,
-        mouseButtonsInverted: false,
+        mouseButtonsInverted: true,
         position: null,
         focus: null,
         ortho: false,
@@ -376,7 +376,9 @@ const observerData: ObserverData = {
     }
 };
 
-const NAVIGATION_COOKIE = 'model-viewer-camera-navigation';
+// V2 rolls out the inverted layout as the new default instead of inheriting the old automatic
+// `false` value. Choices made after the rollout continue to persist normally.
+const NAVIGATION_COOKIE = 'model-viewer-camera-navigation-v2';
 const NAVIGATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 let lastNavigationCookieValue: string | null = null;
 

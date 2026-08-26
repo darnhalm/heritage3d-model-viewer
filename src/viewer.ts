@@ -992,10 +992,6 @@ class Viewer {
 
     private readonly doubleClickZoomFocus = new Vec3();
 
-    private readonly clipCameraPosition = new Vec3();
-
-    private readonly clipCameraFocus = new Vec3();
-
     // Прерванный паузой тура перелёт камеры: сохраняем цель и остаток времени,
     // чтобы Play продолжил движение к той же точке за оставшуюся длительность, а
     // не начинал карточку заново.
@@ -1822,6 +1818,14 @@ class Viewer {
         const startOrbitDistance = viewDirection.length();
         if (hitDistance <= 1e-6 || startOrbitDistance <= 1e-6) return;
 
+        // The scripted transition must obey the same closest-zoom limit as the wheel controls.
+        // Repeated double clicks used to halve the distance indefinitely because `reset()` does
+        // not apply OrbitController.zoomRange by itself.
+        const minDistance = Math.max(ZOOM_SCALE_MIN, this.cameraControls.zoomRange.x);
+        const endHitDistance = Math.max(minDistance, hitDistance / DOUBLE_CLICK_ZOOM_FACTOR);
+        const travelDistance = hitDistance - endHitDistance;
+        if (travelDistance <= 1e-6) return;
+
         // NASA EnvironmentControls keeps the view direction fixed and moves the camera directly
         // along the picked ray. Keeping this separate from camera-fly avoids curved-looking motion
         // and the per-frame Vec3 allocations of the general position/focus interpolation.
@@ -1832,9 +1836,9 @@ class Viewer {
             startPosition,
             zoomDirection: zoomDirection.mulScalar(1 / hitDistance),
             viewDirection: viewDirection.mulScalar(1 / startOrbitDistance),
-            travelDistance: hitDistance * (1 - 1 / DOUBLE_CLICK_ZOOM_FACTOR),
+            travelDistance,
             startOrbitDistance,
-            endOrbitDistance: startOrbitDistance / DOUBLE_CLICK_ZOOM_FACTOR
+            endOrbitDistance: Math.max(minDistance, startOrbitDistance / DOUBLE_CLICK_ZOOM_FACTOR)
         };
         this.cameraControls.enabled = false;
         this.renderNextFrame();
@@ -4222,16 +4226,8 @@ class Viewer {
         vec.sub2(boundCenter, cameraPosition);
         const dist = -vec.dot(cameraForward);
 
-        const far = Math.max(0.01, dist + boundRadius);
-        this.cameraControls.getPosition(this.clipCameraPosition);
-        this.cameraControls.getFocus(this.clipCameraFocus);
-        const focusDistance = this.clipCameraPosition.distance(this.clipCameraFocus);
-        // Inside a large tileset bound, `far / 1024` can be tens of centimetres even when the
-        // camera is millimetres from a terminal tile. Scale the near plane with the live orbit
-        // distance so the final LOD remains visible during close inspection, while retaining the
-        // more precise far/near ratio at ordinary viewing distances.
-        const closeNear = Math.min(far / 1024, Math.max(0.001, focusDistance * 0.01));
-        const near = Math.min(far * 0.5, Math.max(0.001, dist < boundRadius ? closeNear : dist - boundRadius));
+        const far = dist + boundRadius;
+        const near = Math.max(0.001, dist < boundRadius ? far / 1024 : dist - boundRadius);
 
         this.camera.camera.nearClip = near;
         this.camera.camera.farClip = far;
