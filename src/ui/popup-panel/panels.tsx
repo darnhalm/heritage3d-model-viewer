@@ -219,7 +219,7 @@ class InfoPanel extends React.Component <{
         const showAboutTab = !(embed?.enabled) || embed.info;
         const showFitControl = !(embed?.enabled) || embed.fit;
         const showResetControl = !(embed?.enabled) || embed.reset;
-        const mouseButtonsInverted = observerData.camera.mouseButtonsInverted ?? true;
+        const mouseButtonsInverted = observerData.camera.mouseButtonsInverted ?? false;
         const activeTab = (() => {
             if (this.state.tab === 'controls' && showControlsTab) return 'controls';
             if (this.state.tab === 'model' && showModelTab) return 'model';

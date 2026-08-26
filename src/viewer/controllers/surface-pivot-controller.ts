@@ -48,7 +48,7 @@ type SurfacePivotControllerArgs = {
 
 /**
  * Resolves one depth point per drag. Orbit uses it as a temporary off-axis pivot while pan
- * keeps it as a visible surface reference without changing the existing translation math.
+ * translates at that point's depth so the grabbed surface stays under the pointer.
  *
  * Pointer tracking lives outside CameraControls so clicks, async pick cancellation and tool
  * priority remain explicit. CameraControls owns only the cheap transform math.
@@ -109,7 +109,11 @@ class SurfacePivotController {
             lastClientX: event.clientX,
             lastClientY: event.clientY
         };
-        if (gesture === 'orbit') this.cameraControls.beginSurfaceOrbit();
+        if (gesture === 'orbit') {
+            this.cameraControls.beginSurfaceOrbit();
+        } else {
+            this.cameraControls.beginSurfacePan();
+        }
     };
 
     private readonly onPointerMove = (event: PointerEvent) => {
@@ -126,7 +130,11 @@ class SurfacePivotController {
         state.lastClientY = event.clientY;
 
         if (state.state === 'active') {
-            if (state.gesture === 'orbit') this.cameraControls.queueSurfaceOrbit(dx, dy);
+            if (state.gesture === 'orbit') {
+                this.cameraControls.queueSurfaceOrbit(dx, dy);
+            } else {
+                this.cameraControls.queueSurfacePan(dx, dy);
+            }
             this.renderNextFrame();
             return;
         }
@@ -212,7 +220,15 @@ class SurfacePivotController {
             lastClientX: current.lastClientX,
             lastClientY: current.lastClientY
         };
-        if (current.gesture === 'orbit') this.cameraControls.activateSurfaceOrbit(point);
+        if (current.gesture === 'orbit') {
+            this.cameraControls.activateSurfaceOrbit(point);
+        } else {
+            this.cameraControls.activateSurfacePan(
+                point,
+                current.lastClientX - current.startClientX,
+                current.lastClientY - current.startClientY
+            );
+        }
         this.marker?.classList.toggle('touch', current.input !== 'mouse');
         this.marker?.classList.add('visible');
         this.updateMarker();
@@ -243,6 +259,7 @@ class SurfacePivotController {
         this.requestId++;
         this.state = { state: 'idle' };
         this.cameraControls.endSurfaceOrbit();
+        this.cameraControls.endSurfacePan();
         this.marker?.classList.remove('visible', 'touch');
         this.renderNextFrame();
     }

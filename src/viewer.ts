@@ -7243,12 +7243,14 @@ class Viewer {
         this.updateCameraFlyTransition(deltaTime);
         this.updateDoubleClickZoomTransition(deltaTime);
 
-        this.surfacePivotController?.update();
-
         // update the orbit camera
         if (!this.cameraFlyTransition && !this.doubleClickZoomTransition) {
             this.cameraControls.update(deltaTime);
         }
+
+        // Surface markers use the camera pose produced above. In particular, a pan marker must
+        // move in the same frame as its grabbed point instead of visually trailing by one frame.
+        this.surfacePivotController?.update();
 
         // Синхронизируем навигационный куб с ориентацией камеры (только когда он виден).
         if (this.viewCube && this.viewCube.dom.style.display !== 'none') {

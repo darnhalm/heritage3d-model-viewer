@@ -5,6 +5,12 @@ const waitForViewer = async (page: import('@playwright/test').Page) => {
 };
 
 test('boots the viewer shell', async ({ page }) => {
+    await page.addInitScript(() => {
+        // Values persisted by the previous default rollout must not override the current defaults.
+        localStorage.setItem('model-viewer-uistate', JSON.stringify({
+            camera: { surfacePivot: false, mouseButtonsInverted: true }
+        }));
+    });
     await page.goto('/');
     await waitForViewer(page);
 
@@ -21,7 +27,7 @@ test('boots the viewer shell', async ({ page }) => {
     expect(state.urls).toEqual([]);
     expect(state.active).toBe(null);
     expect(state.surfacePivot).toBe(true);
-    expect(state.mouseButtonsInverted).toBe(true);
+    expect(state.mouseButtonsInverted).toBe(false);
 });
 
 test('fly movement speed is configurable from the Controls menu and saved', async ({ page }) => {
@@ -43,23 +49,23 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
     await expect(page.locator('.info-controls-content')).toContainText('Invert mouse buttons');
     const orbitControl = page.locator('.control-detail').filter({ hasText: 'Orbit' }).first();
     const panControl = page.locator('.control-detail').filter({ hasText: 'Pan' }).first();
-    await expect(orbitControl).toContainText('Right Mouse');
-    await expect(panControl).toContainText('Left Mouse');
+    await expect(orbitControl).toContainText('Left Mouse');
+    await expect(panControl).toContainText('Right Mouse');
     await expect(page.locator('.info-controls-content')).toContainText('Set Focus and Zoom One Step');
 
     await page.getByRole('button', { name: 'Touch', exact: true }).click();
     const touchOrbitControl = page.locator('.control-detail').filter({ hasText: 'Orbit' }).first();
     const touchPanControl = page.locator('.control-detail').filter({ hasText: 'Pan' }).first();
-    await expect(touchOrbitControl).toContainText('Two Finger Drag');
-    await expect(touchPanControl).toContainText('One Finger Drag');
-
-    await page.evaluate(() => (window as any).viewer.observer.set('camera.mouseButtonsInverted', false));
     await expect(touchOrbitControl).toContainText('One Finger Drag');
     await expect(touchPanControl).toContainText('Two Finger Drag');
 
+    await page.evaluate(() => (window as any).viewer.observer.set('camera.mouseButtonsInverted', true));
+    await expect(touchOrbitControl).toContainText('Two Finger Drag');
+    await expect(touchPanControl).toContainText('One Finger Drag');
+
     await page.getByRole('button', { name: 'Desktop', exact: true }).click();
-    await expect(orbitControl).toContainText('Left Mouse');
-    await expect(panControl).toContainText('Right Mouse');
+    await expect(orbitControl).toContainText('Right Mouse');
+    await expect(panControl).toContainText('Left Mouse');
 
     const state = await page.evaluate(() => {
         const viewer = (window as any).viewer;
@@ -83,7 +89,7 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
         savedSpeed: 2.5,
         savedSurfacePivot: false,
         savedMouseButtonsInverted: true,
-        cookie: expect.stringContaining('model-viewer-camera-navigation-v2=0.1')
+        cookie: expect.stringContaining('model-viewer-camera-navigation-v3=0.1')
     });
 });
 
@@ -152,7 +158,7 @@ test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and
     expect(await page.evaluate(() => (window as any).viewer.surfacePivotController.getDebugState().state)).toBe('idle');
 });
 
-test('surface marker uses one pick during mouse pan without replacing pan movement', async ({ page }) => {
+test('surface pan keeps the picked point under the moving cursor', async ({ page }) => {
     test.setTimeout(180000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
@@ -160,7 +166,10 @@ test('surface marker uses one pick during mouse pan without replacing pan moveme
     await page.evaluate(() => {
         const viewer = (window as any).viewer;
         viewer.observer.set('camera.mouseButtonsInverted', false);
-        const point = viewer.cameraControls.getFocus().clone().add(viewer.camera.right.clone().mulScalar(0.2));
+        const position = viewer.cameraControls.getPosition();
+        const point = position.clone()
+            .lerp(position, viewer.cameraControls.getFocus(), 0.45)
+            .add(viewer.camera.right.clone().mulScalar(0.2));
         viewer.picker.pick = async () => point.clone();
     });
 
@@ -175,17 +184,34 @@ test('surface marker uses one pick during mouse pan without replacing pan moveme
     await page.mouse.down({ button: 'right' });
     await page.mouse.move(startX + 20, startY + 8);
     await expect(page.locator('.surface-pivot-marker')).toHaveClass(/visible/);
+    const screenBefore = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const point = new (viewer.cameraControls.getPosition().constructor)(
+            ...viewer.surfacePivotController.getDebugState().worldPoint
+        );
+        const screen = viewer.camera.camera.worldToScreen(point);
+        return [screen.x, screen.y];
+    });
     await page.mouse.move(startX + 120, startY + 60, { steps: 12 });
     await page.waitForTimeout(100);
 
-    const active = await page.evaluate(() => ({
-        debug: (window as any).viewer.surfacePivotController.getDebugState(),
-        focus: (window as any).viewer.cameraControls.getFocus().toArray()
-    }));
+    const active = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const debug = viewer.surfacePivotController.getDebugState();
+        const point = new (viewer.cameraControls.getPosition().constructor)(...debug.worldPoint);
+        const screen = viewer.camera.camera.worldToScreen(point);
+        return {
+            debug,
+            focus: viewer.cameraControls.getFocus().toArray(),
+            screen: [screen.x, screen.y]
+        };
+    });
     expect(active.debug.state).toBe('active');
     expect(active.debug.gesture).toBe('pan');
     expect(active.debug.pickCount).toBe(1);
     expect(Math.hypot(...active.focus.map((value: number, index: number) => value - focusBefore[index]))).toBeGreaterThan(0.05);
+    expect(active.screen[0] - screenBefore[0]).toBeCloseTo(100, 0);
+    expect(active.screen[1] - screenBefore[1]).toBeCloseTo(52, 0);
 
     await page.mouse.up({ button: 'right' });
     await expect(page.locator('.surface-pivot-marker')).not.toHaveClass(/visible/);

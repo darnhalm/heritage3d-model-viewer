@@ -178,7 +178,7 @@ const observerData: ObserverData = {
         mode: 'orbit',
         flySpeed: 1,
         surfacePivot: true,
-        mouseButtonsInverted: true,
+        mouseButtonsInverted: false,
         position: null,
         focus: null,
         ortho: false,
@@ -376,9 +376,9 @@ const observerData: ObserverData = {
     }
 };
 
-// V2 rolls out the inverted layout as the new default instead of inheriting the old automatic
-// `false` value. Choices made after the rollout continue to persist normally.
-const NAVIGATION_COOKIE = 'model-viewer-camera-navigation-v2';
+// Version the cookie when the shipped defaults change so an automatically persisted value from
+// the previous rollout does not silently override the new layout.
+const NAVIGATION_COOKIE = 'model-viewer-camera-navigation-v3';
 const NAVIGATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 let lastNavigationCookieValue: string | null = null;
 
@@ -422,6 +422,10 @@ const saveOptions = (observer: Observer, name: string) => {
     if (camera) {
         delete camera.ortho;
         delete camera.viewCube;
+        // Navigation preferences have their own versioned, model-independent cookie.
+        // Keeping another copy here would let stale defaults override a later rollout.
+        delete camera.surfacePivot;
+        delete camera.mouseButtonsInverted;
     }
     window.localStorage.setItem(`model-viewer-${name}`, JSON.stringify({
         camera,
@@ -442,6 +446,8 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
     // The backend is a runtime capability, not a scene/user preference. Ignore both the old and
     // current persisted keys so stale storage can never override automatic device selection.
     const filter = ['skybox.options', 'debug.renderMode', 'debug.alignmentMode', 'enableWebGPU', 'graphicsBackend',
+        // Ignore legacy model-local navigation values; the versioned cookie below is authoritative.
+        'camera.surfacePivot', 'camera.mouseButtonsInverted',
         // Сеансовое состояние проекции и навигационного куба: в старом localStorage оно
         // могло сохраниться, поэтому отбрасываем и на загрузке.
         'camera.ortho', 'camera.viewCube'];

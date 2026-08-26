@@ -35,6 +35,9 @@ const surfaceOldRotation = new Quat();
 const surfaceNewRotation = new Quat();
 const surfaceInverseRotation = new Quat();
 const surfaceDeltaRotation = new Quat();
+const surfacePanRotation = new Quat();
+const surfacePanForward = new Vec3();
+const surfacePanMove = new Vec3();
 
 /** Keyboard fly speed: normal WASD is precise, Shift restores the former cruising speed. */
 const FLY_KEYBOARD_SPEED = 1 / 3;
@@ -134,6 +137,10 @@ class CameraControls {
 
     private _surfaceOrbitDelta: Vec2 = new Vec2();
 
+    private _surfacePan: { phase: 'pending' | 'active'; depth: number } | null = null;
+
+    private _surfacePanDelta: Vec2 = new Vec2();
+
     private _mouseButtonsInverted = false;
 
     private _state: CameraControlsState = {
@@ -224,7 +231,7 @@ class CameraControls {
         if (next === this._mouseButtonsInverted) return;
         this._mouseButtonsInverted = next;
         this._state.mouse.fill(0);
-        this.endSurfaceOrbit();
+        this.endSurfaceNavigation();
     }
 
     get mouseButtonsInverted() {
@@ -236,7 +243,7 @@ class CameraControls {
         if (this._mode === mode) {
             return;
         }
-        if (mode !== 'orbit') this.endSurfaceOrbit();
+        if (mode !== 'orbit') this.endSurfaceNavigation();
         this._mode = mode;
 
         // detach old controller
@@ -319,6 +326,40 @@ class CameraControls {
         if (this._mode === 'orbit') this._orbitController.attach(this._pose, false);
     }
 
+    beginSurfacePan() {
+        if (!this.enabled || this._mode !== 'orbit') return;
+        this._orbitController.attach(this._pose, false);
+        this._surfacePan = { phase: 'pending', depth: 0 };
+        this._surfacePanDelta.set(0, 0);
+    }
+
+    activateSurfacePan(pivot: Vec3, dx: number, dy: number) {
+        if (!this._surfacePan || this._mode !== 'orbit') return;
+        surfacePanRotation.setFromEulerAngles(this._pose.angles);
+        surfacePanRotation.transformVector(Vec3.FORWARD, surfacePanForward);
+        this._surfacePan.phase = 'active';
+        this._surfacePan.depth = Math.max(0, surfacePanForward.dot(surfacePanMove.sub2(pivot, this._pose.position)));
+        this._surfacePanDelta.set(dx, dy);
+    }
+
+    queueSurfacePan(dx: number, dy: number) {
+        if (this._surfacePan?.phase !== 'active') return;
+        this._surfacePanDelta.x += dx;
+        this._surfacePanDelta.y += dy;
+    }
+
+    endSurfacePan() {
+        if (!this._surfacePan) return;
+        this._surfacePan = null;
+        this._surfacePanDelta.set(0, 0);
+        if (this._mode === 'orbit') this._orbitController.attach(this._pose, false);
+    }
+
+    private endSurfaceNavigation() {
+        this.endSurfaceOrbit();
+        this.endSurfacePan();
+    }
+
     private applySurfaceOrbit() {
         const pivot = this._surfaceOrbit?.pivot;
         const dx = this._surfaceOrbitDelta.x;
@@ -344,6 +385,21 @@ class CameraControls {
         this._pose.set(surfaceOffset.add(pivot), surfaceAngles, this._pose.distance);
     }
 
+    private applySurfacePan() {
+        const pan = this._surfacePan;
+        const dx = this._surfacePanDelta.x;
+        const dy = this._surfacePanDelta.y;
+        this._surfacePanDelta.set(0, 0);
+        if (!pan || pan.phase !== 'active' || (dx === 0 && dy === 0)) return;
+
+        // Translate at the picked point's view-space depth. Using the orbit focus distance here
+        // makes nearer/farther surface points slide away from the cursor during a pan.
+        screenToWorld(this._camera, dx, dy, pan.depth, surfacePanMove);
+        surfacePanRotation.setFromEulerAngles(this._pose.angles);
+        surfacePanRotation.transformVector(surfacePanMove, surfacePanMove);
+        this._pose.position.add(surfacePanMove);
+    }
+
     update(dt: number) {
         // read inputs (to clear their state) even when disabled
         const { key, button, mouse, wheel } = this._desktopInput.read();
@@ -361,7 +417,7 @@ class CameraControls {
             return;
         }
 
-        if (this._surfaceOrbit && this._mode !== 'orbit') this.endSurfaceOrbit();
+        if ((this._surfaceOrbit || this._surfacePan) && this._mode !== 'orbit') this.endSurfaceNavigation();
 
         const { keyCode } = KeyboardMouseSource;
         const el = document.activeElement as HTMLElement | null;
@@ -466,9 +522,10 @@ class CameraControls {
 
         // Pending/active surface gestures consume ordinary input so the stock OrbitController
         // cannot rotate around its old central focus at the same time.
-        if (this._surfaceOrbit) {
+        if (this._surfaceOrbit || this._surfacePan) {
             frame.read();
-            if (this._surfaceOrbit.phase === 'active') this.applySurfaceOrbit();
+            if (this._surfaceOrbit?.phase === 'active') this.applySurfaceOrbit();
+            if (this._surfacePan?.phase === 'active') this.applySurfacePan();
         } else {
             this._pose.copy(this._controller.update(frame, dt));
         }
