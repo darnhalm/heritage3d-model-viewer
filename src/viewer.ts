@@ -8188,6 +8188,11 @@ class Viewer {
 
         const s = this.tileManager.getStats();
         const mb = (s.bytes / (1024 * 1024)).toFixed(1);
+        const budgetMb = (s.bytesBudget / (1024 * 1024)).toFixed(0);
+        // Порог показываем только когда память его подняла: в норме это лишний шум, а под
+        // нехваткой это главное, что объясняет, почему картинка загрубела.
+        const sse = s.errorTargetScale > 1.01 ?
+            `   SSE ${s.errorTarget.toFixed(1)}px x${s.errorTargetScale.toFixed(2)} (memory)` : '';
         const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'state';
         const flags = [
             this.observer.get('debug.tileFreeze') ? 'FROZEN' : '',
@@ -8197,7 +8202,7 @@ class Viewer {
         this.setHudText(
             `TILES ${s.tiles}   mode: ${mode}${flags ? `   ${flags}` : ''}\n` +
             `ready ${s.ready}  loading ${s.loading}  queued ${s.queued}  failed ${s.failed}\n` +
-            `selected ${s.selected}   depth ${s.maxSelectedDepth}   ${mb} MB`
+            `selected ${s.selected}   depth ${s.maxSelectedDepth}   ${mb} / ${budgetMb} MB${sse}`
         );
 
         const picked = this.tileManager.getDebugPickedTileInfo();

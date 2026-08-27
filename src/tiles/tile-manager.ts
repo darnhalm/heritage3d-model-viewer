@@ -202,6 +202,50 @@ const CACHE_LOW_MEMORY_GB = 4;
  */
 const CACHE_BYTES_MOBILE_MAX = 128 * 1024 * 1024;
 
+/**
+ * Во сколько раз нехватка памяти может загрубить порог экранной ошибки.
+ *
+ * Одного вытеснения мало: видимые тайлы не выгружаются никогда, поэтому если в бюджет не
+ * влезает уже сам видимый набор, вытеснять нечего — кэш вырождается в «видимое и ничего
+ * сверх», и любое движение камеры перекачивает тайлы заново. Выход — не держать
+ * недостижимую детализацию, а честно её понизить: порог ошибки растёт, дерево уточняется
+ * мельче, набор становится легче. Так же поступает CesiumJS
+ * (`memoryAdjustedScreenSpaceError` при выходе за `cacheBytes`).
+ *
+ * Потолок в 8× нужен, чтобы патологический тайлсет не сваливался в один корневой тайл:
+ * лучше показать грубо и переполнить бюджет, чем показать пустоту.
+ */
+const MEMORY_ERROR_SCALE_MAX = 8;
+
+/**
+ * Шаг подъёма порога за кадр, доля.
+ *
+ * Мелкий намеренно: скачок порога — это одномоментная смена уровня по всему экрану. При 2%
+ * за кадр удвоение занимает порядка трети секунды, что читается как плавное огрубление, а
+ * не как рывок.
+ */
+const MEMORY_ERROR_SCALE_STEP = 0.02;
+
+/**
+ * Шаг возврата порога к базовому за кадр, доля.
+ *
+ * Возврат намеренно медленнее подъёма вчетверо, и это не эстетика. Подъём — реакция на то,
+ * что памяти не хватает уже сейчас; возврат — всего лишь проба, не полегчало ли, и каждая
+ * такая проба стоит повторной закачки тайлов. При равных скоростях система встаёт в
+ * качели: сбросили детализацию — влезли в бюджет — тут же вернули — снова не влезли.
+ * Асимметрия оставляет систему в безопасном состоянии и заставляет её лишь изредка
+ * проверять, можно ли обратно.
+ */
+const MEMORY_ERROR_RELAX_STEP = 0.005;
+
+/**
+ * Доля бюджета, ниже которой порог начинает возвращаться к базовому.
+ *
+ * Зазор между «повышать» и «понижать» обязателен: без него порог начнёт колебаться вокруг
+ * границы бюджета, потому что каждое его изменение само меняет объём набора.
+ */
+const MEMORY_RELEASE_FRACTION = 0.8;
+
 const tmpMat = new Mat4();
 const rotationMat = new Mat4();
 const tmpQuat = new Quat();
@@ -290,6 +334,9 @@ export class TileManager {
     /** Явный потолок кэша в байтах; `null` — считать от вьюпорта. */
     private readonly maxCachedBytes: number | null;
 
+    /** Во сколько раз порог экранной ошибки сейчас загрублен под нехватку памяти. */
+    private errorTargetScale = 1;
+
     private onChange: (transformChanged?: boolean) => void;
 
     private onWarning: (message: string) => void;
@@ -365,6 +412,9 @@ export class TileManager {
         failed: 0,
         selected: 0,
         bytes: 0,
+        bytesBudget: 0,
+        errorTarget: 0,
+        errorTargetScale: 1,
         maxSelectedDepth: 0,
         depthCounts: []
     };
@@ -576,13 +626,20 @@ export class TileManager {
             this.view.sseDenominator = 2 * Math.tan(0.5 * verticalFovRadians(cameraComponent));
         }
 
+        // Память меряется до обхода: обход обязан идти уже с поправленным порогом, иначе
+        // он успеет заказать то, что бюджет не переживёт. Обратная связь на кадр отстаёт —
+        // это и нужно, мгновенная реакция дала бы колебания.
+        const cachedBytes = this.cachedBytes();
+        const byteBudget = this.cacheByteBudget();
+        this.updateErrorTargetScale(cachedBytes, byteBudget);
+
         const selection: Tile[] = [];
         this.visit(this.rootTile, selection);
 
         this.applySelection(selection);
-        this.evictStale();
+        this.evictStale(cachedBytes, byteBudget);
         this.queue.dispatch();
-        this.updateStats(selection);
+        this.updateStats(selection, byteBudget);
     }
 
     /**
@@ -639,7 +696,7 @@ export class TileManager {
 
         // Гистерезис: чтобы на границе порога уровень не мигал туда-сюда каждый кадр,
         // начинать уточнение дороже, чем его продолжать.
-        const threshold = this.options.errorTarget * (tile.wasRefined ? 1 - HYSTERESIS : 1 + HYSTERESIS);
+        const threshold = this.errorTarget() * (tile.wasRefined ? 1 - HYSTERESIS : 1 + HYSTERESIS);
         const needsDetail = tile.error > threshold;
 
         // Уточняем по экранной ошибке (near/крупные — раньше), но при изоляции не глубже
@@ -965,6 +1022,56 @@ export class TileManager {
     }
 
     /**
+     * Порог экранной ошибки, действующий сейчас.
+     *
+     * @returns Порог в пикселях: базовый, загрублённый под нехватку памяти.
+     */
+    private errorTarget(): number {
+        return this.options.errorTarget * this.errorTargetScale;
+    }
+
+    /**
+     * Сколько байт контента сейчас в памяти.
+     *
+     * @returns Сумма по загруженным тайлам.
+     */
+    private cachedBytes(): number {
+        let bytes = 0;
+        this.loaded.forEach((tile) => {
+            bytes += tile.bytes;
+        });
+        return bytes;
+    }
+
+    /**
+     * Подтянуть порог экранной ошибки под текущее давление на память.
+     *
+     * Вверх — пока кэш не влезает в бюджет; вниз — только когда он опустился заметно ниже
+     * (см. `MEMORY_RELEASE_FRACTION`), и вчетверо медленнее. Оба хода мелкими шагами:
+     * порог виден на экране как уровень детализации.
+     *
+     * Полностью колебания это не убирает и убрать не может: тайл неделим, поэтому бюджет
+     * меньше одного тайла не выполним в принципе, и система будет медленно ходить между
+     * двумя уровнями. На осмысленных бюджетах (много тайлов) она сходится.
+     *
+     * @param cachedBytes - Сколько байт сейчас в памяти.
+     * @param byteBudget - Текущий потолок.
+     */
+    private updateErrorTargetScale(cachedBytes: number, byteBudget: number) {
+        if (cachedBytes > byteBudget) {
+            this.errorTargetScale = Math.min(
+                MEMORY_ERROR_SCALE_MAX,
+                this.errorTargetScale * (1 + MEMORY_ERROR_SCALE_STEP)
+            );
+        } else if (cachedBytes < byteBudget * MEMORY_RELEASE_FRACTION) {
+            this.errorTargetScale = Math.max(
+                1,
+                this.errorTargetScale / (1 + MEMORY_ERROR_RELAX_STEP)
+            );
+        }
+    }
+
+    /**
      * Потолок кэша в байтах контента.
      *
      * Считается на каждом вызове, а не запоминается: и размер окна, и `camera.pixelScale`
@@ -1009,16 +1116,15 @@ export class TileManager {
      *
      * Порядок вытеснения — та же лестница приоритетов, что и у загрузки, только с конца:
      * первым уходит то, что грузилось бы последним. Видимый сейчас тайл не выгружается
-     * никогда.
+     * никогда — а значит, когда в бюджет не влезает уже сам видимый набор, вытеснение
+     * бессильно и память разгружает загрубление порога (`updateErrorTargetScale`).
+     *
+     * @param cachedBytes - Сколько байт сейчас в памяти.
+     * @param byteBudget - Текущий потолок кэша.
      */
-    private evictStale() {
-        let cachedBytes = 0;
-        this.loaded.forEach((tile) => {
-            cachedBytes += tile.bytes;
-        });
-
+    private evictStale(cachedBytes: number, byteBudget: number) {
         let excessTiles = this.loaded.size - this.options.maxCachedTiles;
-        let excessBytes = cachedBytes - this.cacheByteBudget();
+        let excessBytes = cachedBytes - byteBudget;
         if (excessTiles <= 0 && excessBytes <= 0) {
             return;
         }
@@ -1058,7 +1164,7 @@ export class TileManager {
         this.loaded.delete(tile);
     }
 
-    private updateStats(selection: Tile[]) {
+    private updateStats(selection: Tile[], byteBudget: number) {
         const stats: TileStats = {
             tiles: 0,
             ready: 0,
@@ -1067,6 +1173,9 @@ export class TileManager {
             failed: 0,
             selected: selection.length,
             bytes: 0,
+            bytesBudget: byteBudget,
+            errorTarget: this.errorTarget(),
+            errorTargetScale: this.errorTargetScale,
             maxSelectedDepth: 0,
             depthCounts: []
         };
