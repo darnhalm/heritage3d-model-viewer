@@ -10,6 +10,7 @@ import {
     BLENDEQUATION_ADD,
     EVENT_KEYDOWN,
     EVENT_KEYUP,
+    FILTER_LINEAR,
     FILTER_NEAREST,
     KEY_CONTROL,
     KEY_ESCAPE,
@@ -1872,11 +1873,11 @@ class Viewer {
 
     private getPickRay(x: number, y: number) {
         const rect = this.canvas.getBoundingClientRect();
-        const device = this.app.graphicsDevice;
         // Mouse coordinates are CSS pixels while PlayCanvas screenToWorld expects
         // render-target pixels. The difference is especially visible in SD mode.
-        const screenX = x * device.width / Math.max(1, rect.width);
-        const screenY = y * device.height / Math.max(1, rect.height);
+        const render = this.renderResolution();
+        const screenX = x * render.width / Math.max(1, rect.width);
+        const screenY = y * render.height / Math.max(1, rect.height);
         const origin = this.camera.camera.screenToWorld(screenX, screenY, this.camera.camera.nearClip);
         const end = this.camera.camera.screenToWorld(screenX, screenY, this.camera.camera.farClip);
         const direction = end.sub(origin).normalize();
@@ -2811,12 +2812,31 @@ class Viewer {
         }
     }
 
+    /**
+     * Разрешение, в котором рисуется сцена.
+     *
+     * Отличается от разрешения бэкбуфера на `camera.pixelScale`: сцена рисуется мельче, а до
+     * экрана её растягивает финальный проход `Multiframe`. Всё, что рассуждает о «пикселях
+     * картинки» — экранная ошибка тайлов, пересчёт координат мыши в пиксели цели рендера —
+     * должно спрашивать это, а не размер устройства.
+     *
+     * @returns Ширина и высота цели рендера в пикселях.
+     */
+    renderResolution(): { width: number; height: number } {
+        const device = this.app.graphicsDevice;
+        const scale = Math.max(1, Number(this.observer.get('camera.pixelScale')) || 1);
+        return {
+            width: Math.max(1, Math.floor(device.width / scale)),
+            height: Math.max(1, Math.floor(device.height / scale))
+        };
+    }
+
     rebuildRenderTargets() {
         const device = this.app.graphicsDevice;
 
-        // get the canvas UI size
-        const widthPixels = device.width;
-        const heightPixels = device.height;
+        const { width: widthPixels, height: heightPixels } = this.renderResolution();
+        this.observer.set('runtime.viewportWidth', widthPixels);
+        this.observer.set('runtime.viewportHeight', heightPixels);
 
         const old = this.camera.camera.renderTarget;
         if (this.isCapturingCoverImage || this.isCapturingTopDown || (old && old.width === widthPixels && old.height === heightPixels)) {
@@ -2826,15 +2846,19 @@ class Viewer {
         // out with the old
         this.destroyRenderTargets();
 
-        const createTexture = (width: number, height: number, format: number) => {
+        // Цвет фильтруется линейно: при `pixelScale > 1` эту цель растягивает финальный
+        // проход, и точечная выборка дала бы ровно ту же лесенку, ради ухода от которой всё
+        // и затевалось. При масштабе 1 выборка попадает в центры текселей, и линейная
+        // фильтрация неотличима от точечной.
+        const createTexture = (width: number, height: number, format: number, filter: number) => {
             return new Texture(device, {
                 name: 'viewer-rt-texture',
                 width: width,
                 height: height,
                 format: format,
                 mipmaps: false,
-                minFilter: FILTER_NEAREST,
-                magFilter: FILTER_NEAREST,
+                minFilter: filter,
+                magFilter: filter,
                 addressU: ADDRESS_CLAMP_TO_EDGE,
                 addressV: ADDRESS_CLAMP_TO_EDGE
             });
@@ -2843,8 +2867,8 @@ class Viewer {
         const maxSamples = Number((device as GraphicsDevice & { maxSamples?: number }).maxSamples ?? 1);
 
         // in with the new
-        const colorBuffer = createTexture(widthPixels, heightPixels, PIXELFORMAT_RGBA8);
-        const depthBuffer = createTexture(widthPixels, heightPixels, PIXELFORMAT_DEPTH);
+        const colorBuffer = createTexture(widthPixels, heightPixels, PIXELFORMAT_RGBA8, FILTER_LINEAR);
+        const depthBuffer = createTexture(widthPixels, heightPixels, PIXELFORMAT_DEPTH, FILTER_NEAREST);
         const renderTarget = new RenderTarget({
             name: 'viewer-rt',
             colorBuffer: colorBuffer,
@@ -6187,11 +6211,11 @@ class Viewer {
 
     private fragmentWorldToCssScreen(point: Vec3) {
         const screen = this.camera.camera.worldToScreen(point);
-        const device = this.app.graphicsDevice;
+        const render = this.renderResolution();
         const rect = this.canvas.getBoundingClientRect();
         return new Vec3(
-            screen.x * rect.width / Math.max(1, device.width),
-            screen.y * rect.height / Math.max(1, device.height),
+            screen.x * rect.width / Math.max(1, render.width),
+            screen.y * rect.height / Math.max(1, render.height),
             screen.z
         );
     }
@@ -7871,13 +7895,14 @@ class Viewer {
         }
 
         if (this.canvasResize) {
+            // Бэкбуфер держим в нативном разрешении экрана. `camera.pixelScale` уменьшает
+            // не его, а цель, в которую рисуется сцена: тогда растяжку до экрана делает наш
+            // финальный проход, а не композитор браузера ближайшим соседом.
             const { width, height } = this.getCanvasSize();
-            const pixelScale = this.observer.get('camera.pixelScale');
-            const widthPixels = Math.floor((width * window.devicePixelRatio) / pixelScale);
-            const heightPixels = Math.floor((height * window.devicePixelRatio) / pixelScale);
-            this.app.graphicsDevice.setResolution(widthPixels, heightPixels);
-            this.observer.set('runtime.viewportWidth', widthPixels);
-            this.observer.set('runtime.viewportHeight', heightPixels);
+            this.app.graphicsDevice.setResolution(
+                Math.max(1, Math.floor(width * window.devicePixelRatio)),
+                Math.max(1, Math.floor(height * window.devicePixelRatio))
+            );
             this.canvasResize = false;
         }
 

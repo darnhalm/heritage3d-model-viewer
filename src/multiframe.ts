@@ -4,7 +4,7 @@ import {
     BLENDMODE_ONE_MINUS_CONSTANT,
     EVENT_POSTRENDER,
     EVENT_PRERENDER,
-    FILTER_NEAREST,
+    FILTER_LINEAR,
     PIXELFORMAT_RGBA8,
     PIXELFORMAT_RGBA16F,
     PIXELFORMAT_RGBA32F,
@@ -226,14 +226,18 @@ class Multiframe {
             fragmentWGSL
         });
 
+        // Накопитель живёт в разрешении сцены, а финальный проход тянет его на бэкбуфер,
+        // который может быть крупнее (`camera.pixelScale`). Поэтому фильтрация линейная: в
+        // накопление она не вмешивается — там выборка идёт один в один, — а растяжку до
+        // экрана делает гладкой вместо лесенки.
         this.accumTexture = new Texture(device, {
             name: 'multiframe-texture',
             width: device.width,
             height: device.height,
             format: choosePixelFormat(device),
             mipmaps: false,
-            minFilter: FILTER_NEAREST,
-            magFilter: FILTER_NEAREST
+            minFilter: FILTER_LINEAR,
+            magFilter: FILTER_LINEAR
         });
 
         this.accumRenderTarget = new RenderTarget({

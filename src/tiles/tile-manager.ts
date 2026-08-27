@@ -622,7 +622,7 @@ export class TileManager {
             this.frustum.setFromMat4(tmpMat);
 
             this.view.cameraPos.copy(this.camera.getPosition());
-            this.view.viewportHeight = Math.max(1, this.app.graphicsDevice.height);
+            this.view.viewportHeight = this.renderHeight();
             this.view.sseDenominator = 2 * Math.tan(0.5 * verticalFovRadians(cameraComponent));
         }
 
@@ -1022,6 +1022,20 @@ export class TileManager {
     }
 
     /**
+     * Высота картинки в пикселях — та, в которой сцена рисуется на самом деле.
+     *
+     * Это не размер бэкбуфера: при `camera.pixelScale > 1` сцена рисуется в цель поменьше, а
+     * до экрана её растягивает финальный проход. Экранная ошибка обязана считаться от той
+     * картинки, которая реально рисуется, иначе уменьшение разрешения не облегчит отбор.
+     *
+     * @returns Высота цели рендера, минимум 1.
+     */
+    private renderHeight(): number {
+        const target = this.camera.camera?.renderTarget;
+        return Math.max(1, target?.height ?? this.app.graphicsDevice.height);
+    }
+
+    /**
      * Порог экранной ошибки, действующий сейчас.
      *
      * @returns Порог в пикселях: базовый, загрублённый под нехватку памяти.
@@ -1085,8 +1099,9 @@ export class TileManager {
             return this.maxCachedBytes;
         }
 
+        const target = this.camera.camera?.renderTarget;
         const device = this.app.graphicsDevice;
-        const pixels = Math.max(1, device.width * device.height);
+        const pixels = Math.max(1, (target?.width ?? device.width) * (target?.height ?? device.height));
         const budget = Math.min(
             CACHE_BYTES_MAX,
             Math.max(CACHE_BYTES_MIN, pixels * CACHE_BYTES_PER_PIXEL)
@@ -1384,7 +1399,7 @@ export class TileManager {
                 tmpMat.mul2(camera.projectionMatrix, camera.viewMatrix);
                 this.frustum.setFromMat4(tmpMat);
                 this.view.cameraPos.copy(this.camera.getPosition());
-                this.view.viewportHeight = Math.max(1, this.app.graphicsDevice.height);
+                this.view.viewportHeight = this.renderHeight();
                 this.view.sseDenominator = 2 * Math.tan(0.5 * verticalFovRadians(camera));
             }
         }
