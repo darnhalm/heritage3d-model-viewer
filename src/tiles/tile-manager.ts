@@ -179,6 +179,21 @@ const CACHE_BYTES_MAX = 256 * 1024 * 1024;
 /** Порог `navigator.deviceMemory` (ГБ), ниже которого бюджет делится пополам. */
 const CACHE_LOW_MEMORY_GB = 4;
 
+/**
+ * Потолок бюджета для телефонов и планшетов.
+ *
+ * По числу пикселей телефон выглядит как настольный монитор (390×844 при dpr 3 — это почти
+ * 3 Мпx), а по доступной памяти — нет. Формула «байт на пиксель» отвечает на вопрос
+ * «сколько тайлов понадобится» и отвечает верно; отдельный потолок отвечает на «сколько
+ * можно себе позволить». Одного `deviceMemory` для этого мало: его отдаёт только Chromium,
+ * а в Safari на iPhone его нет.
+ *
+ * 64 МБ — это то, что даёт таблица бюджетов из docs/GLB-TILING-PLAYCANVAS.md, если
+ * пересчитать её 128–256 МБ декодированных данных обратно в скачанные байты по тем же
+ * 4–10× на распаковку.
+ */
+const CACHE_BYTES_MOBILE_MAX = 64 * 1024 * 1024;
+
 const tmpMat = new Mat4();
 const rotationMat = new Mat4();
 const tmpQuat = new Quat();
@@ -965,8 +980,16 @@ export class TileManager {
         // `deviceMemory` отдаёт только Chromium; где его нет, остаётся общий потолок.
         const memoryGb = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
         const lowMemory = typeof memoryGb === 'number' && memoryGb <= CACHE_LOW_MEMORY_GB;
+        const scaled = lowMemory ? budget / 2 : budget;
 
-        return lowMemory ? budget / 2 : budget;
+        // Грубый указатель + тач — это телефон или планшет. Проверяются оба признака: у
+        // сенсорного ноутбука тачскрин есть, но основной указатель всё равно мышь, и
+        // резать ему кэш не за что.
+        const coarsePointer = typeof matchMedia === 'function' &&
+            matchMedia('(pointer: coarse)').matches &&
+            navigator.maxTouchPoints > 0;
+
+        return coarsePointer ? Math.min(scaled, CACHE_BYTES_MOBILE_MAX) : scaled;
     }
 
     /**
