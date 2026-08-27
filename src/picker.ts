@@ -5,6 +5,25 @@ const uint8 = new Uint8Array(float32.buffer);
 const two = new Vec4(2, 2, 2, 1);
 const one = new Vec4(1, 1, 1, 0);
 
+/**
+ * Во сколько раз сторона буфера пикинга меньше стороны канваса.
+ *
+ * `pick` перерисовывает слой World целиком ради одного пикселя, то есть стоит примерно
+ * лишнего кадра сцены. Половина стороны — вчетверо меньше растеризации. Платим точностью
+ * порядка одного CSS-пикселя: это видно только на силуэтах, а вызывающая сторона там, где
+ * попадает CPU-рейкаст, и так предпочитает его (см. `selection-controller`).
+ */
+const PICK_SCALE = 0.5;
+
+/**
+ * Загнать целую координату в диапазон буфера.
+ *
+ * @param v - Координата.
+ * @param max - Наибольший допустимый индекс.
+ * @returns Координата внутри `0..max`.
+ */
+const clampIndex = (v: number, max: number) => Math.min(max, Math.max(0, v));
+
 class Picker {
     app: AppBase;
 
@@ -22,10 +41,15 @@ class Picker {
         const { app, camera } = this;
         const { graphicsDevice } = app;
         const { canvas } = graphicsDevice;
-        const width = canvas.clientWidth;
-        const height = canvas.clientHeight;
+        const width = Math.max(1, Math.round(canvas.clientWidth * PICK_SCALE));
+        const height = Math.max(1, Math.round(canvas.clientHeight * PICK_SCALE));
 
-        y = graphicsDevice.isWebGL2 ? height - y - 1 : y;
+        // Координаты приходят в CSS-пикселях канваса — переводим в тексел буфера пикинга.
+        // Считаем от центра CSS-пикселя (`+ 0.5`), иначе при уменьшении буфера выборка
+        // систематически съезжает к левому верхнему углу блока.
+        const px = clampIndex(Math.floor((x + 0.5) * PICK_SCALE), width - 1);
+        const scaledY = clampIndex(Math.floor((y + 0.5) * PICK_SCALE), height - 1);
+        const py = graphicsDevice.isWebGL2 ? height - scaledY - 1 : scaledY;
 
         // construct picker on demand
         if (!this.picker) {
@@ -37,7 +61,7 @@ class Picker {
         picker.resize(width, height);
         picker.prepare(camera.camera, app.scene, [app.scene.layers.getLayerByName('World')]);
         const renderTarget = (picker as any).renderTarget;
-        const pixels = await renderTarget.colorBuffer.read(x, y, 1, 1, {
+        const pixels = await renderTarget.colorBuffer.read(px, py, 1, 1, {
             renderTarget,
             immediate: true
         });
@@ -52,8 +76,9 @@ class Picker {
             return null;
         }
 
-        // clip space
-        const pos = new Vec4(x / width, y / height, depth, 1).mul(two).sub(one);
+        // clip space. Прочитанная глубина принадлежит текселу целиком, поэтому обратно
+        // распрямляем его центр, а не угол — иначе появляется сдвиг в полтексела.
+        const pos = new Vec4((px + 0.5) / width, (py + 0.5) / height, depth, 1).mul(two).sub(one);
 
         if (!graphicsDevice.isWebGL2) {
             pos.y *= -1;

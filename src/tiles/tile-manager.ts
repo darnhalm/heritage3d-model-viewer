@@ -143,6 +143,11 @@ export type TileManagerOptions = {
     maxConcurrent?: number;
     /** Сколько готовых, но невидимых тайлов держать в памяти. */
     maxCachedTiles?: number;
+    /**
+     * Потолок кэша по байтам контента. По умолчанию считается от площади вьюпорта,
+     * см. `cacheByteBudget`.
+     */
+    maxCachedBytes?: number;
     /** Куда писать предупреждения о неподдержанных частях формата. */
     onWarning?: (message: string) => void;
 };
@@ -151,6 +156,28 @@ const UP_AXIS_ROTATION = -90;
 
 /** Ширина зоны гистерезиса вокруг порога SSE, доля от порога. */
 const HYSTERESIS = 0.15;
+
+/**
+ * Бюджет кэша тайлов: байт контента на пиксель вьюпорта.
+ *
+ * Тайлы отбираются по экранной ошибке в пикселях, поэтому рабочий набор растёт вместе с
+ * разрешением — бюджет, привязанный к площади вьюпорта, держит одинаковый запас и на
+ * телефоне, и на 4K, чего фиксированное число тайлов не даёт.
+ *
+ * Байты здесь — размер скачанных GLB, а не занятая видеопамять: точной цифры по VRAM у нас
+ * нет, а сетевой объём ей примерно пропорционален (по docs/GLB-TILING-PLAYCANVAS.md
+ * распаковка даёт 4–10×). 48 Б/px — это ~100 МБ GLB на 1920×1080.
+ */
+const CACHE_BYTES_PER_PIXEL = 48;
+
+/** Нижняя граница бюджета: в маленьком окне кэш не должен схлопываться до бесполезного. */
+const CACHE_BYTES_MIN = 64 * 1024 * 1024;
+
+/** Верхняя граница: на 4K линейный рост упёрся бы в память раньше, чем принёс пользу. */
+const CACHE_BYTES_MAX = 256 * 1024 * 1024;
+
+/** Порог `navigator.deviceMemory` (ГБ), ниже которого бюджет делится пополам. */
+const CACHE_LOW_MEMORY_GB = 4;
 
 const tmpMat = new Mat4();
 const rotationMat = new Mat4();
@@ -236,6 +263,9 @@ export class TileManager {
     private camera: Entity;
 
     private options: Required<Pick<TileManagerOptions, 'errorTarget' | 'maxConcurrent' | 'maxCachedTiles'>>;
+
+    /** Явный потолок кэша в байтах; `null` — считать от вьюпорта. */
+    private readonly maxCachedBytes: number | null;
 
     private onChange: (transformChanged?: boolean) => void;
 
@@ -338,6 +368,7 @@ export class TileManager {
             maxConcurrent: options.maxConcurrent ?? 6,
             maxCachedTiles: options.maxCachedTiles ?? 128
         };
+        this.maxCachedBytes = options.maxCachedBytes ?? null;
 
         this.root = new Entity('tilesRoot', this.app);
         options.parent.addChild(this.root);
@@ -911,14 +942,53 @@ export class TileManager {
     }
 
     /**
+     * Потолок кэша в байтах контента.
+     *
+     * Считается на каждом вызове, а не запоминается: и размер окна, и `camera.pixelScale`
+     * меняются на ходу, а вместе с ними меняется и то, сколько тайлов отбирается по
+     * экранной ошибке.
+     *
+     * @returns Бюджет в байтах.
+     */
+    private cacheByteBudget(): number {
+        if (this.maxCachedBytes !== null) {
+            return this.maxCachedBytes;
+        }
+
+        const device = this.app.graphicsDevice;
+        const pixels = Math.max(1, device.width * device.height);
+        const budget = Math.min(
+            CACHE_BYTES_MAX,
+            Math.max(CACHE_BYTES_MIN, pixels * CACHE_BYTES_PER_PIXEL)
+        );
+
+        // `deviceMemory` отдаёт только Chromium; где его нет, остаётся общий потолок.
+        const memoryGb = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+        const lowMemory = typeof memoryGb === 'number' && memoryGb <= CACHE_LOW_MEMORY_GB;
+
+        return lowMemory ? budget / 2 : budget;
+    }
+
+    /**
      * Вытеснить лишнее из памяти.
+     *
+     * Потолка два: по числу тайлов — он держит в узде количество entity и драв-коллов, и по
+     * байтам контента — он держит память. Одного числа тайлов мало: 128 тайлов по 10 МБ и
+     * 128 по 200 КБ отличаются на три порядка. Превышение любого запускает вытеснение.
      *
      * Порядок вытеснения — та же лестница приоритетов, что и у загрузки, только с конца:
      * первым уходит то, что грузилось бы последним. Видимый сейчас тайл не выгружается
      * никогда.
      */
     private evictStale() {
-        if (this.loaded.size <= this.options.maxCachedTiles) {
+        let cachedBytes = 0;
+        this.loaded.forEach((tile) => {
+            cachedBytes += tile.bytes;
+        });
+
+        let excessTiles = this.loaded.size - this.options.maxCachedTiles;
+        let excessBytes = cachedBytes - this.cacheByteBudget();
+        if (excessTiles <= 0 && excessBytes <= 0) {
             return;
         }
 
@@ -926,13 +996,15 @@ export class TileManager {
             !tile.selected && tile.lastUsedFrame !== this.frame);
         candidates.sort((a, b) => compareTilePriority(b, a, this.frame));
 
-        let excess = this.loaded.size - this.options.maxCachedTiles;
         for (const tile of candidates) {
-            if (excess <= 0) {
+            if (excessTiles <= 0 && excessBytes <= 0) {
                 break;
             }
+            // `unloadTile` обнуляет `tile.bytes`, поэтому размер снимается до выгрузки.
+            const bytes = tile.bytes;
             this.unloadTile(tile);
-            excess--;
+            excessTiles--;
+            excessBytes -= bytes;
         }
     }
 
