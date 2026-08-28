@@ -11,6 +11,29 @@ import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
 import { hasSeenTour } from './tour-seen';
 
+/**
+ * Делители разрешения сцены.
+ *
+ * Дробные ступени взяты из пресетов FSR 1: там качество задают долей стороны — Ultra Quality
+ * 77%, Quality 67%, Balanced 59%, Performance 50%. В делителях это 1.3, 1.5, 1.7 и 2. Целые
+ * 4/8/16 оставлены как были: пользы в них немного, но на них удобно смотреть, во что упирается
+ * сцена.
+ *
+ * Почему дробные вообще нужны: пиксели считаются по площади, поэтому шаг с 1 сразу на 2 — это
+ * не «вдвое меньше работы», а вчетверо, и картинка проседает соответственно. 1.5 даёт 44%
+ * пикселей — почти весь выигрыш при заметно меньшей потере чёткости.
+ */
+const PIXEL_SCALES: Option[] = [
+    { v: 1, t: '1 — 100%' },
+    { v: 1.3, t: '1.3 — 77%' },
+    { v: 1.5, t: '1.5 — 67%' },
+    { v: 1.7, t: '1.7 — 59%' },
+    { v: 2, t: '2 — 50%' },
+    { v: 4, t: '4 — 25%' },
+    { v: 8, t: '8' },
+    { v: 16, t: '16' }
+];
+
 type PoiItem = {
     id: string;
     number: number;
@@ -306,7 +329,7 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     label={t('Pixel Scale', lang)}
                     value={props.observerData.camera.pixelScale}
                     type='number'
-                    options={[1, 2, 4, 8, 16].map(v => ({ v: v, t: Number(v).toString() }))}
+                    options={PIXEL_SCALES}
                     setProperty={(value: number) => props.setProperty('camera.pixelScale', value)} />
                 <Detail label={t('Viewport', lang)} value={`${props.observerData.runtime?.viewportWidth ?? 0} x ${props.observerData.runtime?.viewportHeight ?? 0}`} />
                 <Toggle
