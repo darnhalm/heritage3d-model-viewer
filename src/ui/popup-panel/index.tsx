@@ -102,7 +102,9 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                 this.props.observerData.fragment.enabled
             ));
         const showInfoButton = !(embed?.enabled) || embed.info || embed.controls;
-        const showMeasureButton = !(embed?.enabled) || embed.measure;
+        // Измерения требуют точных кликов по поверхности и чтения чисел в панели — на
+        // телефоне это нерабочий сценарий, поэтому инструмент туда не выносится.
+        const showMeasureButton = (!(embed?.enabled) || embed.measure) && !isMobileLayout();
         const showFitButton = !(embed?.enabled) || embed.fit;
         const showFullscreenButton = !(embed?.enabled) || embed.fullscreen;
         const showHdButton = !(embed?.enabled) || embed.hd;

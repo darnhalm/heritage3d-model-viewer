@@ -466,8 +466,10 @@ class SettingsService {
         // На узком экране режим качества — не свойство модели, а свойство устройства: файл
         // настроек, сохранённый с десктопа, иначе включил бы телефону HD и полное разрешение
         // при каждой загрузке. Переключить руками это не мешает, сбрасывается только импорт.
+        // Там же и режим измерений: кнопки для него на телефоне нет, и включённым из файла
+        // он оставил бы пользователя в режиме, из которого нечем выйти.
         const filter = isMobileLayout() ?
-            [...SettingsService.SETTINGS_FILTER_PATHS, 'camera.hq', 'camera.pixelScale'] :
+            [...SettingsService.SETTINGS_FILTER_PATHS, 'camera.hq', 'camera.pixelScale', 'measure.enabled'] :
             SettingsService.SETTINGS_FILTER_PATHS;
         const blockedKeys = new Set(['__proto__', 'constructor', 'prototype']);
         const colorPaths = ['skybox.backgroundColor', 'light.color', 'theme.primaryColor', 'debug.wireframeColor'];
