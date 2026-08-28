@@ -89,7 +89,7 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
         savedSpeed: 2.5,
         savedSurfacePivot: false,
         savedMouseButtonsInverted: true,
-        cookie: expect.stringContaining('model-viewer-camera-navigation-v3=0.1')
+        cookie: expect.stringContaining('model-viewer-camera-navigation-v4=0.1')
     });
 });
 
