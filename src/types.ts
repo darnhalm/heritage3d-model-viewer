@@ -75,6 +75,8 @@ export interface ObserverData {
         pixelScale: number,
         multisampleSupported: boolean,
         multisample: boolean,
+        /** Понижать разрешение сцены, пока камера движется. */
+        dynamicScale?: boolean,
         hq: boolean,
         mode: 'orbit' | 'fly',
         flySpeed: number,

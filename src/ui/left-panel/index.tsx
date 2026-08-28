@@ -289,6 +289,7 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                a.camera?.fov !== b.camera?.fov ||
                a.camera?.tonemapping !== b.camera?.tonemapping ||
                a.camera?.pixelScale !== b.camera?.pixelScale ||
+               a.camera?.dynamicScale !== b.camera?.dynamicScale ||
                a.camera?.multisampleSupported !== b.camera?.multisampleSupported ||
                a.camera?.multisample !== b.camera?.multisample ||
                a.camera?.hq !== b.camera?.hq ||
@@ -336,6 +337,11 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     type='string'
                     options={PIXEL_SCALES}
                     setProperty={(value: string) => props.setProperty('camera.pixelScale', Number(value))} />
+                <Toggle
+                    label={t('Lower while moving', lang)}
+                    value={props.observerData.camera.dynamicScale !== false}
+                    setProperty={(value: boolean) => props.setProperty('camera.dynamicScale', value)}
+                />
                 <Detail label={t('Viewport', lang)} value={`${props.observerData.runtime?.viewportWidth ?? 0} x ${props.observerData.runtime?.viewportHeight ?? 0}`} />
                 <Toggle
                     label={t('Multisample', lang)}

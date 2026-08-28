@@ -177,6 +177,7 @@ const observerData: ObserverData = {
         pixelScale: isMobileLayout() ? SD_PIXEL_SCALE : 1,
         multisampleSupported: true,
         multisample: true,
+        dynamicScale: true,
         hq: !isMobileLayout(),
         mode: 'orbit',
         flySpeed: 1,

@@ -118,6 +118,21 @@ import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from 
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, SurfacePivotController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry, intersectMeshTriangles } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
+/**
+ * Во сколько раз мельче рисуется сцена, пока камера движется.
+ *
+ * 1.5 — из замеров `npm run benchmark:render-scale`: пикселей остаётся 44%, а на сплатовой
+ * сцене это 37 -> 51 кадр. Шаг на 2 дал бы больше, но мыло в движении уже заметно.
+ */
+const MOTION_PIXEL_SCALE = 1.5;
+
+/**
+ * Сколько камера должна простоять, прежде чем вернуть полное разрешение, мс.
+ *
+ * Короче — картинка дёргается на паузах внутри жеста; длиннее — заметна задержка резкости
+ * после остановки.
+ */
+const MOTION_SETTLE_MS = 180;
 
 type MeshoptDecoderModule = typeof import('../lib/meshopt_decoder.module.js')['MeshoptDecoder'];
 
@@ -707,6 +722,15 @@ class Viewer {
     dirtySkeleton: boolean;
 
     dirtyGrid: boolean;
+
+    /** Цель рендера другого размера, придержанная для обратного переключения. */
+    spareRenderTarget: RenderTarget | null;
+
+    /** Матрица камеры на прошлом кадре — по ней узнаём о движении. */
+    lastCameraTransform: Float32Array;
+
+    /** Когда камера двигалась в последний раз, мс. */
+    cameraMovedAt: number;
 
     dirtyNormals: boolean;
 
@@ -1357,6 +1381,9 @@ class Viewer {
         this.dirtyBounds = false;
         this.dirtySkeleton = false;
         this.dirtyGrid = false;
+        this.spareRenderTarget = null;
+        this.lastCameraTransform = new Float32Array(16);
+        this.cameraMovedAt = 0;
         this.dirtyNormals = false;
 
         this.sceneBounds = new BoundingBox();
@@ -2811,7 +2838,27 @@ class Viewer {
         this.cameraControls.reset(focus, start);
     }
 
+    /**
+     * Назначить цель рендера обеим камерам.
+     *
+     * @param rt - Цель рендера или `null`.
+     */
+    private assignRenderTarget(rt: RenderTarget | null) {
+        this.camera.camera.renderTarget = rt;
+        if (this.activeSceneCamera) {
+            this.activeSceneCamera.renderTarget = rt;
+        }
+    }
+
     destroyRenderTargets() {
+        // Придержанная цель другого размера живёт ровно до этого момента: её зовут при смене
+        // мультисэмплинга и при сбросе, после которых запас всё равно не подошёл бы.
+        if (this.spareRenderTarget) {
+            this.spareRenderTarget.colorBuffer?.destroy();
+            this.spareRenderTarget.depthBuffer?.destroy();
+            this.spareRenderTarget.destroy();
+            this.spareRenderTarget = null;
+        }
         const rt = this.camera.camera.renderTarget;
         if (rt && this.activeSceneCamera && this.activeSceneCamera.renderTarget === rt) {
             this.activeSceneCamera.renderTarget = null;
@@ -2834,9 +2881,43 @@ class Viewer {
      *
      * @returns Ширина и высота цели рендера в пикселях.
      */
+    /**
+     * Отметить движение камеры, сравнив её положение с предыдущим кадром.
+     *
+     * Сравниваем именно матрицу, а не причину перерисовки: `renderNextFrame` зовут и правки
+     * интерфейса, и мини-статистика, и от них ронять разрешение незачем.
+     */
+    private updateCameraMotion() {
+        const m = this.camera.getWorldTransform().data;
+        const prev = this.lastCameraTransform;
+        let moved = false;
+        for (let i = 0; i < 16; i++) {
+            if (prev[i] !== m[i]) {
+                moved = true;
+                break;
+            }
+        }
+        if (moved) {
+            prev.set(m);
+            this.cameraMovedAt = performance.now();
+        }
+    }
+
+    /**
+     * Во сколько раз мельче рисовать сцену прямо сейчас.
+     *
+     * @returns Множитель к `camera.pixelScale`: больше единицы, пока камера движется.
+     */
+    private motionScale(): number {
+        if (this.observer.get('camera.dynamicScale') === false) return 1;
+        // Пока идёт съёмка обложки или вида сверху, разрешение трогать нельзя: кадр уйдёт в файл.
+        if (this.isCapturingCoverImage || this.isCapturingTopDown) return 1;
+        return performance.now() - this.cameraMovedAt < MOTION_SETTLE_MS ? MOTION_PIXEL_SCALE : 1;
+    }
+
     renderResolution(): { width: number; height: number } {
         const device = this.app.graphicsDevice;
-        const scale = Math.max(1, Number(this.observer.get('camera.pixelScale')) || 1);
+        const scale = Math.max(1, Number(this.observer.get('camera.pixelScale')) || 1) * this.motionScale();
         return {
             width: Math.max(1, Math.floor(device.width / scale)),
             height: Math.max(1, Math.floor(device.height / scale))
@@ -2855,8 +2936,34 @@ class Viewer {
             return;
         }
 
+        const maxSamplesEarly = Number((device as GraphicsDevice & { maxSamples?: number }).maxSamples ?? 1);
+        const wantSamples = this.observer.get('camera.multisample') ? maxSamplesEarly : 1;
+
+        // Понижение на время движения — это переключение между двумя размерами, туда и обратно
+        // по нескольку раз в секунду. Прошлую цель поэтому не уничтожаем, а придерживаем:
+        // выделение двух текстур посреди жеста стоит дороже, чем экономит меньшее разрешение,
+        // и рывок пришёлся бы ровно на начало движения.
+        const spare = this.spareRenderTarget;
+        if (spare && spare.width === widthPixels && spare.height === heightPixels && spare.samples === wantSamples) {
+            this.spareRenderTarget = old ?? null;
+            this.assignRenderTarget(spare);
+            this.syncMultiframeCamera();
+            return;
+        }
+
         // out with the old
-        this.destroyRenderTargets();
+        if (old && old.samples === wantSamples) {
+            // Размер не подошёл, но цель ещё пригодится при обратном переключении.
+            if (this.spareRenderTarget) {
+                this.spareRenderTarget.colorBuffer?.destroy();
+                this.spareRenderTarget.depthBuffer?.destroy();
+                this.spareRenderTarget.destroy();
+            }
+            this.spareRenderTarget = old;
+            this.assignRenderTarget(null);
+        } else {
+            this.destroyRenderTargets();
+        }
 
         // Цвет фильтруется линейно: при `pixelScale > 1` эту цель растягивает финальный
         // проход, и точечная выборка дала бы ровно ту же лесенку, ради ухода от которой всё
@@ -2889,10 +2996,7 @@ class Viewer {
             samples: this.observer.get('camera.multisample') ? maxSamples : 1,
             autoResolve: false
         });
-        this.camera.camera.renderTarget = renderTarget;
-        if (this.activeSceneCamera) {
-            this.activeSceneCamera.renderTarget = renderTarget;
-        }
+        this.assignRenderTarget(renderTarget);
         this.syncMultiframeCamera();
     }
 
@@ -7912,6 +8016,9 @@ class Viewer {
             );
             this.canvasResize = false;
         }
+
+        // Движение отмечаем до пересборки целей: от него зависит запрошенное разрешение.
+        this.updateCameraMotion();
 
         // rebuild render targets
         this.rebuildRenderTargets();
