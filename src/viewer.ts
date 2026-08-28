@@ -3045,6 +3045,12 @@ class Viewer {
         const stable = this.stableRenderResolution();
         this.observer.set('runtime.viewportWidth', stable.width);
         this.observer.set('runtime.viewportHeight', stable.height);
+
+        // Настоящий размер цели показываем отдельно: по нему видно, работает ли понижение.
+        // Публикуем на каждой пересборке без опаски — наблюдатель молчит, когда значение не
+        // изменилось, а меняется оно дважды за жест.
+        this.observer.set('runtime.renderWidth', widthPixels);
+        this.observer.set('runtime.renderHeight', heightPixels);
         if (this.tileManager) {
             this.tileManager.stableRenderHeight = stable.height;
         }

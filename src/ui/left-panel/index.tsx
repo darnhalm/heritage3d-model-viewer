@@ -297,6 +297,8 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                a.camera?.multisample !== b.camera?.multisample ||
                a.camera?.hq !== b.camera?.hq ||
                a.runtime?.cameraDistance !== b.runtime?.cameraDistance ||
+               a.runtime?.renderWidth !== b.runtime?.renderWidth ||
+               a.runtime?.renderHeight !== b.runtime?.renderHeight ||
                a.runtime?.viewportWidth !== b.runtime?.viewportWidth ||
                a.runtime?.viewportHeight !== b.runtime?.viewportHeight;
     }
@@ -385,6 +387,7 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     setProperty={(value: boolean) => props.setProperty('camera.dynamicScale', value)}
                 />
                 <Detail label={t('Viewport', lang)} value={`${props.observerData.runtime?.viewportWidth ?? 0} x ${props.observerData.runtime?.viewportHeight ?? 0}`} />
+                <Detail label={t('Render target', lang)} value={`${props.observerData.runtime?.renderWidth ?? 0} x ${props.observerData.runtime?.renderHeight ?? 0}`} />
                 <Toggle
                     label={t('Multisample', lang)}
                     value={props.observerData.camera.multisample}
