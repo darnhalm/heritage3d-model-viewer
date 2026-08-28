@@ -22,6 +22,7 @@ import initializeUI from './ui';
 import Viewer from './viewer';
 import './style.scss';
 import { version as modelViewerVersion } from '../package.json';
+import { isMobileLayout, SD_PIXEL_SCALE } from './helpers';
 
 // Google Material Icons — для иконок в лейблах хелперов (слушатель/микрофон).
 // Подключаем рантаймом (в style.scss мешает порядок @use/@import).
@@ -171,10 +172,12 @@ const observerData: ObserverData = {
     camera: {
         fov: 40,
         tonemapping: 'Linear',
-        pixelScale: 1,
+        // Узкий экран стартует в SD: половинное разрешение и без накопления. Это единственная
+        // настройка, которая на телефоне заметно влияет на плавность вращения.
+        pixelScale: isMobileLayout() ? SD_PIXEL_SCALE : 1,
         multisampleSupported: true,
         multisample: true,
-        hq: true,
+        hq: !isMobileLayout(),
         mode: 'orbit',
         flySpeed: 1,
         surfacePivot: true,

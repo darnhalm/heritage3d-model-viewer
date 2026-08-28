@@ -60,4 +60,27 @@ const extract = (obj: any, paths: string[]) => {
     return result;
 };
 
-export { addEventListenerOnClickOnly, extract };
+/** Ширина, ниже которой интерфейс считается мобильным. Та же точка перелома, что в стилях. */
+const MOBILE_LAYOUT_MAX_WIDTH = 950;
+
+/**
+ * Узкий ли сейчас экран.
+ *
+ * Меряется шириной, а не типом указателя: речь о раскладке интерфейса, и порог тот же, по
+ * которому стили перестраивают панели. На сенсорном ноутбуке с широким экраном мобильная
+ * раскладка не нужна.
+ *
+ * @returns `true`, если экран уже порога.
+ */
+const isMobileLayout = () => typeof matchMedia === 'function' &&
+    matchMedia(`(max-width: ${MOBILE_LAYOUT_MAX_WIDTH}px)`).matches;
+
+/**
+ * Масштаб пикселя в режиме SD.
+ *
+ * Половина стороны — четверть пикселей. На телефоне именно это даёт кадры: мультифрейм
+ * работает только на неподвижной камере и на плавность вращения не влияет вовсе.
+ */
+const SD_PIXEL_SCALE = 2;
+
+export { addEventListenerOnClickOnly, extract, isMobileLayout, SD_PIXEL_SCALE };

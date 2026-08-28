@@ -1,6 +1,7 @@
 import { Observer } from '@playcanvas/observer';
 import { Vec3 } from 'playcanvas';
 
+import { isMobileLayout } from '../helpers';
 import { t } from '../i18n/translations';
 import { DEFAULT_THEME_COLOR } from '../theme';
 
@@ -373,7 +374,9 @@ class SettingsService {
         o.set('camera.tonemapping', 'Linear');
         o.set('camera.pixelScale', 1);
         o.set('camera.multisample', true);
-        o.set('camera.hq', true);
+        // Обработчик `camera.hq` сам поставит нужный масштаб пикселя, поэтому строка выше с
+        // `pixelScale` задаёт лишь десктопное значение, а телефон получит своё.
+        o.set('camera.hq', !isMobileLayout());
         o.set('camera.mode', 'orbit');
         o.set('camera.flySpeed', 1);
         // Surface pivot and mouse-button mapping are user navigation preferences, not model
@@ -460,7 +463,12 @@ class SettingsService {
     }
 
     applyViewerSettings(data: Record<string, unknown>) {
-        const filter = SettingsService.SETTINGS_FILTER_PATHS;
+        // На узком экране режим качества — не свойство модели, а свойство устройства: файл
+        // настроек, сохранённый с десктопа, иначе включил бы телефону HD и полное разрешение
+        // при каждой загрузке. Переключить руками это не мешает, сбрасывается только импорт.
+        const filter = isMobileLayout() ?
+            [...SettingsService.SETTINGS_FILTER_PATHS, 'camera.hq', 'camera.pixelScale'] :
+            SettingsService.SETTINGS_FILTER_PATHS;
         const blockedKeys = new Set(['__proto__', 'constructor', 'prototype']);
         const colorPaths = ['skybox.backgroundColor', 'light.color', 'theme.primaryColor', 'debug.wireframeColor'];
         const numericPaths = new Set(['measure.unitScale', 'measure.knownDistance', 'camera.fov', 'camera.flySpeed', 'skybox.exposure', 'debug.selectedUvSet']);

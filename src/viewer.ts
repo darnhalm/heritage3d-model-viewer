@@ -105,6 +105,7 @@ import { ClipBoxMaterials } from './clip-box';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
+import { SD_PIXEL_SCALE } from './helpers';
 import { t } from './i18n/translations';
 import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
@@ -2289,6 +2290,12 @@ class Viewer {
             },
             'camera.hq': (enabled: boolean) => {
                 this.multiframe.enabled = enabled;
+                // SD — это не только выключенное накопление. Мультифрейм работает лишь на
+                // неподвижной камере, поэтому сам по себе он не влияет на плавность
+                // вращения; кадры на телефоне даёт именно половинное разрешение сцены.
+                // Ручной выбор в «Масштабе пикселя» этим переключателем сбрасывается — HD и
+                // SD задают режим целиком, иначе две настройки противоречили бы друг другу.
+                this.observer.set('camera.pixelScale', enabled ? 1 : SD_PIXEL_SCALE);
                 this.renderNextFrame();
             },
             'camera.mode': (mode: 'orbit' | 'fly') => {
