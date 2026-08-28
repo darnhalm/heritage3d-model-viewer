@@ -134,6 +134,17 @@ const MOTION_PIXEL_SCALE = 1.5;
  */
 const MOTION_SETTLE_MS = 180;
 
+/**
+ * Сколько камера должна двигаться, прежде чем понижать разрешение, мс.
+ *
+ * Переход виден: меняется не только разрешение, но и способ вывода — на неподвижной камере
+ * кадр копируется из накопления, в движении растягивается с резкостью. Без задержки это
+ * происходило на каждом касании мыши, включая короткие поправки, где выигрыш всё равно
+ * незаметен. Со ста миллисекундами короткие движения идут в полном разрешении, а понижение
+ * включается там, где оно и нужно, — на долгом облёте.
+ */
+const MOTION_ONSET_MS = 100;
+
 type MeshoptDecoderModule = typeof import('../lib/meshopt_decoder.module.js')['MeshoptDecoder'];
 
 // Декодер meshopt заводит свой wasm прямо при импорте модуля: браузер компилирует и
@@ -748,6 +759,15 @@ class Viewer {
 
     /** Когда в последний раз публиковали расстояние до точки вращения, мс. */
     distancePublishedAt: number;
+
+    /** Когда началось нынешнее непрерывное движение камеры, мс. */
+    cameraMotionStartedAt: number;
+
+    /** Двигалась ли камера на прошлом кадре — по этому обрывается серия. */
+    cameraMoving: boolean;
+
+    /** Включено ли понижение сейчас; держится до полной остановки. */
+    motionScaleEngaged: boolean;
 
     dirtyNormals: boolean;
 
@@ -1403,6 +1423,9 @@ class Viewer {
         this.cameraMovedAt = 0;
         this.distanceLimitSceneSize = 1;
         this.distancePublishedAt = 0;
+        this.cameraMotionStartedAt = 0;
+        this.cameraMoving = false;
+        this.motionScaleEngaged = false;
         this.dirtyNormals = false;
 
         this.sceneBounds = new BoundingBox();
@@ -2932,8 +2955,17 @@ class Viewer {
         }
         const now = performance.now();
         if (moved) {
+            // Серия обрывается кадром без движения, а не паузой в миллисекундах: на тяжёлой
+            // сцене кадр сам по себе длиннее любого разумного порога, и отсчёт по времени
+            // не начинался бы вовсе — то есть понижение не включалось бы там, где оно нужнее.
+            if (!this.cameraMoving) {
+                this.cameraMoving = true;
+                this.cameraMotionStartedAt = now;
+            }
             prev.set(m);
             this.cameraMovedAt = now;
+        } else {
+            this.cameraMoving = false;
         }
 
         // Текущее расстояние показываем в панели: пределы задаются числами, а на глаз число
@@ -2956,7 +2988,20 @@ class Viewer {
         if (this.observer.get('camera.dynamicScale') === false) return 1;
         // Пока идёт съёмка обложки или вида сверху, разрешение трогать нельзя: кадр уйдёт в файл.
         if (this.isCapturingCoverImage || this.isCapturingTopDown) return 1;
-        return performance.now() - this.cameraMovedAt < MOTION_SETTLE_MS ? MOTION_PIXEL_SCALE : 1;
+
+        const now = performance.now();
+        if (now - this.cameraMovedAt >= MOTION_SETTLE_MS) {
+            this.motionScaleEngaged = false;
+            return 1;
+        }
+        // Движение должно продлиться: короткие поправки проходят в полном разрешении, и переход
+        // не мелькает на каждом касании мыши. Раз включившись, понижение держится до полной
+        // остановки — иначе короткая пауза посреди жеста возвращала бы полное разрешение,
+        // и мельканий стало бы больше, а не меньше.
+        if (!this.motionScaleEngaged && now - this.cameraMotionStartedAt >= MOTION_ONSET_MS) {
+            this.motionScaleEngaged = true;
+        }
+        return this.motionScaleEngaged ? MOTION_PIXEL_SCALE : 1;
     }
 
     renderResolution(): { width: number; height: number } {
