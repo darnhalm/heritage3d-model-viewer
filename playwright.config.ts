@@ -1,7 +1,14 @@
+import os from 'node:os';
+import path from 'node:path';
+
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
     testDir: './tests',
+    // Артефакты прогона (видео, трассы, снимки) держим вне репозитория. Он лежит на внешнем
+    // томе exFAT, где macOS кладёт рядом с каждым файлом спутник `._имя`; из-за них Playwright
+    // не может очистить свой каталог перед запуском и падает с `ENOTEMPTY`, не начав работу.
+    outputDir: path.join(os.tmpdir(), 'model-viewer-playwright'),
     // Репозиторий лежит на внешнем томе, где macOS кладёт рядом с каждым файлом
     // AppleDouble-спутник `._имя`. Без этого фильтра Playwright пытается разобрать их как
     // тесты и падает на первом же.
