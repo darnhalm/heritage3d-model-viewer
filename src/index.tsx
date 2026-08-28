@@ -182,7 +182,9 @@ const observerData: ObserverData = {
         flySpeed: 1,
         surfacePivot: true,
         mouseButtonsInverted: false,
-        pointerDevice: 'auto',
+        // По умолчанию мышь: автоопределение путает колесо со свайпом на части мышей, и
+        // зум неожиданно превращался в поворот. Трекпадный режим включается явно.
+        pointerDevice: 'mouse',
         position: null,
         focus: null,
         ortho: false,

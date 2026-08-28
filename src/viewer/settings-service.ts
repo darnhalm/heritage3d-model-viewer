@@ -1,7 +1,7 @@
 import { Observer } from '@playcanvas/observer';
 import { Vec3 } from 'playcanvas';
 
-import { isMobileLayout } from '../helpers';
+import { isMobileLayout, SD_PIXEL_SCALE } from '../helpers';
 import { t } from '../i18n/translations';
 import { DEFAULT_THEME_COLOR } from '../theme';
 
@@ -373,11 +373,13 @@ class SettingsService {
         const o = this.observer;
         o.set('camera.fov', 40);
         o.set('camera.tonemapping', 'Linear');
-        o.set('camera.pixelScale', 1);
-        o.set('camera.multisample', true);
-        // Обработчик `camera.hq` сам поставит нужный масштаб пикселя, поэтому строка выше с
-        // `pixelScale` задаёт лишь десктопное значение, а телефон получит своё.
-        o.set('camera.hq', !isMobileLayout());
+        // Все три величины задаём явно, а не через обработчик `camera.hq`. Наблюдатель не
+        // рассылает событие на присвоение прежнего значения, а на телефоне `hq` и так уже
+        // `false` — обработчик не срабатывал, и сброс оставлял устройству полное разрешение.
+        const hq = !isMobileLayout();
+        o.set('camera.pixelScale', hq ? 1 : SD_PIXEL_SCALE);
+        o.set('camera.multisample', hq);
+        o.set('camera.hq', hq);
         o.set('camera.mode', 'orbit');
         o.set('camera.flySpeed', 1);
         // Surface pivot and mouse-button mapping are user navigation preferences, not model
