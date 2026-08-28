@@ -487,8 +487,10 @@ class CameraControls {
             SURFACE_ZOOM_MAX_STEP
         );
         const scale = Math.exp(step);
-        // Ближе минимума не подходим: за него начинается пересечение поверхности.
-        const next = Math.max(this._zoomRange.x, distance * scale);
+        // Ближе минимума не подходим: за него начинается пересечение поверхности. Дальше
+        // максимума — тоже: этот путь ограничивал только ближнюю границу, из-за чего колесо
+        // к точке под курсором уезжало за предел, который обычная орбита соблюдает.
+        const next = math.clamp(distance * scale, this._zoomRange.x, this._zoomRange.y);
         surfaceZoomOffset.mulScalar(next / distance).add(anchor);
 
         surfaceZoomRotation.setFromEulerAngles(this._pose.angles);

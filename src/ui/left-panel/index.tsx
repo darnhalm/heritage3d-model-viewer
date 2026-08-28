@@ -290,6 +290,9 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                a.camera?.tonemapping !== b.camera?.tonemapping ||
                a.camera?.pixelScale !== b.camera?.pixelScale ||
                a.camera?.dynamicScale !== b.camera?.dynamicScale ||
+               a.camera?.distanceLimitsManual !== b.camera?.distanceLimitsManual ||
+               a.camera?.distanceMin !== b.camera?.distanceMin ||
+               a.camera?.distanceMax !== b.camera?.distanceMax ||
                a.camera?.multisampleSupported !== b.camera?.multisampleSupported ||
                a.camera?.multisample !== b.camera?.multisample ||
                a.camera?.hq !== b.camera?.hq ||
@@ -337,6 +340,27 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     type='string'
                     options={PIXEL_SCALES}
                     setProperty={(value: string) => props.setProperty('camera.pixelScale', Number(value))} />
+                <Toggle
+                    label={t('Manual distance limits', lang)}
+                    value={props.observerData.camera.distanceLimitsManual === true}
+                    setProperty={(value: boolean) => props.setProperty('camera.distanceLimitsManual', value)}
+                />
+                <Numeric
+                    label={t('Min distance', lang)}
+                    value={props.observerData.camera.distanceMin ?? 0}
+                    min={0.001}
+                    max={1e9}
+                    enabled={props.observerData.camera.distanceLimitsManual === true}
+                    setProperty={(value: number) => props.setProperty('camera.distanceMin', value)}
+                />
+                <Numeric
+                    label={t('Max distance', lang)}
+                    value={props.observerData.camera.distanceMax ?? 0}
+                    min={0.001}
+                    max={1e9}
+                    enabled={props.observerData.camera.distanceLimitsManual === true}
+                    setProperty={(value: number) => props.setProperty('camera.distanceMax', value)}
+                />
                 <Toggle
                     label={t('Lower while moving', lang)}
                     value={props.observerData.camera.dynamicScale !== false}

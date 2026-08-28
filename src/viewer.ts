@@ -169,6 +169,14 @@ const fragmentHitDir = new Vec3();
 
 const FOCUS_FOV = 75;
 const ZOOM_SCALE_MIN = 0.01;
+
+/**
+ * Автоматический предел отдаления, в радиусах описанной сферы сцены.
+ *
+ * Десяти хватает, чтобы обойти модель кругом и увидеть её целиком с запасом. Дальше начинается
+ * пустота, где модель — точка, и вернуться можно только клавишей F.
+ */
+const AUTO_DISTANCE_MAX_RADII = 10;
 const MIC_HELPER_NODE_RE = /^mic(?:[_-]|$)/i;
 const MIC_CAMEL_HELPER_NODE_RE = /^mic[A-Z0-9]/;
 
@@ -731,6 +739,9 @@ class Viewer {
 
     /** Когда камера двигалась в последний раз, мс. */
     cameraMovedAt: number;
+
+    /** Габариты, от которых считался автоматический предел расстояния. */
+    distanceLimitSceneSize: number;
 
     dirtyNormals: boolean;
 
@@ -1384,6 +1395,7 @@ class Viewer {
         this.spareRenderTarget = null;
         this.lastCameraTransform = new Float32Array(16);
         this.cameraMovedAt = 0;
+        this.distanceLimitSceneSize = 1;
         this.dirtyNormals = false;
 
         this.sceneBounds = new BoundingBox();
@@ -2315,6 +2327,20 @@ class Viewer {
                 this.destroyRenderTargets();
                 this.renderNextFrame();
             },
+            'camera.distanceLimitsManual': () => {
+                this.applyDistanceLimits(this.distanceLimitSceneSize);
+                this.renderNextFrame();
+            },
+            'camera.distanceMin': () => {
+                if (this.observer.get('camera.distanceLimitsManual') !== true) return;
+                this.applyDistanceLimits(this.distanceLimitSceneSize);
+                this.renderNextFrame();
+            },
+            'camera.distanceMax': () => {
+                if (this.observer.get('camera.distanceLimitsManual') !== true) return;
+                this.applyDistanceLimits(this.distanceLimitSceneSize);
+                this.renderNextFrame();
+            },
             'camera.hq': (enabled: boolean) => {
                 this.multiframe.enabled = enabled;
                 // SD — это не только выключенное накопление. Мультифрейм работает лишь на
@@ -2815,7 +2841,7 @@ class Viewer {
         // calculate scene size
         const sceneSize = bbox.halfExtents.length();
         this.cameraControls.moveSpeed = sceneSize * 2.5;
-        this.cameraControls.zoomRange = new Vec2(ZOOM_SCALE_MIN, 10 * sceneSize);
+        this.applyDistanceLimits(sceneSize);
 
         // calculate the camera focal point
         const focus = this.calcFocalPoint(bbox);
@@ -4352,6 +4378,43 @@ class Viewer {
         this.settingsService.syncSkyboxAndLightFromObserver();
     }
 
+    /**
+     * Задать пределы расстояния до точки вращения.
+     *
+     * Автоматический предел считается от габаритов сцены: десять радиусов описанной сферы —
+     * достаточно, чтобы обойти модель кругом, и мало, чтобы улететь в пустоту, откуда она
+     * выглядит точкой и вернуться нечем.
+     *
+     * В ручном режиме значения берутся из настроек и кадрированием не перетираются: их задали
+     * осознанно, и «вписать в экран» не повод их терять.
+     *
+     * @param sceneSize - Радиус описанной сферы сцены.
+     */
+    applyDistanceLimits(sceneSize: number) {
+        // Габариты запоминаем: правка полей должна пересчитывать предел от того же размера,
+        // от которого его считало кадрирование, а `sceneBounds` — это уже другая величина
+        // (кадрируют по выбранному объекту или по фрагменту, а не по всей сцене).
+        this.distanceLimitSceneSize = sceneSize;
+        const manual = this.observer.get('camera.distanceLimitsManual') === true;
+        const min = manual ?
+            Math.max(ZOOM_SCALE_MIN, Number(this.observer.get('camera.distanceMin')) || ZOOM_SCALE_MIN) :
+            ZOOM_SCALE_MIN;
+        const autoMax = AUTO_DISTANCE_MAX_RADII * Math.max(sceneSize, ZOOM_SCALE_MIN);
+        const max = manual ?
+            (Number(this.observer.get('camera.distanceMax')) || autoMax) :
+            autoMax;
+
+        this.cameraControls.zoomRange = new Vec2(min, Math.max(min, max));
+
+        // Показываем посчитанное в полях, чтобы предел был виден и его было с чего править.
+        // Значения задаём явно: наблюдатель не рассылает событие на прежнее значение, и
+        // рассчитывать, что одно поле подтянет другое, нельзя.
+        if (!manual) {
+            this.observer.set('camera.distanceMin', min);
+            this.observer.set('camera.distanceMax', max);
+        }
+    }
+
     // adjust camera clipping planes to fit the scene
     fitCameraClipPlanes() {
         const mat = this.camera.getWorldTransform();
@@ -4385,7 +4448,7 @@ class Viewer {
             const zoom = this.calcZoom(sceneSize);
             const start = this.camera.forward.clone().mulScalar(-zoom).add(center);
             this.cameraControls.moveSpeed = sceneSize * 2.5;
-            this.cameraControls.zoomRange = new Vec2(ZOOM_SCALE_MIN, 10 * sceneSize);
+            this.applyDistanceLimits(sceneSize);
             this.cameraControls.reset(center, start);
         } else {
             // Кадрируем по реальной геометрии сцены (calcSceneBounds внутри focus),

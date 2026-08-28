@@ -77,6 +77,12 @@ export interface ObserverData {
         multisample: boolean,
         /** Понижать разрешение сцены, пока камера движется. */
         dynamicScale?: boolean,
+        /** Задавать пределы расстояния вручную, а не от габаритов сцены. */
+        distanceLimitsManual?: boolean,
+        /** Ближний предел расстояния до точки вращения. */
+        distanceMin?: number,
+        /** Дальний предел расстояния до точки вращения. */
+        distanceMax?: number,
         hq: boolean,
         mode: 'orbit' | 'fly',
         flySpeed: number,
