@@ -16,11 +16,26 @@ type VectorValue = number[];
 type ColorValue = number[];
 type SelectValue = string | number | boolean | null;
 
+/**
+ * Подпись поля в панели.
+ *
+ * Колонка подписи узкая и длинные названия в ней обрезаются. `title` на обёртке даёт прочитать
+ * название целиком: тултип наследуется потомками, а `display: contents` не добавляет коробки и
+ * не ломает раскладку — тот же приём, что у кнопок-иконок.
+ *
+ * @param props - Свойства.
+ * @param props.text - Текст подписи.
+ * @returns Подпись с всплывающей подсказкой.
+ */
+const PanelLabel = (props: { text: string }) => (
+    <span title={props.text} style={{ display: 'contents' }}>
+        <Label class='panel-label' text={props.text} />
+    </span>
+);
+
 export const Detail = (props: { label: string, value:string|number}) => {
     return <Container class='panel-option'>
-        <Label
-            class='panel-label'
-            text={props.label} />
+        <PanelLabel text={props.label} />
         <Label
             class='panel-value'
             text={String(props.value)}/>
@@ -34,9 +49,7 @@ export const Vector = (props: {
     enabled?: boolean}) => {
 
     return <Container class='panel-option' enabled={props.enabled ?? true}>
-        <Label
-            class='panel-label'
-            text={props.label} />
+        <PanelLabel text={props.label} />
         <VectorInput class='panel-value'
             dimensions={props.dimensions}
             value={props.value}
@@ -51,9 +64,7 @@ export const Toggle = (props: {
     value: boolean }) => {
 
     return <Container class='panel-option' enabled={props.enabled ?? true}>
-        <Label
-            class='panel-label'
-            text={props.label} />
+        <PanelLabel text={props.label} />
         <BooleanInput
             class='panel-value-boolean'
             type='toggle'
@@ -70,9 +81,7 @@ export const ToggleColor = (props: {
         setColorProperty: (value: ColorValue) => void
     }) => {
     return <Container class='panel-option'>
-        <Label
-            class='panel-label'
-            text={props.label} />
+        <PanelLabel text={props.label} />
         <Container class='panel-value'>
             <BooleanInput
                 type='toggle'
@@ -96,9 +105,7 @@ export const SelectColor = (props: {
     setColorProperty: (value: ColorValue) => void }) => {
 
     return <Container class='panel-option'>
-        <Label
-            class='panel-label'
-            text={props.label} />
+        <PanelLabel text={props.label} />
         <Container class='panel-value'>
             <SelectInput
                 class='panel-value-select'
@@ -125,10 +132,7 @@ export const Slider = (props: {
     step?: number }) => {
 
     return <Container class='panel-option' enabled={props.enabled ?? true}>
-        <Label
-            class='panel-label'
-            text={props.label}
-        />
+        <PanelLabel text={props.label} />
         <SliderInput
             class='panel-value'
             min={props.min}
@@ -154,9 +158,7 @@ export const Numeric = (props: {
     enabled?: boolean }) => {
 
     return <Container class='panel-option' enabled={props.enabled ?? true}>
-        <Label
-            class='panel-label'
-            text={props.label} />
+        <PanelLabel text={props.label} />
         <NumericInput
             class='panel-value'
             min={props.min}
@@ -177,9 +179,7 @@ export const ColorPickerControl = (props: {
     hidden?: boolean }) => {
 
     return <Container class='panel-option' hidden={props.hidden} enabled={props.enabled ?? true}>
-        <Label
-            class='panel-label'
-            text={props.label} />
+        <PanelLabel text={props.label} />
         <ColorPicker
             class='panel-value'
             value={props.value}
@@ -232,9 +232,7 @@ export const Select = (props: {
     selectKey?: string }) => {
 
     return <Container class='panel-option' enabled={props.enabled ?? true}>
-        <Label
-            class='panel-label'
-            text={props.label} />
+        <PanelLabel text={props.label} />
         <SelectInput
             key={props.selectKey}
             class='panel-value'

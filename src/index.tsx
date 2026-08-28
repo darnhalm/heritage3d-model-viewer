@@ -330,7 +330,8 @@ const observerData: ObserverData = {
         requestedBackend: 'auto',
         gsplatRenderer: '',
         viewportWidth: 0,
-        viewportHeight: 0
+        viewportHeight: 0,
+        cameraDistance: 0
     },
     poi: {
         enabled: false,

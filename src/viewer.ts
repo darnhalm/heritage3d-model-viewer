@@ -177,6 +177,9 @@ const ZOOM_SCALE_MIN = 0.01;
  * пустота, где модель — точка, и вернуться можно только клавишей F.
  */
 const AUTO_DISTANCE_MAX_RADII = 10;
+
+/** Как часто обновлять показанное расстояние до точки вращения, мс. */
+const DISTANCE_PUBLISH_INTERVAL_MS = 200;
 const MIC_HELPER_NODE_RE = /^mic(?:[_-]|$)/i;
 const MIC_CAMEL_HELPER_NODE_RE = /^mic[A-Z0-9]/;
 
@@ -742,6 +745,9 @@ class Viewer {
 
     /** Габариты, от которых считался автоматический предел расстояния. */
     distanceLimitSceneSize: number;
+
+    /** Когда в последний раз публиковали расстояние до точки вращения, мс. */
+    distancePublishedAt: number;
 
     dirtyNormals: boolean;
 
@@ -1396,6 +1402,7 @@ class Viewer {
         this.lastCameraTransform = new Float32Array(16);
         this.cameraMovedAt = 0;
         this.distanceLimitSceneSize = 1;
+        this.distancePublishedAt = 0;
         this.dirtyNormals = false;
 
         this.sceneBounds = new BoundingBox();
@@ -2923,9 +2930,20 @@ class Viewer {
                 break;
             }
         }
+        const now = performance.now();
         if (moved) {
             prev.set(m);
-            this.cameraMovedAt = performance.now();
+            this.cameraMovedAt = now;
+        }
+
+        // Текущее расстояние показываем в панели: пределы задаются числами, а на глаз число
+        // не подобрать — нужно видеть, чему отвечает текущий вид. Обновляем редко: наблюдатель
+        // рассылает событие в React, и делать это каждый кадр значило бы платить перерисовкой
+        // ровно в движении, ради плавности которого всё и затевалось.
+        if (now - this.distancePublishedAt > DISTANCE_PUBLISH_INTERVAL_MS) {
+            this.distancePublishedAt = now;
+            const distance = this.cameraControls.getPosition().distance(this.cameraControls.getFocus());
+            this.observer.set('runtime.cameraDistance', Math.round(distance * 1000) / 1000);
         }
     }
 
@@ -2942,8 +2960,29 @@ class Viewer {
     }
 
     renderResolution(): { width: number; height: number } {
+        return this.resolutionForScale(this.motionScale());
+    }
+
+    /**
+     * Разрешение без временного понижения на время движения.
+     *
+     * От него считают всё, что должно быть устойчивым между кадрами: экранная ошибка тайлов и
+     * подпись «Вьюпорт». Иначе за один жест величина меняется дважды, отбор успевает сбросить
+     * уровень детализации и заказать его обратно, и это видно как моргание.
+     *
+     * @returns Ширина и высота в пикселях.
+     */
+    stableRenderResolution(): { width: number; height: number } {
+        return this.resolutionForScale(1);
+    }
+
+    /**
+     * @param motion - Множитель понижения: 1 — без него.
+     * @returns Ширина и высота в пикселях.
+     */
+    private resolutionForScale(motion: number): { width: number; height: number } {
         const device = this.app.graphicsDevice;
-        const scale = Math.max(1, Number(this.observer.get('camera.pixelScale')) || 1) * this.motionScale();
+        const scale = Math.max(1, Number(this.observer.get('camera.pixelScale')) || 1) * motion;
         return {
             width: Math.max(1, Math.floor(device.width / scale)),
             height: Math.max(1, Math.floor(device.height / scale))
@@ -2954,8 +2993,16 @@ class Viewer {
         const device = this.app.graphicsDevice;
 
         const { width: widthPixels, height: heightPixels } = this.renderResolution();
-        this.observer.set('runtime.viewportWidth', widthPixels);
-        this.observer.set('runtime.viewportHeight', heightPixels);
+
+        // Наружу сообщаем устойчивое разрешение, а не то, в котором рисуем прямо сейчас:
+        // подпись «Вьюпорт» иначе прыгала бы на каждом жесте, а отбор тайлов — сбрасывал
+        // уровень детализации и заказывал его обратно.
+        const stable = this.stableRenderResolution();
+        this.observer.set('runtime.viewportWidth', stable.width);
+        this.observer.set('runtime.viewportHeight', stable.height);
+        if (this.tileManager) {
+            this.tileManager.stableRenderHeight = stable.height;
+        }
 
         const old = this.camera.camera.renderTarget;
         if (this.isCapturingCoverImage || this.isCapturingTopDown || (old && old.width === widthPixels && old.height === heightPixels)) {
@@ -2969,6 +3016,13 @@ class Viewer {
         // по нескольку раз в секунду. Прошлую цель поэтому не уничтожаем, а придерживаем:
         // выделение двух текстур посреди жеста стоит дороже, чем экономит меньшее разрешение,
         // и рывок пришёлся бы ровно на начало движения.
+        // Пикер на время съёмки подменяет цель у камеры и возвращает прежнюю. Если обмен
+        // придётся на этот промежуток, запас и текущая цель окажутся одним объектом — и мы
+        // уничтожим ту, в которую рисуем. Проверяем и разрываем совпадение.
+        if (this.spareRenderTarget && this.spareRenderTarget === old) {
+            this.spareRenderTarget = null;
+        }
+
         const spare = this.spareRenderTarget;
         if (spare && spare.width === widthPixels && spare.height === heightPixels && spare.samples === wantSamples) {
             this.spareRenderTarget = old ?? null;

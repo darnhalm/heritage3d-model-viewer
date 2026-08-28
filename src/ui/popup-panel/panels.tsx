@@ -9,7 +9,7 @@ const ControlDetail = (props: { label: string, value: string, icon?: string, ico
     const iconList = props.icons || (props.icon ? [props.icon] : []);
     return (
         <Container class={['panel-option', 'control-detail']}>
-            <Label class='panel-label' text={props.label} />
+            <span title={props.label} style={{ display: 'contents' }}><Label class='panel-label' text={props.label} /></span>
             <div className='panel-value control-value'>
                 {props.useMouseIcon && <span className='control-icon control-icon-mouse' />}
                 {props.trackpadIcon === '1' && <span className='control-icon control-icon-trackpad-1' />}
@@ -328,7 +328,7 @@ class InfoPanel extends React.Component <{
                                             <Label text={t('General', lang)} class='popup-panel-heading' />
                                             {showFitControl && (
                                                 <Container class={['panel-option', 'control-detail']}>
-                                                    <Label class='panel-label' text={t('Frame Scene', lang)} />
+                                                    <span title={t('Frame Scene', lang)} style={{ display: 'contents' }}><Label class='panel-label' text={t('Frame Scene', lang)} /></span>
                                                     <div className='panel-value control-value'>
                                                         <span>F</span>
                                                         <Button
@@ -342,7 +342,7 @@ class InfoPanel extends React.Component <{
                                             )}
                                             {showResetControl && (
                                                 <Container class={['panel-option', 'control-detail']}>
-                                                    <Label class='panel-label' text={t('Reset Camera', lang)} />
+                                                    <span title={t('Reset Camera', lang)} style={{ display: 'contents' }}><Label class='panel-label' text={t('Reset Camera', lang)} /></span>
                                                     <div className='panel-value control-value'>
                                                         <span>R</span>
                                                         <Button

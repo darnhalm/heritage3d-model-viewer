@@ -296,6 +296,7 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                a.camera?.multisampleSupported !== b.camera?.multisampleSupported ||
                a.camera?.multisample !== b.camera?.multisample ||
                a.camera?.hq !== b.camera?.hq ||
+               a.runtime?.cameraDistance !== b.runtime?.cameraDistance ||
                a.runtime?.viewportWidth !== b.runtime?.viewportWidth ||
                a.runtime?.viewportHeight !== b.runtime?.viewportHeight;
     }
@@ -361,6 +362,23 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     enabled={props.observerData.camera.distanceLimitsManual === true}
                     setProperty={(value: number) => props.setProperty('camera.distanceMax', value)}
                 />
+                <Detail label={t('Current distance', lang)} value={String(props.observerData.runtime?.cameraDistance ?? 0)} />
+                <Container class='distance-from-view'>
+                    <span title={t('Use the current camera distance as the near limit', lang)} style={{ display: 'contents' }}>
+                        <Button
+                            text={t('Near from view', lang)}
+                            class='secondary'
+                            enabled={props.observerData.camera.distanceLimitsManual === true}
+                            onClick={() => props.setProperty('camera.distanceMin', props.observerData.runtime?.cameraDistance ?? 0)} />
+                    </span>
+                    <span title={t('Use the current camera distance as the far limit', lang)} style={{ display: 'contents' }}>
+                        <Button
+                            text={t('Far from view', lang)}
+                            class='secondary'
+                            enabled={props.observerData.camera.distanceLimitsManual === true}
+                            onClick={() => props.setProperty('camera.distanceMax', props.observerData.runtime?.cameraDistance ?? 0)} />
+                    </span>
+                </Container>
                 <Toggle
                     label={t('Lower while moving', lang)}
                     value={props.observerData.camera.dynamicScale !== false}

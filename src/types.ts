@@ -285,7 +285,9 @@ export interface ObserverData {
         /** Resolved gsplat renderer, e.g. 'GPU sort' / 'CPU sort'. Debug/diagnostics only. */
         gsplatRenderer: string,
         viewportWidth: number,
-        viewportHeight: number
+        viewportHeight: number,
+        /** Текущее расстояние от камеры до точки вращения. */
+        cameraDistance?: number
     },
     poi: {
         enabled: boolean,

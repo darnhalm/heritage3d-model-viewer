@@ -402,6 +402,9 @@ export class TileManager {
     /** Параметры камеры текущего кадра — обход читает их, а не таскает пятым аргументом. */
     private view = { cameraPos: new Vec3(), sseDenominator: 1, viewportHeight: 1 };
 
+    /** Высота картинки без учёта понижения на время движения; задаётся вьюером. */
+    stableRenderHeight = 0;
+
     private disposed = false;
 
     private stats: TileStats = {
@@ -1028,9 +1031,15 @@ export class TileManager {
      * до экрана её растягивает финальный проход. Экранная ошибка обязана считаться от той
      * картинки, которая реально рисуется, иначе уменьшение разрешения не облегчит отбор.
      *
-     * @returns Высота цели рендера, минимум 1.
+     * Временное понижение на время движения камеры сюда не входит: от него высота меняется
+     * дважды за жест, и отбор успевал бы сбросить уровень детализации и заказать его обратно —
+     * это видно как моргание. Поэтому вьюер сообщает устойчивую высоту, а к цели рендера мы
+     * обращаемся только пока он молчит.
+     *
+     * @returns Высота картинки в пикселях, минимум 1.
      */
     private renderHeight(): number {
+        if (this.stableRenderHeight) return Math.max(1, this.stableRenderHeight);
         const target = this.camera.camera?.renderTarget;
         return Math.max(1, target?.height ?? this.app.graphicsDevice.height);
     }
