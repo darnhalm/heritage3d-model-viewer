@@ -1,4 +1,5 @@
 // official rollup plugins
+import fs from 'fs';
 import path from 'path';
 
 import alias from '@rollup/plugin-alias';
@@ -22,6 +23,43 @@ const BLUE_OUT = '\x1b[34m';
 const BOLD_OUT = '\x1b[1m';
 const REGULAR_OUT = '\x1b[22m';
 const RESET_OUT = '\x1b[0m';
+
+/**
+ * Порог встраивания иконки в CSS, байты.
+ *
+ * Иконки панелей — отдельные запросы, и браузер тянет их по мере того, как элементы
+ * появляются в разметке. Из-за этого нижняя панель проявляется рвано: кнопки уже на месте,
+ * а картинки в них доезжают одна за другой, и это читается как подтормаживание. Встроенные
+ * в стиль иконки приходят вместе с ним и рисуются разом.
+ *
+ * Порог нужен, потому что встраивание раздувает CSS на треть от размера файла (base64 — плюс
+ * 33%), а CSS грузится до первого кадра. Две иконки материалов весят 68 и 33 КБ — их
+ * встраивать нельзя, они и так показываются только в открытой панели.
+ */
+const ICON_INLINE_LIMIT = 8 * 1024;
+
+/**
+ * Встроить мелкие SVG-иконки в CSS как data-URI.
+ *
+ * @param {string} css - Собранный CSS.
+ * @returns {string} CSS, в котором ссылки на мелкие иконки заменены на встроенные данные.
+ */
+const inlineSmallIcons = (css) => {
+    let inlined = 0;
+    let skipped = 0;
+    const out = css.replace(/url\(\.?\/?(static\/icons\/[\w-]+\.svg)\)/g, (match, rel) => {
+        const file = path.resolve(rel);
+        if (!fs.existsSync(file) || fs.statSync(file).size > ICON_INLINE_LIMIT) {
+            skipped++;
+            return match;
+        }
+        const svg = fs.readFileSync(file, 'utf8');
+        inlined++;
+        return `url("data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}")`;
+    });
+    console.log(`${BLUE_OUT}icons inlined ${BOLD_OUT}${inlined}${REGULAR_OUT}, left as files ${BOLD_OUT}${skipped}${REGULAR_OUT}${RESET_OUT}`);
+    return out;
+};
 
 const title = [
     'Building PlayCanvas Model Viewer',
@@ -73,7 +111,8 @@ export default {
             insert: false,
             output: 'dist/style.css',
             outputStyle: 'compressed',
-            api: 'modern'
+            api: 'modern',
+            processor: inlineSmallIcons
         }),
         image({ dom: true }),
         alias({
