@@ -13,6 +13,7 @@ import LeftPanel from './left-panel';
 import LoadControls from './load-controls';
 import PopupPanel from './popup-panel';
 import SelectedNode from './selected-node';
+import { isMobileLayout } from '../helpers';
 
 // Через сколько применить изменения observer, если кадр так и не наступил.
 // Полтора кадра при 60 Гц: пока кадры идут, страховка никогда не срабатывает первой.
@@ -428,7 +429,12 @@ class App extends React.Component<{ observer: Observer }> {
         const showSelectedNode = !embed?.enabled && !!this.state?.debug?.withTextureOnly;
         const showEmbedStartOverlay = !!(embed?.enabled && embed?.waiting);
         const showEmbedLoadingBackdrop = !!(embed?.enabled && !embed?.waiting && embed?.placeholderUrl && this.state?.ui?.spinner);
-        const showPoiPlayer = poiList.length > 0 && !(embed?.enabled && !embed?.tour);
+        // На узком экране режим выделения фрагмента забирает низ экрана под свои органы
+        // управления, и плееры оказываются поверх них. На широком места хватает всем.
+        const fragmentBusy = !!(this.state?.fragment?.selecting || this.state?.fragment?.initialized ||
+            this.state?.fragment?.enabled);
+        const crowdedByFragment = fragmentBusy && isMobileLayout();
+        const showPoiPlayer = poiList.length > 0 && !(embed?.enabled && !embed?.tour) && !crowdedByFragment;
         // Переключатель проекции живёт под навигационным кубом и показывается вместе с ним.
         const showProjectionToggle = !!this.state?.camera?.viewCube;
         const orthographic = !!this.state?.camera?.ortho;
@@ -547,7 +553,9 @@ class App extends React.Component<{ observer: Observer }> {
                             title={this.state?.poi?.playing ? t('Pause', lang) : t('Play', lang)}
                             aria-label={this.state?.poi?.playing ? t('Pause', lang) : t('Play', lang)}
                         >
-                            {this.state?.poi?.playing ? '⏸' : '►'}
+                            <span className='material-symbols-outlined'>
+                                {this.state?.poi?.playing ? 'pause' : 'play_arrow'}
+                            </span>
                         </button>
                         <button
                             type='button'
@@ -556,7 +564,7 @@ class App extends React.Component<{ observer: Observer }> {
                             title={t('Stop', lang)}
                             aria-label={t('Stop', lang)}
                         >
-                            ⏹
+                            <span className='material-symbols-outlined'>stop</span>
                         </button>
                         <button
                             type='button'
@@ -569,7 +577,7 @@ class App extends React.Component<{ observer: Observer }> {
                             title={t('Previous POI', lang)}
                             aria-label={t('Previous POI', lang)}
                         >
-                            ‹
+                            <span className='material-symbols-outlined'>chevron_left</span>
                         </button>
                         <div className='poi-player-title'>
                             {String(currentPoi.title ?? `POI ${currentPoi.number}`)}
@@ -585,7 +593,7 @@ class App extends React.Component<{ observer: Observer }> {
                             title={t('Next POI', lang)}
                             aria-label={t('Next POI', lang)}
                         >
-                            ›
+                            <span className='material-symbols-outlined'>chevron_right</span>
                         </button>
                     </div>
                 )}

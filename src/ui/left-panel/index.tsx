@@ -3,7 +3,7 @@ import React from 'react';
 
 import { postToViewerParent } from '../../embed-messaging';
 import { persistRequestedBackend, GraphicsBackend } from '../../graphics-backend';
-import { extract } from '../../helpers';
+import { extract, isMobileLayout } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { DEFAULT_POI_DURATION_SECONDS, DEFAULT_POI_HOLD_TIME_SECONDS } from '../../poi-defaults';
 import { DEFAULT_THEME_COLOR } from '../../theme';
@@ -1213,7 +1213,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         <div className='materials-layer-category-title'>
                                             {cat.title} ({cat.items.length})
                                         </div>
-                                        {cat.title === 'MATERIAL CHANNELS' && !observerData?.scene?.isTileset && (
+                                        {/* Режим «По объектам» требует кликать по объектам и читать
+                                            поштучные значения материалов — на узком экране это нерабочий
+                                            сценарий, поэтому переключатель там не показывается. */}
+                                        {cat.title === 'MATERIAL CHANNELS' && !observerData?.scene?.isTileset && !isMobileLayout() && (
                                             <Toggle
                                                 label={t('By objects', lang)}
                                                 value={observerData?.debug?.withTextureOnly ?? false}

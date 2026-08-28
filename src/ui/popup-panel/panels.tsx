@@ -1,7 +1,7 @@
 import { Button, Container, Label, TextAreaInput, TextInput, TreeView, TreeViewItem } from '@playcanvas/pcui/react';
 import React from 'react';
 
-import { extract, addEventListenerOnClickOnly } from '../../helpers';
+import { addEventListenerOnClickOnly, extract, isMobileLayout } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData, HierarchyNode } from '../../types';
 import { Detail, Slider, Toggle, Select, ColorPickerControl, ToggleColor, Numeric, Vector } from '../components';
@@ -215,7 +215,10 @@ class InfoPanel extends React.Component <{
         const lang = observerData?.ui?.language;
         const embed = observerData?.ui?.embed;
         const showControlsTab = !(embed?.enabled) || embed.controls;
-        const showModelTab = !(embed?.enabled) || embed.info;
+        // На узком экране вкладка «Модель» — это длинное дерево иерархии и таблицы текстур,
+        // которые там нечитаемы; остаются «Управление» и «О программе». Если активной была
+        // именно она, `activeTab` ниже сам перекинет на первую доступную.
+        const showModelTab = (!(embed?.enabled) || embed.info) && !isMobileLayout();
         const showAboutTab = !(embed?.enabled) || embed.info;
         const showFitControl = !(embed?.enabled) || embed.fit;
         const showResetControl = !(embed?.enabled) || embed.reset;

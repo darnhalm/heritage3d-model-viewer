@@ -3,7 +3,7 @@ import React from 'react';
 
 import AnimationControls from './animation-controls';
 import { FragmentPanel, MeasurementsPanel, ViewPanel, InfoPanel } from './panels';
-import { addEventListenerOnClickOnly } from '../../helpers';
+import { addEventListenerOnClickOnly, isMobileLayout } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData } from '../../types';
 
@@ -95,7 +95,12 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
         const embed = this.props.observerData?.ui?.embed;
         // Вне встройки — всегда; во встройке — по флагу animControls (его дефолт
         // зависит от пресета: full/compact → вкл, minimal → выкл).
-        const showAnimationControls = !(embed?.enabled) || embed?.animControls !== false;
+        const showAnimationControls = (!(embed?.enabled) || embed?.animControls !== false) &&
+            !(isMobileLayout() && (
+                this.props.observerData.fragment.selecting ||
+                this.props.observerData.fragment.initialized ||
+                this.props.observerData.fragment.enabled
+            ));
         const showInfoButton = !(embed?.enabled) || embed.info || embed.controls;
         const showMeasureButton = !(embed?.enabled) || embed.measure;
         const showFitButton = !(embed?.enabled) || embed.fit;

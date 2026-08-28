@@ -244,6 +244,20 @@ select {
     z-index: 1;
 }
 
+/*
+ * Иконки плеера — глифы Material Symbols, а не символы Unicode.
+ *
+ * Раньше здесь стояли `⏸`, `►` и `⏹`. На мобильных системах у `⏸` и `⏹` начертание по
+ * умолчанию эмодзи, и кнопки приезжали цветными — на десктопе тех же символов это не
+ * касалось, потому что там подхватывался текстовый шрифт.
+ */
+.poi-player-button .material-symbols-outlined {
+    font-size: 22px;
+    line-height: 1;
+    color: inherit;
+    pointer-events: none;
+}
+
 .poi-player-button {
     width: 28px;
     height: 28px;
@@ -3247,7 +3261,10 @@ input {
         margin: 8px 0 !important;
     }
 
-    #popup-buttons-parent #fullscreen-button,
+    /*
+     * На узком экране в панели остаётся только то, чем реально пользуются пальцем.
+     * Полноэкранный режим здесь как раз нужнее, чем на десктопе, — его вернули.
+     */
     #popup-buttons-parent #camera-mode-button,
     #popup-buttons-parent #view-button {
         display: none !important;
