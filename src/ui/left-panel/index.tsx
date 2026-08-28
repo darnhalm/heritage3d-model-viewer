@@ -22,16 +22,21 @@ import { hasSeenTour } from './tour-seen';
  * Почему дробные вообще нужны: пиксели считаются по площади, поэтому шаг с 1 сразу на 2 — это
  * не «вдвое меньше работы», а вчетверо, и картинка проседает соответственно. 1.5 даёт 44%
  * пикселей — почти весь выигрыш при заметно меньшей потере чёткости.
+ *
+ * Значения строковые, и это не небрежность: `SelectInput` из pcui при `type='number'`
+ * прогоняет выбранное через `parseInt(value, 10)`, то есть 1.5 превратилась бы в 1 и
+ * переключатель бы просто отскакивал назад. Поэтому список строковый, а обратно в число
+ * значение переводит уже обработчик.
  */
 const PIXEL_SCALES: Option[] = [
-    { v: 1, t: '1 — 100%' },
-    { v: 1.3, t: '1.3 — 77%' },
-    { v: 1.5, t: '1.5 — 67%' },
-    { v: 1.7, t: '1.7 — 59%' },
-    { v: 2, t: '2 — 50%' },
-    { v: 4, t: '4 — 25%' },
-    { v: 8, t: '8' },
-    { v: 16, t: '16' }
+    { v: '1', t: '1 — 100%' },
+    { v: '1.3', t: '1.3 — 77%' },
+    { v: '1.5', t: '1.5 — 67%' },
+    { v: '1.7', t: '1.7 — 59%' },
+    { v: '2', t: '2 — 50%' },
+    { v: '4', t: '4 — 25%' },
+    { v: '8', t: '8' },
+    { v: '16', t: '16' }
 ];
 
 type PoiItem = {
@@ -327,10 +332,10 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     setProperty={(value: string) => props.setProperty('camera.tonemapping', value)} />
                 <Select
                     label={t('Pixel Scale', lang)}
-                    value={props.observerData.camera.pixelScale}
-                    type='number'
+                    value={String(props.observerData.camera.pixelScale)}
+                    type='string'
                     options={PIXEL_SCALES}
-                    setProperty={(value: number) => props.setProperty('camera.pixelScale', value)} />
+                    setProperty={(value: string) => props.setProperty('camera.pixelScale', Number(value))} />
                 <Detail label={t('Viewport', lang)} value={`${props.observerData.runtime?.viewportWidth ?? 0} x ${props.observerData.runtime?.viewportHeight ?? 0}`} />
                 <Toggle
                     label={t('Multisample', lang)}
