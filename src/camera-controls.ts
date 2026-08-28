@@ -62,6 +62,15 @@ const SURFACE_ZOOM_STEP = 1;
  */
 const SURFACE_ZOOM_MAX_STEP = 0.5;
 
+/**
+ * Остаток поворота, ниже которого выбег считается законченным, градусы.
+ *
+ * Выбег держит жест живым и на это время отбирает ввод у штатного контроллера, поэтому
+ * гаснуть он должен быстро: при `rotateDamping` 0.97 остаток тает примерно на 40% за кадр,
+ * то есть от заметного до этого порога проходит около десятка кадров.
+ */
+const SURFACE_ORBIT_EPSILON = 0.002;
+
 /** Keyboard fly speed: normal WASD is precise, Shift restores the former cruising speed. */
 const FLY_KEYBOARD_SPEED = 1 / 3;
 const FLY_KEYBOARD_BOOST_SPEED = 1;
@@ -156,7 +165,7 @@ class CameraControls {
 
     private _mode: 'orbit' | 'fly';
 
-    private _surfaceOrbit: { phase: 'pending' | 'active'; pivot: Vec3 | null } | null = null;
+    private _surfaceOrbit: { phase: 'pending' | 'active' | 'coasting'; pivot: Vec3 | null } | null = null;
 
     private _surfaceOrbitDelta: Vec2 = new Vec2();
 
@@ -352,6 +361,18 @@ class CameraControls {
 
     endSurfaceOrbit() {
         if (!this._surfaceOrbit) return;
+        // Кнопку отпустили, но накопленный поворот ещё не отработан: доигрываем его как
+        // выбег, иначе движение обрывается ровно в тот момент, когда рука уже остановилась.
+        if (this._surfaceOrbit.phase === 'active' && this._surfaceOrbit.pivot &&
+            this._surfaceOrbitDelta.length() > SURFACE_ORBIT_EPSILON) {
+            this._surfaceOrbit.phase = 'coasting';
+            return;
+        }
+        this.finishSurfaceOrbit();
+    }
+
+    /** Снять жест орбиты и вернуть управление штатному контроллеру. */
+    private finishSurfaceOrbit() {
         this._surfaceOrbit = null;
         this._surfaceOrbitDelta.set(0, 0);
         if (this._mode === 'orbit') this._orbitController.attach(this._pose, false);
@@ -442,11 +463,28 @@ class CameraControls {
         this.endSurfacePan();
     }
 
-    private applySurfaceOrbit() {
+    /**
+     * Довернуть камеру вокруг найденной точки поверхности.
+     *
+     * Накопленный сдвиг отрабатывается не целиком за кадр, а долями — тем же законом
+     * `damp`, что у штатной орбиты, и с тем же `rotateDamping`. Без этого поверхностный
+     * поворот идёт жёстко, ступенька в ступеньку за движением мыши, и на фоне обычной
+     * орбиты выглядит дёрганым. Остаток переносится на следующие кадры, поэтому после
+     * отпускания кнопки движение не обрывается, а коротко догасает.
+     *
+     * @param dt - Длительность кадра, секунды.
+     */
+    private applySurfaceOrbit(dt: number) {
         const pivot = this._surfaceOrbit?.pivot;
-        const dx = this._surfaceOrbitDelta.x;
-        const dy = this._surfaceOrbitDelta.y;
-        this._surfaceOrbitDelta.set(0, 0);
+        const factor = damp(this._orbitController.rotateDamping, dt);
+        const dx = this._surfaceOrbitDelta.x * factor;
+        const dy = this._surfaceOrbitDelta.y * factor;
+        this._surfaceOrbitDelta.x -= dx;
+        this._surfaceOrbitDelta.y -= dy;
+        if (this._surfaceOrbit?.phase === 'coasting' &&
+            this._surfaceOrbitDelta.length() <= SURFACE_ORBIT_EPSILON) {
+            this._surfaceOrbitDelta.set(0, 0);
+        }
         if (!pivot || (dx === 0 && dy === 0)) return;
 
         surfaceAngles.copy(this._pose.angles);
@@ -610,8 +648,13 @@ class CameraControls {
         // cannot rotate around its old central focus at the same time.
         if (this._surfaceOrbit || this._surfacePan) {
             frame.read();
-            if (this._surfaceOrbit?.phase === 'active') this.applySurfaceOrbit();
+            const orbiting = this._surfaceOrbit?.phase;
+            if (orbiting === 'active' || orbiting === 'coasting') this.applySurfaceOrbit(dt);
             if (this._surfacePan?.phase === 'active') this.applySurfacePan();
+            // Выбег закончился — возвращаем ввод штатному контроллеру.
+            if (this._surfaceOrbit?.phase === 'coasting' && this._surfaceOrbitDelta.length() === 0) {
+                this.finishSurfaceOrbit();
+            }
         } else {
             this._pose.copy(this._controller.update(frame, dt));
         }
