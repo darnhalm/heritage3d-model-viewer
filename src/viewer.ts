@@ -2296,6 +2296,10 @@ class Viewer {
                 // Ручной выбор в «Масштабе пикселя» этим переключателем сбрасывается — HD и
                 // SD задают режим целиком, иначе две настройки противоречили бы друг другу.
                 this.observer.set('camera.pixelScale', enabled ? 1 : SD_PIXEL_SCALE);
+                // Сглаживание по сэмплам — тоже часть цены кадра, и в SD ему делать нечего.
+                if (this.observer.get('camera.multisampleSupported')) {
+                    this.observer.set('camera.multisample', enabled);
+                }
                 this.renderNextFrame();
             },
             'camera.mode': (mode: 'orbit' | 'fly') => {

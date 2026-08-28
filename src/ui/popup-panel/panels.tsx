@@ -298,6 +298,17 @@ class InfoPanel extends React.Component <{
                                         value={mouseButtonsInverted}
                                         setProperty={(value: boolean) => setProperty('camera.mouseButtonsInverted', value)}
                                     />
+                                    <Select
+                                        label={t('Pointer device', lang)}
+                                        type='string'
+                                        options={[
+                                            { v: 'auto', t: t('Detect automatically', lang) },
+                                            { v: 'mouse', t: t('Mouse', lang) },
+                                            { v: 'trackpad', t: t('Trackpad', lang) }
+                                        ]}
+                                        value={String(observerData.camera.pointerDevice ?? 'auto')}
+                                        setProperty={(value: string) => setProperty('camera.pointerDevice', value)}
+                                    />
                                     <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
                                     <ControlDetail label={t('Look Around', lang)} value={t(mouseButtonsInverted ? 'Right Mouse' : 'Left Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'right_click' : 'left_click']} />
                                     <ControlDetail label={t('Fly', lang)} value='W, S, A, D' icon='keyboard' />

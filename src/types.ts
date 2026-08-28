@@ -82,6 +82,8 @@ export interface ObserverData {
         surfacePivot?: boolean,
         /** Swap the orbit and pan assignments of the left and right mouse buttons. */
         mouseButtonsInverted?: boolean,
+        /** Источник колеса: `auto` определяет сам, иначе принудительно мышь или трекпад. */
+        pointerDevice?: 'auto' | 'mouse' | 'trackpad',
         position?: [number, number, number] | null,
         focus?: [number, number, number] | null,
         /** Проекция камеры ортогональна. */

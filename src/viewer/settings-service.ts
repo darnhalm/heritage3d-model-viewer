@@ -44,7 +44,8 @@ class SettingsService {
         // Per-user navigation preferences come from the compact cookie and must not change when
         // a model-specific settings sidecar is applied.
         'camera.surfacePivot',
-        'camera.mouseButtonsInverted'
+        'camera.mouseButtonsInverted',
+        'camera.pointerDevice'
     ];
 
     private static readonly SETTINGS_CANDIDATE_VERSIONS = 20;
@@ -469,7 +470,7 @@ class SettingsService {
         // Там же и режим измерений: кнопки для него на телефоне нет, и включённым из файла
         // он оставил бы пользователя в режиме, из которого нечем выйти.
         const filter = isMobileLayout() ?
-            [...SettingsService.SETTINGS_FILTER_PATHS, 'camera.hq', 'camera.pixelScale', 'measure.enabled'] :
+            [...SettingsService.SETTINGS_FILTER_PATHS, 'camera.hq', 'camera.pixelScale', 'camera.multisample', 'measure.enabled'] :
             SettingsService.SETTINGS_FILTER_PATHS;
         const blockedKeys = new Set(['__proto__', 'constructor', 'prototype']);
         const colorPaths = ['skybox.backgroundColor', 'light.color', 'theme.primaryColor', 'debug.wireframeColor'];

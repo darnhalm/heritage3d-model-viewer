@@ -182,6 +182,7 @@ const observerData: ObserverData = {
         flySpeed: 1,
         surfacePivot: true,
         mouseButtonsInverted: false,
+        pointerDevice: 'auto',
         position: null,
         focus: null,
         ortho: false,
@@ -389,7 +390,9 @@ const saveNavigationCookie = (observer: Observer) => {
     try {
         const surfacePivot = observer.get('camera.surfacePivot') !== false ? '1' : '0';
         const mouseButtonsInverted = observer.get('camera.mouseButtonsInverted') === true ? '1' : '0';
-        const value = `${surfacePivot}.${mouseButtonsInverted}`;
+        // Третий сегмент добавлен позже: куки из двух сегментов читаются как «auto».
+        const pointerDevice = String(observer.get('camera.pointerDevice') ?? 'auto');
+        const value = `${surfacePivot}.${mouseButtonsInverted}.${pointerDevice}`;
         // The global observer listener also receives render/runtime changes. Avoid rewriting the
         // same cookie on each of them; navigation preferences change only from explicit UI input.
         if (value === lastNavigationCookieValue) return;
@@ -404,10 +407,13 @@ const loadNavigationCookie = (observer: Observer) => {
         const value = document.cookie.split(';').map(part => part.trim()).find(part => part.startsWith(prefix))?.slice(prefix.length);
         if (!value) return;
         lastNavigationCookieValue = value;
-        const [surfacePivot, mouseButtonsInverted] = value.split('.');
+        const [surfacePivot, mouseButtonsInverted, pointerDevice] = value.split('.');
         if (surfacePivot === '0' || surfacePivot === '1') observer.set('camera.surfacePivot', surfacePivot === '1');
         if (mouseButtonsInverted === '0' || mouseButtonsInverted === '1') {
             observer.set('camera.mouseButtonsInverted', mouseButtonsInverted === '1');
+        }
+        if (pointerDevice === 'auto' || pointerDevice === 'mouse' || pointerDevice === 'trackpad') {
+            observer.set('camera.pointerDevice', pointerDevice);
         }
     } catch { /* cookies unavailable */ }
 };
@@ -453,7 +459,11 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
         'camera.surfacePivot', 'camera.mouseButtonsInverted',
         // Сеансовое состояние проекции и навигационного куба: в старом localStorage оно
         // могло сохраниться, поэтому отбрасываем и на загрузке.
-        'camera.ortho', 'camera.viewCube'];
+        'camera.ortho', 'camera.viewCube',
+        // Режим качества на узком экране — свойство устройства, а не сохранённый выбор.
+        // Телефон, заходивший до появления мобильного умолчания, иначе навсегда остаётся в
+        // HD: в localStorage лежит `hq: true`, и он побеждает дефолт при каждой загрузке.
+        ...(isMobileLayout() ? ['camera.hq', 'camera.pixelScale', 'camera.multisample'] : [])];
 
     const loadRec = (path: string, value: unknown) => {
         if (filter.indexOf(path) !== -1) {

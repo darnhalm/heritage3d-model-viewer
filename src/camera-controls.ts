@@ -66,10 +66,11 @@ const SURFACE_ZOOM_MAX_STEP = 0.5;
  * Какая доля скорости выбега остаётся через секунду.
  *
  * Задано «за секунду», а не «за кадр», чтобы выбег не зависел от частоты кадров: на 30 и на
- * 120 кадрах он одинаковой длины. 0.02 означает, что за секунду скорость падает до двух
- * процентов — модель ощутимо доворачивается после броска и мягко встаёт.
+ * 120 кадрах он одинаковой длины. 0.004 означает, что за секунду скорость падает до четырёх
+ * десятых процента: доворот заметен, но короткий — основное движение гаснет за две десятых
+ * секунды, а не за полсекунды, как при 0.02.
  */
-const SURFACE_ORBIT_COAST_RETENTION = 0.02;
+const SURFACE_ORBIT_COAST_RETENTION = 0.004;
 
 /**
  * Скорость, ниже которой выбег прекращается, экранных пикселей в секунду.
@@ -106,6 +107,9 @@ const TRACKPAD_WHEEL_MAX_STEP = 40;
  * Без залипания классификация прыгала бы посреди жеста, и свайп то вращал бы, то зумил.
  */
 const TRACKPAD_WHEEL_STICKY_MS = 400;
+
+/** Что считать источником `wheel`: определять самим или взять указанное пользователем. */
+type PointerDevice = 'auto' | 'mouse' | 'trackpad';
 
 /** Keyboard fly speed: normal WASD is precise, Shift restores the former cruising speed. */
 const FLY_KEYBOARD_SPEED = 1 / 3;
@@ -261,7 +265,7 @@ class CameraControls {
     /** Degrees per CSS pixel for the event-driven off-axis surface orbit. */
     surfaceOrbitSpeed = 0.25;
 
-    pinchSpeed = 0.4;
+    pinchSpeed = 0.25;
 
     wheelSpeed = 0.06;
 
@@ -580,13 +584,16 @@ class CameraControls {
     private _onWheel = (event: WheelEvent) => {
         if (event.ctrlKey || this._mode !== 'orbit') return;
 
+        const device = (this._observer.get('camera.pointerDevice') ?? 'auto') as PointerDevice;
+        if (device === 'mouse') return;
+
         const now = performance.now();
         const pixelMode = event.deltaMode === 0;
-        const looksLikeTrackpad = pixelMode && (
+        const looksLikeTrackpad = device === 'trackpad' || (pixelMode && (
             event.deltaX !== 0 ||
             !Number.isInteger(event.deltaY) ||
             Math.abs(event.deltaY) < TRACKPAD_WHEEL_MAX_STEP
-        );
+        ));
         const sticky = now - this._trackpadSeenAt < TRACKPAD_WHEEL_STICKY_MS;
 
         if (!looksLikeTrackpad && !sticky) return;
