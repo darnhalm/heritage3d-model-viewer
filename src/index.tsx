@@ -384,7 +384,16 @@ const observerData: ObserverData = {
 
 // Version the cookie when the shipped defaults change so an automatically persisted value from
 // the previous rollout does not silently override the new layout.
-const NAVIGATION_COOKIE = 'model-viewer-camera-navigation-v3';
+const NAVIGATION_COOKIE = 'model-viewer-camera-navigation-v4';
+
+// Версия поднята из-за устройства ввода. Первая сборка с этой настройкой умолчанием ставила
+// «определять автоматически» и успела записать `auto` в куки всем, кто её открывал. Умолчанием
+// стала мышь, но сохранённое значение перебивало бы её при каждой загрузке — а отличить
+// «пользователь выбрал авто» от «так записалось само» в старой куке нечем.
+//
+// Из старой куки переносим только точку вращения и инверсию кнопок: их выбирали руками, терять
+// их незачем. Устройство ввода из неё игнорируется и берётся из умолчаний.
+const NAVIGATION_COOKIE_LEGACY = 'model-viewer-camera-navigation-v3';
 const NAVIGATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 let lastNavigationCookieValue: string | null = null;
 
@@ -405,10 +414,16 @@ const saveNavigationCookie = (observer: Observer) => {
 
 const loadNavigationCookie = (observer: Observer) => {
     try {
-        const prefix = `${NAVIGATION_COOKIE}=`;
-        const value = document.cookie.split(';').map(part => part.trim()).find(part => part.startsWith(prefix))?.slice(prefix.length);
+        const read = (name: string) => {
+            const prefix = `${name}=`;
+            return document.cookie.split(';').map(part => part.trim())
+            .find(part => part.startsWith(prefix))?.slice(prefix.length);
+        };
+        const current = read(NAVIGATION_COOKIE);
+        // Из старой куки берём только два первых сегмента, устройство ввода из неё не переносим.
+        const value = current ?? read(NAVIGATION_COOKIE_LEGACY)?.split('.').slice(0, 2).join('.');
         if (!value) return;
-        lastNavigationCookieValue = value;
+        if (current) lastNavigationCookieValue = value;
         const [surfacePivot, mouseButtonsInverted, pointerDevice] = value.split('.');
         if (surfacePivot === '0' || surfacePivot === '1') observer.set('camera.surfacePivot', surfacePivot === '1');
         if (mouseButtonsInverted === '0' || mouseButtonsInverted === '1') {
