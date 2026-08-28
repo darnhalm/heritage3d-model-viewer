@@ -87,6 +87,26 @@ const SURFACE_ORBIT_MIN_SPEED = 2;
  */
 const SURFACE_ORBIT_VELOCITY_WINDOW = 0.05;
 
+/**
+ * Признаки, по которым `wheel` считается свайпом по трекпаду, а не колесом мыши.
+ *
+ * Браузер отдаёт и то, и другое одним событием, а различать их надо: колесо мыши обязано
+ * зумить, как и раньше, а двухпальцевый свайп по трекпаду — вращать (зум там уже на щипке).
+ * Отличие в характере: колесо шлёт редкие крупные шаги строго по вертикали, обычно ровно 100
+ * или кратно ему, трекпад — частые мелкие, нередко с горизонтальной составляющей и дробные.
+ *
+ * Щипок на трекпаде сюда не попадает: браузер помечает его `ctrlKey`, и он уходит в зум.
+ */
+const TRACKPAD_WHEEL_MAX_STEP = 40;
+
+/**
+ * Сколько держится решение «это трекпад», мс.
+ *
+ * Внутри одного свайпа события разнородны: в начале и в конце шаги мельче, чем в середине.
+ * Без залипания классификация прыгала бы посреди жеста, и свайп то вращал бы, то зумил.
+ */
+const TRACKPAD_WHEEL_STICKY_MS = 400;
+
 /** Keyboard fly speed: normal WASD is precise, Shift restores the former cruising speed. */
 const FLY_KEYBOARD_SPEED = 1 / 3;
 const FLY_KEYBOARD_BOOST_SPEED = 1;
@@ -186,6 +206,12 @@ class CameraControls {
     /** Угловая скорость поворота для выбега, экранных пикселей в секунду. */
     private _surfaceOrbitVelocity = new Vec2();
 
+    /** Накопленный свайп по трекпаду, пиксели. Тратится в `update` на поворот. */
+    private _trackpadScroll = new Vec2();
+
+    /** Когда последний раз видели событие, похожее на трекпад. */
+    private _trackpadSeenAt = 0;
+
     private _surfaceOrbitDelta: Vec2 = new Vec2();
 
     private _surfacePan: { phase: 'pending' | 'active'; depth: number } | null = null;
@@ -261,6 +287,7 @@ class CameraControls {
 
         // attach input
         this._desktopInput.attach(this._app.graphicsDevice.canvas);
+        this._app.graphicsDevice.canvas.addEventListener('wheel', this._onWheel, { passive: true });
         this._orbitMobileInput.attach(this._app.graphicsDevice.canvas);
         this._flyMobileInput.attach(this._app.graphicsDevice.canvas);
         this._gamepadInput.attach(this._app.graphicsDevice.canvas);
@@ -542,6 +569,33 @@ class CameraControls {
         this._pose.set(surfaceOffset.add(pivot), surfaceAngles, this._pose.distance);
     }
 
+    /**
+     * Разобрать событие колеса: свайп по трекпаду или всё остальное.
+     *
+     * Свайп копится отдельно и в `update` уходит в поворот; зум для него подавляется. Колесо
+     * мыши и щипок на трекпаде (у него выставлен `ctrlKey`) идут прежним путём — в зум.
+     *
+     * @param event - Событие колеса.
+     */
+    private _onWheel = (event: WheelEvent) => {
+        if (event.ctrlKey || this._mode !== 'orbit') return;
+
+        const now = performance.now();
+        const pixelMode = event.deltaMode === 0;
+        const looksLikeTrackpad = pixelMode && (
+            event.deltaX !== 0 ||
+            !Number.isInteger(event.deltaY) ||
+            Math.abs(event.deltaY) < TRACKPAD_WHEEL_MAX_STEP
+        );
+        const sticky = now - this._trackpadSeenAt < TRACKPAD_WHEEL_STICKY_MS;
+
+        if (!looksLikeTrackpad && !sticky) return;
+
+        this._trackpadSeenAt = now;
+        this._trackpadScroll.x += event.deltaX;
+        this._trackpadScroll.y += event.deltaY;
+    };
+
     private applySurfacePan() {
         const pan = this._surfacePan;
         const dx = this._surfacePanDelta.x;
@@ -624,9 +678,13 @@ class CameraControls {
         v.add(panMove.mulScalar(desktopPan));
         // Колесо: если контроллер поверхностной навигации подсказал точку под курсором,
         // тянем камеру к ней и гасим обычный шаг — иначе зум сработал бы дважды.
+        // Свайп по трекпаду уже разобран в `_onWheel` и пойдёт в поворот — значит этот же
+        // `wheel` не должен ещё и зумить.
+        const trackpadSwipe = this._trackpadScroll.length() > 0;
         const wheelAmount = wheel[0] * this.wheelSpeed * dt;
-        const surfaceZoomed = orbit === 1 && !desktopPan && this.applySurfaceZoom(wheelAmount);
-        const wheelMove = new Vec3(0, 0, surfaceZoomed ? 0 : -wheel[0]);
+        const surfaceZoomed = !trackpadSwipe && orbit === 1 && !desktopPan &&
+            this.applySurfaceZoom(wheelAmount);
+        const wheelMove = new Vec3(0, 0, (surfaceZoomed || trackpadSwipe) ? 0 : -wheel[0]);
         v.add(wheelMove.mulScalar(this.wheelSpeed * dt));
         // FIXME: need to flip z axis for orbit camera
         deltas.move.append([v.x, v.y, orbit ? -v.z : v.z]);
@@ -643,11 +701,19 @@ class CameraControls {
             while (next > 180) next -= 360;
             while (next < -180) next += 360;
             this._observer.set('skybox.rotation', next);
+            // Свайп во время вращения неба не копим: иначе он выстрелит одним рывком, когда
+            // жест закончится.
+            this._trackpadScroll.set(0, 0);
             deltas.rotate.append([0, 0, 0]);
         } else {
             v.set(0, 0, 0);
             const mouseRotate = new Vec3(mouse[0], mouse[1], 0);
             v.add(mouseRotate.mulScalar((1 - desktopPan) * this.orbitSpeed * dt));
+            // Свайп двумя пальцами вращает так же, как перетаскивание: содержимое едет за
+            // пальцами, поэтому знак обратный прокрутке.
+            const swipeRotate = new Vec3(-this._trackpadScroll.x, -this._trackpadScroll.y, 0);
+            v.add(swipeRotate.mulScalar(this.orbitSpeed * dt));
+            this._trackpadScroll.set(0, 0);
             deltas.rotate.append([v.x, v.y, v.z]);
         }
 
@@ -716,6 +782,7 @@ class CameraControls {
     destroy() {
         window.removeEventListener('keydown', this._onKeyDown);
         window.removeEventListener('keyup', this._onKeyUp);
+        this._app.graphicsDevice.canvas.removeEventListener('wheel', this._onWheel);
         this._desktopInput.destroy();
         this._orbitMobileInput.destroy();
         this._flyMobileInput.destroy();
