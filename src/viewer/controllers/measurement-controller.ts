@@ -640,7 +640,18 @@ class MeasurementController {
         return { area, maxDeviation };
     }
 
-    private pickSurfacePoint(x: number, y: number) {
+    /**
+     * Ближайшая точка поверхности под экранной координатой, синхронно.
+     *
+     * Публичный, потому что этим же пиком пользуется поверхностная навигация: во время
+     * жеста нужен ответ в том же кадре, а `Picker.pick` асинхронный и на серию событий
+     * выстроил бы очередь из проходов рендера.
+     *
+     * @param x - Экранная координата, CSS-пиксели канваса.
+     * @param y - Экранная координата, CSS-пиксели канваса.
+     * @returns Точка пересечения либо `null`, если луч не встретил геометрии.
+     */
+    pickSurfacePoint(x: number, y: number) {
         const { origin, direction } = this.getPickRay(x, y);
         let bestT = Number.POSITIVE_INFINITY;
         let bestPoint: Vec3 | null = null;

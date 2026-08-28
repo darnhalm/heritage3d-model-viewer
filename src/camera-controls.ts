@@ -38,6 +38,29 @@ const surfaceDeltaRotation = new Quat();
 const surfacePanRotation = new Quat();
 const surfacePanForward = new Vec3();
 const surfacePanMove = new Vec3();
+const surfaceZoomRotation = new Quat();
+const surfaceZoomForward = new Vec3();
+const surfaceZoomOffset = new Vec3();
+
+/**
+ * Чувствительность зума к точке под курсором, относительно штатного шага колеса.
+ *
+ * Единица означает «как было»: на вход берётся ровно та же величина `wheel * wheelSpeed * dt`,
+ * что и у обычного зума, поэтому ощущение прокрутки не меняется. Разница в том, что величина
+ * идёт в показатель экспоненты, то есть шаг задаётся множителем расстояния до поверхности, а
+ * не прибавкой к нему: одна и та же прокрутка одинаково ощущается и в метре от стены, и в
+ * сотне метров. Побочный, но нужный эффект — камера приближается к поверхности асимптотически
+ * и пересечь её не может.
+ */
+const SURFACE_ZOOM_STEP = 1;
+
+/**
+ * Предел изменения расстояния за один кадр.
+ *
+ * Колесо шлёт события пачками, и на трекпаде за кадр их набирается десятками. Без потолка
+ * показатель экспоненты вырастает до десятков, а камера — улетает на порядки от сцены.
+ */
+const SURFACE_ZOOM_MAX_STEP = 0.5;
 
 /** Keyboard fly speed: normal WASD is precise, Shift restores the former cruising speed. */
 const FLY_KEYBOARD_SPEED = 1 / 3;
@@ -138,6 +161,14 @@ class CameraControls {
     private _surfaceOrbitDelta: Vec2 = new Vec2();
 
     private _surfacePan: { phase: 'pending' | 'active'; depth: number } | null = null;
+
+    /**
+     * Точка под курсором, к которой тянет колесо.
+     *
+     * `null` — работает прежний зум к фокусу орбиты. Точку кладёт сюда контроллер
+     * поверхностной навигации: пик умеет он, а не эти контролы.
+     */
+    private _surfaceZoomPoint: Vec3 | null = null;
 
     private _surfacePanDelta: Vec2 = new Vec2();
 
@@ -348,6 +379,57 @@ class CameraControls {
         this._surfacePanDelta.y += dy;
     }
 
+    /**
+     * Задать точку, к которой тянет колесо.
+     *
+     * @param point - Мировая точка под курсором либо `null`, чтобы вернуть зум к фокусу орбиты.
+     */
+    setSurfaceZoomTarget(point: Vec3 | null) {
+        this._surfaceZoomPoint = point ? point.clone() : null;
+    }
+
+    /**
+     * Приблизить камеру к точке под курсором.
+     *
+     * Камера едет строго по лучу к самой точке, поэтому точка остаётся ровно под курсором —
+     * то же правило, что уже работает при поверхностном перетаскивании. Дополнительно фокус
+     * орбиты сажается на глубину этой точки: иначе он остаётся на прежней, более далёкой
+     * глубине, и следующий поворот пойдёт вокруг места где-то внутри модели.
+     *
+     * @param amount - Величина прокрутки: та же `wheel * wheelSpeed * dt`, что у обычного зума.
+     * @returns `true`, если зум применён и обычный шаг колеса больше не нужен.
+     */
+    private applySurfaceZoom(amount: number): boolean {
+        const anchor = this._surfaceZoomPoint;
+        if (!anchor || amount === 0) return false;
+
+        surfaceZoomOffset.sub2(this._pose.position, anchor);
+        const distance = surfaceZoomOffset.length();
+        if (distance <= this._zoomRange.x) return false;
+
+        // Знак совпадает с прокруткой: «от себя» даёт отрицательное значение и приближает.
+        const step = math.clamp(
+            amount * SURFACE_ZOOM_STEP,
+            -SURFACE_ZOOM_MAX_STEP,
+            SURFACE_ZOOM_MAX_STEP
+        );
+        const scale = Math.exp(step);
+        // Ближе минимума не подходим: за него начинается пересечение поверхности.
+        const next = Math.max(this._zoomRange.x, distance * scale);
+        surfaceZoomOffset.mulScalar(next / distance).add(anchor);
+
+        surfaceZoomRotation.setFromEulerAngles(this._pose.angles);
+        surfaceZoomRotation.transformVector(Vec3.FORWARD, surfaceZoomForward);
+        const focusDepth = Math.max(
+            this._zoomRange.x,
+            surfaceZoomForward.dot(tmpV2.sub2(anchor, surfaceZoomOffset))
+        );
+
+        this._pose.set(surfaceZoomOffset, this._pose.angles, focusDepth);
+        this._orbitController.attach(this._pose, false);
+        return true;
+    }
+
     endSurfacePan() {
         if (!this._surfacePan) return;
         this._surfacePan = null;
@@ -465,7 +547,11 @@ class CameraControls {
         v.add(keyMove.mulScalar(fly * this.moveSpeed * this.flySpeed * keyboardSpeed * dt));
         const panMove = screenToWorld(this._camera, mouse[0], mouse[1], distance);
         v.add(panMove.mulScalar(desktopPan));
-        const wheelMove = new Vec3(0, 0, -wheel[0]);
+        // Колесо: если контроллер поверхностной навигации подсказал точку под курсором,
+        // тянем камеру к ней и гасим обычный шаг — иначе зум сработал бы дважды.
+        const wheelAmount = wheel[0] * this.wheelSpeed * dt;
+        const surfaceZoomed = orbit === 1 && !desktopPan && this.applySurfaceZoom(wheelAmount);
+        const wheelMove = new Vec3(0, 0, surfaceZoomed ? 0 : -wheel[0]);
         v.add(wheelMove.mulScalar(this.wheelSpeed * dt));
         // FIXME: need to flip z axis for orbit camera
         deltas.move.append([v.x, v.y, orbit ? -v.z : v.z]);

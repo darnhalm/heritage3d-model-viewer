@@ -44,7 +44,12 @@ type SurfacePivotControllerArgs = {
     mouseButtonsInverted: () => boolean;
     worldToScreen: (point: Vec3) => Vec3;
     renderNextFrame: () => void;
+    /** Синхронный пик поверхности: колесу нужен ответ в том же кадре. */
+    pickSurfaceSync: (x: number, y: number) => Vec3 | null;
 };
+
+/** Как долго точка под курсором считается свежей внутри одной серии прокруток, мс. */
+const ZOOM_TARGET_TTL_MS = 150;
 
 /**
  * Resolves one depth point per drag. Orbit uses it as a temporary off-axis pivot while pan
@@ -58,6 +63,9 @@ class SurfacePivotController {
 
     private readonly picker: Picker;
 
+    /** Последняя точка, отданная колесу: серия прокруток не должна пикать на каждое событие. */
+    private zoomTarget: { x: number; y: number; at: number } | null = null;
+
     private readonly cameraControls: CameraControls;
 
     private readonly canStart: () => boolean;
@@ -67,6 +75,8 @@ class SurfacePivotController {
     private readonly worldToScreen: (point: Vec3) => Vec3;
 
     private readonly renderNextFrame: () => void;
+
+    private readonly pickSurfaceSync: (x: number, y: number) => Vec3 | null;
 
     private state: SurfacePivotState = { state: 'idle' };
 
@@ -159,6 +169,7 @@ class SurfacePivotController {
     constructor(args: SurfacePivotControllerArgs) {
         this.canvas = args.canvas;
         this.picker = args.picker;
+        this.pickSurfaceSync = args.pickSurfaceSync;
         this.cameraControls = args.cameraControls;
         this.canStart = args.canStart;
         this.mouseButtonsInverted = args.mouseButtonsInverted;
@@ -166,12 +177,44 @@ class SurfacePivotController {
         this.renderNextFrame = args.renderNextFrame;
         this.initMarker();
 
+        this.canvas.addEventListener('wheel', this.onWheel, { passive: true });
         this.canvas.addEventListener('pointerdown', this.onPointerDown);
         this.canvas.addEventListener('pointerleave', this.onPointerLeave);
         document.addEventListener('pointermove', this.onPointerMove);
         document.addEventListener('pointerup', this.onPointerUp);
         document.addEventListener('pointercancel', this.onPointerUp);
     }
+
+    /**
+     * Подсказать камере точку под курсором перед тем, как она обработает прокрутку.
+     *
+     * Пик синхронный и в той же серии прокруток переиспользуется: колесо шлёт события
+     * пачками, а обходить треугольники на каждое из них незачем. Промах по геометрии сбрасывает
+     * подсказку, и зум возвращается к прежнему поведению — к фокусу орбиты.
+     *
+     * @param event - Событие колеса.
+     */
+    private onWheel = (event: WheelEvent) => {
+        if (!this.canStart()) {
+            this.cameraControls.setSurfaceZoomTarget(null);
+            return;
+        }
+        const rect = this.canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const now = performance.now();
+        const fresh = this.zoomTarget &&
+            now - this.zoomTarget.at < ZOOM_TARGET_TTL_MS &&
+            Math.abs(this.zoomTarget.x - x) < 2 &&
+            Math.abs(this.zoomTarget.y - y) < 2;
+        if (fresh) {
+            this.zoomTarget.at = now;
+            return;
+        }
+        const point = this.pickSurfaceSync(x, y);
+        this.cameraControls.setSurfaceZoomTarget(point);
+        this.zoomTarget = point ? { x, y, at: now } : null;
+    };
 
     private initMarker() {
         const wrapper = this.canvas.parentElement;
@@ -276,6 +319,7 @@ class SurfacePivotController {
 
     dispose() {
         this.reset();
+        this.canvas.removeEventListener('wheel', this.onWheel);
         this.canvas.removeEventListener('pointerdown', this.onPointerDown);
         this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
         document.removeEventListener('pointermove', this.onPointerMove);

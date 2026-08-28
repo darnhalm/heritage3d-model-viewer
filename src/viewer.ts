@@ -1629,7 +1629,9 @@ class Viewer {
             canStart: () => this.canUseSurfacePivot(),
             mouseButtonsInverted: () => this.cameraControls.mouseButtonsInverted,
             worldToScreen: point => this.fragmentWorldToCssScreen(point),
-            renderNextFrame: this.renderNextFrame.bind(this)
+            renderNextFrame: this.renderNextFrame.bind(this),
+            // Ленивая ссылка: контроллер измерений создаётся следом, а зовётся это уже в рантайме.
+            pickSurfaceSync: (x, y) => this.measurementController?.pickSurfacePoint(x, y) ?? null
         });
         this.measurementController = new MeasurementController({
             canvas: this.canvas,
