@@ -45,6 +45,55 @@ const fragmentGLSL = `
     }
 `;
 
+// Апскейл: билинейная растяжка плюс адаптивная резкость.
+//
+// Растянутая картинка мягкая — билинейная выборка съедает контраст кромок. Классический
+// unsharp mask возвращает его, но одинаковой силы для всего кадра он не годится: на почти
+// плоском небе он вытащит шум, а на контрастной кромке выбьет пиксель за пределы диапазона
+// и оставит светлую кайму.
+//
+// Поэтому сила усиления считается на каждый пиксель из запаса яркости в его окрестности:
+// сколько есть места вниз (`mn`) и вверх (`1 - mx`). Там, где пиксель у края диапазона,
+// запаса нет и резкость гасится сама. Корень смягчает переход. Итог дополнительно зажат в
+// [mn, mx] — это не даёт появиться ореолу вокруг кромок.
+//
+// Ядро записано в форме (c + w·сумма_соседей) / (1 + 4w) с отрицательным w: на однородном
+// участке оно даёт ровно исходный цвет, то есть плоские области не трогаются вообще.
+//
+// Это НЕ порт FSR или SGSR. Те дают лучшую реконструкцию кромок за счёт направленного
+// анализа, но их надо переносить с исходников, а не по памяти. Здесь простая и проверяемая
+// вещь; если качества не хватит, EASU встанет на это же место.
+const fragmentUpscaleGLSL = `
+    varying vec2 texcoord;
+    uniform sampler2D multiframeTex;
+    uniform float power;
+    uniform float sharpness;
+    uniform vec2 outputTexel;
+
+    vec3 tap(vec2 uv) {
+        return pow(texture2D(multiframeTex, uv).rgb, vec3(power));
+    }
+
+    void main(void) {
+        vec4 centerTexel = texture2D(multiframeTex, texcoord);
+        vec3 c = pow(centerTexel.rgb, vec3(power));
+        vec3 n = tap(texcoord + vec2(0.0, -outputTexel.y));
+        vec3 s = tap(texcoord + vec2(0.0, outputTexel.y));
+        vec3 w = tap(texcoord + vec2(-outputTexel.x, 0.0));
+        vec3 e = tap(texcoord + vec2(outputTexel.x, 0.0));
+
+        vec3 mn = min(c, min(min(n, s), min(w, e)));
+        vec3 mx = max(c, max(max(n, s), max(w, e)));
+
+        vec3 headroom = min(mn, vec3(1.0) - mx) / max(mx, vec3(1e-4));
+        float room = clamp(min(min(headroom.r, headroom.g), headroom.b), 0.0, 1.0);
+        float amount = -sharpness * sqrt(room);
+
+        vec3 color = (c + amount * (n + s + w + e)) / (1.0 + 4.0 * amount);
+        gl_FragColor = vec4(clamp(color, mn, mx), pow(centerTexel.a, power));
+    }
+`;
+
 const vertexWGSL = /* wgsl */`
     attribute vertex_position: vec2f;
 
@@ -102,6 +151,55 @@ const gauss = (x: number, sigma: number): number => {
     return (1.0 / (Math.sqrt(2.0 * Math.PI) * sigma)) * Math.exp(-(x * x) / (2.0 * sigma * sigma));
 };
 
+const fragmentUpscaleWGSL = /* wgsl */`
+    varying texcoord: vec2f;
+
+    var multiframeTex: texture_2d<f32>;
+    var multiframeSampler: sampler;
+
+    uniform outputTexel: vec2f;
+    uniform power: f32;
+    uniform sharpness: f32;
+
+    fn tap(uv: vec2f) -> vec3f {
+        let t: vec4f = textureSample(multiframeTex, multiframeSampler, uv);
+        return pow(t.rgb, vec3f(uniform.power));
+    }
+
+    @fragment
+    fn fragmentMain(input: FragmentInput) -> FragmentOutput {
+        var output: FragmentOutput;
+
+        let centerTexel: vec4f = textureSample(multiframeTex, multiframeSampler, input.texcoord);
+        let c: vec3f = pow(centerTexel.rgb, vec3f(uniform.power));
+        let n: vec3f = tap(input.texcoord + vec2f(0.0, -uniform.outputTexel.y));
+        let s: vec3f = tap(input.texcoord + vec2f(0.0, uniform.outputTexel.y));
+        let w: vec3f = tap(input.texcoord + vec2f(-uniform.outputTexel.x, 0.0));
+        let e: vec3f = tap(input.texcoord + vec2f(uniform.outputTexel.x, 0.0));
+
+        let mn: vec3f = min(c, min(min(n, s), min(w, e)));
+        let mx: vec3f = max(c, max(max(n, s), max(w, e)));
+
+        let headroom: vec3f = min(mn, vec3f(1.0) - mx) / max(mx, vec3f(1e-4));
+        let room: f32 = clamp(min(min(headroom.r, headroom.g), headroom.b), 0.0, 1.0);
+        let amount: f32 = -uniform.sharpness * sqrt(room);
+
+        let color: vec3f = (c + amount * (n + s + w + e)) / (1.0 + 4.0 * amount);
+        output.color = vec4f(clamp(color, mn, mx), pow(centerTexel.a, uniform.power));
+
+        return output;
+    }
+`;
+
+/**
+ * Сила резкости при растяжке.
+ *
+ * Знаменатель ядра равен `1 + 4w`, поэтому при w меньше -0.25 он обращается в ноль и картинка
+ * разваливается. 0.12 оставляет запас и на глаз возвращает примерно ту чёткость, которую
+ * съела билинейная выборка, не доводя до звона.
+ */
+const UPSCALE_SHARPNESS = 0.12;
+
 const accumBlend = new BlendState(true, BLENDEQUATION_ADD, BLENDMODE_CONSTANT, BLENDMODE_ONE_MINUS_CONSTANT);
 const noBlend = new BlendState(false);
 
@@ -129,6 +227,9 @@ class Multiframe {
     textureBias: number;
 
     shader: Shader = null;
+
+    /** Шейдер финального прохода, когда цель сцены мельче бэкбуфера. */
+    upscaleShader: Shader = null;
 
     accumTexture: Texture = null;
 
@@ -230,6 +331,17 @@ class Multiframe {
         // который может быть крупнее (`camera.pixelScale`). Поэтому фильтрация линейная: в
         // накопление она не вмешивается — там выборка идёт один в один, — а растяжку до
         // экрана делает гладкой вместо лесенки.
+        this.upscaleShader = ShaderUtils.createShader(device, {
+            uniqueName: 'multiframe-upscale-shader',
+            attributes: {
+                vertex_position: SEMANTIC_POSITION
+            },
+            vertexGLSL,
+            fragmentGLSL: fragmentUpscaleGLSL,
+            vertexWGSL,
+            fragmentWGSL: fragmentUpscaleWGSL
+        });
+
         this.accumTexture = new Texture(device, {
             name: 'multiframe-texture',
             width: device.width,
@@ -271,6 +383,7 @@ class Multiframe {
         this.finalRenderPass.shader = this.shader;
         this.finalRenderPass.events.on('execute', () => {
             const blending = this.enabled && this.sampleId > 0;
+            const source = blending ? this.accumTexture : this.sourceTex;
 
             if (this.blend !== 1.0) {
                 device.setBlendColor(this.blend, this.blend, this.blend, this.blend);
@@ -279,11 +392,19 @@ class Multiframe {
                 this.finalRenderPass.blendState = noBlend;
             }
 
+            // Растягиваем, только если цель сцены и правда мельче бэкбуфера. При совпадении
+            // размеров выборка попадает в центры текселей, и резкость нечего возвращать —
+            // там работает обычная копия, без лишних четырёх выборок на пиксель.
+            const upscaling = source.width !== device.width || source.height !== device.height;
+            this.finalRenderPass.shader = upscaling ? this.upscaleShader : this.shader;
+
             // we must flip the image upside-down on webgpu
             resolve(device.scope, {
                 texcoordMod: !blending && device.isWebGPU ? [1, -1, 0, 1] : [1, 1, 0, 0],
-                multiframeTex: blending ? this.accumTexture : this.sourceTex,
-                power: blending ? (1.0 / gamma) : 1.0
+                multiframeTex: source,
+                power: blending ? (1.0 / gamma) : 1.0,
+                sharpness: UPSCALE_SHARPNESS,
+                outputTexel: [1 / Math.max(1, device.width), 1 / Math.max(1, device.height)]
             });
         });
 
