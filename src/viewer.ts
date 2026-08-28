@@ -1874,14 +1874,13 @@ class Viewer {
     }
 
     private getPickRay(x: number, y: number) {
-        const rect = this.canvas.getBoundingClientRect();
-        // Mouse coordinates are CSS pixels while PlayCanvas screenToWorld expects
-        // render-target pixels. The difference is especially visible in SD mode.
-        const render = this.renderResolution();
-        const screenX = x * render.width / Math.max(1, rect.width);
-        const screenY = y * render.height / Math.max(1, rect.height);
-        const origin = this.camera.camera.screenToWorld(screenX, screenY, this.camera.camera.nearClip);
-        const end = this.camera.camera.screenToWorld(screenX, screenY, this.camera.camera.farClip);
+        // Координаты идут в `screenToWorld` как есть, без пересчёта: движок меряет экран
+        // через `device.clientRect`, а это `getBoundingClientRect()` канваса, то есть те же
+        // CSS-пиксели, в которых приходит мышь. Любой пересчёт — в пиксели устройства или
+        // цели рендера — уводит луч ровно во столько раз, каков масштаб; это и сбивало
+        // привязку кружка к поверхности при `camera.pixelScale` больше единицы.
+        const origin = this.camera.camera.screenToWorld(x, y, this.camera.camera.nearClip);
+        const end = this.camera.camera.screenToWorld(x, y, this.camera.camera.farClip);
         const direction = end.sub(origin).normalize();
         return { origin, direction };
     }
@@ -6212,14 +6211,9 @@ class Viewer {
     }
 
     private fragmentWorldToCssScreen(point: Vec3) {
-        const screen = this.camera.camera.worldToScreen(point);
-        const render = this.renderResolution();
-        const rect = this.canvas.getBoundingClientRect();
-        return new Vec3(
-            screen.x * rect.width / Math.max(1, render.width),
-            screen.y * rect.height / Math.max(1, render.height),
-            screen.z
-        );
+        // `worldToScreen` уже отдаёт CSS-пиксели канваса (движок берёт размер из
+        // `device.clientRect`), поэтому пересчитывать нечего — см. `getPickRay`.
+        return this.camera.camera.worldToScreen(point);
     }
 
     private updateFragmentHandles() {
