@@ -63,13 +63,29 @@ const SURFACE_ZOOM_STEP = 1;
 const SURFACE_ZOOM_MAX_STEP = 0.5;
 
 /**
- * Остаток поворота, ниже которого выбег считается законченным, градусы.
+ * Какая доля скорости выбега остаётся через секунду.
+ *
+ * Задано «за секунду», а не «за кадр», чтобы выбег не зависел от частоты кадров: на 30 и на
+ * 120 кадрах он одинаковой длины. 0.02 означает, что за секунду скорость падает до двух
+ * процентов — модель ощутимо доворачивается после броска и мягко встаёт.
+ */
+const SURFACE_ORBIT_COAST_RETENTION = 0.02;
+
+/**
+ * Скорость, ниже которой выбег прекращается, экранных пикселей в секунду.
  *
  * Выбег держит жест живым и на это время отбирает ввод у штатного контроллера, поэтому
- * гаснуть он должен быстро: при `rotateDamping` 0.97 остаток тает примерно на 40% за кадр,
- * то есть от заметного до этого порога проходит около десятка кадров.
+ * висеть на неразличимой глазом скорости он не должен.
  */
-const SURFACE_ORBIT_EPSILON = 0.002;
+const SURFACE_ORBIT_MIN_SPEED = 2;
+
+/**
+ * Окно усреднения скорости, секунды.
+ *
+ * Скорость для выбега берётся не из последнего кадра, а сглаженной: иначе случайное дрожание
+ * руки в момент отпускания кнопки задаёт бросок, которого человек не делал.
+ */
+const SURFACE_ORBIT_VELOCITY_WINDOW = 0.05;
 
 /** Keyboard fly speed: normal WASD is precise, Shift restores the former cruising speed. */
 const FLY_KEYBOARD_SPEED = 1 / 3;
@@ -166,6 +182,9 @@ class CameraControls {
     private _mode: 'orbit' | 'fly';
 
     private _surfaceOrbit: { phase: 'pending' | 'active' | 'coasting'; pivot: Vec3 | null } | null = null;
+
+    /** Угловая скорость поворота для выбега, экранных пикселей в секунду. */
+    private _surfaceOrbitVelocity = new Vec2();
 
     private _surfaceOrbitDelta: Vec2 = new Vec2();
 
@@ -344,6 +363,7 @@ class CameraControls {
         this._orbitController.attach(this._pose, false);
         this._surfaceOrbit = { phase: 'pending', pivot: null };
         this._surfaceOrbitDelta.set(0, 0);
+        this._surfaceOrbitVelocity.set(0, 0);
     }
 
     activateSurfaceOrbit(pivot: Vec3) {
@@ -364,7 +384,7 @@ class CameraControls {
         // Кнопку отпустили, но накопленный поворот ещё не отработан: доигрываем его как
         // выбег, иначе движение обрывается ровно в тот момент, когда рука уже остановилась.
         if (this._surfaceOrbit.phase === 'active' && this._surfaceOrbit.pivot &&
-            this._surfaceOrbitDelta.length() > SURFACE_ORBIT_EPSILON) {
+            this._surfaceOrbitVelocity.length() > SURFACE_ORBIT_MIN_SPEED) {
             this._surfaceOrbit.phase = 'coasting';
             return;
         }
@@ -375,6 +395,7 @@ class CameraControls {
     private finishSurfaceOrbit() {
         this._surfaceOrbit = null;
         this._surfaceOrbitDelta.set(0, 0);
+        this._surfaceOrbitVelocity.set(0, 0);
         if (this._mode === 'orbit') this._orbitController.attach(this._pose, false);
     }
 
@@ -476,15 +497,31 @@ class CameraControls {
      */
     private applySurfaceOrbit(dt: number) {
         const pivot = this._surfaceOrbit?.pivot;
-        const factor = damp(this._orbitController.rotateDamping, dt);
-        const dx = this._surfaceOrbitDelta.x * factor;
-        const dy = this._surfaceOrbitDelta.y * factor;
-        this._surfaceOrbitDelta.x -= dx;
-        this._surfaceOrbitDelta.y -= dy;
-        if (this._surfaceOrbit?.phase === 'coasting' &&
-            this._surfaceOrbitDelta.length() <= SURFACE_ORBIT_EPSILON) {
-            this._surfaceOrbitDelta.set(0, 0);
+        let dx = 0;
+        let dy = 0;
+
+        if (this._surfaceOrbit?.phase === 'coasting') {
+            // Кнопка отпущена: крутим по запомненной скорости, гася её со временем.
+            dx = this._surfaceOrbitVelocity.x * dt;
+            dy = this._surfaceOrbitVelocity.y * dt;
+            this._surfaceOrbitVelocity.mulScalar(Math.pow(SURFACE_ORBIT_COAST_RETENTION, dt));
+            if (this._surfaceOrbitVelocity.length() < SURFACE_ORBIT_MIN_SPEED) {
+                this._surfaceOrbitVelocity.set(0, 0);
+            }
+        } else {
+            const factor = damp(this._orbitController.rotateDamping, dt);
+            dx = this._surfaceOrbitDelta.x * factor;
+            dy = this._surfaceOrbitDelta.y * factor;
+            this._surfaceOrbitDelta.x -= dx;
+            this._surfaceOrbitDelta.y -= dy;
+            // Копим сглаженную скорость: по ней пойдёт выбег, когда кнопку отпустят.
+            if (dt > 0) {
+                const weight = Math.min(1, dt / SURFACE_ORBIT_VELOCITY_WINDOW);
+                this._surfaceOrbitVelocity.x += (dx / dt - this._surfaceOrbitVelocity.x) * weight;
+                this._surfaceOrbitVelocity.y += (dy / dt - this._surfaceOrbitVelocity.y) * weight;
+            }
         }
+
         if (!pivot || (dx === 0 && dy === 0)) return;
 
         surfaceAngles.copy(this._pose.angles);
@@ -644,6 +681,13 @@ class CameraControls {
         v.add(stickRotate.mulScalar(this.orbitSpeed * dt));
         deltas.rotate.append([v.x, v.y, v.z]);
 
+        // Выбег отбирает ввод у штатного контроллера, поэтому любое нажатие кнопки мыши его
+        // прерывает: иначе следующий жест пришлось бы ждать, пока модель довернётся. Через
+        // `beginSurfaceOrbit` это не закрыть — при активном инструменте его не зовут вовсе.
+        if (this._surfaceOrbit?.phase === 'coasting' && this._state.mouse.some(count => count > 0)) {
+            this.finishSurfaceOrbit();
+        }
+
         // Pending/active surface gestures consume ordinary input so the stock OrbitController
         // cannot rotate around its old central focus at the same time.
         if (this._surfaceOrbit || this._surfacePan) {
@@ -652,7 +696,7 @@ class CameraControls {
             if (orbiting === 'active' || orbiting === 'coasting') this.applySurfaceOrbit(dt);
             if (this._surfacePan?.phase === 'active') this.applySurfacePan();
             // Выбег закончился — возвращаем ввод штатному контроллеру.
-            if (this._surfaceOrbit?.phase === 'coasting' && this._surfaceOrbitDelta.length() === 0) {
+            if (this._surfaceOrbit?.phase === 'coasting' && this._surfaceOrbitVelocity.length() === 0) {
                 this.finishSurfaceOrbit();
             }
         } else {
