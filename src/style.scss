@@ -3947,3 +3947,17 @@ $panel-focus-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
         line-height: 1.2;
     }
 }
+
+/*
+ * Иллюстрация порядка загрузки тайлов в панели «Управление».
+ *
+ * Внутреннее разрешение канваса фиксировано, а по ширине он тянется на строку панели — так
+ * картинка остаётся резкой на любом экране без пересчёта размеров при каждом открытии.
+ */
+.tile-order-illustration {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 6px 0 2px;
+    border-radius: 4px;
+}

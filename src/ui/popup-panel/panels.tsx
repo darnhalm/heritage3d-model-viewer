@@ -87,6 +87,205 @@ const TwinIdRow = (props: { twinId?: string | null, lang: string }) => {
 
 // Миграция полезной части прежней ID-панели: путь и имя выбранного узла сцены
 // с копированием пути. Показывается в сведениях о модели только при выделении.
+/** Клетка кадра в иллюстрации очереди. */
+type OrderCell = {
+    c: number;
+    r: number;
+    x: number;
+    y: number;
+    distance: number;
+    sse: number;
+};
+
+/** Куда переезжает указатель в курсорном режиме, в долях кадра. */
+const CURSOR_WAYPOINTS = [
+    { x: 0.28, y: 0.32 },
+    { x: 0.74, y: 0.26 },
+    { x: 0.6, y: 0.72 },
+    { x: 0.2, y: 0.62 }
+];
+
+/**
+ * Иллюстрация порядка загрузки тайлов.
+ *
+ * Кадр 16x8 клеток: клетки загораются в том же порядке, в каком за ними пошла бы очередь, а
+ * цвет показывает место в ней — тёплый рано, холодный поздно. Порядок считается по той же
+ * лестнице, что в обходе: сперва центральные, затем по грубости, затем по близости.
+ *
+ * В курсорном режиме указатель переезжает между точками и очередь пересобирается от нового
+ * места: без движения он был бы неотличим от взгляда, ведь оба рисуют круг в кадре.
+ *
+ * Рисуем на канвасе, а не сотней элементов: панель живёт поверх трёхмерной сцены, и лишние
+ * сто узлов с переходами ей ни к чему.
+ *
+ * @param props - Свойства.
+ * @param props.mode - Выбранный режим очереди.
+ * @returns Канвас с проигрыванием очереди.
+ */
+const TileOrderIllustration = (props: { mode: string }) => {
+    const ref = React.useRef<HTMLCanvasElement>(null);
+
+    React.useEffect(() => {
+        const canvas = ref.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx) return;
+
+        const COLS = 16, ROWS = 8, CONE = 0.24;
+        const W = canvas.width, H = canvas.height;
+        const cw = W / COLS, ch = H / ROWS;
+
+        const cells: OrderCell[] = [];
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                const i = r * COLS + c;
+                const noise = Math.abs(Math.sin(i * 12.9898 + 4.1414) * 43758.5453 % 1);
+                // Верх кадра дальше от камеры: грубость на экране падает с расстоянием.
+                const distance = 1 + (ROWS - 1 - r) * 1.3;
+                cells.push({
+                    c, r,
+                    x: (c + 0.5) / COLS,
+                    y: (r + 0.5) / ROWS,
+                    distance,
+                    sse: (0.4 + noise * 1.6) / distance
+                });
+            }
+        }
+
+        const central = (cell: OrderCell, focus: { x: number, y: number }) =>
+            Math.hypot(cell.x - focus.x, (cell.y - focus.y) * 0.5) <= CONE;
+
+        const orderFor = (focus: { x: number, y: number } | null): OrderCell[] =>
+            [...cells].sort((a, b) => {
+                if (focus) {
+                    const ca = central(a, focus) ? 1 : 0;
+                    const cb = central(b, focus) ? 1 : 0;
+                    if (ca !== cb) return cb - ca;
+                }
+                if (a.sse !== b.sse) return b.sse - a.sse;
+                return a.distance - b.distance;
+            });
+
+        const draw = (seq: OrderCell[], upTo: number, focus: { x: number, y: number } | null, pointer: boolean) => {
+            ctx.clearRect(0, 0, W, H);
+            for (let k = 0; k < upTo; k++) {
+                const cell = seq[k];
+                const t = k / (seq.length - 1);
+                ctx.fillStyle = `rgb(${Math.round(232 + (86 - 232) * t)}, ${Math.round(163 + (150 - 163) * t)}, ${Math.round(61 + (184 - 61) * t)})`;
+                ctx.fillRect(cell.c * cw + 0.5, cell.r * ch + 0.5, cw - 1, ch - 1);
+            }
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
+
+            if (!focus) return;
+            ctx.strokeStyle = 'rgba(232, 163, 61, 0.9)';
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.ellipse(focus.x * W, focus.y * H, CONE * W, CONE * H * 2, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            if (!pointer) return;
+            // Стрелка указателя: сразу видно, что круг привязан к нему, а не к центру.
+            const px = focus.x * W, py = focus.y * H;
+            ctx.fillStyle = '#FFFFFF';
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(px, py + 13);
+            ctx.lineTo(px + 3.6, py + 9.6);
+            ctx.lineTo(px + 7.4, py + 12.6);
+            ctx.lineTo(px + 9.2, py + 10.4);
+            ctx.lineTo(px + 5.4, py + 7.6);
+            ctx.lineTo(px + 9.4, py + 6.6);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.fill();
+        };
+
+        const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        if (props.mode !== 'cursor') {
+            const focus = props.mode === 'default' ? null : { x: 0.5, y: 0.5 };
+            const seq = orderFor(focus);
+            if (reduced) {
+                draw(seq, seq.length, focus, false);
+                return;
+            }
+            let k = 0;
+            let timer = 0;
+            const tick = () => {
+                k = Math.min(seq.length, k + 3);
+                draw(seq, k, focus, false);
+                if (k < seq.length) timer = window.setTimeout(tick, 26);
+            };
+            tick();
+            return () => window.clearTimeout(timer);
+        }
+
+        // Курсорный режим: указатель переезжает, очередь пересобирается от нового места.
+        if (reduced) {
+            const focus = CURSOR_WAYPOINTS[0];
+            draw(orderFor(focus), cells.length, focus, true);
+            return;
+        }
+
+        let timer = 0;
+        let stopped = false;
+        // Три круга по точкам — достаточно, чтобы понять идею, и не крутится вечно поверх сцены.
+        const CYCLES = 3;
+        let visited = 0;
+
+        const glide = (from: { x: number, y: number }, to: { x: number, y: number }, done: () => void) => {
+            const steps = 14;
+            let i = 0;
+            const step = () => {
+                if (stopped) return;
+                const t = i / steps;
+                const eased = t * t * (3 - 2 * t);
+                const focus = { x: from.x + (to.x - from.x) * eased, y: from.y + (to.y - from.y) * eased };
+                draw([], 0, focus, true);
+                i++;
+                if (i <= steps) timer = window.setTimeout(step, 26);
+                else done();
+            };
+            step();
+        };
+
+        const reveal = (focus: { x: number, y: number }, done: () => void) => {
+            const seq = orderFor(focus);
+            let k = 0;
+            const step = () => {
+                if (stopped) return;
+                k = Math.min(seq.length, k + 3);
+                draw(seq, k, focus, true);
+                if (k < seq.length) timer = window.setTimeout(step, 26);
+                else timer = window.setTimeout(done, 700);
+            };
+            step();
+        };
+
+        const cycle = (index: number) => {
+            if (stopped) return;
+            const from = CURSOR_WAYPOINTS[(index + CURSOR_WAYPOINTS.length - 1) % CURSOR_WAYPOINTS.length];
+            const to = CURSOR_WAYPOINTS[index % CURSOR_WAYPOINTS.length];
+            glide(from, to, () => reveal(to, () => {
+                visited++;
+                if (visited < CYCLES * CURSOR_WAYPOINTS.length) cycle(index + 1);
+            }));
+        };
+
+        cycle(0);
+        return () => {
+            stopped = true;
+            window.clearTimeout(timer);
+        };
+    }, [props.mode]);
+
+    return <canvas ref={ref} width={320} height={120} className='tile-order-illustration' />;
+};
+
 const SelectedObjectRow = (props: { path: string, name?: string | null, lang: string }) => {
     const [copied, setCopied] = React.useState(false);
     if (!props.path) return null;
@@ -369,6 +568,23 @@ class InfoPanel extends React.Component <{
                                     <ControlDetail label={t('Fly', lang)} value={t('Touch on Left', lang)} swipeIcon='left' />
                                 </div>
                             )}
+                            {scene.isTileset ? (
+                                <div className='info-controls-content'>
+                                    <Label text={t('Tiles', lang)} class='popup-panel-heading' />
+                                    <Select
+                                        label={t('Tile loading order', lang)}
+                                        type='string'
+                                        options={[
+                                            { v: 'foveated', t: t('Center of view first', lang) },
+                                            { v: 'cursor', t: t('Under the cursor first', lang) },
+                                            { v: 'default', t: t('By error and distance', lang) }
+                                        ]}
+                                        value={String(observerData.camera?.tilePriority ?? 'foveated')}
+                                        setProperty={(value: string) => setProperty('camera.tilePriority', value)}
+                                    />
+                                    <TileOrderIllustration mode={String(observerData.camera?.tilePriority ?? 'foveated')} />
+                                </div>
+                            ) : null}
                         </>
                     )}
                     {activeTab === 'model' && (
@@ -454,22 +670,6 @@ class InfoPanel extends React.Component <{
                                 <>
                                     <Label text={t('Selected object', lang)} class='popup-panel-heading' />
                                     <SelectedObjectRow path={scene.selectedNode.path} name={scene.selectedNode.name} lang={lang} />
-                                </>
-                            ) : null}
-                            {scene.isTileset ? (
-                                <>
-                                    <Label text={t('Tiles', lang)} class='popup-panel-heading' />
-                                    <Select
-                                        label={t('Tile loading order', lang)}
-                                        type='string'
-                                        options={[
-                                            { v: 'foveated', t: t('Center of view first', lang) },
-                                            { v: 'cursor', t: t('Under the cursor first', lang) },
-                                            { v: 'default', t: t('By error and distance', lang) }
-                                        ]}
-                                        value={String(observerData.camera?.tilePriority ?? 'foveated')}
-                                        setProperty={(value: string) => setProperty('camera.tilePriority', value)}
-                                    />
                                 </>
                             ) : null}
                             <Label text={t('Stats', lang)} class='popup-panel-heading' />
