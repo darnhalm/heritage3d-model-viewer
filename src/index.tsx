@@ -457,6 +457,12 @@ const saveOptions = (observer: Observer, name: string) => {
         // Keeping another copy here would let stale defaults override a later rollout.
         delete camera.surfacePivot;
         delete camera.mouseButtonsInverted;
+        // Пределы расстояния — свойство конкретной сцены, а не пользователя: расстояние в
+        // единицах одной модели для другой бессмысленно. Их место — в файле настроек модели,
+        // откуда они и приезжают; общее хранилище переносило бы их между всеми моделями.
+        delete camera.distanceLimitsManual;
+        delete camera.distanceMin;
+        delete camera.distanceMax;
     }
     window.localStorage.setItem(`model-viewer-${name}`, JSON.stringify({
         camera,
@@ -482,6 +488,9 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
         // Сеансовое состояние проекции и навигационного куба: в старом localStorage оно
         // могло сохраниться, поэтому отбрасываем и на загрузке.
         'camera.ortho', 'camera.viewCube',
+        // Пределы расстояния привязаны к габаритам конкретной сцены. Сохранённые от прошлой
+        // модели значения удерживали бы камеру там, где для новой модели нет никакого смысла.
+        'camera.distanceLimitsManual', 'camera.distanceMin', 'camera.distanceMax',
         // Режим качества на узком экране — свойство устройства, а не сохранённый выбор.
         // Телефон, заходивший до появления мобильного умолчания, иначе навсегда остаётся в
         // HD: в localStorage лежит `hq: true`, и он побеждает дефолт при каждой загрузке.
