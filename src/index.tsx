@@ -177,7 +177,10 @@ const observerData: ObserverData = {
         pixelScale: isMobileLayout() ? SD_PIXEL_SCALE : 1,
         multisampleSupported: true,
         multisample: true,
-        dynamicScale: true,
+        // Выключено по умолчанию: при смене разрешения кадр вспыхивает — вместе с разрешением
+        // меняется и способ вывода, и убрать это без переделки финального прохода не вышло.
+        // Выигрыш на сплатах при этом настоящий, поэтому функция оставлена как экспериментальная.
+        dynamicScale: false,
         distanceLimitsManual: false,
         distanceMin: 0.01,
         distanceMax: 0,
