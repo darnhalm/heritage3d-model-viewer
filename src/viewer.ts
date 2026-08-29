@@ -179,6 +179,14 @@ const fragmentHitOrigin = new Vec3();
 const fragmentHitDir = new Vec3();
 
 const FOCUS_FOV = 75;
+/**
+ * Цвета полоски долей в отладочном окне тайлов: готов, грузится, в очереди, ошибка.
+ *
+ * Те же, что у рамок тайлов в сцене (`STATE_COLORS`): полоска и картинка обязаны читаться как
+ * одно целое, иначе она будет вводить в заблуждение.
+ */
+const TILE_HUD_BAR_COLORS = ['#00e000', '#ff8000', '#ffff00', '#ff2020'];
+
 const ZOOM_SCALE_MIN = 0.01;
 
 /**
@@ -829,6 +837,12 @@ class Viewer {
     private tileHudText: HTMLDivElement | null = null;
 
     private tileHudLegend: HTMLDivElement | null = null;
+
+    /** Полоска долей состояний над отладочным окном тайлов. */
+    private tileHudBar: HTMLDivElement | null = null;
+
+    /** Отрезки полоски по состояниям; ширины меняем, узлы не пересоздаём. */
+    private tileHudBarParts: HTMLDivElement[] = [];
 
     /**
      * Меши, которым проставлен цвет LOD, и глубина, под которую он посчитан. Цвет живёт в
@@ -8508,12 +8522,27 @@ class Viewer {
                 'padding:6px 9px;border-radius:5px;letter-spacing:0.2px;';
             const text = document.createElement('div');
             text.style.cssText = 'white-space:pre;';
+            // Полоска долей — самая верхняя строка окна: соотношение состояний считывается
+            // взглядом, а числа под ней нужны, только когда захочется точности.
+            const bar = document.createElement('div');
+            bar.style.cssText = 'display:none;height:6px;border-radius:3px;overflow:hidden;' +
+                'margin:0 0 6px;background:rgba(255,255,255,0.10);';
+            for (let i = 0; i < TILE_HUD_BAR_COLORS.length; i++) {
+                const part = document.createElement('div');
+                part.style.cssText = `height:100%;width:0;background:${TILE_HUD_BAR_COLORS[i]};transition:width .18s linear;`;
+                bar.appendChild(part);
+                this.tileHudBarParts.push(part);
+            }
+            bar.style.display = 'flex';
+
             const legend = document.createElement('div');
             // Легенда над текстом: цвета — первое, что нужно глазу, а строки статистики
             // меняются по высоте (выбранный тайл добавляет блок) и сдвигали бы её.
             legend.style.cssText = 'display:none;flex-wrap:wrap;align-items:center;gap:4px;margin:0 0 5px;';
+            el.appendChild(bar);
             el.appendChild(legend);
             el.appendChild(text);
+            this.tileHudBar = bar;
             const canvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
             (canvas.parentElement ?? document.body).appendChild(el);
             this.tileHud = el;
@@ -8521,6 +8550,10 @@ class Viewer {
             this.tileHudLegend = legend;
         }
         this.tileHud.style.display = 'block';
+
+        if (this.tileHudBar) {
+            this.tileHudBar.style.display = gsplatEnabled ? 'none' : 'flex';
+        }
 
         if (gsplatEnabled && this.gsplatDebugStats) {
             const s = this.gsplatDebugStats;
@@ -8556,6 +8589,7 @@ class Viewer {
             this.observer.get('debug.tileFreeze') ? 'FROZEN' : '',
             this.observer.get('debug.tilePaused') ? 'PAUSED' : ''
         ].filter(Boolean).join(' ');
+        this.updateTileHudBar(s);
         this.renderLodLegend(s.depthCounts, mode === 'lod' || tileLodColor);
         this.setHudText(
             `TILES ${s.tiles}   mode: ${mode}${flags ? `   ${flags}` : ''}\n` +
@@ -8614,6 +8648,24 @@ class Viewer {
      * @param counts - Количество элементов по уровням; индекс массива — номер уровня.
      * @param visible - Показывать ли легенду (на экране действительно цвета LOD).
      */
+    /**
+     * Обновить доли состояний в полоске над окном.
+     *
+     * Доли считаем от общего числа тайлов дерева, а не от суммы состояний: остаток — это тайлы,
+     * которых обход ещё не касался, и он тоже часть картины. Без него полоска всегда была бы
+     * заполнена целиком и не показывала бы, много ли работы впереди.
+     *
+     * @param s - Статистика менеджера тайлов.
+     */
+    private updateTileHudBar(s: { tiles: number, ready: number, loading: number, queued: number, failed: number }) {
+        if (!this.tileHudBar || this.tileHudBarParts.length !== TILE_HUD_BAR_COLORS.length) return;
+        const total = Math.max(1, s.tiles);
+        const counts = [s.ready, s.loading, s.queued, s.failed];
+        for (let i = 0; i < counts.length; i++) {
+            this.tileHudBarParts[i].style.width = `${(counts[i] / total) * 100}%`;
+        }
+    }
+
     private renderLodLegend(counts: number[], visible: boolean) {
         const legend = this.tileHudLegend;
         if (!legend) return;
