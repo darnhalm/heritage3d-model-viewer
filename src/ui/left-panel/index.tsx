@@ -64,7 +64,7 @@ type SceneCameraOption = {
 type ViewerApi = {
     exportViewerSettings?: () => void;
     graphicsBackend?: 'webgpu' | 'webgl';
-    observer?: { get?: (path: string) => unknown };
+    observer?: { get?: (path: string) => unknown, set?: (path: string, value: unknown) => void };
     cameraControls?: {
         mode?: string;
         getPosition: () => { x: number; y: number; z: number };
@@ -279,6 +279,26 @@ const toggleCollapsed = () => {
     }
 };
 
+/**
+ * Записать нынешнее расстояние камеры в один из пределов.
+ *
+ * Расстояние читается живым, из наблюдателя: React-обёртка pcui вешает `onClick` один раз при
+ * монтировании и больше не переустанавливает, поэтому значение, захваченное при рендере, вечно
+ * осталось бы нулевым — кнопка выглядела бы рабочей и ничего не записывала.
+ *
+ * Нажатие само включает ручной режим: просить сначала передвинуть переключатель, а потом
+ * нажать кнопку — лишний шаг, а смысл нажатия и так однозначен.
+ *
+ * @param path - Путь настройки: ближний или дальний предел.
+ */
+const takeDistanceFromView = (path: 'camera.distanceMin' | 'camera.distanceMax') => {
+    const observer = getViewer()?.observer;
+    const distance = Number(observer?.get?.('runtime.cameraDistance')) || 0;
+    if (!observer || distance <= 0) return;
+    observer.set?.('camera.distanceLimitsManual', true);
+    observer.set?.(path, distance);
+};
+
 class CameraPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
     shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>): boolean {
         const a = nextProps.observerData;
@@ -297,8 +317,6 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                a.camera?.multisample !== b.camera?.multisample ||
                a.camera?.hq !== b.camera?.hq ||
                a.runtime?.cameraDistance !== b.runtime?.cameraDistance ||
-               a.runtime?.renderWidth !== b.runtime?.renderWidth ||
-               a.runtime?.renderHeight !== b.runtime?.renderHeight ||
                a.runtime?.viewportWidth !== b.runtime?.viewportWidth ||
                a.runtime?.viewportHeight !== b.runtime?.viewportHeight;
     }
@@ -370,15 +388,13 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                         <Button
                             text={t('Near from view', lang)}
                             class='secondary'
-                            enabled={props.observerData.camera.distanceLimitsManual === true}
-                            onClick={() => props.setProperty('camera.distanceMin', props.observerData.runtime?.cameraDistance ?? 0)} />
+                            onClick={() => takeDistanceFromView('camera.distanceMin')} />
                     </span>
                     <span title={t('Use the current camera distance as the far limit', lang)} style={{ display: 'contents' }}>
                         <Button
                             text={t('Far from view', lang)}
                             class='secondary'
-                            enabled={props.observerData.camera.distanceLimitsManual === true}
-                            onClick={() => props.setProperty('camera.distanceMax', props.observerData.runtime?.cameraDistance ?? 0)} />
+                            onClick={() => takeDistanceFromView('camera.distanceMax')} />
                     </span>
                 </Container>
                 <Toggle
@@ -387,7 +403,6 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     setProperty={(value: boolean) => props.setProperty('camera.dynamicScale', value)}
                 />
                 <Detail label={t('Viewport', lang)} value={`${props.observerData.runtime?.viewportWidth ?? 0} x ${props.observerData.runtime?.viewportHeight ?? 0}`} />
-                <Detail label={t('Render target', lang)} value={`${props.observerData.runtime?.renderWidth ?? 0} x ${props.observerData.runtime?.renderHeight ?? 0}`} />
                 <Toggle
                     label={t('Multisample', lang)}
                     value={props.observerData.camera.multisample}

@@ -331,9 +331,7 @@ const observerData: ObserverData = {
         gsplatRenderer: '',
         viewportWidth: 0,
         viewportHeight: 0,
-        cameraDistance: 0,
-        renderWidth: 0,
-        renderHeight: 0
+        cameraDistance: 0
     },
     poi: {
         enabled: false,

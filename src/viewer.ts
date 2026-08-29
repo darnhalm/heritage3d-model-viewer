@@ -3042,17 +3042,15 @@ class Viewer {
         // Наружу сообщаем устойчивое разрешение, а не то, в котором рисуем прямо сейчас:
         // подпись «Вьюпорт» иначе прыгала бы на каждом жесте, а отбор тайлов — сбрасывал
         // уровень детализации и заказывал его обратно.
-        const stable = this.stableRenderResolution();
-        this.observer.set('runtime.viewportWidth', stable.width);
-        this.observer.set('runtime.viewportHeight', stable.height);
+        // «Окно просмотра» показывает настоящий размер, включая понижение при движении: по нему
+        // и видно, работает ли оно, отдельного поля для этого не нужно.
+        this.observer.set('runtime.viewportWidth', widthPixels);
+        this.observer.set('runtime.viewportHeight', heightPixels);
 
-        // Настоящий размер цели показываем отдельно: по нему видно, работает ли понижение.
-        // Публикуем на каждой пересборке без опаски — наблюдатель молчит, когда значение не
-        // изменилось, а меняется оно дважды за жест.
-        this.observer.set('runtime.renderWidth', widthPixels);
-        this.observer.set('runtime.renderHeight', heightPixels);
+        // Отбору тайлов, наоборот, нужна устойчивая величина: от скачков разрешения он сбрасывал
+        // бы уровень детализации и заказывал его обратно дважды за жест.
         if (this.tileManager) {
-            this.tileManager.stableRenderHeight = stable.height;
+            this.tileManager.stableRenderHeight = this.stableRenderResolution().height;
         }
 
         const old = this.camera.camera.renderTarget;

@@ -287,11 +287,7 @@ export interface ObserverData {
         viewportWidth: number,
         viewportHeight: number,
         /** Текущее расстояние от камеры до точки вращения. */
-        cameraDistance?: number,
-        /** Ширина цели рендера прямо сейчас, с учётом понижения при движении. */
-        renderWidth?: number,
-        /** Высота цели рендера прямо сейчас, с учётом понижения при движении. */
-        renderHeight?: number
+        cameraDistance?: number
     },
     poi: {
         enabled: boolean,
