@@ -456,6 +456,22 @@ class InfoPanel extends React.Component <{
                                     <SelectedObjectRow path={scene.selectedNode.path} name={scene.selectedNode.name} lang={lang} />
                                 </>
                             ) : null}
+                            {scene.isTileset ? (
+                                <>
+                                    <Label text={t('Tiles', lang)} class='popup-panel-heading' />
+                                    <Select
+                                        label={t('Tile loading order', lang)}
+                                        type='string'
+                                        options={[
+                                            { v: 'foveated', t: t('Center of view first', lang) },
+                                            { v: 'cursor', t: t('Under the cursor first', lang) },
+                                            { v: 'default', t: t('By error and distance', lang) }
+                                        ]}
+                                        value={String(observerData.camera?.tilePriority ?? 'foveated')}
+                                        setProperty={(value: string) => setProperty('camera.tilePriority', value)}
+                                    />
+                                </>
+                            ) : null}
                             <Label text={t('Stats', lang)} class='popup-panel-heading' />
                             <Toggle
                                 label={t('Show performance stats', lang)}
