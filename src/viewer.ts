@@ -8659,10 +8659,16 @@ class Viewer {
         // самое, только соотношением, а не числами.
         const totalCount = levels.reduce((sum, entry) => sum + entry.count, 0);
         if (bar && totalCount > 0) {
-            for (const { lod, count } of levels) {
+            for (let i = 0; i < levels.length; i++) {
+                const { lod, count } = levels[i];
                 const part = document.createElement('div');
+                // Волосяной разделитель между отрезками. В палитре восемь цветов, дальше она
+                // идёт по кругу: на глубоком дереве L0 и L8 одного цвета, и без разделителя
+                // соседние отрезки слились бы в один. В легенде их различает номер в квадрате,
+                // а в полоске номеров нет.
+                const divider = i > 0 ? 'box-shadow:inset 1px 0 0 rgba(0,0,0,0.55);' : '';
                 part.style.cssText = `height:100%;width:${(count / totalCount) * 100}%;` +
-                    `background:${lodColorCss(lod)};`;
+                    `background:${lodColorCss(lod)};${divider}`;
                 bar.appendChild(part);
             }
         }
