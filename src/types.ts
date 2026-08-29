@@ -77,6 +77,8 @@ export interface ObserverData {
         multisample: boolean,
         /** Понижать разрешение сцены, пока камера движется. */
         dynamicScale?: boolean,
+        /** Что грузить первым при обходе тайлов. */
+        tilePriority?: 'default' | 'foveated' | 'cursor',
         /** Задавать пределы расстояния вручную, а не от габаритов сцены. */
         distanceLimitsManual?: boolean,
         /** Ближний предел расстояния до точки вращения. */

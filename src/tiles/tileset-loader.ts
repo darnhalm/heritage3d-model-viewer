@@ -143,6 +143,7 @@ export function buildTileTree(json: TileJson, options: BuildTreeOptions): Tile {
         distance: Infinity,
         error: 0,
         inFrustum: false,
+        central: true,
         selected: false,
         wasRefined: false,
         loadToken: null,

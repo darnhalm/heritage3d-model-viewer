@@ -192,6 +192,14 @@ const AUTO_DISTANCE_MAX_RADII = 15;
 
 /** Как часто обновлять показанное расстояние до точки вращения, мс. */
 const DISTANCE_PUBLISH_INTERVAL_MS = 200;
+
+/**
+ * Сколько указатель считается свежим для курсорного приоритета загрузки, мс.
+ *
+ * Брошенный в углу курсор — не признак внимания: он там оказался случайно и остался. По истечении
+ * этого срока приоритет откатывается к центру кадра.
+ */
+const CURSOR_FOCUS_STALE_MS = 3000;
 const MIC_HELPER_NODE_RE = /^mic(?:[_-]|$)/i;
 const MIC_CAMEL_HELPER_NODE_RE = /^mic[A-Z0-9]/;
 
@@ -763,6 +771,9 @@ class Viewer {
 
     /** Когда началось нынешнее непрерывное движение камеры, мс. */
     cameraMotionStartedAt: number;
+
+    /** Положение указателя над канвасом в CSS-пикселях и время последнего движения. */
+    pointerFocus: { x: number, y: number, at: number, over: boolean };
 
     /** Двигалась ли камера на прошлом кадре — по этому обрывается серия. */
     cameraMoving: boolean;
@@ -1425,6 +1436,7 @@ class Viewer {
         this.distanceLimitSceneSize = 1;
         this.distancePublishedAt = 0;
         this.cameraMotionStartedAt = 0;
+        this.pointerFocus = { x: 0, y: 0, at: 0, over: false };
         this.cameraMoving = false;
         this.motionScaleEngaged = false;
         this.dirtyNormals = false;
@@ -1749,6 +1761,19 @@ class Viewer {
             renderNextFrame: this.renderNextFrame.bind(this)
         });
         this.canvas.addEventListener('mousedown', this.onTilePickMouseDown);
+
+        // Указатель нужен курсорному приоритету загрузки тайлов. Слушаем пассивно и только
+        // запоминаем координаты: работы на кадр это не добавляет, решение принимается позже.
+        this.canvas.addEventListener('pointermove', (event: PointerEvent) => {
+            const rect = this.canvas.getBoundingClientRect();
+            this.pointerFocus.x = event.clientX - rect.left;
+            this.pointerFocus.y = event.clientY - rect.top;
+            this.pointerFocus.at = performance.now();
+            this.pointerFocus.over = true;
+        }, { passive: true });
+        this.canvas.addEventListener('pointerleave', () => {
+            this.pointerFocus.over = false;
+        }, { passive: true });
         document.addEventListener('mousemove', this.onTilePickMouseMove);
         document.addEventListener('mouseup', this.onTilePickMouseUp);
 
@@ -2938,6 +2963,32 @@ class Viewer {
      *
      * @returns Ширина и высота цели рендера в пикселях.
      */
+    /**
+     * Сообщить менеджеру тайлов, вокруг какого направления считать тайлы центральными.
+     *
+     * Режим выбирает пользователь. «Как раньше» — направления нет вовсе, порядок загрузки прежний.
+     * Фовеальный — взгляд камеры. Курсорный — луч через указатель, но только пока указатель над
+     * канвасом и недавно двигался; иначе откат к взгляду, потому что брошенный курсор не признак
+     * внимания, а на сенсорном экране его нет вовсе.
+     */
+    private updateTileFocus() {
+        if (!this.tileManager) return;
+
+        const mode = String(this.observer.get('camera.tilePriority') ?? 'foveated');
+        if (mode === 'default') {
+            this.tileManager.focusDirection = null;
+            return;
+        }
+
+        const pointer = this.pointerFocus;
+        if (mode === 'cursor' && pointer.over && performance.now() - pointer.at < CURSOR_FOCUS_STALE_MS) {
+            this.tileManager.focusDirection = this.getPickRay(pointer.x, pointer.y).direction;
+            return;
+        }
+
+        this.tileManager.focusDirection = this.camera.forward.clone();
+    }
+
     /**
      * Отметить движение камеры, сравнив её положение с предыдущим кадром.
      *
@@ -8186,6 +8237,7 @@ class Viewer {
 
         // Движение отмечаем до пересборки целей: от него зависит запрошенное разрешение.
         this.updateCameraMotion();
+        this.updateTileFocus();
 
         // rebuild render targets
         this.rebuildRenderTargets();

@@ -181,6 +181,9 @@ const observerData: ObserverData = {
         // меняется и способ вывода, и убрать это без переделки финального прохода не вышло.
         // Выигрыш на сплатах при этом настоящий, поэтому функция оставлена как экспериментальная.
         dynamicScale: false,
+        // Порядок загрузки тайлов: 'default' — как раньше, 'foveated' — сперва центр кадра,
+        // 'cursor' — сперва то, на что наведён указатель.
+        tilePriority: 'foveated',
         distanceLimitsManual: false,
         distanceMin: 0.01,
         distanceMax: 0,

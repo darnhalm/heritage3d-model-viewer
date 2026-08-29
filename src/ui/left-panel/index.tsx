@@ -310,6 +310,7 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                a.camera?.tonemapping !== b.camera?.tonemapping ||
                a.camera?.pixelScale !== b.camera?.pixelScale ||
                a.camera?.dynamicScale !== b.camera?.dynamicScale ||
+               a.camera?.tilePriority !== b.camera?.tilePriority ||
                a.camera?.distanceLimitsManual !== b.camera?.distanceLimitsManual ||
                a.camera?.distanceMin !== b.camera?.distanceMin ||
                a.camera?.distanceMax !== b.camera?.distanceMax ||
@@ -361,6 +362,16 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     type='string'
                     options={PIXEL_SCALES}
                     setProperty={(value: string) => props.setProperty('camera.pixelScale', Number(value))} />
+                <Select
+                    label={t('Tile loading order', lang)}
+                    type='string'
+                    options={[
+                        { v: 'foveated', t: t('Center of view first', lang) },
+                        { v: 'cursor', t: t('Under the cursor first', lang) },
+                        { v: 'default', t: t('By error and distance', lang) }
+                    ]}
+                    value={String(props.observerData.camera.tilePriority ?? 'foveated')}
+                    setProperty={(value: string) => props.setProperty('camera.tilePriority', value)} />
                 <Toggle
                     label={t('Manual distance limits', lang)}
                     value={props.observerData.camera.distanceLimitsManual === true}

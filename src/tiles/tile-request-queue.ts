@@ -46,6 +46,14 @@ export function compareTilePriority(a: Tile, b: Tile, frame: number): number {
         return frustumB - frustumA;
     }
 
+    // Центр кадра важнее величины ошибки: пользователь смотрит туда, и резкость нужна там
+    // раньше. Набор выбранных тайлов от этого не меняется — только очерёдность загрузки.
+    const centralA = a.central ? 1 : 0;
+    const centralB = b.central ? 1 : 0;
+    if (centralA !== centralB) {
+        return centralB - centralA;
+    }
+
     if (a.error !== b.error) {
         return b.error - a.error;
     }

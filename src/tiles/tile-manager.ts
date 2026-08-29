@@ -251,6 +251,16 @@ const rotationMat = new Mat4();
 const tmpQuat = new Quat();
 const tmpVec = new Vec3();
 
+const tmpVecCentral = new Vec3();
+
+/**
+ * Доля вертикального полуугла камеры, которую считаем «центром кадра».
+ *
+ * Половина: конус достаточно узкий, чтобы центр что-то значил, и достаточно широкий, чтобы под
+ * него попадало не одно ядро кадра.
+ */
+const CENTRAL_CONE_FRACTION = 0.5;
+
 /**
  * Разложить матрицу в позицию/поворот/масштаб и применить к entity.
  *
@@ -404,6 +414,15 @@ export class TileManager {
 
     /** Высота картинки без учёта понижения на время движения; задаётся вьюером. */
     stableRenderHeight = 0;
+
+    /**
+     * Направление, вокруг которого тайлы считаются центральными; задаётся вьюером.
+     *
+     * `null` — приоритет как раньше, без учёта экранного положения. Иначе это единичный вектор:
+     * взгляд камеры (фовеальный режим) или луч через указатель (курсорный). Вьюер знает и о
+     * настройке, и об указателе, поэтому решение принимает он, а обход только меряет угол.
+     */
+    focusDirection: Vec3 | null = null;
 
     private disposed = false;
 
@@ -688,6 +707,7 @@ export class TileManager {
 
         tile.lastUsedFrame = this.frame;
         tile.distance = tile.obb ? distanceToObb(tile.obb, this.view.cameraPos) : 0;
+        tile.central = this.isCentral(tile);
         tile.error = terminal ? 0 : (tile.obb ?
             screenSpaceError(tile.geometricError, tile.distance, this.view.sseDenominator, this.view.viewportHeight) :
             Infinity);
@@ -1038,6 +1058,30 @@ export class TileManager {
      *
      * @returns Высота картинки в пикселях, минимум 1.
      */
+    /**
+     * Попадает ли тайл в конус вокруг точки внимания.
+     *
+     * Конус берём вполовину от вертикального полуугла камеры: достаточно узкий, чтобы «центр»
+     * что-то значил, и достаточно широкий, чтобы под него попадало не одно ядро кадра.
+     *
+     * @param tile - Тайл.
+     * @returns `true`, если тайл центральный либо режим приоритета выключен.
+     */
+    private isCentral(tile: Tile): boolean {
+        const dir = this.focusDirection;
+        if (!dir || !tile.obb) return true;
+
+        tmpVecCentral.sub2(tile.obb.center, this.view.cameraPos);
+        const length = tmpVecCentral.length();
+        // Камера внутри габаритов — тайл вокруг нас, направление бессмысленно.
+        if (length <= 1e-6) return true;
+        tmpVecCentral.mulScalar(1 / length);
+
+        // `sseDenominator` это 2*tan(fovY/2), отсюда и полуугол.
+        const halfFov = Math.atan(0.5 * this.view.sseDenominator);
+        return tmpVecCentral.dot(dir) >= Math.cos(halfFov * CENTRAL_CONE_FRACTION);
+    }
+
     private renderHeight(): number {
         if (this.stableRenderHeight) return Math.max(1, this.stableRenderHeight);
         const target = this.camera.camera?.renderTarget;
