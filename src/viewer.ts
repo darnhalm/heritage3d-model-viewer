@@ -105,7 +105,7 @@ import { ClipBoxMaterials } from './clip-box';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
-import { isMobileLayout, SD_PIXEL_SCALE, SPLAT_PIXEL_SCALE } from './helpers';
+import { SD_PIXEL_SCALE } from './helpers';
 import { t } from './i18n/translations';
 import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
@@ -4573,20 +4573,18 @@ class Viewer {
 
     /** Reset viewer settings (camera, skybox, light, etc.) to defaults. */
     /**
-     * Стартовый масштаб пиксела для сплатовой сцены.
+     * Помечает сцену как сплатовую перед сбросом умолчаний.
      *
      * Решаем по имени файла, а не по составу сцены: сплатовый LOD подцепляет сущности много
-     * позже, и `scene.hasGsplat` к моменту настройки ещё не отражает правду. Вызывается сразу
-     * после сброса умолчаний — значит файл настроек модели, который применяется следом,
-     * по-прежнему сильнее и может задать своё.
+     * позже, и `scene.hasGsplat` к этому моменту ещё не отражает правду. Сам масштаб пиксела
+     * выбирает сброс — он повторяется при неудачном поиске файла настроек и иначе затирал бы
+     * выставленное здесь значение.
      *
      * @param url - Имя или адрес загружаемого файла.
      */
-    private applySplatPixelScaleDefault(url: string | undefined) {
-        // На узком экране не вмешиваемся: там уже действует SD, и он грубее полутора.
-        if (!url || isMobileLayout()) return;
-        if (this.isTilesetFilename(url) || !this.isGSplatFilename(url)) return;
-        this.observer.set('camera.pixelScale', SPLAT_PIXEL_SCALE);
+    private markSplatScene(url: string | undefined) {
+        this.settingsService.splatScene = !!url &&
+            !this.isTilesetFilename(url) && this.isGSplatFilename(url);
     }
 
     private resetViewerSettingsToDefaults() {
@@ -6124,8 +6122,8 @@ class Viewer {
             // preload ниже. Без этого reset перекрашивал в дефолтный серо-голубой.
             const prevBg = this.observer.get('skybox.background');
             const prevBgColor = this.observer.get('skybox.backgroundColor');
+            this.markSplatScene(modelFiles[0]?.url ?? modelFiles[0]?.filename);
             this.resetViewerSettingsToDefaults();
-            this.applySplatPixelScaleDefault(modelFiles[0]?.url ?? modelFiles[0]?.filename);
             if (prevBgColor) {
                 this.observer.set('skybox.background', prevBg);
                 this.observer.set('skybox.backgroundColor', prevBgColor);
@@ -6370,8 +6368,8 @@ class Viewer {
         const url = file.url ?? file.filename;
         const warnings: string[] = [];
 
+        this.markSplatScene(url);
         this.resetViewerSettingsToDefaults();
-        this.applySplatPixelScaleDefault(url);
         this.observer.set('ui.spinner', true);
         this.observer.set('ui.loadProgress', 0);
         this.observer.set('ui.error', null);

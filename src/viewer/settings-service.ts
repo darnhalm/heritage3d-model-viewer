@@ -1,7 +1,7 @@
 import { Observer } from '@playcanvas/observer';
 import { Vec3 } from 'playcanvas';
 
-import { isMobileLayout, SD_PIXEL_SCALE } from '../helpers';
+import { isMobileLayout, SD_PIXEL_SCALE, SPLAT_PIXEL_SCALE } from '../helpers';
 import { t } from '../i18n/translations';
 import { DEFAULT_THEME_COLOR } from '../theme';
 
@@ -36,6 +36,15 @@ type SettingsServiceArgs = {
 type SettingsLookupResult = { data: Record<string, unknown>; version: number } | null;
 
 class SettingsService {
+    /**
+     * Сплатовая ли сейчас сцена. Ставится перед сбросом умолчаний, по имени загружаемого файла.
+     *
+     * Учитывать это должен сам сброс, а не вызывающий: когда у модели нет файла настроек,
+     * поиск заканчивается ещё одним сбросом — уже после старта загрузки. Значение, выставленное
+     * снаружи, он затирал.
+     */
+    splatScene = false;
+
     private static readonly SETTINGS_APPLY_KEYS = ['camera', 'skybox', 'light', 'theme', 'debug', 'shadowCatcher', 'measure', 'dimensionBox', 'poi'];
 
     private static readonly SETTINGS_FILTER_PATHS = [
@@ -401,7 +410,10 @@ class SettingsService {
         o.set('camera.distanceLimitsManual', false);
 
         const hq = !isMobileLayout();
-        o.set('camera.pixelScale', hq ? 1 : SD_PIXEL_SCALE);
+        // Сплаты открываются чуть мягче полного разрешения: ступень в полтора пиксела новые
+        // фильтры вывода сглаживают хорошо, а выигрыш в плавности на сплатах ощутим. На узком
+        // экране не вмешиваемся — там уже SD, и он грубее.
+        o.set('camera.pixelScale', hq ? (this.splatScene ? SPLAT_PIXEL_SCALE : 1) : SD_PIXEL_SCALE);
         o.set('camera.multisample', hq);
         o.set('camera.hq', hq);
         o.set('camera.mode', 'orbit');
