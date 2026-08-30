@@ -2414,6 +2414,10 @@ class Viewer {
                 this.canvasResize = true;
                 this.renderNextFrame();
             },
+            'camera.easu': (enabled: boolean) => {
+                this.multiframe.easu = enabled !== false;
+                this.renderNextFrame();
+            },
             'camera.sharpness': (value: number) => {
                 // RCAS сам ограничивает силу фильтра, поэтому проверять диапазон незачем —
                 // достаточно не пустить отрицательное, которое означало бы размытие.

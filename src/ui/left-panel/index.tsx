@@ -309,6 +309,7 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                a.camera?.fov !== b.camera?.fov ||
                a.camera?.tonemapping !== b.camera?.tonemapping ||
                a.camera?.pixelScale !== b.camera?.pixelScale ||
+               a.camera?.easu !== b.camera?.easu ||
                a.camera?.sharpness !== b.camera?.sharpness ||
                a.camera?.dynamicScale !== b.camera?.dynamicScale ||
                a.camera?.distanceLimitsManual !== b.camera?.distanceLimitsManual ||
@@ -362,6 +363,11 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     type='string'
                     options={PIXEL_SCALES}
                     setProperty={(value: string) => props.setProperty('camera.pixelScale', Number(value))} />
+                <Toggle
+                    label={t('Edge upscale (EASU)', lang)}
+                    value={props.observerData.camera.easu !== false}
+                    setProperty={(value: boolean) => props.setProperty('camera.easu', value)}
+                />
                 <Slider
                     label={t('Sharpness', lang)}
                     precision={2}

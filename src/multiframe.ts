@@ -440,6 +440,14 @@ class Multiframe {
     /** Сила резкости RCAS: 0 выключает фильтр целиком. */
     sharpness = DEFAULT_SHARPNESS;
 
+    /**
+     * Растягивать ли кадр через EASU.
+     *
+     * Выключение оставляет билинейную выборку с RCAS поверх — то, что было до внедрения FSR.
+     * Нужно, чтобы сравнить два способа на одной сцене вручную: замера качества у нас нет.
+     */
+    easu = true;
+
     accumTexture: Texture = null;
 
     accumRenderTarget: RenderTarget = null;
@@ -607,7 +615,7 @@ class Multiframe {
                 sharpness: this.sharpness,
                 // EASU включаем только когда источник и правда мельче экрана: при совпадении
                 // размеров растягивать нечего, а двенадцать отсчётов стоили бы впустую.
-                easuEnabled: upscaling ? 1 : 0,
+                easuEnabled: (upscaling && this.easu) ? 1 : 0,
                 srcSize: [source.width, source.height],
                 outputTexel: [1 / Math.max(1, device.width), 1 / Math.max(1, device.height)]
             });
