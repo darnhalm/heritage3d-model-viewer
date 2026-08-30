@@ -421,6 +421,11 @@ body:not(.ui-ready) #panel-left {
     mask-image: url(./static/icons/camera-icon.svg?v=1);
 }
 
+#limits-panel > .pcui-panel-header::before {
+    -webkit-mask-image: url(./static/icons/limits-icon.svg?v=1);
+    mask-image: url(./static/icons/limits-icon.svg?v=1);
+}
+
 #sky-panel > .pcui-panel-header::before {
     -webkit-mask-image: url(./static/icons/sky-icon.svg?v=1);
     mask-image: url(./static/icons/sky-icon.svg?v=1);

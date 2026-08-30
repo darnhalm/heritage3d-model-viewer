@@ -1492,15 +1492,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         )}
                                         {materialActionButton(t('Color Tiles by LOD', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
                                         {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
-                                        {materialActionButton(
-                                            observerData?.debug?.tileLineStyle === 'solid' ? t('Solid Frame', lang) : t('Checker Frame', lang),
-                                            observerData?.debug?.tileLineStyle !== 'solid',
-                                            () => {
-                                                // Каркас либо ровный, либо шахматный: одной кнопки с двумя состояниями хватает.
-                                                const checker = getViewer()?.observer?.get?.('debug.tileLineStyle') !== 'solid';
-                                                setProperty('debug.tileLineStyle', checker ? 'solid' : 'checker');
-                                            }
-                                        )}
                                         {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
                                         {observerData?.debug?.tileOrderLabels && (
                                             materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
@@ -1513,6 +1504,15 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         })}
                                         {observerData?.debug?.tileDebug && (
                                             <>
+                                        {materialActionButton(
+                                            observerData?.debug?.tileLineStyle === 'solid' ? t('Solid Frame', lang) : t('Checker Frame', lang),
+                                            observerData?.debug?.tileLineStyle !== 'solid',
+                                            () => {
+                                                // Каркас либо ровный, либо шахматный: одной кнопки с двумя состояниями хватает.
+                                                const checker = getViewer()?.observer?.get?.('debug.tileLineStyle') !== 'solid';
+                                                setProperty('debug.tileLineStyle', checker ? 'solid' : 'checker');
+                                            }
+                                        )}
                                                 <div className='materials-layer-normals-row'>
                                                 </div>
                                                 <div className='materials-layer-normals-row'>

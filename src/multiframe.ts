@@ -40,16 +40,132 @@ const fragmentGLSL = `
     uniform sampler2D multiframeTex;
     uniform float power;
     uniform float sharpness;
+    uniform float easuEnabled;
+    uniform vec2 srcSize;
     uniform vec2 outputTexel;
 
     vec3 tap(vec2 uv) {
         return pow(texture2D(multiframeTex, uv).rgb, vec3(power));
     }
 
+    // --- EASU из FSR 1.0 -------------------------------------------------------------------
+    // Растяжка с восстановлением кромок: по крестовине яркостей вокруг пикселя определяется
+    // направление и выраженность кромки, из них строится вытянутое вдоль неё ядро Ланцоша, и
+    // двенадцать отсчётов складываются с его весами. Билинейная выборка так не умеет — она
+    // усредняет по квадрату и кромку размазывает.
+
+    vec3 easuTapColor(vec2 uv) {
+        return pow(texture2D(multiframeTex, uv).rgb, vec3(power));
+    }
+
+    void easuSet(inout vec2 dir, inout float len, float w,
+                 float lA, float lB, float lC, float lD, float lE) {
+        float dc = lD - lC;
+        float cb = lC - lB;
+        float lenX = 1.0 / max(max(abs(dc), abs(cb)), 1e-5);
+        float dirX = lD - lB;
+        dir.x += dirX * w;
+        lenX = clamp(abs(dirX) * lenX, 0.0, 1.0);
+        len += lenX * lenX * w;
+
+        float ec = lE - lC;
+        float ca = lC - lA;
+        float lenY = 1.0 / max(max(abs(ec), abs(ca)), 1e-5);
+        float dirY = lE - lA;
+        dir.y += dirY * w;
+        lenY = clamp(abs(dirY) * lenY, 0.0, 1.0);
+        len += lenY * lenY * w;
+    }
+
+    void easuTap(inout vec3 aC, inout float aW, vec2 off, vec2 dir, vec2 len2,
+                 float lob, float clp, vec3 c) {
+        vec2 v = vec2(off.x * dir.x + off.y * dir.y, off.x * (-dir.y) + off.y * dir.x) * len2;
+        float d2 = min(v.x * v.x + v.y * v.y, clp);
+        float wB = 0.4 * d2 - 1.0;
+        float wA = lob * d2 - 1.0;
+        wB *= wB;
+        wA *= wA;
+        wB = 1.5625 * wB - 0.5625;
+        float w = wB * wA;
+        aC += c * w;
+        aW += w;
+    }
+
+    vec3 easu(vec2 uv) {
+        vec2 pp = uv * srcSize - 0.5;
+        vec2 fp = floor(pp);
+        pp -= fp;
+        vec2 t = (fp + 0.5) / srcSize;
+        vec2 sp = 1.0 / srcSize;
+
+        vec3 cb = easuTapColor(t + vec2(0.0, -1.0) * sp);
+        vec3 cc = easuTapColor(t + vec2(1.0, -1.0) * sp);
+        vec3 ce = easuTapColor(t + vec2(-1.0, 0.0) * sp);
+        vec3 cf = easuTapColor(t);
+        vec3 cg = easuTapColor(t + vec2(1.0, 0.0) * sp);
+        vec3 ch = easuTapColor(t + vec2(2.0, 0.0) * sp);
+        vec3 ci = easuTapColor(t + vec2(-1.0, 1.0) * sp);
+        vec3 cj = easuTapColor(t + vec2(0.0, 1.0) * sp);
+        vec3 ck = easuTapColor(t + vec2(1.0, 1.0) * sp);
+        vec3 cl = easuTapColor(t + vec2(2.0, 1.0) * sp);
+        vec3 cn = easuTapColor(t + vec2(0.0, 2.0) * sp);
+        vec3 co = easuTapColor(t + vec2(1.0, 2.0) * sp);
+
+        // Яркость берём по зелёному каналу, как в эталонной реализации: он ближе всего к
+        // светлоте и не требует лишних умножений на каждый из двенадцати отсчётов.
+        vec2 dir = vec2(0.0);
+        float len = 0.0;
+        easuSet(dir, len, (1.0 - pp.x) * (1.0 - pp.y), cb.g, ce.g, cf.g, cg.g, cj.g);
+        easuSet(dir, len, pp.x * (1.0 - pp.y), cc.g, cf.g, cg.g, ch.g, ck.g);
+        easuSet(dir, len, (1.0 - pp.x) * pp.y, cf.g, ci.g, cj.g, ck.g, cn.g);
+        easuSet(dir, len, pp.x * pp.y, cg.g, cj.g, ck.g, cl.g, co.g);
+
+        vec2 dir2 = dir * dir;
+        float dirR = dir2.x + dir2.y;
+        bool zro = dirR < (1.0 / 32768.0);
+        dirR = inversesqrt(max(dirR, 1e-8));
+        dirR = zro ? 1.0 : dirR;
+        dir.x = zro ? 1.0 : dir.x;
+        dir *= dirR;
+
+        len = len * 0.5;
+        len *= len;
+
+        // Ядро вытягивается вдоль кромки: по диагонали до корня из двух, поперёк — сжимается.
+        float stretch = (dir.x * dir.x + dir.y * dir.y) / max(max(abs(dir.x), abs(dir.y)), 1e-5);
+        vec2 len2 = vec2(1.0 + (stretch - 1.0) * len, 1.0 - 0.5 * len);
+        float lob = 0.5 - 0.29 * len;
+        float clp = 1.0 / lob;
+
+        vec3 aC = vec3(0.0);
+        float aW = 0.0;
+        easuTap(aC, aW, vec2(0.0, -1.0) - pp, dir, len2, lob, clp, cb);
+        easuTap(aC, aW, vec2(1.0, -1.0) - pp, dir, len2, lob, clp, cc);
+        easuTap(aC, aW, vec2(-1.0, 1.0) - pp, dir, len2, lob, clp, ci);
+        easuTap(aC, aW, vec2(0.0, 1.0) - pp, dir, len2, lob, clp, cj);
+        easuTap(aC, aW, vec2(0.0, 0.0) - pp, dir, len2, lob, clp, cf);
+        easuTap(aC, aW, vec2(-1.0, 0.0) - pp, dir, len2, lob, clp, ce);
+        easuTap(aC, aW, vec2(1.0, 1.0) - pp, dir, len2, lob, clp, ck);
+        easuTap(aC, aW, vec2(2.0, 1.0) - pp, dir, len2, lob, clp, cl);
+        easuTap(aC, aW, vec2(2.0, 0.0) - pp, dir, len2, lob, clp, ch);
+        easuTap(aC, aW, vec2(1.0, 0.0) - pp, dir, len2, lob, clp, cg);
+        easuTap(aC, aW, vec2(1.0, 2.0) - pp, dir, len2, lob, clp, co);
+        easuTap(aC, aW, vec2(0.0, 2.0) - pp, dir, len2, lob, clp, cn);
+
+        return max(aC / max(aW, 1e-5), vec3(0.0));
+    }
+
     void main(void) {
         vec4 centerTexel = texture2D(multiframeTex, texcoord);
         vec3 e = pow(centerTexel.rgb, vec3(power));
         float alpha = pow(centerTexel.a, power);
+
+        // При растяжке кромки восстанавливает EASU, и подрезчивать поверх нечего: RCAS работает
+        // по соседям выхода, а их у нас нет — эталонный FSR ставит его отдельным проходом.
+        if (easuEnabled > 0.5) {
+            gl_FragColor = vec4(easu(texcoord), alpha);
+            return;
+        }
 
         if (sharpness <= 0.0) {
             gl_FragColor = vec4(e, alpha);
@@ -117,11 +233,113 @@ const fragmentWGSL = /* wgsl */`
 
     uniform power: f32;
     uniform sharpness: f32;
+    uniform easuEnabled: f32;
+    uniform srcSize: vec2f;
     uniform outputTexel: vec2f;
 
     fn tap(uv: vec2f) -> vec3f {
         let t: vec4f = textureSample(multiframeTex, multiframeSampler, uv);
         return pow(t.rgb, vec3f(uniform.power));
+    }
+
+    // --- EASU из FSR 1.0 (см. пояснение у версии на GLSL) ---
+    fn easuTapColor(uv: vec2f) -> vec3f {
+        let t: vec4f = textureSample(multiframeTex, multiframeSampler, uv);
+        return pow(t.rgb, vec3f(uniform.power));
+    }
+
+    fn easuSet(dir: ptr<function, vec2f>, len: ptr<function, f32>, w: f32,
+               lA: f32, lB: f32, lC: f32, lD: f32, lE: f32) {
+        let dc: f32 = lD - lC;
+        let cb: f32 = lC - lB;
+        let lenXr: f32 = 1.0 / max(max(abs(dc), abs(cb)), 1e-5);
+        let dirX: f32 = lD - lB;
+        (*dir).x = (*dir).x + dirX * w;
+        let lenX: f32 = clamp(abs(dirX) * lenXr, 0.0, 1.0);
+        *len = *len + lenX * lenX * w;
+
+        let ec: f32 = lE - lC;
+        let ca: f32 = lC - lA;
+        let lenYr: f32 = 1.0 / max(max(abs(ec), abs(ca)), 1e-5);
+        let dirY: f32 = lE - lA;
+        (*dir).y = (*dir).y + dirY * w;
+        let lenY: f32 = clamp(abs(dirY) * lenYr, 0.0, 1.0);
+        *len = *len + lenY * lenY * w;
+    }
+
+    fn easuTap(aC: ptr<function, vec3f>, aW: ptr<function, f32>, off: vec2f, dir: vec2f,
+               len2: vec2f, lob: f32, clp: f32, c: vec3f) {
+        let v: vec2f = vec2f(off.x * dir.x + off.y * dir.y, off.x * (-dir.y) + off.y * dir.x) * len2;
+        let d2: f32 = min(v.x * v.x + v.y * v.y, clp);
+        var wB: f32 = 0.4 * d2 - 1.0;
+        var wA: f32 = lob * d2 - 1.0;
+        wB = wB * wB;
+        wA = wA * wA;
+        wB = 1.5625 * wB - 0.5625;
+        let w: f32 = wB * wA;
+        *aC = *aC + c * w;
+        *aW = *aW + w;
+    }
+
+    fn easu(uv: vec2f) -> vec3f {
+        var pp: vec2f = uv * uniform.srcSize - 0.5;
+        let fp: vec2f = floor(pp);
+        pp = pp - fp;
+        let t: vec2f = (fp + 0.5) / uniform.srcSize;
+        let sp: vec2f = 1.0 / uniform.srcSize;
+
+        let cb: vec3f = easuTapColor(t + vec2f(0.0, -1.0) * sp);
+        let cc: vec3f = easuTapColor(t + vec2f(1.0, -1.0) * sp);
+        let ce: vec3f = easuTapColor(t + vec2f(-1.0, 0.0) * sp);
+        let cf: vec3f = easuTapColor(t);
+        let cg: vec3f = easuTapColor(t + vec2f(1.0, 0.0) * sp);
+        let ch: vec3f = easuTapColor(t + vec2f(2.0, 0.0) * sp);
+        let ci: vec3f = easuTapColor(t + vec2f(-1.0, 1.0) * sp);
+        let cj: vec3f = easuTapColor(t + vec2f(0.0, 1.0) * sp);
+        let ck: vec3f = easuTapColor(t + vec2f(1.0, 1.0) * sp);
+        let cl: vec3f = easuTapColor(t + vec2f(2.0, 1.0) * sp);
+        let cn: vec3f = easuTapColor(t + vec2f(0.0, 2.0) * sp);
+        let co: vec3f = easuTapColor(t + vec2f(1.0, 2.0) * sp);
+
+        var dir: vec2f = vec2f(0.0);
+        var len: f32 = 0.0;
+        easuSet(&dir, &len, (1.0 - pp.x) * (1.0 - pp.y), cb.g, ce.g, cf.g, cg.g, cj.g);
+        easuSet(&dir, &len, pp.x * (1.0 - pp.y), cc.g, cf.g, cg.g, ch.g, ck.g);
+        easuSet(&dir, &len, (1.0 - pp.x) * pp.y, cf.g, ci.g, cj.g, ck.g, cn.g);
+        easuSet(&dir, &len, pp.x * pp.y, cg.g, cj.g, ck.g, cl.g, co.g);
+
+        let dir2: vec2f = dir * dir;
+        var dirR: f32 = dir2.x + dir2.y;
+        let zro: bool = dirR < (1.0 / 32768.0);
+        dirR = inverseSqrt(max(dirR, 1e-8));
+        dirR = select(dirR, 1.0, zro);
+        dir.x = select(dir.x, 1.0, zro);
+        dir = dir * dirR;
+
+        var lenS: f32 = len * 0.5;
+        lenS = lenS * lenS;
+
+        let stretch: f32 = (dir.x * dir.x + dir.y * dir.y) / max(max(abs(dir.x), abs(dir.y)), 1e-5);
+        let len2: vec2f = vec2f(1.0 + (stretch - 1.0) * lenS, 1.0 - 0.5 * lenS);
+        let lob: f32 = 0.5 - 0.29 * lenS;
+        let clp: f32 = 1.0 / lob;
+
+        var aC: vec3f = vec3f(0.0);
+        var aW: f32 = 0.0;
+        easuTap(&aC, &aW, vec2f(0.0, -1.0) - pp, dir, len2, lob, clp, cb);
+        easuTap(&aC, &aW, vec2f(1.0, -1.0) - pp, dir, len2, lob, clp, cc);
+        easuTap(&aC, &aW, vec2f(-1.0, 1.0) - pp, dir, len2, lob, clp, ci);
+        easuTap(&aC, &aW, vec2f(0.0, 1.0) - pp, dir, len2, lob, clp, cj);
+        easuTap(&aC, &aW, vec2f(0.0, 0.0) - pp, dir, len2, lob, clp, cf);
+        easuTap(&aC, &aW, vec2f(-1.0, 0.0) - pp, dir, len2, lob, clp, ce);
+        easuTap(&aC, &aW, vec2f(1.0, 1.0) - pp, dir, len2, lob, clp, ck);
+        easuTap(&aC, &aW, vec2f(2.0, 1.0) - pp, dir, len2, lob, clp, cl);
+        easuTap(&aC, &aW, vec2f(2.0, 0.0) - pp, dir, len2, lob, clp, ch);
+        easuTap(&aC, &aW, vec2f(1.0, 0.0) - pp, dir, len2, lob, clp, cg);
+        easuTap(&aC, &aW, vec2f(1.0, 2.0) - pp, dir, len2, lob, clp, co);
+        easuTap(&aC, &aW, vec2f(0.0, 2.0) - pp, dir, len2, lob, clp, cn);
+
+        return max(aC / max(aW, 1e-5), vec3f(0.0));
     }
 
     @fragment
@@ -131,6 +349,11 @@ const fragmentWGSL = /* wgsl */`
         let centerTexel: vec4f = textureSample(multiframeTex, multiframeSampler, input.texcoord);
         let e: vec3f = pow(centerTexel.rgb, vec3f(uniform.power));
         let alpha: f32 = pow(centerTexel.a, uniform.power);
+
+        if (uniform.easuEnabled > 0.5) {
+            output.color = vec4f(easu(input.texcoord), alpha);
+            return output;
+        }
 
         if (uniform.sharpness <= 0.0) {
             output.color = vec4f(e, alpha);
@@ -275,8 +498,15 @@ class Multiframe {
                 const sign = ix === 12 ? -1 : 1;
                 pmat.data[ix] = sign * sample.x / this.accumTexture.width;
                 pmat.data[iy] = sign * sample.y / this.accumTexture.height;
+                // Байас наращиваем по числу уже накопленных сэмплов, а не переключаем скачком.
+                // За формулой стоит смысл: сдвиг уровня мипа допустим ровно настолько, насколько
+                // есть усреднения, которые погасят вызванную им рябь. Прежний код прыгал с нуля
+                // на конечное значение — при шестнадцати сэмплах это два уровня мипа разом, и
+                // текстуры скачком становились резкими в момент остановки камеры.
+                const settled = Math.max(1, this.sampleId);
+                const bias = Math.max(this.textureBias, -Math.log2(Math.sqrt(settled)));
                 resolve(device.scope, {
-                    textureBias: this.sampleId === 0 ? 0.0 : this.textureBias
+                    textureBias: this.sampleId === 0 ? 0.0 : bias
                 });
             } else {
                 resolve(device.scope, {
@@ -363,6 +593,8 @@ class Multiframe {
                 this.finalRenderPass.blendState = noBlend;
             }
 
+            const upscaling = source.width < device.width || source.height < device.height;
+
             // Путь вывода один на все состояния. Прежде шейдер выбирался по совпадению
             // размеров, и вместе с ним менялась гамма — за жест переключение случалось дважды
             // и было видно как вспышка. Теперь меняются только значения параметров.
@@ -373,6 +605,10 @@ class Multiframe {
                 multiframeTex: source,
                 power: blending ? (1.0 / gamma) : 1.0,
                 sharpness: this.sharpness,
+                // EASU включаем только когда источник и правда мельче экрана: при совпадении
+                // размеров растягивать нечего, а двенадцать отсчётов стоили бы впустую.
+                easuEnabled: upscaling ? 1 : 0,
+                srcSize: [source.width, source.height],
                 outputTexel: [1 / Math.max(1, device.width), 1 / Math.max(1, device.height)]
             });
         });
