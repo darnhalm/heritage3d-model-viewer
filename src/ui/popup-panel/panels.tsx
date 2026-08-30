@@ -732,6 +732,10 @@ class InfoPanel extends React.Component <{
                                 {t('Tile streaming architecture inspired by NASA-AMMOS/3DTilesRendererJS (Apache License 2.0):', lang)}
                             </div>
                             <a href='https://github.com/NASA-AMMOS/3DTilesRendererJS' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/NASA-AMMOS/3DTilesRendererJS</a>
+                            <div className='about-description'>
+                                {t('Edge upscaling and sharpening use the AMD FidelityFX FSR 1.0 algorithms, EASU and RCAS (MIT License):', lang)}
+                            </div>
+                            <a href='https://github.com/GPUOpen-Effects/FidelityFX-FSR' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/GPUOpen-Effects/FidelityFX-FSR</a>
                         </div>
                     )}
                 </Container>
