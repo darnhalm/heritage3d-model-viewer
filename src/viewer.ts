@@ -178,6 +178,11 @@ const fragmentHitMat = new Mat4();
 /** Временный вектор для проекции номеров тайлов в экранные координаты. */
 const tileLabelScreen = new Vec3();
 
+/** Концы отрезка проволочной сферы выделения. */
+const fragmentSphereA = new Vec3();
+
+const fragmentSphereB = new Vec3();
+
 /** Точка в системе координат камеры — для глубины, не зависящей от типа проекции. */
 const tileLabelView = new Vec3();
 
@@ -2529,6 +2534,16 @@ class Viewer {
             'fragment.size': () => {
                 this.syncFragmentEntityFromObserver();
                 this.syncFragmentClipping();
+            },
+            'fragment.shape': () => {
+                this.syncFragmentEntityFromObserver();
+                this.syncFragmentClipping();
+                this.renderNextFrame();
+            },
+            'fragment.radius': () => {
+                this.syncFragmentEntityFromObserver();
+                this.syncFragmentClipping();
+                this.renderNextFrame();
             },
             'fragment.rotation': () => {
                 this.syncFragmentEntityFromObserver();
@@ -6598,6 +6613,42 @@ class Viewer {
         return this.camera.camera.worldToScreen(point);
     }
 
+    /**
+     * Нарисовать проволочную сферу выделения: три окружности в плоскостях осей.
+     *
+     * @param center - Центр сферы в мире.
+     * @param ax - Полуось X сущности в мире; её длина и есть радиус.
+     * @param ay - Полуось Y.
+     * @param az - Полуось Z.
+     */
+    private drawFragmentSphereOutline(center: Vec3, ax: Vec3, ay: Vec3, az: Vec3) {
+        const SEGMENTS = 48;
+        const circle = (u: Vec3, v: Vec3) => {
+            let prevX = 0;
+            let prevY = 0;
+            let prevZ = 0;
+            for (let i = 0; i <= SEGMENTS; i++) {
+                const angle = (i / SEGMENTS) * Math.PI * 2;
+                const cos = Math.cos(angle);
+                const sin = Math.sin(angle);
+                const x = center.x + u.x * cos + v.x * sin;
+                const y = center.y + u.y * cos + v.y * sin;
+                const z = center.z + u.z * cos + v.z * sin;
+                if (i > 0) {
+                    fragmentSphereA.set(prevX, prevY, prevZ);
+                    fragmentSphereB.set(x, y, z);
+                    this.debugFragmentBox.line(fragmentSphereA, fragmentSphereB, 0xffffffff);
+                }
+                prevX = x;
+                prevY = y;
+                prevZ = z;
+            }
+        };
+        circle(ax, ay);
+        circle(ay, az);
+        circle(az, ax);
+    }
+
     private updateFragmentHandles() {
         const visible = !!this.observer.get('fragment.initialized') &&
             this.observer.get('ui.active') === 'fragment' && !this.observer.get('fragment.selecting');
@@ -8502,16 +8553,22 @@ class Viewer {
             if (!this.observer.get('fragment.enabled')) {
                 this.debugFragmentBoxSolid.obbFaces(center, ax, ay, az, this.fragmentFillColor());
             }
-            this.debugFragmentBoxSolid.obbEdgesThick(
-                center,
-                ax,
-                ay,
-                az,
-                this.camera.getPosition(),
-                0.0021,
-                0xffffffff
-            );
-            this.debugFragmentBox.obb(center, ax, ay, az, 0xffffffff);
+            if (this.observer.get('fragment.shape') === 'sphere') {
+                // У сферы рёбер нет: показываем три окружности по осям — этого достаточно,
+                // чтобы читались и положение, и радиус, а ручки остаются на местах граней.
+                this.drawFragmentSphereOutline(center, ax, ay, az);
+            } else {
+                this.debugFragmentBoxSolid.obbEdgesThick(
+                    center,
+                    ax,
+                    ay,
+                    az,
+                    this.camera.getPosition(),
+                    0.0021,
+                    0xffffffff
+                );
+                this.debugFragmentBox.obb(center, ax, ay, az, 0xffffffff);
+            }
         }
         this.debugFragmentBoxSolid.update();
         this.debugFragmentBox.update();
