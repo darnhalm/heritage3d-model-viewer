@@ -420,10 +420,17 @@ class SettingsService {
         // Tiles Debug — сессионный инструмент разработчика. Никогда не переносим его
         // активное состояние на следующую модель или в публичный просмотр.
         o.set('debug.tileDebug', false);
-        o.set('debug.tileDebugMode', 'state');
+        // Раскраска по уровню детализации и ровный каркас: понять, какой LOD на экране, хочется
+        // почти всегда, а шахматный каркас нужен, только когда рамки накладываются. Значения
+        // держим здесь же — сброс выполняется при каждой загрузке модели и перебил бы умолчания
+        // наблюдателя, задай мы их только там.
+        o.set('debug.tileDebugMode', 'lod');
         o.set('debug.tileLineThickness', 2);
-        o.set('debug.tileLineStyle', 'checker');
+        o.set('debug.tileLineStyle', 'solid');
         o.set('debug.tileCheckerFill', false);
+        o.set('debug.tileOrderLabels', false);
+        o.set('debug.tileOrderPerLod', false);
+        o.set('debug.tileIdLabels', false);
         o.set('debug.tilePick', false);
         o.set('debug.tileIsolatePick', false);
         o.set('debug.tileFreeze', false);
