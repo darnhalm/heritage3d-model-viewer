@@ -253,7 +253,7 @@ const observerData: ObserverData = {
         // По уровню детализации: раскраска по состоянию загрузки нужна реже, а понять, какой
         // LOD сейчас на экране, хочется почти всегда.
         tileDebugMode: 'lod',
-        tileLineThickness: 2,
+        tileLineThickness: 1,
         // Ровный каркас: шахматный полезен, когда рамки накладываются друг на друга, но при
         // первом взгляде он читается хуже.
         tileLineStyle: 'solid',
@@ -466,11 +466,15 @@ const saveOptions = (observer: Observer, name: string) => {
         ...options.debug,
         alignmentMode: false
     } : options.debug;
-    // Вид каркаса — не долгоживущая настройка, а способ разглядеть наложенные рамки прямо
-    // сейчас. Сохранённый шахматный перебивал бы ровный по умолчанию у всех, кто хоть раз его
-    // включал, и умолчание было бы бессмысленным.
+    // Отладка тайлов целиком не переживает сеанс. Она сеансовый инструмент разработчика: её
+    // включают посмотреть и забывают, а сохранённое значение потом перебивает умолчание — и
+    // сброс при загрузке модели тут не спасает, потому что на части путей он не выполняется.
+    // Мы ловили это пять раз подряд: раскраска по состоянию, шахматный каркас и толщина линий
+    // возвращались из хранилища, хотя в коде стояли другие умолчания.
     if (debug) {
-        delete debug.tileLineStyle;
+        Object.keys(debug)
+        .filter(key => key.startsWith('tile'))
+        .forEach(key => delete (debug as Record<string, unknown>)[key]);
     }
     // `ortho` и `viewCube` — состояние текущего сеанса, а не настройка: проекцию включает
     // сам пользователь в режиме выравнивания, а куб виден только в нём. Сохранять их нельзя —
@@ -519,8 +523,6 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
         // могло сохраниться, поэтому отбрасываем и на загрузке.
         'camera.ortho', 'camera.viewCube',
         'camera.tilePriority',
-        // Вид каркаса начинается ровным каждый сеанс; см. `saveOptions`.
-        'debug.tileLineStyle',
         // Пределы расстояния привязаны к габаритам конкретной сцены. Сохранённые от прошлой
         // модели значения удерживали бы камеру там, где для новой модели нет никакого смысла.
         'camera.distanceLimitsManual', 'camera.distanceMin', 'camera.distanceMax',
@@ -530,7 +532,9 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
         ...(isMobileLayout() ? ['camera.hq', 'camera.pixelScale', 'camera.multisample'] : [])];
 
     const loadRec = (path: string, value: unknown) => {
-        if (filter.indexOf(path) !== -1) {
+        // Отладка тайлов не восстанавливается: значения, записанные прежними версиями, иначе
+        // продолжали бы перебивать умолчания даже после того, как их перестали сохранять.
+        if (filter.indexOf(path) !== -1 || path.startsWith('debug.tile')) {
             return;
         }
 

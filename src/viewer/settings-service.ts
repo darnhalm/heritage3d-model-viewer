@@ -311,7 +311,20 @@ class SettingsService {
             skybox,
             light,
             theme,
-            debug: options.debug,
+            // Из отладки сохраняем только выравнивание: оно описывает положение модели в сцене.
+            // Всё прочее — каркас, скелет, нормали, оси, статистика, отладка тайлов — состояние
+            // инструментов разработчика; в файле модели оно потом перебивало умолчания вьюера.
+            debug: (() => {
+                const dbg = options.debug;
+                if (!dbg || typeof dbg !== 'object' || Array.isArray(dbg)) return dbg;
+                const kept: Record<string, unknown> = {};
+                Object.entries(dbg as Record<string, unknown>)
+                .filter(([key]) => key.startsWith('alignment'))
+                .forEach(([key, value]) => {
+                    kept[key] = value;
+                });
+                return kept;
+            })(),
             shadowCatcher: options.shadowCatcher,
             measure: (() => {
                 const m = options.measure;
@@ -425,7 +438,7 @@ class SettingsService {
         // держим здесь же — сброс выполняется при каждой загрузке модели и перебил бы умолчания
         // наблюдателя, задай мы их только там.
         o.set('debug.tileDebugMode', 'lod');
-        o.set('debug.tileLineThickness', 2);
+        o.set('debug.tileLineThickness', 1);
         o.set('debug.tileLineStyle', 'solid');
         o.set('debug.tileCheckerFill', false);
         o.set('debug.tileOrderLabels', false);
@@ -533,7 +546,19 @@ class SettingsService {
             return null;
         };
         const loadRec = (path: string, value: unknown): void => {
-            if (filter.indexOf(path) !== -1) return;
+            // Из файла настроек модели берём только то, что описывает саму сцену: разделы
+            // «Настройки», выравнивание и точки интереса. Отладка — каркас, скелет, нормали,
+            // оси, статистика, вся отладка тайлов — это состояние инструментов разработчика, а
+            // не свойство модели. В наборах такие ключи уже лежат: `tileDebugMode: state` и
+            // `tileLineStyle: checker` применялись после сброса и перебивали умолчания, из-за
+            // чего раскраска по LOD и ровный каркас не появлялись ни при какой правке
+            // остальных трёх источников.
+            //
+            // Выравнивание — исключение: оно живёт под тем же `debug.`, но описывает положение
+            // модели в сцене, то есть именно её свойство.
+            const debugPath = path.startsWith('debug.');
+            const alignment = path.startsWith('debug.alignment');
+            if (filter.indexOf(path) !== -1 || (debugPath && !alignment)) return;
             // Бокс размеров — сессионный инструмент: НЕ восстанавливаем его включённым
             // из сохранённых настроек, иначе он «висит» поверх модели после загрузки.
             if (path === 'dimensionBox.enabled') {
