@@ -735,7 +735,7 @@ class InfoPanel extends React.Component <{
                             <div className='about-description'>
                                 {t('Edge upscaling and sharpening use the AMD FidelityFX FSR 1.0 algorithms, EASU and RCAS (MIT License):', lang)}
                             </div>
-                            <a href='https://github.com/GPUOpen-Effects/FidelityFX-FSR' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/GPUOpen-Effects/FidelityFX-FSR</a>
+                            <a href='https://gpuopen.com/fidelityfx-superresolution/' target='_blank' rel='noopener noreferrer' className='about-link'>https://gpuopen.com/fidelityfx-superresolution/</a>
                         </div>
                     )}
                 </Container>
