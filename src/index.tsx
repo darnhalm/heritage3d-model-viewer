@@ -270,7 +270,7 @@ const observerData: ObserverData = {
         tileLodColor: false,
         gsplatLodColor: false,
         gsplatNodeBounds: false,
-        gsplatDebugMode: 'state',
+        gsplatDebugMode: 'lod',
         gsplatFreeze: false,
         gsplatPaused: false
     },
@@ -534,7 +534,8 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
     const loadRec = (path: string, value: unknown) => {
         // Отладка тайлов не восстанавливается: значения, записанные прежними версиями, иначе
         // продолжали бы перебивать умолчания даже после того, как их перестали сохранять.
-        if (filter.indexOf(path) !== -1 || path.startsWith('debug.tile')) {
+        if (filter.indexOf(path) !== -1 || path.startsWith('debug.tile') ||
+            path.startsWith('debug.gsplat')) {
             return;
         }
 

@@ -83,4 +83,9 @@ const isMobileLayout = () => typeof matchMedia === 'function' &&
  */
 const SD_PIXEL_SCALE = 2;
 
-export { addEventListenerOnClickOnly, extract, isMobileLayout, SD_PIXEL_SCALE };
+// Сплаты стартуют чуть мягче полного разрешения. Ступень такого размера новые фильтры вывода
+// (EASU и RCAS) сглаживают заметно лучше прежней билинейной растяжки, а выигрыш в плавности
+// на сплатовых сценах ощутим — они упираются в заполнение, а не в геометрию.
+const SPLAT_PIXEL_SCALE = 1.5;
+
+export { addEventListenerOnClickOnly, extract, isMobileLayout, SD_PIXEL_SCALE, SPLAT_PIXEL_SCALE };

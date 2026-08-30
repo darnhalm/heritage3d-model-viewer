@@ -1298,16 +1298,63 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         <div className='materials-layer-category-title'>{t('Spatial LOD Debug', lang)} (4)</div>
                                         {materialActionButton(t('Color Splats by LOD', lang), !!observerData?.debug?.gsplatLodColor, () => toggleObserverBoolean('debug.gsplatLodColor', !!observerData?.debug?.gsplatLodColor))}
                                         {materialActionButton(t('Spatial Node Bounds', lang), !!observerData?.debug?.gsplatNodeBounds, () => toggleObserverBoolean('debug.gsplatNodeBounds', !!observerData?.debug?.gsplatNodeBounds))}
-                                        {materialActionButton(t('Freeze LOD Camera', lang), !!observerData?.debug?.gsplatFreeze, () => toggleObserverBoolean('debug.gsplatFreeze', !!observerData?.debug?.gsplatFreeze))}
-                                        {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.gsplatPaused, () => toggleObserverBoolean('debug.gsplatPaused', !!observerData?.debug?.gsplatPaused))}
                                         {observerData?.debug?.gsplatNodeBounds && (
-                                            <div className='materials-layer-normals-row'>
-                                                {materialActionButton(t('By State', lang), (observerData?.debug?.gsplatDebugMode ?? 'state') === 'state', () => setProperty('debug.gsplatDebugMode', 'state'))}
-                                                {materialActionButton(t('By LOD', lang), observerData?.debug?.gsplatDebugMode === 'lod', () => setProperty('debug.gsplatDebugMode', 'lod'))}
-                                            </div>
+                                            <>
+                                                {materialActionButton(
+                                                    t('Checker Frame', lang),
+                                                    observerData?.debug?.tileLineStyle !== 'solid',
+                                                    () => {
+                                                        const checker = getViewer()?.observer?.get?.('debug.tileLineStyle') !== 'solid';
+                                                        setProperty('debug.tileLineStyle', checker ? 'solid' : 'checker');
+                                                    }
+                                                )}
+                                                <div className='materials-layer-normals-row'>
+                                                    {materialActionButton(t('By State', lang), (observerData?.debug?.gsplatDebugMode ?? 'lod') === 'state', () => setProperty('debug.gsplatDebugMode', 'state'))}
+                                                    {materialActionButton(t('By LOD', lang), (observerData?.debug?.gsplatDebugMode ?? 'lod') !== 'state', () => setProperty('debug.gsplatDebugMode', 'lod'))}
+                                                </div>
+                                                <Slider
+                                                    label={t('Line Thickness', lang)}
+                                                    precision={1}
+                                                    min={0.5}
+                                                    max={8}
+                                                    step={0.5}
+                                                    value={observerData?.debug?.tileLineThickness ?? 1}
+                                                    setProperty={(value: number) => setProperty('debug.tileLineThickness', value)}
+                                                />
+                                            </>
                                         )}
                                         <div className='materials-layer-inline-hint'>
                                             {t('LOD diagnostics use the live streaming state.', lang)}
+                                        </div>
+                                        {/* Тот же блок управления показом, что и у полигональных тайлов:
+                                            заморозка камеры и пауза загрузки — одно и то же действие,
+                                            и выглядеть они должны одинаково. */}
+                                        <div className='tile-playback-toolbar'>
+                                            <button
+                                                type='button'
+                                                className={`tile-playback-button${observerData?.debug?.gsplatFreeze ? ' active' : ''}`}
+                                                title={t('Freeze LOD Camera', lang)}
+                                                aria-label={t('Freeze LOD Camera', lang)}
+                                                aria-pressed={!!observerData?.debug?.gsplatFreeze}
+                                                onClick={() => toggleObserverBoolean('debug.gsplatFreeze', !!observerData?.debug?.gsplatFreeze)}
+                                            >
+                                                <span className='tile-playback-glyph-stack'>
+                                                    <span className='material-symbols-outlined'>photo_camera</span>
+                                                    <span className='material-symbols-outlined tile-playback-glyph-badge'>ac_unit</span>
+                                                </span>
+                                            </button>
+                                            <button
+                                                type='button'
+                                                className={`tile-playback-button${observerData?.debug?.gsplatPaused ? ' active' : ''}`}
+                                                title={t(observerData?.debug?.gsplatPaused ? 'Resume Loading' : 'Pause Loading', lang)}
+                                                aria-label={t(observerData?.debug?.gsplatPaused ? 'Resume Loading' : 'Pause Loading', lang)}
+                                                aria-pressed={!!observerData?.debug?.gsplatPaused}
+                                                onClick={() => toggleObserverBoolean('debug.gsplatPaused', !!observerData?.debug?.gsplatPaused)}
+                                            >
+                                                <span className='material-symbols-outlined'>
+                                                    {observerData?.debug?.gsplatPaused ? 'play_arrow' : 'pause'}
+                                                </span>
+                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -1510,18 +1557,18 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         })}
                                         {observerData?.debug?.tileDebug && (
                                             <>
-                                        {materialActionButton(
-                                            // Подпись постоянная, подсветка означает «включено» — как у прочих
-                                            // кнопок панели. Прежде менялись обе, и ровный каркас читался как
-                                            // выключённый режим, хотя он и есть умолчание.
-                                            t('Checker Frame', lang),
-                                            observerData?.debug?.tileLineStyle !== 'solid',
-                                            () => {
-                                                // Каркас либо ровный, либо шахматный: одной кнопки с двумя состояниями хватает.
-                                                const checker = getViewer()?.observer?.get?.('debug.tileLineStyle') !== 'solid';
-                                                setProperty('debug.tileLineStyle', checker ? 'solid' : 'checker');
-                                            }
-                                        )}
+                                                {materialActionButton(
+                                                    // Подпись постоянная, подсветка означает «включено» — как у прочих
+                                                    // кнопок панели. Прежде менялись обе, и ровный каркас читался как
+                                                    // выключённый режим, хотя он и есть умолчание.
+                                                    t('Checker Frame', lang),
+                                                    observerData?.debug?.tileLineStyle !== 'solid',
+                                                    () => {
+                                                        // Каркас либо ровный, либо шахматный: одной кнопки с двумя состояниями хватает.
+                                                        const checker = getViewer()?.observer?.get?.('debug.tileLineStyle') !== 'solid';
+                                                        setProperty('debug.tileLineStyle', checker ? 'solid' : 'checker');
+                                                    }
+                                                )}
                                                 <div className='materials-layer-normals-row'>
                                                 </div>
                                                 <div className='materials-layer-normals-row'>

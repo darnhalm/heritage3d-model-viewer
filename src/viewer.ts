@@ -105,7 +105,7 @@ import { ClipBoxMaterials } from './clip-box';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
-import { SD_PIXEL_SCALE } from './helpers';
+import { isMobileLayout, SD_PIXEL_SCALE, SPLAT_PIXEL_SCALE } from './helpers';
 import { t } from './i18n/translations';
 import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
@@ -113,7 +113,7 @@ import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
 import { ShadowCatcher } from './shadow-catcher';
 import { normalizeThemeColor } from './theme';
-import { TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
+import { dimColor, EDGE_WIDTH_UNIT, gridIndex, TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, SurfacePivotController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry, intersectMeshTriangles } from './viewer/controllers/mesh-raycast';
@@ -4572,6 +4572,23 @@ class Viewer {
     }
 
     /** Reset viewer settings (camera, skybox, light, etc.) to defaults. */
+    /**
+     * Стартовый масштаб пиксела для сплатовой сцены.
+     *
+     * Решаем по имени файла, а не по составу сцены: сплатовый LOD подцепляет сущности много
+     * позже, и `scene.hasGsplat` к моменту настройки ещё не отражает правду. Вызывается сразу
+     * после сброса умолчаний — значит файл настроек модели, который применяется следом,
+     * по-прежнему сильнее и может задать своё.
+     *
+     * @param url - Имя или адрес загружаемого файла.
+     */
+    private applySplatPixelScaleDefault(url: string | undefined) {
+        // На узком экране не вмешиваемся: там уже действует SD, и он грубее полутора.
+        if (!url || isMobileLayout()) return;
+        if (this.isTilesetFilename(url) || !this.isGSplatFilename(url)) return;
+        this.observer.set('camera.pixelScale', SPLAT_PIXEL_SCALE);
+    }
+
     private resetViewerSettingsToDefaults() {
         this.settingsService.resetViewerSettingsToDefaults();
     }
@@ -6108,6 +6125,7 @@ class Viewer {
             const prevBg = this.observer.get('skybox.background');
             const prevBgColor = this.observer.get('skybox.backgroundColor');
             this.resetViewerSettingsToDefaults();
+            this.applySplatPixelScaleDefault(modelFiles[0]?.url ?? modelFiles[0]?.filename);
             if (prevBgColor) {
                 this.observer.set('skybox.background', prevBg);
                 this.observer.set('skybox.backgroundColor', prevBgColor);
@@ -6353,6 +6371,7 @@ class Viewer {
         const warnings: string[] = [];
 
         this.resetViewerSettingsToDefaults();
+        this.applySplatPixelScaleDefault(url);
         this.observer.set('ui.spinner', true);
         this.observer.set('ui.loadProgress', 0);
         this.observer.set('ui.error', null);
@@ -6382,7 +6401,7 @@ class Viewer {
         this.observer.set('debug.tileLodColor', false);
         this.observer.set('debug.gsplatLodColor', false);
         this.observer.set('debug.gsplatNodeBounds', false);
-        this.observer.set('debug.gsplatDebugMode', 'state');
+        this.observer.set('debug.gsplatDebugMode', 'lod');
         this.observer.set('debug.gsplatFreeze', false);
         this.observer.set('debug.gsplatPaused', false);
         this.observer.set('scene.tilesetMaxDepth', 0);
@@ -8646,7 +8665,7 @@ class Viewer {
 
         if (gsplatEnabled && this.gsplatDebugStats) {
             const s = this.gsplatDebugStats;
-            const mode = (this.observer.get('debug.gsplatDebugMode') as 'state' | 'lod') ?? 'state';
+            const mode = (this.observer.get('debug.gsplatDebugMode') as 'state' | 'lod') ?? 'lod';
             const lods = s.lodCounts.map((count, lod) => `L${lod}:${count}`).filter(label => !label.endsWith(':0')).join('  ');
             const flags = [
                 this.observer.get('debug.gsplatFreeze') ? 'FROZEN' : '',
@@ -8938,6 +8957,12 @@ class Viewer {
         };
         const managers = this.getGSplatManagers();
 
+        // Стиль каркаса общий с тайлами: настройка одна, и обе отладки выглядят одинаково.
+        const boundsStyle = {
+            lineThickness: Number(this.observer.get('debug.tileLineThickness') ?? 1),
+            checker: this.observer.get('debug.tileLineStyle') !== 'solid'
+        };
+        const cameraPos = this.camera.getPosition();
         const stateColors = {
             optimal: 0xff52d273,
             coarser: 0xffbfd42d,
@@ -8987,7 +9012,7 @@ class Viewer {
                     const ax = worldMat.transformVector(new Vec3(half.x, 0, 0), new Vec3());
                     const ay = worldMat.transformVector(new Vec3(0, half.y, 0), new Vec3());
                     const az = worldMat.transformVector(new Vec3(0, 0, half.z), new Vec3());
-                    const mode = this.observer.get('debug.gsplatDebugMode') ?? 'state';
+                    const mode = this.observer.get('debug.gsplatDebugMode') ?? 'lod';
                     let color = lodColorAbgr(current);
                     if (mode === 'state') {
                         const pending = inst.pendingVisibleAdds?.has?.(i) ||
@@ -8998,7 +9023,18 @@ class Viewer {
                     } else if (current < 0) {
                         color = stateColors.missing;
                     }
-                    this.debugTiles.obb(worldCenter, ax, ay, az, color);
+                    // Тот же каркас, что у полигональных тайлов: толстые рёбра, шахматное
+                    // чередование яркости у соседей и та же настройка толщины. Раньше здесь
+                    // была тонкая линия без стиля, и две одинаковые по смыслу отладки
+                    // выглядели по-разному.
+                    const parity = (
+                        Math.round(gridIndex(worldCenter, ax)) +
+                        Math.round(gridIndex(worldCenter, ay)) +
+                        Math.round(gridIndex(worldCenter, az))
+                    ) & 1;
+                    const edge = (!boundsStyle.checker || parity) ? color : dimColor(color, 0.55);
+                    const width = Math.min(8, Math.max(0.5, boundsStyle.lineThickness)) * EDGE_WIDTH_UNIT;
+                    this.debugTilesSolid.obbEdgesThick(worldCenter, ax, ay, az, cameraPos, width, edge);
                 }
             }
         }

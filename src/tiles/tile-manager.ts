@@ -84,7 +84,7 @@ const PICKED_COLOR = 0xffffffff;
 const lodColor = (depth: number) => lodColorAbgr(depth);
 
 /** Единица полуширины контурных лент в долях расстояния до камеры. Значение UI 2 = прежние 0.002. */
-const EDGE_WIDTH_UNIT = 0.001;
+export const EDGE_WIDTH_UNIT = 0.001;
 
 /**
  * Индекс тайла вдоль его полуоси в единицах полного размера бокса — для шахматной чётности.
@@ -94,7 +94,7 @@ const EDGE_WIDTH_UNIT = 0.001;
  * @param axis - Полуось бокса.
  * @returns Дробный индекс вдоль оси (вызывающий округляет).
  */
-function gridIndex(center: Vec3, axis: Vec3): number {
+export function gridIndex(center: Vec3, axis: Vec3): number {
     const lenSq = axis.lengthSq();
     if (lenSq < 1e-12) {
         return 0;
@@ -110,7 +110,7 @@ function gridIndex(center: Vec3, axis: Vec3): number {
  * @param factor - Множитель яркости (0..1).
  * @returns Затемнённый цвет.
  */
-function dimColor(clr: number, factor: number): number {
+export function dimColor(clr: number, factor: number): number {
     const r = Math.round((clr & 0xff) * factor);
     const g = Math.round(((clr >> 8) & 0xff) * factor);
     const b = Math.round(((clr >> 16) & 0xff) * factor);
