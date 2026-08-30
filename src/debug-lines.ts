@@ -649,6 +649,49 @@ class DebugSolid {
     }
 
     /**
+     * Полупрозрачная сфера, заданная тремя полуосями сущности.
+     *
+     * Собирается из четырёхугольников по широтам и долготам — отдельного примитива для сферы
+     * у нас нет, а `quad` уже умеет всё нужное. На полюсах четырёхугольник вырождается в
+     * треугольник, это допустимо и лишних артефактов не даёт.
+     *
+     * @param center - Центр сферы.
+     * @param ax - Первая полуось; её длина задаёт радиус.
+     * @param ay - Вторая полуось.
+     * @param az - Третья полуось.
+     * @param clr - Цвет (0xAABBGGRR); альфа в старшем байте задаёт интенсивность.
+     */
+    sphereFaces(center: Vec3, ax: Vec3, ay: Vec3, az: Vec3, clr = 0x40ffffff): void {
+        const LAT = 12;
+        const LON = 24;
+        const put = (target: Vec3, lat: number, lon: number) => {
+            const cosLat = Math.cos(lat);
+            const sinLat = Math.sin(lat);
+            const cosLon = Math.cos(lon);
+            const sinLon = Math.sin(lon);
+            target.set(
+                center.x + ax.x * cosLat * cosLon + ay.x * sinLat + az.x * cosLat * sinLon,
+                center.y + ax.y * cosLat * cosLon + ay.y * sinLat + az.y * cosLat * sinLon,
+                center.z + ax.z * cosLat * cosLon + ay.z * sinLat + az.z * cosLat * sinLon
+            );
+        };
+
+        for (let i = 0; i < LAT; ++i) {
+            const lat0 = -Math.PI / 2 + (i / LAT) * Math.PI;
+            const lat1 = -Math.PI / 2 + ((i + 1) / LAT) * Math.PI;
+            for (let j = 0; j < LON; ++j) {
+                const lon0 = (j / LON) * Math.PI * 2;
+                const lon1 = ((j + 1) / LON) * Math.PI * 2;
+                put(sp0, lat0, lon0);
+                put(sp1, lat0, lon1);
+                put(sp2, lat1, lon1);
+                put(sp3, lat1, lon0);
+                this.quad(sp0, sp1, sp2, sp3, clr);
+            }
+        }
+    }
+
+    /**
      * Полупрозрачные грани усечённой пирамиды/ортографического фрустума камеры.
      * Углы идут по кругу: верх-лево, верх-право, низ-право, низ-лево.
      *

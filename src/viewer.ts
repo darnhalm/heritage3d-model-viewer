@@ -8550,10 +8550,15 @@ class Viewer {
             const ax = transform.transformVector(new Vec3(0.5, 0, 0));
             const ay = transform.transformVector(new Vec3(0, 0.5, 0));
             const az = transform.transformVector(new Vec3(0, 0, 0.5));
+            const sphere = this.observer.get('fragment.shape') === 'sphere';
             if (!this.observer.get('fragment.enabled')) {
-                this.debugFragmentBoxSolid.obbFaces(center, ax, ay, az, this.fragmentFillColor());
+                if (sphere) {
+                    this.debugFragmentBoxSolid.sphereFaces(center, ax, ay, az, this.fragmentFillColor());
+                } else {
+                    this.debugFragmentBoxSolid.obbFaces(center, ax, ay, az, this.fragmentFillColor());
+                }
             }
-            if (this.observer.get('fragment.shape') === 'sphere') {
+            if (sphere) {
                 // У сферы рёбер нет: показываем три окружности по осям — этого достаточно,
                 // чтобы читались и положение, и радиус, а ручки остаются на местах граней.
                 this.drawFragmentSphereOutline(center, ax, ay, az);
