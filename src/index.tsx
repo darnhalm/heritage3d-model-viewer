@@ -249,6 +249,7 @@ const observerData: ObserverData = {
         tileCheckerFill: false,
         tilePick: false,
         tileOrderLabels: false,
+        tileOrderPerLod: false,
         tileIsolatePick: false,
         tileFreeze: false,
         tilePaused: false,

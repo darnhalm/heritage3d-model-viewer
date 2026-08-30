@@ -424,6 +424,21 @@ export class TileManager {
      */
     private loadCounter = 0;
 
+    /** Счётчики порядка загрузки по уровням детализации: ключ — глубина тайла. */
+    private readonly lodCounters = new Map<number, number>();
+
+    /**
+     * Отметить тайл как доехавший: общий номер и номер внутри своего уровня.
+     *
+     * @param tile - Тайл, содержимое которого готово.
+     */
+    private markLoadOrder(tile: Tile) {
+        tile.loadSequence = ++this.loadCounter;
+        const next = (this.lodCounters.get(tile.depth) ?? 0) + 1;
+        this.lodCounters.set(tile.depth, next);
+        tile.lodSequence = next;
+    }
+
     /**
      * Направление, вокруг которого тайлы считаются центральными; задаётся вьюером.
      *
@@ -919,7 +934,7 @@ export class TileManager {
         this.getTileMeshInstances(tile).forEach(meshInstance => this.meshToTile.set(meshInstance, tile));
 
         tile.state = TILE_READY;
-        tile.loadSequence = ++this.loadCounter;
+        this.markLoadOrder(tile);
         this.loaded.add(tile);
         this.onChange();
     }
@@ -1008,7 +1023,7 @@ export class TileManager {
                 warnings
             });
             tile.state = TILE_READY;
-            tile.loadSequence = ++this.loadCounter;
+            this.markLoadOrder(tile);
             [...new Set(warnings)].forEach(w => this.onWarning(w));
             this.onChange();
         })
@@ -1535,7 +1550,7 @@ export class TileManager {
      *
      * @param out - Массив, куда добавлять записи; переиспользуется между кадрами.
      */
-    collectOrderLabels(out: Array<{ center: Vec3, order: number }>) {
+    collectOrderLabels(out: Array<{ center: Vec3, order: number, lodOrder: number, depth: number }>) {
         out.length = 0;
         if (!this.rootTile || this.disposed) return;
         const stack: Tile[] = [this.rootTile];
@@ -1544,7 +1559,12 @@ export class TileManager {
             const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
             for (let i = 0; i < children.length; ++i) stack.push(children[i]);
             if (!tile.selected || !tile.obb || tile.loadSequence <= 0) continue;
-            out.push({ center: tile.obb.center, order: tile.loadSequence });
+            out.push({
+                center: tile.obb.center,
+                order: tile.loadSequence,
+                lodOrder: tile.lodSequence,
+                depth: tile.depth
+            });
         }
     }
 
@@ -1619,6 +1639,7 @@ export class TileManager {
         this.rootTile = null;
         this.loaded.clear();
         this.loadCounter = 0;
+        this.lodCounters.clear();
         this.prevSelection = [];
         this.root.destroy();
     }

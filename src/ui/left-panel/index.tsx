@@ -1461,6 +1461,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         )}
                                         {materialActionButton(t('Color Tiles by LOD', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
                                         {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
+                                        {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
+                                        {observerData?.debug?.tileOrderLabels && (
+                                            materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
+                                        )}
                                         {materialActionButton(t('Freeze Camera + FOV', lang), !!observerData?.debug?.tileFreeze, () => toggleObserverBoolean('debug.tileFreeze', !!observerData?.debug?.tileFreeze))}
                                         {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.tilePaused, () => toggleObserverBoolean('debug.tilePaused', !!observerData?.debug?.tilePaused))}
                                         {observerData?.debug?.tileDebug && (
@@ -1487,7 +1491,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     value={observerData?.debug?.tileLineThickness ?? 2}
                                                     setProperty={(value: number) => setProperty('debug.tileLineThickness', value)}
                                                 />
-                                                {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
                                                 {materialActionButton(t('Pick Tile', lang), !!observerData?.debug?.tilePick, () => toggleObserverBoolean('debug.tilePick', !!observerData?.debug?.tilePick))}
                                                 {observerData?.debug?.tilePick && (
                                                     materialActionButton(t('Isolate Picked Tile', lang), !!observerData?.debug?.tileIsolatePick, () => toggleObserverBoolean('debug.tileIsolatePick', !!observerData?.debug?.tileIsolatePick))

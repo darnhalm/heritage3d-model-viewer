@@ -178,6 +178,12 @@ const fragmentHitMat = new Mat4();
 /** Временный вектор для проекции номеров тайлов в экранные координаты. */
 const tileLabelScreen = new Vec3();
 
+/** Точка в системе координат камеры — для глубины, не зависящей от типа проекции. */
+const tileLabelView = new Vec3();
+
+/** Обратная матрица камеры; пересчитывается раз в кадр. */
+const tileLabelViewInv = new Mat4();
+
 const fragmentHitOrigin = new Vec3();
 const fragmentHitDir = new Vec3();
 
@@ -840,7 +846,7 @@ class Viewer {
     private tileOrderCanvas: HTMLCanvasElement | null = null;
 
     /** Центры и номера выбранных тайлов; массив переиспользуется между кадрами. */
-    private readonly tileOrderLabels: Array<{ center: Vec3, order: number }> = [];
+    private readonly tileOrderLabels: Array<{ center: Vec3, order: number, lodOrder: number, depth: number }> = [];
 
     /**
      * Меши, которым проставлен цвет LOD, и глубина, под которую он посчитан. Цвет живёт в
@@ -8675,9 +8681,9 @@ class Viewer {
      * `DebugLines` не умеет, поэтому проекция и отрисовка живут здесь.
      */
     private updateTileOrderLabels() {
-        const enabled = !!this.tileManager &&
-            !!this.observer.get('debug.tileDebug') &&
-            !!this.observer.get('debug.tileOrderLabels');
+        // Не требуем включённых границ тайлов: номера — самостоятельный режим, и смотреть их
+        // поверх чистой сцены обычно удобнее, чем поверх сетки рамок.
+        const enabled = !!this.tileManager && !!this.observer.get('debug.tileOrderLabels');
 
         if (!enabled) {
             if (this.tileOrderCanvas) this.tileOrderCanvas.style.display = 'none';
@@ -8722,13 +8728,20 @@ class Viewer {
 
         // Ближние подписи рисуем последними: при наложении сверху окажется та, что ближе.
         const camera = this.camera.camera;
-        const screen: Array<{ x: number, y: number, order: number, depth: number }> = [];
-        for (const { center, order } of this.tileOrderLabels) {
+        // Глубину считаем сами, а не берём `z` у проекции: в перспективе там расстояние по оси
+        // взгляда, а в ортогональной — другая величина, и диапазон плоскостей отсечения к ней
+        // неприменим. Из-за этого в ортогональном режиме пропадали все подписи разом.
+        tileLabelViewInv.copy(this.camera.getWorldTransform()).invert();
+        const perLod = !!this.observer.get('debug.tileOrderPerLod');
+        const screen: Array<{ x: number, y: number, order: number, depth: number, lod: number }> = [];
+        for (const { center, order, lodOrder, depth: lod } of this.tileOrderLabels) {
+            tileLabelViewInv.transformPoint(center, tileLabelView);
+            // Камера смотрит вдоль минус Z, поэтому глубина — это минус координата.
+            const depth = -tileLabelView.z;
+            if (depth <= camera.nearClip || depth >= camera.farClip) continue;
             const point = camera.worldToScreen(center, tileLabelScreen);
-            // Точки за камерой и за дальней плоскостью проецируются мусором.
-            if (point.z <= camera.nearClip || point.z >= camera.farClip) continue;
             if (point.x < -40 || point.y < -20 || point.x > width + 40 || point.y > height + 20) continue;
-            screen.push({ x: point.x, y: point.y, order, depth: point.z });
+            screen.push({ x: point.x, y: point.y, order: perLod ? lodOrder : order, depth, lod });
         }
         screen.sort((a, b) => b.depth - a.depth);
 
@@ -8739,11 +8752,15 @@ class Viewer {
             const text = String(label.order);
             const w = ctx.measureText(text).width + 10;
             const h = 16;
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.66)';
+            // Подложка в цвете уровня — та же палитра, что у легенды и полоски долей: номер
+            // сразу говорит и «когда доехал», и «какого уровня».
+            ctx.fillStyle = lodColorCss(label.lod);
             ctx.beginPath();
             ctx.roundRect(label.x - w / 2, label.y - h / 2, w, h, 4);
             ctx.fill();
-            ctx.fillStyle = '#ffffff';
+            // Цвет цифры выбираем по яркости подложки: на жёлтом и голубом белый не читается.
+            const [r, g, b] = lodColorRgb(label.lod);
+            ctx.fillStyle = (0.299 * r + 0.587 * g + 0.114 * b) > 0.55 ? '#101010' : '#ffffff';
             ctx.fillText(text, label.x, label.y);
         }
     }

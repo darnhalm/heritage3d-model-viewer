@@ -1337,7 +1337,8 @@ export const FragmentPanel = (props: { observerData: ObserverData, setProperty: 
                         setProperty={(value: number) => props.setProperty('fragment.outlineWidth', value)}
                     />
                 )}
-                {data.initialized && (
+                {/* Форму выбирают до выделения: она определяет, что именно появится по клику. */}
+                {!data.enabled && (
                     <Container class='fragment-shape-toolbar'>
                         {([
                             ['box', 'fragment-shape-box', 'Box shape'],
