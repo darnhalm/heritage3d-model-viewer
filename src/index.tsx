@@ -248,6 +248,7 @@ const observerData: ObserverData = {
         tileLineStyle: 'checker',
         tileCheckerFill: false,
         tilePick: false,
+        tileOrderLabels: false,
         tileIsolatePick: false,
         tileFreeze: false,
         tilePaused: false,

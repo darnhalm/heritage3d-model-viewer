@@ -144,6 +144,7 @@ export function buildTileTree(json: TileJson, options: BuildTreeOptions): Tile {
         error: 0,
         inFrustum: false,
         central: true,
+        loadSequence: 0,
         selected: false,
         wasRefined: false,
         loadToken: null,

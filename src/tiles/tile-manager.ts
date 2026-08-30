@@ -416,6 +416,15 @@ export class TileManager {
     stableRenderHeight = 0;
 
     /**
+     * Сколько тайлов уже доехало за жизнь этого набора.
+     *
+     * Номер присваивается в момент готовности содержимого и больше не меняется: отладка
+     * показывает историю загрузки, а не текущую очередь. Историю можно спокойно рассматривать,
+     * остановив камеру, — очередь же перескакивала бы при каждом её движении.
+     */
+    private loadCounter = 0;
+
+    /**
      * Направление, вокруг которого тайлы считаются центральными; задаётся вьюером.
      *
      * `null` — приоритет как раньше, без учёта экранного положения. Иначе это единичный вектор:
@@ -910,6 +919,7 @@ export class TileManager {
         this.getTileMeshInstances(tile).forEach(meshInstance => this.meshToTile.set(meshInstance, tile));
 
         tile.state = TILE_READY;
+        tile.loadSequence = ++this.loadCounter;
         this.loaded.add(tile);
         this.onChange();
     }
@@ -998,6 +1008,7 @@ export class TileManager {
                 warnings
             });
             tile.state = TILE_READY;
+            tile.loadSequence = ++this.loadCounter;
             [...new Set(warnings)].forEach(w => this.onWarning(w));
             this.onChange();
         })
@@ -1516,6 +1527,27 @@ export class TileManager {
      * @param mode - `state` — цвет по состоянию загрузки; `lod` — по глубине в дереве.
      * @param style - Толщина, цвет и шахматный режим.
      */
+    /**
+     * Собрать центры выбранных тайлов и их номера в истории загрузки.
+     *
+     * Возвращаем сырые данные, а не рисуем: текст `DebugLines` не умеет, его кладёт вьюер на
+     * канвас поверх сцены. Тайлы без номера пропускаем — они ещё не догрузились.
+     *
+     * @param out - Массив, куда добавлять записи; переиспользуется между кадрами.
+     */
+    collectOrderLabels(out: Array<{ center: Vec3, order: number }>) {
+        out.length = 0;
+        if (!this.rootTile || this.disposed) return;
+        const stack: Tile[] = [this.rootTile];
+        while (stack.length > 0) {
+            const tile = stack.pop() as Tile;
+            const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
+            for (let i = 0; i < children.length; ++i) stack.push(children[i]);
+            if (!tile.selected || !tile.obb || tile.loadSequence <= 0) continue;
+            out.push({ center: tile.obb.center, order: tile.loadSequence });
+        }
+    }
+
     debugDraw(lines: DebugLines, solid: DebugSolid, fill: DebugSolid, mode: TileDebugMode, style: TileDebugStyle) {
         if (!this.rootTile || this.disposed) {
             return;
@@ -1586,6 +1618,7 @@ export class TileManager {
         }
         this.rootTile = null;
         this.loaded.clear();
+        this.loadCounter = 0;
         this.prevSelection = [];
         this.root.destroy();
     }

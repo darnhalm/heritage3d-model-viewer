@@ -1487,6 +1487,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     value={observerData?.debug?.tileLineThickness ?? 2}
                                                     setProperty={(value: number) => setProperty('debug.tileLineThickness', value)}
                                                 />
+                                                {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
                                                 {materialActionButton(t('Pick Tile', lang), !!observerData?.debug?.tilePick, () => toggleObserverBoolean('debug.tilePick', !!observerData?.debug?.tilePick))}
                                                 {observerData?.debug?.tilePick && (
                                                     materialActionButton(t('Isolate Picked Tile', lang), !!observerData?.debug?.tileIsolatePick, () => toggleObserverBoolean('debug.tileIsolatePick', !!observerData?.debug?.tileIsolatePick))

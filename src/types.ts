@@ -167,6 +167,8 @@ export interface ObserverData {
         tileCheckerFill?: boolean,
         /** Режим клика по поверхности для выбора и инспекции тайла. */
         tilePick?: boolean,
+        /** Показывать номера порядка загрузки в центрах тайлов. */
+        tileOrderLabels?: boolean,
         /** Показывать только контент выбранного кликом тайла. */
         tileIsolatePick?: boolean,
         /** Заморозка отбора: LOD считается от камеры на момент заморозки. */

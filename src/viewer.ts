@@ -175,6 +175,9 @@ const vec = new Vec3();
 const bbox = new BoundingBox();
 // Скретч для проверки попадания луча в бокс фрагмента — переиспользуется между вызовами.
 const fragmentHitMat = new Mat4();
+/** Временный вектор для проекции номеров тайлов в экранные координаты. */
+const tileLabelScreen = new Vec3();
+
 const fragmentHitOrigin = new Vec3();
 const fragmentHitDir = new Vec3();
 
@@ -832,6 +835,12 @@ class Viewer {
 
     /** Полоска долей уровней детализации над отладочным окном тайлов. */
     private tileHudBar: HTMLDivElement | null = null;
+
+    /** Канвас с номерами порядка загрузки поверх сцены. */
+    private tileOrderCanvas: HTMLCanvasElement | null = null;
+
+    /** Центры и номера выбранных тайлов; массив переиспользуется между кадрами. */
+    private readonly tileOrderLabels: Array<{ center: Vec3, order: number }> = [];
 
     /**
      * Меши, которым проставлен цвет LOD, и глубина, под которую он посчитан. Цвет живёт в
@@ -8428,6 +8437,7 @@ class Viewer {
             };
             this.tileManager.debugDraw(this.debugTiles, this.debugTilesSolid, this.debugTilesFill, mode, style);
         }
+        this.updateTileOrderLabels();
         const gsplatDebugEnabled = !!this.observer.get('scene.hasGsplat') &&
             (!!this.observer.get('debug.gsplatNodeBounds') || !!this.observer.get('debug.gsplatLodColor') ||
                 !!this.observer.get('debug.gsplatFreeze') || !!this.observer.get('debug.gsplatPaused'));
@@ -8626,6 +8636,87 @@ class Viewer {
      * @param counts - Количество элементов по уровням; индекс массива — номер уровня.
      * @param visible - Показывать ли легенду (на экране действительно цвета LOD).
      */
+    /**
+     * Нарисовать номера порядка загрузки в центрах выбранных тайлов.
+     *
+     * Одним канвасом поверх сцены, а не сотней узлов разметки: тайлов на экране бывают сотни, и
+     * держать под каждый элемент с пересчётом положения каждый кадр — расточительство. Текст
+     * `DebugLines` не умеет, поэтому проекция и отрисовка живут здесь.
+     */
+    private updateTileOrderLabels() {
+        const enabled = !!this.tileManager &&
+            !!this.observer.get('debug.tileDebug') &&
+            !!this.observer.get('debug.tileOrderLabels');
+
+        if (!enabled) {
+            if (this.tileOrderCanvas) this.tileOrderCanvas.style.display = 'none';
+            return;
+        }
+
+        const sceneCanvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
+        // Канвас без раскладки (скрытая вкладка, свёрнутая встройка) рисовать незачем: работа
+        // ушла бы в никуда, а `getContext` на нулевом размере ещё и бросает при чтении.
+        if (sceneCanvas.clientWidth <= 0 || sceneCanvas.clientHeight <= 0) {
+            if (this.tileOrderCanvas) this.tileOrderCanvas.style.display = 'none';
+            return;
+        }
+
+        if (!this.tileOrderCanvas) {
+            const el = document.createElement('canvas');
+            el.id = 'tile-order-labels';
+            el.style.cssText = 'position:absolute;left:0;top:0;z-index:99;pointer-events:none;';
+            (sceneCanvas.parentElement ?? document.body).appendChild(el);
+            this.tileOrderCanvas = el;
+        }
+
+        const canvas = this.tileOrderCanvas;
+        canvas.style.display = 'block';
+        const width = sceneCanvas.clientWidth;
+        const height = sceneCanvas.clientHeight;
+        const dpr = window.devicePixelRatio || 1;
+        if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
+            canvas.width = Math.round(width * dpr);
+            canvas.height = Math.round(height * dpr);
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+
+        this.tileManager?.collectOrderLabels(this.tileOrderLabels);
+        if (this.tileOrderLabels.length === 0) return;
+
+        // Ближние подписи рисуем последними: при наложении сверху окажется та, что ближе.
+        const camera = this.camera.camera;
+        const screen: Array<{ x: number, y: number, order: number, depth: number }> = [];
+        for (const { center, order } of this.tileOrderLabels) {
+            const point = camera.worldToScreen(center, tileLabelScreen);
+            // Точки за камерой и за дальней плоскостью проецируются мусором.
+            if (point.z <= camera.nearClip || point.z >= camera.farClip) continue;
+            if (point.x < -40 || point.y < -20 || point.x > width + 40 || point.y > height + 20) continue;
+            screen.push({ x: point.x, y: point.y, order, depth: point.z });
+        }
+        screen.sort((a, b) => b.depth - a.depth);
+
+        ctx.font = '600 12px ui-monospace, Menlo, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (const label of screen) {
+            const text = String(label.order);
+            const w = ctx.measureText(text).width + 10;
+            const h = 16;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.66)';
+            ctx.beginPath();
+            ctx.roundRect(label.x - w / 2, label.y - h / 2, w, h, 4);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(text, label.x, label.y);
+        }
+    }
+
     private renderLodLegend(counts: number[], visible: boolean) {
         const legend = this.tileHudLegend;
         if (!legend) return;
