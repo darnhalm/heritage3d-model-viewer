@@ -183,7 +183,7 @@ const observerData: ObserverData = {
         dynamicScale: false,
         // Порядок загрузки тайлов: 'default' — как раньше, 'foveated' — сперва центр кадра,
         // 'cursor' — сперва то, на что наведён указатель.
-        tilePriority: 'foveated',
+        tilePriority: 'default',
         distanceLimitsManual: false,
         distanceMin: 0.01,
         distanceMax: 0,
@@ -463,6 +463,10 @@ const saveOptions = (observer: Observer, name: string) => {
         // Keeping another copy here would let stale defaults override a later rollout.
         delete camera.surfacePivot;
         delete camera.mouseButtonsInverted;
+        // Порядок загрузки — не свойство пользователя и не свойство модели: это режим, который
+        // включают на время, чтобы посмотреть. Сохранённое значение перебивало бы умолчание при
+        // каждой правке умолчания, а этой ловушкой мы уже обжигались на HD и на устройстве ввода.
+        delete camera.tilePriority;
         // Пределы расстояния — свойство конкретной сцены, а не пользователя: расстояние в
         // единицах одной модели для другой бессмысленно. Их место — в файле настроек модели,
         // откуда они и приезжают; общее хранилище переносило бы их между всеми моделями.
@@ -494,6 +498,7 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
         // Сеансовое состояние проекции и навигационного куба: в старом localStorage оно
         // могло сохраниться, поэтому отбрасываем и на загрузке.
         'camera.ortho', 'camera.viewCube',
+        'camera.tilePriority',
         // Пределы расстояния привязаны к габаритам конкретной сцены. Сохранённые от прошлой
         // модели значения удерживали бы камеру там, где для новой модели нет никакого смысла.
         'camera.distanceLimitsManual', 'camera.distanceMin', 'camera.distanceMax',

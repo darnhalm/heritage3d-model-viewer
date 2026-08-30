@@ -185,26 +185,32 @@ const TileOrderIllustration = (props: { mode: string }) => {
             ctx.stroke();
             ctx.setLineDash([]);
 
-            if (!pointer) return;
-            // Стрелка указателя: сразу видно, что круг привязан к нему, а не к центру.
+            if (!pointer || !fontReady) return;
+            // Стрелка указателя — готовый глиф Material Symbols `arrow_selector_tool`, а не
+            // самодельный многоугольник: рисованный вручную получался кривым, а глиф уже есть
+            // в наборе шрифта, которым размечен весь интерфейс.
             const px = focus.x * W, py = focus.y * H;
+            ctx.font = '20px "Material Symbols Outlined"';
+            ctx.textBaseline = 'top';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
+            ctx.strokeText('arrow_selector_tool', px - 3, py - 2);
             ctx.fillStyle = '#FFFFFF';
-            ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.moveTo(px, py);
-            ctx.lineTo(px, py + 13);
-            ctx.lineTo(px + 3.6, py + 9.6);
-            ctx.lineTo(px + 7.4, py + 12.6);
-            ctx.lineTo(px + 9.2, py + 10.4);
-            ctx.lineTo(px + 5.4, py + 7.6);
-            ctx.lineTo(px + 9.4, py + 6.6);
-            ctx.closePath();
-            ctx.stroke();
-            ctx.fill();
+            ctx.fillText('arrow_selector_tool', px - 3, py - 2);
         };
 
         const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        // Пока шрифт иконок не загружен, `fillText` нарисовал бы имя глифа словами. Ждём его
+        // готовности и перерисовываем: первый кадр иллюстрации в худшем случае идёт без стрелки.
+        let fontReady = false;
+        document.fonts?.load?.('20px "Material Symbols Outlined"', 'arrow_selector_tool')
+        .then(() => {
+            fontReady = true;
+        })
+        .catch(() => {
+            fontReady = false;
+        });
 
         if (props.mode !== 'cursor') {
             const focus = props.mode === 'default' ? null : { x: 0.5, y: 0.5 };
