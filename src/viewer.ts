@@ -178,11 +178,6 @@ const fragmentHitMat = new Mat4();
 /** Временный вектор для проекции номеров тайлов в экранные координаты. */
 const tileLabelScreen = new Vec3();
 
-/** Концы отрезка проволочной сферы выделения. */
-const fragmentSphereA = new Vec3();
-
-const fragmentSphereB = new Vec3();
-
 /** Точка в системе координат камеры — для глубины, не зависящей от типа проекции. */
 const tileLabelView = new Vec3();
 
@@ -6634,41 +6629,6 @@ class Viewer {
         return this.camera.camera.worldToScreen(point);
     }
 
-    /**
-     * Нарисовать проволочную сферу выделения: три окружности в плоскостях осей.
-     *
-     * @param center - Центр сферы в мире.
-     * @param ax - Полуось X сущности в мире; её длина и есть радиус.
-     * @param ay - Полуось Y.
-     * @param az - Полуось Z.
-     */
-    private drawFragmentSphereOutline(center: Vec3, ax: Vec3, ay: Vec3, az: Vec3) {
-        const SEGMENTS = 48;
-        const circle = (u: Vec3, v: Vec3) => {
-            let prevX = 0;
-            let prevY = 0;
-            let prevZ = 0;
-            for (let i = 0; i <= SEGMENTS; i++) {
-                const angle = (i / SEGMENTS) * Math.PI * 2;
-                const cos = Math.cos(angle);
-                const sin = Math.sin(angle);
-                const x = center.x + u.x * cos + v.x * sin;
-                const y = center.y + u.y * cos + v.y * sin;
-                const z = center.z + u.z * cos + v.z * sin;
-                if (i > 0) {
-                    fragmentSphereA.set(prevX, prevY, prevZ);
-                    fragmentSphereB.set(x, y, z);
-                    this.debugFragmentBox.line(fragmentSphereA, fragmentSphereB, 0xffffffff);
-                }
-                prevX = x;
-                prevY = y;
-                prevZ = z;
-            }
-        };
-        circle(ax, ay);
-        circle(ay, az);
-        circle(az, ax);
-    }
 
     private updateFragmentHandles() {
         const visible = !!this.observer.get('fragment.initialized') &&
@@ -8588,9 +8548,17 @@ class Viewer {
                 }
             }
             if (sphere) {
-                // У сферы рёбер нет: показываем три окружности по осям — этого достаточно,
-                // чтобы читались и положение, и радиус, а ручки остаются на местах граней.
-                this.drawFragmentSphereOutline(center, ax, ay, az);
+                // Толщина та же, что у рёбер бокса: иначе контур сферы выглядит тоньше, и две
+                // формы читаются как разные по важности.
+                this.debugFragmentBoxSolid.sphereEdgesThick(
+                    center,
+                    ax,
+                    ay,
+                    az,
+                    this.camera.getPosition(),
+                    0.0021,
+                    0xffffffff
+                );
             } else {
                 this.debugFragmentBoxSolid.obbEdgesThick(
                     center,

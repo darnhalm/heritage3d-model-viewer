@@ -362,6 +362,52 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     type='string'
                     options={PIXEL_SCALES}
                     setProperty={(value: string) => props.setProperty('camera.pixelScale', Number(value))} />
+                <Slider
+                    label={t('Sharpness', lang)}
+                    precision={2}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={props.observerData.camera.sharpness ?? 0.5}
+                    setProperty={(value: number) => props.setProperty('camera.sharpness', value)} />
+                <Toggle
+                    label={t('Lower while moving', lang)}
+                    value={props.observerData.camera.dynamicScale !== false}
+                    setProperty={(value: boolean) => props.setProperty('camera.dynamicScale', value)}
+                />
+                <Detail label={t('Viewport', lang)} value={`${props.observerData.runtime?.viewportWidth ?? 0} x ${props.observerData.runtime?.viewportHeight ?? 0}`} />
+                <Toggle
+                    label={t('Multisample', lang)}
+                    value={props.observerData.camera.multisample}
+                    enabled={props.observerData.camera.multisampleSupported}
+                    setProperty={(value: boolean) => props.setProperty('camera.multisample', value)}
+                />
+                <Toggle
+                    label={t('HD', lang)}
+                    value={props.observerData.camera.hq}
+                    setProperty={(value: boolean) => props.setProperty('camera.hq', value)}
+                />
+            </Panel>
+        );
+    }
+}
+
+class LimitsPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
+    shouldComponentUpdate(nextProps: Readonly<{ observerData: ObserverData; setProperty: SetProperty; }>): boolean {
+        const a = nextProps.observerData;
+        const b = this.props.observerData;
+        return a.camera?.distanceLimitsManual !== b.camera?.distanceLimitsManual ||
+               a.camera?.distanceMin !== b.camera?.distanceMin ||
+               a.camera?.distanceMax !== b.camera?.distanceMax ||
+               a.runtime?.cameraDistance !== b.runtime?.cameraDistance ||
+               a.ui?.language !== b.ui?.language;
+    }
+
+    render() {
+        const props = this.props;
+        const lang = props.observerData?.ui?.language;
+        return (
+            <Panel headerText={t('Camera limits', lang)} id='limits-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
                 <Toggle
                     label={t('Manual distance limits', lang)}
                     value={props.observerData.camera.distanceLimitsManual === true}
@@ -398,31 +444,6 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                             onClick={() => takeDistanceFromView('camera.distanceMax')} />
                     </span>
                 </Container>
-                <Slider
-                    label={t('Sharpness', lang)}
-                    precision={2}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={props.observerData.camera.sharpness ?? 0.5}
-                    setProperty={(value: number) => props.setProperty('camera.sharpness', value)} />
-                <Toggle
-                    label={t('Lower while moving', lang)}
-                    value={props.observerData.camera.dynamicScale !== false}
-                    setProperty={(value: boolean) => props.setProperty('camera.dynamicScale', value)}
-                />
-                <Detail label={t('Viewport', lang)} value={`${props.observerData.runtime?.viewportWidth ?? 0} x ${props.observerData.runtime?.viewportHeight ?? 0}`} />
-                <Toggle
-                    label={t('Multisample', lang)}
-                    value={props.observerData.camera.multisample}
-                    enabled={props.observerData.camera.multisampleSupported}
-                    setProperty={(value: boolean) => props.setProperty('camera.multisample', value)}
-                />
-                <Toggle
-                    label={t('HD', lang)}
-                    value={props.observerData.camera.hq}
-                    setProperty={(value: boolean) => props.setProperty('camera.hq', value)}
-                />
             </Panel>
         );
     }
@@ -1235,6 +1256,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     {tab === 'scene' && (
                         <>
                             <CameraPanel observerData={observerData} setProperty={setProperty} />
+                            <LimitsPanel observerData={observerData} setProperty={setProperty} />
                             {!embedEnabled && !observerData?.scene?.hasGsplat && (
                                 <>
                                     {/* Окружение остаётся и для unlit: модель его не учитывает,
@@ -1470,44 +1492,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         )}
                                         {materialActionButton(t('Color Tiles by LOD', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
                                         {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
-                                        {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
-                                        {materialActionButton(t('Tile ID numbers', lang), !!observerData?.debug?.tileIdLabels, () => {
-                                            const next = !getViewer()?.observer?.get?.('debug.tileIdLabels');
-                                            setProperty('debug.tileIdLabels', next);
-                                            // Два числа в одном кружке не показать: режимы исключают друг друга.
-                                            if (next) setProperty('debug.tileOrderLabels', false);
-                                        })}
-                                        {observerData?.debug?.tileOrderLabels && (
-                                            materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
-                                        )}
-                                        <div className='tile-playback-toolbar'>
-                                            <button
-                                                type='button'
-                                                className={`tile-playback-button${observerData?.debug?.tileFreeze ? ' active' : ''}`}
-                                                title={t('Freeze Camera + FOV', lang)}
-                                                aria-label={t('Freeze Camera + FOV', lang)}
-                                                aria-pressed={!!observerData?.debug?.tileFreeze}
-                                                onClick={() => toggleObserverBoolean('debug.tileFreeze', !!observerData?.debug?.tileFreeze)}
-                                            >
-                                                {/* Камера со снежинкой в нижнем правом углу: заморожен не показ, а камера. */}
-                                                <span className='tile-playback-glyph-stack'>
-                                                    <span className='material-symbols-outlined'>photo_camera</span>
-                                                    <span className='material-symbols-outlined tile-playback-glyph-badge'>ac_unit</span>
-                                                </span>
-                                            </button>
-                                            <button
-                                                type='button'
-                                                className={`tile-playback-button${observerData?.debug?.tilePaused ? ' active' : ''}`}
-                                                title={t(observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', lang)}
-                                                aria-label={t(observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', lang)}
-                                                aria-pressed={!!observerData?.debug?.tilePaused}
-                                                onClick={() => toggleObserverBoolean('debug.tilePaused', !!observerData?.debug?.tilePaused)}
-                                            >
-                                                <span className='material-symbols-outlined'>
-                                                    {observerData?.debug?.tilePaused ? 'play_arrow' : 'pause'}
-                                                </span>
-                                            </button>
-                                        </div>
                                         {materialActionButton(
                                             observerData?.debug?.tileLineStyle === 'solid' ? t('Solid Frame', lang) : t('Checker Frame', lang),
                                             observerData?.debug?.tileLineStyle !== 'solid',
@@ -1517,6 +1501,16 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 setProperty('debug.tileLineStyle', checker ? 'solid' : 'checker');
                                             }
                                         )}
+                                        {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
+                                        {observerData?.debug?.tileOrderLabels && (
+                                            materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
+                                        )}
+                                        {materialActionButton(t('Tile ID numbers', lang), !!observerData?.debug?.tileIdLabels, () => {
+                                            const next = !getViewer()?.observer?.get?.('debug.tileIdLabels');
+                                            setProperty('debug.tileIdLabels', next);
+                                            // Два числа в одном кружке не показать: режимы исключают друг друга.
+                                            if (next) setProperty('debug.tileOrderLabels', false);
+                                        })}
                                         {observerData?.debug?.tileDebug && (
                                             <>
                                                 <div className='materials-layer-normals-row'>
@@ -1545,6 +1539,35 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 )}
                                             </>
                                         )}
+
+                                        <div className='tile-playback-toolbar'>
+                                            <button
+                                                type='button'
+                                                className={`tile-playback-button${observerData?.debug?.tileFreeze ? ' active' : ''}`}
+                                                title={t('Freeze Camera + FOV', lang)}
+                                                aria-label={t('Freeze Camera + FOV', lang)}
+                                                aria-pressed={!!observerData?.debug?.tileFreeze}
+                                                onClick={() => toggleObserverBoolean('debug.tileFreeze', !!observerData?.debug?.tileFreeze)}
+                                            >
+                                                {/* Камера со снежинкой в нижнем правом углу: заморожен не показ, а камера. */}
+                                                <span className='tile-playback-glyph-stack'>
+                                                    <span className='material-symbols-outlined'>photo_camera</span>
+                                                    <span className='material-symbols-outlined tile-playback-glyph-badge'>ac_unit</span>
+                                                </span>
+                                            </button>
+                                            <button
+                                                type='button'
+                                                className={`tile-playback-button${observerData?.debug?.tilePaused ? ' active' : ''}`}
+                                                title={t(observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', lang)}
+                                                aria-label={t(observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', lang)}
+                                                aria-pressed={!!observerData?.debug?.tilePaused}
+                                                onClick={() => toggleObserverBoolean('debug.tilePaused', !!observerData?.debug?.tilePaused)}
+                                            >
+                                                <span className='material-symbols-outlined'>
+                                                    {observerData?.debug?.tilePaused ? 'play_arrow' : 'pause'}
+                                                </span>
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>

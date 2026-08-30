@@ -60,6 +60,10 @@ const sp3 = new Vec3();
 const sedge = new Vec3();
 const sview = new Vec3();
 const sperp = new Vec3();
+const sphereEdgeA = new Vec3();
+
+const sphereEdgeB = new Vec3();
+
 const smid = new Vec3();
 const unitBone = [
     [[0,    0,   0], [-0.5, 0, 0.3]],
@@ -747,6 +751,46 @@ class DebugSolid {
      * @param width - Полуширина в долях расстояния (~постоянная толщина в пикселях).
      * @param clr - Цвет (0xAABBGGRR).
      */
+    /**
+     * Три окружности по осям заданными полуосями — толстыми линиями, как рёбра бокса.
+     *
+     * Толщина считается от расстояния до камеры тем же способом, что у рёбер: иначе контур
+     * сферы выглядел бы тоньше боксового, и две формы читались бы как разные по важности.
+     *
+     * @param center - Центр сферы.
+     * @param ax - Первая полуось; её длина задаёт радиус.
+     * @param ay - Вторая полуось.
+     * @param az - Третья полуось.
+     * @param camPos - Положение камеры.
+     * @param width - Толщина линии в долях расстояния до камеры.
+     * @param clr - Цвет (0xAABBGGRR).
+     */
+    sphereEdgesThick(center: Vec3, ax: Vec3, ay: Vec3, az: Vec3, camPos: Vec3, width: number, clr: number): void {
+        const SEGMENTS = 48;
+        const ring = (u: Vec3, v: Vec3) => {
+            for (let i = 0; i < SEGMENTS; ++i) {
+                const a0 = (i / SEGMENTS) * Math.PI * 2;
+                const a1 = ((i + 1) / SEGMENTS) * Math.PI * 2;
+                const c0 = Math.cos(a0), s0 = Math.sin(a0);
+                const c1 = Math.cos(a1), s1 = Math.sin(a1);
+                sphereEdgeA.set(
+                    center.x + u.x * c0 + v.x * s0,
+                    center.y + u.y * c0 + v.y * s0,
+                    center.z + u.z * c0 + v.z * s0
+                );
+                sphereEdgeB.set(
+                    center.x + u.x * c1 + v.x * s1,
+                    center.y + u.y * c1 + v.y * s1,
+                    center.z + u.z * c1 + v.z * s1
+                );
+                this.thickLine(sphereEdgeA, sphereEdgeB, camPos, width, clr);
+            }
+        };
+        ring(ax, ay);
+        ring(ay, az);
+        ring(az, ax);
+    }
+
     obbEdgesThick(center: Vec3, ax: Vec3, ay: Vec3, az: Vec3, camPos: Vec3, width: number, clr: number): void {
         let i = 0;
         for (let sx = -1; sx <= 1; sx += 2) {
