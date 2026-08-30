@@ -448,6 +448,16 @@ class Multiframe {
      */
     easu = true;
 
+    /** Промежуточная цель для растянутого кадра; живёт в разрешении экрана. */
+    easuTexture: Texture = null;
+
+    easuRenderTarget: RenderTarget = null;
+
+    easuRenderPass: CustomRenderPass = null;
+
+    /** Идёт ли сейчас цепочка из двух проходов: EASU в цель, затем RCAS на экран. */
+    private chained = false;
+
     accumTexture: Texture = null;
 
     accumRenderTarget: RenderTarget = null;
@@ -586,6 +596,46 @@ class Multiframe {
             });
         });
 
+        // Промежуточная цель под растянутый кадр. Эталонный FSR ставит RCAS отдельным проходом
+        // по выходу EASU: резкость нужна в разрешении экрана, где после растяжки и живут детали,
+        // а соседей выходного пикселя в одном проходе взять неоткуда.
+        this.easuTexture = new Texture(device, {
+            name: 'multiframe-easu-texture',
+            width: device.width,
+            height: device.height,
+            format: choosePixelFormat(device),
+            mipmaps: false,
+            minFilter: FILTER_LINEAR,
+            magFilter: FILTER_LINEAR
+        });
+
+        this.easuRenderTarget = new RenderTarget({
+            name: 'multiframe-easu-target',
+            colorBuffer: this.easuTexture,
+            depth: false
+        });
+
+        this.easuRenderPass = new CustomRenderPass(device);
+        this.easuRenderPass.init(this.easuRenderTarget, {});
+        this.easuRenderPass.blendState = noBlend;
+        this.easuRenderPass.events.on('execute', () => {
+            // Источник тот же, что взял бы финальный проход: накопление, если оно уже идёт,
+            // иначе цель сцены. Читать всегда цель сцены значило бы терять накопленные детали.
+            const blending = this.enabled && this.sampleId > 0;
+            const src = blending ? this.accumTexture : this.sourceTex;
+            // Переворота нет — как у прохода накопления: цель рендера, а не бэкбуфер. Цепочка
+            // из двух целей повторяет форму пути накопления, поэтому ориентация сходится сама.
+            resolve(device.scope, {
+                texcoordMod: [1, 1, 0, 0],
+                multiframeTex: src,
+                power: blending ? (1.0 / gamma) : 1.0,
+                sharpness: 0,
+                easuEnabled: 1,
+                srcSize: [src.width, src.height],
+                outputTexel: [1 / Math.max(1, device.width), 1 / Math.max(1, device.height)]
+            });
+        });
+
         // render pass for final blit to backbuffer
         this.finalRenderPass = new CustomRenderPass(device);
         this.finalRenderPass.init(null, {});
@@ -608,6 +658,20 @@ class Multiframe {
             // и было видно как вспышка. Теперь меняются только значения параметров.
 
             // we must flip the image upside-down on webgpu
+            if (this.chained) {
+                // Второй проход цепочки: источник уже растянут и разгамлен, осталась резкость.
+                resolve(device.scope, {
+                    texcoordMod: [1, 1, 0, 0],
+                    multiframeTex: this.easuTexture,
+                    power: 1.0,
+                    sharpness: this.sharpness,
+                    easuEnabled: 0,
+                    srcSize: [device.width, device.height],
+                    outputTexel: [1 / Math.max(1, device.width), 1 / Math.max(1, device.height)]
+                });
+                return;
+            }
+
             resolve(device.scope, {
                 texcoordMod: !blending && device.isWebGPU ? [1, -1, 0, 1] : [1, 1, 0, 0],
                 multiframeTex: source,
@@ -727,7 +791,20 @@ class Multiframe {
             this.updateRenderPass.render();
         }
 
+        // Растяжка и резкость — двумя проходами, как в эталонном FSR: EASU в цель разрешения
+        // экрана, затем RCAS по её выходу. Одним проходом резкость применить нельзя — RCAS
+        // смотрит на соседей выходного пикселя, а их пришлось бы считать EASU заново.
+        const dev = this.device;
+        const source = this.sampleId > 0 ? this.accumTexture : sourceTex;
+        this.chained = this.easu && this.sharpness > 0 &&
+            (source.width < dev.width || source.height < dev.height);
+        if (this.chained) {
+            this.easuRenderTarget.resize(dev.width, dev.height);
+            this.easuRenderPass.render();
+        }
+
         this.finalRenderPass.render();
+        this.chained = false;
 
         return this.sampleId < sampleCnt;
     }
