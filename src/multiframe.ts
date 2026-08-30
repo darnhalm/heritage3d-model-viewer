@@ -406,7 +406,7 @@ const gauss = (x: number, sigma: number): number => {
  * знаменатель ядра `1 + 4·lobe` подходит к нулю, поэтому развалиться картинка не может даже на
  * единице; меньшие значения просто мягче.
  */
-const DEFAULT_SHARPNESS = 0.5;
+const DEFAULT_SHARPNESS = 1;
 
 const accumBlend = new BlendState(true, BLENDEQUATION_ADD, BLENDMODE_CONSTANT, BLENDMODE_ONE_MINUS_CONSTANT);
 const noBlend = new BlendState(false);

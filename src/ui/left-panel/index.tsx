@@ -368,7 +368,7 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     min={0}
                     max={1}
                     step={0.05}
-                    value={props.observerData.camera.sharpness ?? 0.5}
+                    value={props.observerData.camera.sharpness ?? 1}
                     setProperty={(value: number) => props.setProperty('camera.sharpness', value)} />
                 <Toggle
                     label={t('Lower while moving', lang)}
