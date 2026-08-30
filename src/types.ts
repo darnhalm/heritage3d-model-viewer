@@ -75,6 +75,8 @@ export interface ObserverData {
         pixelScale: number,
         multisampleSupported: boolean,
         multisample: boolean,
+        /** Сила резкости RCAS: 0 выключает фильтр, 1 — полная сила алгоритма. */
+        sharpness?: number,
         /** Понижать разрешение сцены, пока камера движется. */
         dynamicScale?: boolean,
         /** Что грузить первым при обходе тайлов. */

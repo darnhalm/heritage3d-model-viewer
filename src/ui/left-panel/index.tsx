@@ -309,6 +309,7 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                a.camera?.fov !== b.camera?.fov ||
                a.camera?.tonemapping !== b.camera?.tonemapping ||
                a.camera?.pixelScale !== b.camera?.pixelScale ||
+               a.camera?.sharpness !== b.camera?.sharpness ||
                a.camera?.dynamicScale !== b.camera?.dynamicScale ||
                a.camera?.distanceLimitsManual !== b.camera?.distanceLimitsManual ||
                a.camera?.distanceMin !== b.camera?.distanceMin ||
@@ -397,6 +398,14 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                             onClick={() => takeDistanceFromView('camera.distanceMax')} />
                     </span>
                 </Container>
+                <Slider
+                    label={t('Sharpness', lang)}
+                    precision={2}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={props.observerData.camera.sharpness ?? 0.5}
+                    setProperty={(value: number) => props.setProperty('camera.sharpness', value)} />
                 <Toggle
                     label={t('Lower while moving', lang)}
                     value={props.observerData.camera.dynamicScale !== false}

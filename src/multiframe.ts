@@ -39,9 +39,37 @@ const fragmentGLSL = `
     varying vec2 texcoord;
     uniform sampler2D multiframeTex;
     uniform float power;
+    uniform float sharpness;
+    uniform vec2 outputTexel;
+
+    vec3 tap(vec2 uv) {
+        return pow(texture2D(multiframeTex, uv).rgb, vec3(power));
+    }
+
     void main(void) {
-        vec4 t = texture2D(multiframeTex, texcoord);
-        gl_FragColor = pow(t, vec4(power));
+        vec4 centerTexel = texture2D(multiframeTex, texcoord);
+        vec3 e = pow(centerTexel.rgb, vec3(power));
+        float alpha = pow(centerTexel.a, power);
+
+        if (sharpness <= 0.0) {
+            gl_FragColor = vec4(e, alpha);
+            return;
+        }
+
+        vec3 b = tap(texcoord + vec2(0.0, -outputTexel.y));
+        vec3 h = tap(texcoord + vec2(0.0, outputTexel.y));
+        vec3 d = tap(texcoord + vec2(-outputTexel.x, 0.0));
+        vec3 f = tap(texcoord + vec2(outputTexel.x, 0.0));
+
+        vec3 mn4 = min(min(b, d), min(f, h));
+        vec3 mx4 = max(max(b, d), max(f, h));
+        vec3 hitMin = mn4 / (4.0 * mx4 + 1e-5);
+        vec3 hitMax = (1.0 - mx4) / (4.0 * mn4 - 4.0 - 1e-5);
+        vec3 lobeRGB = max(-hitMin, hitMax);
+        float lobe = max(-0.1875, min(max(lobeRGB.r, max(lobeRGB.g, lobeRGB.b)), 0.0)) * sharpness;
+
+        vec3 color = (lobe * (b + d + f + h) + e) / (4.0 * lobe + 1.0);
+        gl_FragColor = vec4(clamp(color, min(mn4, e), max(mx4, e)), alpha);
     }
 `;
 
@@ -63,37 +91,6 @@ const fragmentGLSL = `
 // Это НЕ порт FSR или SGSR. Те дают лучшую реконструкцию кромок за счёт направленного
 // анализа, но их надо переносить с исходников, а не по памяти. Здесь простая и проверяемая
 // вещь; если качества не хватит, EASU встанет на это же место.
-const fragmentUpscaleGLSL = `
-    varying vec2 texcoord;
-    uniform sampler2D multiframeTex;
-    uniform float power;
-    uniform float sharpness;
-    uniform vec2 outputTexel;
-
-    vec3 tap(vec2 uv) {
-        return pow(texture2D(multiframeTex, uv).rgb, vec3(power));
-    }
-
-    void main(void) {
-        vec4 centerTexel = texture2D(multiframeTex, texcoord);
-        vec3 c = pow(centerTexel.rgb, vec3(power));
-        vec3 n = tap(texcoord + vec2(0.0, -outputTexel.y));
-        vec3 s = tap(texcoord + vec2(0.0, outputTexel.y));
-        vec3 w = tap(texcoord + vec2(-outputTexel.x, 0.0));
-        vec3 e = tap(texcoord + vec2(outputTexel.x, 0.0));
-
-        vec3 mn = min(c, min(min(n, s), min(w, e)));
-        vec3 mx = max(c, max(max(n, s), max(w, e)));
-
-        vec3 headroom = min(mn, vec3(1.0) - mx) / max(mx, vec3(1e-4));
-        float room = clamp(min(min(headroom.r, headroom.g), headroom.b), 0.0, 1.0);
-        float amount = -sharpness * sqrt(room);
-
-        vec3 color = (c + amount * (n + s + w + e)) / (1.0 + 4.0 * amount);
-        gl_FragColor = vec4(clamp(color, mn, mx), pow(centerTexel.a, power));
-    }
-`;
-
 const vertexWGSL = /* wgsl */`
     attribute vertex_position: vec2f;
 
@@ -119,13 +116,41 @@ const fragmentWGSL = /* wgsl */`
     var multiframeSampler: sampler;
 
     uniform power: f32;
+    uniform sharpness: f32;
+    uniform outputTexel: vec2f;
+
+    fn tap(uv: vec2f) -> vec3f {
+        let t: vec4f = textureSample(multiframeTex, multiframeSampler, uv);
+        return pow(t.rgb, vec3f(uniform.power));
+    }
 
     @fragment
     fn fragmentMain(input: FragmentInput) -> FragmentOutput {
         var output: FragmentOutput;
 
-        let t: vec4f = textureSample(multiframeTex, multiframeSampler, input.texcoord);
-        output.color = pow(t, vec4f(uniform.power));
+        let centerTexel: vec4f = textureSample(multiframeTex, multiframeSampler, input.texcoord);
+        let e: vec3f = pow(centerTexel.rgb, vec3f(uniform.power));
+        let alpha: f32 = pow(centerTexel.a, uniform.power);
+
+        if (uniform.sharpness <= 0.0) {
+            output.color = vec4f(e, alpha);
+            return output;
+        }
+
+        let b: vec3f = tap(input.texcoord + vec2f(0.0, -uniform.outputTexel.y));
+        let h: vec3f = tap(input.texcoord + vec2f(0.0, uniform.outputTexel.y));
+        let d: vec3f = tap(input.texcoord + vec2f(-uniform.outputTexel.x, 0.0));
+        let f: vec3f = tap(input.texcoord + vec2f(uniform.outputTexel.x, 0.0));
+
+        let mn4: vec3f = min(min(b, d), min(f, h));
+        let mx4: vec3f = max(max(b, d), max(f, h));
+        let hitMin: vec3f = mn4 / (4.0 * mx4 + 1e-5);
+        let hitMax: vec3f = (vec3f(1.0) - mx4) / (4.0 * mn4 - 4.0 - 1e-5);
+        let lobeRGB: vec3f = max(-hitMin, hitMax);
+        let lobe: f32 = max(-0.1875, min(max(lobeRGB.r, max(lobeRGB.g, lobeRGB.b)), 0.0)) * uniform.sharpness;
+
+        let color: vec3f = (lobe * (b + d + f + h) + e) / (4.0 * lobe + 1.0);
+        output.color = vec4f(clamp(color, min(mn4, e), max(mx4, e)), alpha);
 
         return output;
     }
@@ -151,54 +176,14 @@ const gauss = (x: number, sigma: number): number => {
     return (1.0 / (Math.sqrt(2.0 * Math.PI) * sigma)) * Math.exp(-(x * x) / (2.0 * sigma * sigma));
 };
 
-const fragmentUpscaleWGSL = /* wgsl */`
-    varying texcoord: vec2f;
-
-    var multiframeTex: texture_2d<f32>;
-    var multiframeSampler: sampler;
-
-    uniform outputTexel: vec2f;
-    uniform power: f32;
-    uniform sharpness: f32;
-
-    fn tap(uv: vec2f) -> vec3f {
-        let t: vec4f = textureSample(multiframeTex, multiframeSampler, uv);
-        return pow(t.rgb, vec3f(uniform.power));
-    }
-
-    @fragment
-    fn fragmentMain(input: FragmentInput) -> FragmentOutput {
-        var output: FragmentOutput;
-
-        let centerTexel: vec4f = textureSample(multiframeTex, multiframeSampler, input.texcoord);
-        let c: vec3f = pow(centerTexel.rgb, vec3f(uniform.power));
-        let n: vec3f = tap(input.texcoord + vec2f(0.0, -uniform.outputTexel.y));
-        let s: vec3f = tap(input.texcoord + vec2f(0.0, uniform.outputTexel.y));
-        let w: vec3f = tap(input.texcoord + vec2f(-uniform.outputTexel.x, 0.0));
-        let e: vec3f = tap(input.texcoord + vec2f(uniform.outputTexel.x, 0.0));
-
-        let mn: vec3f = min(c, min(min(n, s), min(w, e)));
-        let mx: vec3f = max(c, max(max(n, s), max(w, e)));
-
-        let headroom: vec3f = min(mn, vec3f(1.0) - mx) / max(mx, vec3f(1e-4));
-        let room: f32 = clamp(min(min(headroom.r, headroom.g), headroom.b), 0.0, 1.0);
-        let amount: f32 = -uniform.sharpness * sqrt(room);
-
-        let color: vec3f = (c + amount * (n + s + w + e)) / (1.0 + 4.0 * amount);
-        output.color = vec4f(clamp(color, mn, mx), pow(centerTexel.a, uniform.power));
-
-        return output;
-    }
-`;
-
 /**
- * Сила резкости при растяжке.
+ * Сила резкости по умолчанию — множитель к лобе RCAS.
  *
- * Знаменатель ядра равен `1 + 4w`, поэтому при w меньше -0.25 он обращается в ноль и картинка
- * разваливается. 0.12 оставляет запас и на глаз возвращает примерно ту чёткость, которую
- * съела билинейная выборка, не доводя до звона.
+ * Единица означает полную силу фильтра. RCAS сам ограничивает лобу пределом 0.1875, за которым
+ * знаменатель ядра `1 + 4·lobe` подходит к нулю, поэтому развалиться картинка не может даже на
+ * единице; меньшие значения просто мягче.
  */
-const UPSCALE_SHARPNESS = 0.12;
+const DEFAULT_SHARPNESS = 0.5;
 
 const accumBlend = new BlendState(true, BLENDEQUATION_ADD, BLENDMODE_CONSTANT, BLENDMODE_ONE_MINUS_CONSTANT);
 const noBlend = new BlendState(false);
@@ -229,7 +214,8 @@ class Multiframe {
     shader: Shader = null;
 
     /** Шейдер финального прохода, когда цель сцены мельче бэкбуфера. */
-    upscaleShader: Shader = null;
+    /** Сила резкости RCAS: 0 выключает фильтр целиком. */
+    sharpness = DEFAULT_SHARPNESS;
 
     accumTexture: Texture = null;
 
@@ -327,21 +313,6 @@ class Multiframe {
             fragmentWGSL
         });
 
-        // Накопитель живёт в разрешении сцены, а финальный проход тянет его на бэкбуфер,
-        // который может быть крупнее (`camera.pixelScale`). Поэтому фильтрация линейная: в
-        // накопление она не вмешивается — там выборка идёт один в один, — а растяжку до
-        // экрана делает гладкой вместо лесенки.
-        this.upscaleShader = ShaderUtils.createShader(device, {
-            uniqueName: 'multiframe-upscale-shader',
-            attributes: {
-                vertex_position: SEMANTIC_POSITION
-            },
-            vertexGLSL,
-            fragmentGLSL: fragmentUpscaleGLSL,
-            vertexWGSL,
-            fragmentWGSL: fragmentUpscaleWGSL
-        });
-
         this.accumTexture = new Texture(device, {
             name: 'multiframe-texture',
             width: device.width,
@@ -392,18 +363,16 @@ class Multiframe {
                 this.finalRenderPass.blendState = noBlend;
             }
 
-            // Растягиваем, только если цель сцены и правда мельче бэкбуфера. При совпадении
-            // размеров выборка попадает в центры текселей, и резкость нечего возвращать —
-            // там работает обычная копия, без лишних четырёх выборок на пиксель.
-            const upscaling = source.width !== device.width || source.height !== device.height;
-            this.finalRenderPass.shader = upscaling ? this.upscaleShader : this.shader;
+            // Путь вывода один на все состояния. Прежде шейдер выбирался по совпадению
+            // размеров, и вместе с ним менялась гамма — за жест переключение случалось дважды
+            // и было видно как вспышка. Теперь меняются только значения параметров.
 
             // we must flip the image upside-down on webgpu
             resolve(device.scope, {
                 texcoordMod: !blending && device.isWebGPU ? [1, -1, 0, 1] : [1, 1, 0, 0],
                 multiframeTex: source,
                 power: blending ? (1.0 / gamma) : 1.0,
-                sharpness: UPSCALE_SHARPNESS,
+                sharpness: this.sharpness,
                 outputTexel: [1 / Math.max(1, device.width), 1 / Math.max(1, device.height)]
             });
         });
