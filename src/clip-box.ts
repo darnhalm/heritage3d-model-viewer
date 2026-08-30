@@ -7,23 +7,31 @@ const CLIP_UNIFORMS_GLSL = `
 uniform mat4 clipBoxWorldToLocal;
 uniform float clipBoxInvert;
 uniform vec4 clipBoxEdge;
+uniform float clipBoxSphere;
 `;
 
 const CLIP_UNIFORMS_WGSL = `
 uniform clipBoxWorldToLocal: mat4x4f;
 uniform clipBoxInvert: f32;
 uniform clipBoxEdge: vec4f;
+uniform clipBoxSphere: f32;
 `;
 
 const CLIP_TEST_GLSL = `
     vec3 clipBoxPosition = (clipBoxWorldToLocal * vec4(vPositionW, 1.0)).xyz;
-    bool clipBoxInside = all(lessThanEqual(abs(clipBoxPosition), vec3(0.50001)));
+    bool clipBoxInside = clipBoxSphere > 0.5 ?
+        (length(clipBoxPosition) <= 0.50001) :
+        all(lessThanEqual(abs(clipBoxPosition), vec3(0.50001)));
     if ((clipBoxInvert < 0.5 && !clipBoxInside) || (clipBoxInvert >= 0.5 && clipBoxInside)) discard;
 `;
 
 const CLIP_TEST_WGSL = `
     let clipBoxPosition: vec3f = (uniform.clipBoxWorldToLocal * vec4f(vPositionW, 1.0)).xyz;
-    let clipBoxInside: bool = all(abs(clipBoxPosition) <= vec3f(0.50001));
+    let clipBoxInside: bool = select(
+        all(abs(clipBoxPosition) <= vec3f(0.50001)),
+        length(clipBoxPosition) <= 0.50001,
+        uniform.clipBoxSphere > 0.5
+    );
     if ((uniform.clipBoxInvert < 0.5 && !clipBoxInside) || (uniform.clipBoxInvert >= 0.5 && clipBoxInside)) { discard; }
 `;
 
@@ -39,11 +47,16 @@ const CLIP_EDGE_GLSL = `
         vec3 clipEdgeAbs = abs(clipEdgeLocal);
         vec3 clipEdgeDist = abs(vec3(0.5) - clipEdgeAbs);
         vec3 clipEdgeBand = fwidth(clipEdgeLocal) * clipBoxEdge.w;
-        bool clipEdgeHit =
+        // У сферы граней нет: линия там, где поверхность подходит к радиусу. Ширину полосы
+        // берём по наибольшей производной — иначе на косых участках линия истончалась бы.
+        float clipEdgeRadius = length(clipEdgeLocal);
+        float clipEdgeSphereBand = max(max(clipEdgeBand.x, clipEdgeBand.y), clipEdgeBand.z);
+        bool clipEdgeSphereHit = abs(0.5 - clipEdgeRadius) < clipEdgeSphereBand;
+        bool clipEdgeBoxHit =
             (clipEdgeDist.x < clipEdgeBand.x && clipEdgeAbs.y <= 0.5 && clipEdgeAbs.z <= 0.5) ||
             (clipEdgeDist.y < clipEdgeBand.y && clipEdgeAbs.x <= 0.5 && clipEdgeAbs.z <= 0.5) ||
             (clipEdgeDist.z < clipEdgeBand.z && clipEdgeAbs.x <= 0.5 && clipEdgeAbs.y <= 0.5);
-        if (clipEdgeHit) {
+        if (clipBoxSphere > 0.5 ? clipEdgeSphereHit : clipEdgeBoxHit) {
             gl_FragColor = vec4(clipBoxEdge.rgb, gl_FragColor.a);
         }
     }
@@ -57,11 +70,14 @@ const CLIP_EDGE_WGSL = `
         let clipEdgeAbs: vec3f = abs(clipEdgeLocal);
         let clipEdgeDist: vec3f = abs(vec3f(0.5) - clipEdgeAbs);
         let clipEdgeBand: vec3f = fwidth(clipEdgeLocal) * uniform.clipBoxEdge.w;
-        let clipEdgeHit: bool =
+        // У сферы граней нет: линия там, где поверхность подходит к радиусу.
+        let clipEdgeSphereBand: f32 = max(max(clipEdgeBand.x, clipEdgeBand.y), clipEdgeBand.z);
+        let clipEdgeSphereHit: bool = abs(0.5 - length(clipEdgeLocal)) < clipEdgeSphereBand;
+        let clipEdgeBoxHit: bool =
             (clipEdgeDist.x < clipEdgeBand.x && clipEdgeAbs.y <= 0.5 && clipEdgeAbs.z <= 0.5) ||
             (clipEdgeDist.y < clipEdgeBand.y && clipEdgeAbs.x <= 0.5 && clipEdgeAbs.z <= 0.5) ||
             (clipEdgeDist.z < clipEdgeBand.z && clipEdgeAbs.x <= 0.5 && clipEdgeAbs.y <= 0.5);
-        if (clipEdgeHit) {
+        if (select(clipEdgeBoxHit, clipEdgeSphereHit, uniform.clipBoxSphere > 0.5)) {
             output.color = vec4f(uniform.clipBoxEdge.xyz, output.color.a);
         }
     }
@@ -129,7 +145,7 @@ export class ClipBoxMaterials {
         material.update();
     }
 
-    apply(meshInstances: MeshInstance[], worldToLocal: Mat4, invert: boolean, edge: ClipBoxEdge | null = null) {
+    apply(meshInstances: MeshInstance[], worldToLocal: Mat4, invert: boolean, edge: ClipBoxEdge | null = null, sphere = false) {
         const matrix = worldToLocal.data;
         // Нулевая толщина выключает подсветку прямо в шейдере, без пересборки материала.
         const edgeParam = edge ?
@@ -144,6 +160,7 @@ export class ClipBoxMaterials {
             material.setParameter('clipBoxWorldToLocal', matrix);
             material.setParameter('clipBoxInvert', invert ? 1 : 0);
             material.setParameter('clipBoxEdge', edgeParam);
+            material.setParameter('clipBoxSphere', sphere ? 1 : 0);
         });
     }
 
@@ -162,6 +179,7 @@ export class ClipBoxMaterials {
             material.deleteParameter('clipBoxWorldToLocal');
             material.deleteParameter('clipBoxInvert');
             material.deleteParameter('clipBoxEdge');
+            material.deleteParameter('clipBoxSphere');
             material.update();
         });
         this.materials.clear();

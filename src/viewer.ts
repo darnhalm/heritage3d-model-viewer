@@ -931,7 +931,12 @@ class Viewer {
             pixelsPerWorld,
             worldAxis,
             startCenter: this.fragmentBoxEntity.getPosition().clone(),
-            startSize: this.fragmentTuple('fragment.size', [1, 1, 1])
+            startSize: this.observer.get('fragment.shape') === 'sphere' ?
+                (() => {
+                    const d = Math.max(0.00002, Math.abs(Number(this.observer.get('fragment.radius')) || 1) * 2);
+                    return [d, d, d] as [number, number, number];
+                })() :
+                this.fragmentTuple('fragment.size', [1, 1, 1])
         };
         this.cameraControls.enabled = false;
     };
@@ -944,6 +949,15 @@ class Viewer {
         const deltaWorld = (pointerX * drag.screenAxisX + pointerY * drag.screenAxisY) / drag.pixelsPerWorld;
         const minSize = Math.max(0.00001, this.sceneBounds.halfExtents.length() * 0.0001);
         const nextSize = [...drag.startSize] as [number, number, number];
+        if (this.observer.get('fragment.shape') === 'sphere') {
+            // У сферы одна величина: любая ручка тянет радиус, а центр остаётся на месте —
+            // сдвигать его, как грань бокса, было бы неверно, сфера растёт во все стороны.
+            const startRadius = Math.max(0.00001, drag.startSize[drag.axis] / 2);
+            this.observer.set('fragment.radius', Math.max(minSize / 2, startRadius + drag.sign * deltaWorld));
+            this.syncFragmentEntityFromObserver();
+            this.renderNextFrame();
+            return;
+        }
         nextSize[drag.axis] = Math.max(minSize, drag.startSize[drag.axis] + drag.sign * deltaWorld);
         const actualFaceDelta = drag.sign * (nextSize[drag.axis] - drag.startSize[drag.axis]);
         const center = drag.startCenter.clone().add(drag.worldAxis.clone().mulScalar(actualFaceDelta * 0.5));
@@ -2091,6 +2105,9 @@ class Viewer {
         this.observer.set('fragment.enabled', false);
         this.observer.set('fragment.center', [hit.x, hit.y, hit.z]);
         this.observer.set('fragment.size', [size, size, size * 0.8]);
+        // Радиус сферы задаём тут же: размеры у форм свои, но появиться разумной должна и та,
+        // которую пока не выбрали. Половина стороны бокса — сфера, вписанная в него.
+        this.observer.set('fragment.radius', size / 2);
         // Keep the box upright: its horizontal faces stay parallel to the scene
         // ground while the heading still follows the current view.
         this.observer.set('fragment.rotation', [0, cameraRotation.y, 0]);
@@ -6422,6 +6439,7 @@ class Viewer {
         const safe = (value: number) => Math.max(0.00001, Math.abs(value) * 2);
         this.observer.set('fragment.center', [center.x, center.y, center.z]);
         this.observer.set('fragment.size', [safe(half.x), safe(half.y), safe(half.z)]);
+        this.observer.set('fragment.radius', Math.max(safe(half.x), safe(half.y), safe(half.z)) / 2);
         this.observer.set('fragment.rotation', [0, 0, 0]);
         this.observer.set('fragment.initialized', true);
         this.syncFragmentEntityFromObserver();
@@ -6445,7 +6463,14 @@ class Viewer {
         const rotation = this.fragmentTuple('fragment.rotation', [0, 0, 0]);
         this.fragmentBoxEntity.setPosition(center[0], center[1], center[2]);
         this.fragmentBoxEntity.setEulerAngles(rotation[0], rotation[1], rotation[2]);
-        this.fragmentBoxEntity.setLocalScale(size[0], size[1], size[2]);
+        if (this.observer.get('fragment.shape') === 'sphere') {
+            // Шейдер сравнивает расстояние с 0.5 в системе координат сущности, значит радиусу
+            // отвечает равномерный масштаб в диаметр. Отдельной математики сфере не нужно.
+            const diameter = Math.max(0.00002, Math.abs(Number(this.observer.get('fragment.radius')) || 1) * 2);
+            this.fragmentBoxEntity.setLocalScale(diameter, diameter, diameter);
+        } else {
+            this.fragmentBoxEntity.setLocalScale(size[0], size[1], size[2]);
+        }
     }
 
     private syncFragmentObserverFromEntity() {
@@ -6453,6 +6478,11 @@ class Viewer {
         const scale = this.fragmentBoxEntity.getLocalScale();
         const rotation = this.fragmentBoxEntity.getEulerAngles();
         this.observer.set('fragment.center', [position.x, position.y, position.z]);
+        if (this.observer.get('fragment.shape') === 'sphere') {
+            // Размеры бокса остаются нетронутыми: у каждой формы свой размер, и переключение
+            // не должно терять то, что настроили в другой.
+            this.observer.set('fragment.radius', Math.max(0.00001, scale.x / 2));
+        }
         this.observer.set('fragment.size', [Math.max(0.00001, Math.abs(scale.x)), Math.max(0.00001, Math.abs(scale.y)), Math.max(0.00001, Math.abs(scale.z))]);
         this.observer.set('fragment.rotation', [rotation.x, rotation.y, rotation.z]);
         this.observer.set('fragment.initialized', true);
@@ -6480,7 +6510,8 @@ class Viewer {
             !!this.observer.get('fragment.invert'),
             this.observer.get('fragment.outline') ?
                 { color: [theme.r, theme.g, theme.b], widthPx: this.fragmentOutlineWidth() } :
-                null
+                null,
+            this.observer.get('fragment.shape') === 'sphere'
         );
     }
 

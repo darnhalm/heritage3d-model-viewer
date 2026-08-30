@@ -334,6 +334,10 @@ export interface ObserverData {
         editMode: 'move' | 'resize' | 'rotate',
         center: [number, number, number],
         size: [number, number, number],
+        /** Форма области выделения фрагмента. */
+        shape?: 'box' | 'sphere',
+        /** Радиус сферы; у бокса не используется. */
+        radius?: number,
         rotation: [number, number, number],
         initialized: boolean
     },

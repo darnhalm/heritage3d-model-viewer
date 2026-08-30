@@ -2035,7 +2035,7 @@ input {
     font-size: 10px;
     line-height: 1.2;
 }
-
+.fragment-shape-toolbar,
 .fragment-mode-toolbar {
     display: flex;
     justify-content: center;
@@ -2066,6 +2066,16 @@ input {
     .fragment-tool-move::before {
         -webkit-mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
         mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
+    }
+
+    .fragment-shape-box::before {
+        -webkit-mask: url('static/icons/fragment-box-icon.svg') no-repeat center / contain;
+        mask: url('static/icons/fragment-box-icon.svg') no-repeat center / contain;
+    }
+
+    .fragment-shape-sphere::before {
+        -webkit-mask: url('static/icons/fragment-sphere-icon.svg') no-repeat center / contain;
+        mask: url('static/icons/fragment-sphere-icon.svg') no-repeat center / contain;
     }
 
     .fragment-tool-rotate::before {

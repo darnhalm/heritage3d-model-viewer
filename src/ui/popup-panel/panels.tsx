@@ -1338,12 +1338,35 @@ export const FragmentPanel = (props: { observerData: ObserverData, setProperty: 
                     />
                 )}
                 {data.initialized && (
-                    <Container class='fragment-mode-toolbar'>
+                    <Container class='fragment-shape-toolbar'>
                         {([
+                            ['box', 'fragment-shape-box', 'Box shape'],
+                            ['sphere', 'fragment-shape-sphere', 'Sphere shape']
+                        ] as const).map(([shape, iconClass, title]) => (
+                            <span key={shape} title={t(title, lang)} style={{ display: 'contents' }}>
+                                <Button
+                                    class={[
+                                        'secondary', 'fragment-tool-button', iconClass,
+                                        ...((data.shape ?? 'box') === shape ? ['active'] : [])
+                                    ]}
+                                    aria-label={t(title, lang)}
+                                    aria-pressed={(data.shape ?? 'box') === shape}
+                                    onClick={() => props.setProperty('fragment.shape', shape)}
+                                />
+                            </span>
+                        ))}
+                    </Container>
+                )}
+                {data.initialized && (
+                    <Container class='fragment-mode-toolbar'>
+                        {(([
                             ['move', 'fragment-tool-move', 'Move box'],
                             ['resize', 'fragment-tool-scale', 'Resize box'],
                             ['rotate', 'fragment-tool-rotate', 'Rotate box']
-                        ] as const).map(([mode, iconClass, title]) => (
+                        ] as const)
+                        // Сферу вращать нечем: инструмент поворота для неё бессмыслен.
+                        .filter(([mode]) => !((data.shape ?? 'box') === 'sphere' && mode === 'rotate'))
+                        ).map(([mode, iconClass, title]) => (
                             <span key={mode} title={t(title, lang)} style={{ display: 'contents' }}>
                                 <Button
                                     class={[
