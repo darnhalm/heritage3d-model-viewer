@@ -22,8 +22,10 @@ export const translations: Record<Lang, Record<string, string>> = {
         Tonemap: 'Tonemap',
         'Pixel Scale': 'Pixel Scale',
         'Lower while moving': 'Lower while moving (experimental)',
-        'Sharpness': 'Sharpness (RCAS)',
-        'Edge upscale (EASU)': 'Edge upscale (EASU)',
+        'RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.':
+            'RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.',
+        'EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.':
+            'EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.',
         'Manual distance limits': 'Manual distance limits',
         'Camera limits': 'Camera limits',
         'Tile loading order': 'Tile loading order',
@@ -433,8 +435,10 @@ export const translations: Record<Lang, Record<string, string>> = {
         Tonemap: 'Tonemap',
         'Pixel Scale': 'Масштаб пикселя',
         'Lower while moving': 'Понижать при движении (эксперимент)',
-        'Sharpness': 'Резкость (RCAS)',
-        'Edge upscale (EASU)': 'Растяжка по кромкам (EASU)',
+        'RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.':
+            'RCAS: контрастно-адаптивная резкость из AMD FidelityFX FSR 1.0. Усиливает кромки и не трогает ровные участки.',
+        'EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.':
+            'EASU: растяжка изображения с восстановлением кромок из AMD FidelityFX FSR 1.0. Работает только при масштабе пикселя больше единицы.',
         'Manual distance limits': 'Пределы расстояния вручную',
         'Camera limits': 'Ограничители камеры',
         'Tile loading order': 'Порядок загрузки тайлов',
@@ -844,8 +848,10 @@ export const translations: Record<Lang, Record<string, string>> = {
         Tonemap: '色调映射',
         'Pixel Scale': '像素缩放',
         'Lower while moving': '移动时降低（实验性）',
-        'Sharpness': '锐度 (RCAS)',
-        'Edge upscale (EASU)': '边缘放大 (EASU)',
+        'RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.':
+            'RCAS：来自 AMD FidelityFX FSR 1.0 的对比度自适应锐化。只增强边缘，不影响平坦区域。',
+        'EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.':
+            'EASU：来自 AMD FidelityFX FSR 1.0 的边缘保持放大。仅在像素比例大于 1 时生效。',
         'Manual distance limits': '手动距离限制',
         'Camera limits': '相机限制',
         'Tile loading order': '瓦片加载顺序',

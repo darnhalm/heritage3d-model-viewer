@@ -363,19 +363,25 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     type='string'
                     options={PIXEL_SCALES}
                     setProperty={(value: string) => props.setProperty('camera.pixelScale', Number(value))} />
-                <Toggle
-                    label={t('Edge upscale (EASU)', lang)}
-                    value={props.observerData.camera.easu !== false}
-                    setProperty={(value: boolean) => props.setProperty('camera.easu', value)}
-                />
-                <Slider
-                    label={t('Sharpness', lang)}
-                    precision={2}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={props.observerData.camera.sharpness ?? 1}
-                    setProperty={(value: number) => props.setProperty('camera.sharpness', value)} />
+                {/* В подписи — только имя технологии: переводить EASU и RCAS не на что, своих
+                    русских названий у них нет. Что они делают, объясняет подсказка. */}
+                <span title={t('EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.', lang)} style={{ display: 'contents' }}>
+                    <Toggle
+                        label='EASU'
+                        value={props.observerData.camera.easu !== false}
+                        setProperty={(value: boolean) => props.setProperty('camera.easu', value)}
+                    />
+                </span>
+                <span title={t('RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.', lang)} style={{ display: 'contents' }}>
+                    <Slider
+                        label='RCAS'
+                        precision={2}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={props.observerData.camera.sharpness ?? 1}
+                        setProperty={(value: number) => props.setProperty('camera.sharpness', value)} />
+                </span>
                 <Toggle
                     label={t('Lower while moving', lang)}
                     value={props.observerData.camera.dynamicScale !== false}
