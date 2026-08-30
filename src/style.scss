@@ -3963,28 +3963,32 @@ $panel-focus-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
 }
 
 /*
- * Ряд квадратных кнопок отладки тайлов: заморозка, пауза и вид каркаса.
+ * Плейбек-блок отладки тайлов: заморозка камеры и пауза загрузки.
+ *
+ * Крупные кнопки по центру панели: это не мелкая настройка в ряду прочих, а управление тем,
+ * что происходит со сценой прямо сейчас, и рука должна попадать в них не целясь.
  *
  * Значки — глифы Material Symbols, а не маски из файлов: рисованные вручную выходили кривыми,
  * а набор шрифта в проекте уже есть и размечает весь остальной интерфейс.
  */
 .tile-playback-toolbar {
     display: flex;
-    gap: 6px;
-    margin: 4px 0;
+    justify-content: center;
+    gap: 12px;
+    margin: 10px 0;
 }
 
 .tile-playback-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 64px;
+    height: 64px;
     padding: 0;
     border: 1px solid var(--panel-border, #3a3a3a);
-    border-radius: 5px;
+    border-radius: 10px;
     background: transparent;
-    color: inherit;
+    color: #ffffff;
     cursor: pointer;
 }
 
@@ -3994,11 +3998,39 @@ $panel-focus-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
 
 .tile-playback-button.active {
     background: var(--theme-primary, #f60);
-    color: #101010;
     border-color: var(--theme-primary, #f60);
+    /* Белый и на заливке: тёмная надпись на цветном фоне читается хуже и выбивается из панели. */
+    color: #ffffff;
 }
 
 .tile-playback-button .material-symbols-outlined {
-    font-size: 19px;
+    font-size: 38px;
     line-height: 1;
+}
+
+/* Снежинка садится в нижний правый угол камеры — заморожен не показ, а сама камера. */
+.tile-playback-glyph-stack {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tile-playback-glyph-stack .tile-playback-glyph-badge {
+    position: absolute;
+    right: -7px;
+    bottom: -5px;
+    font-size: 20px;
+    /* Обводка цветом кнопки: снежинка не сливается с корпусом камеры под ней. */
+    text-shadow:
+        0 0 3px var(--panel-bg, #1e1e1e),
+        0 0 3px var(--panel-bg, #1e1e1e),
+        0 0 3px var(--panel-bg, #1e1e1e);
+}
+
+.tile-playback-button.active .tile-playback-glyph-badge {
+    text-shadow:
+        0 0 3px var(--theme-primary, #f60),
+        0 0 3px var(--theme-primary, #f60),
+        0 0 3px var(--theme-primary, #f60);
 }

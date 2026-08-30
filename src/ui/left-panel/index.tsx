@@ -1472,35 +1472,42 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
                                         )}
                                         <div className='tile-playback-toolbar'>
-                                            {([
-                                                ['debug.tileFreeze', 'ac_unit', 'Freeze Camera + FOV', !!observerData?.debug?.tileFreeze],
-                                                ['debug.tilePaused', observerData?.debug?.tilePaused ? 'play_arrow' : 'pause',
-                                                    observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', !!observerData?.debug?.tilePaused],
-                                                ['debug.tileLineStyle', 'grid_4x4', 'Frame style', observerData?.debug?.tileLineStyle !== 'solid']
-                                            ] as const).map(([path, glyph, title, active]) => (
-                                                <button
-                                                    key={path}
-                                                    type='button'
-                                                    className={`tile-playback-button${active ? ' active' : ''}`}
-                                                    title={t(title, lang)}
-                                                    aria-label={t(title, lang)}
-                                                    aria-pressed={active}
-                                                    onClick={() => {
-                                                        // Состояние читаем живым: разметка перерисовывается, а замыкание нет.
-                                                        const observer = getViewer()?.observer;
-                                                        if (path === 'debug.tileLineStyle') {
-                                                            // Каркас всегда либо ровный, либо шахматный — одной кнопки хватает.
-                                                            const checker = observer?.get?.(path) !== 'solid';
-                                                            setProperty(path, checker ? 'solid' : 'checker');
-                                                            return;
-                                                        }
-                                                        setProperty(path, !observer?.get?.(path));
-                                                    }}
-                                                >
-                                                    <span className='material-symbols-outlined'>{glyph}</span>
-                                                </button>
-                                            ))}
+                                            <button
+                                                type='button'
+                                                className={`tile-playback-button${observerData?.debug?.tileFreeze ? ' active' : ''}`}
+                                                title={t('Freeze Camera + FOV', lang)}
+                                                aria-label={t('Freeze Camera + FOV', lang)}
+                                                aria-pressed={!!observerData?.debug?.tileFreeze}
+                                                onClick={() => toggleObserverBoolean('debug.tileFreeze', !!observerData?.debug?.tileFreeze)}
+                                            >
+                                                {/* Камера со снежинкой в нижнем правом углу: заморожен не показ, а камера. */}
+                                                <span className='tile-playback-glyph-stack'>
+                                                    <span className='material-symbols-outlined'>photo_camera</span>
+                                                    <span className='material-symbols-outlined tile-playback-glyph-badge'>ac_unit</span>
+                                                </span>
+                                            </button>
+                                            <button
+                                                type='button'
+                                                className={`tile-playback-button${observerData?.debug?.tilePaused ? ' active' : ''}`}
+                                                title={t(observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', lang)}
+                                                aria-label={t(observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', lang)}
+                                                aria-pressed={!!observerData?.debug?.tilePaused}
+                                                onClick={() => toggleObserverBoolean('debug.tilePaused', !!observerData?.debug?.tilePaused)}
+                                            >
+                                                <span className='material-symbols-outlined'>
+                                                    {observerData?.debug?.tilePaused ? 'play_arrow' : 'pause'}
+                                                </span>
+                                            </button>
                                         </div>
+                                        {materialActionButton(
+                                            observerData?.debug?.tileLineStyle === 'solid' ? t('Solid Frame', lang) : t('Checker Frame', lang),
+                                            observerData?.debug?.tileLineStyle !== 'solid',
+                                            () => {
+                                                // Каркас либо ровный, либо шахматный: одной кнопки с двумя состояниями хватает.
+                                                const checker = getViewer()?.observer?.get?.('debug.tileLineStyle') !== 'solid';
+                                                setProperty('debug.tileLineStyle', checker ? 'solid' : 'checker');
+                                            }
+                                        )}
                                         {observerData?.debug?.tileDebug && (
                                             <>
                                                 <div className='materials-layer-normals-row'>
