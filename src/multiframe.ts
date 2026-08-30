@@ -617,6 +617,7 @@ class Multiframe {
 
         this.easuRenderPass = new CustomRenderPass(device);
         this.easuRenderPass.init(this.easuRenderTarget, {});
+        this.easuRenderPass.shader = this.shader;
         this.easuRenderPass.blendState = noBlend;
         this.easuRenderPass.events.on('execute', () => {
             // Источник тот же, что взял бы финальный проход: накопление, если оно уже идёт,
@@ -774,9 +775,29 @@ class Multiframe {
     // update the multiframe accumulation buffer.
     // blend the camera's render target colour buffer with the multiframe accumulation buffer.
     // writes results to the backbuffer.
+    /**
+     * Вывести кадр на экран: при растяжке — цепочкой EASU плюс RCAS, иначе одним проходом.
+     *
+     * Вынесено отдельно, потому что путь вывода нужен обеим веткам `update`. Когда накопление
+     * выключено (режим SD), она выходит рано, и цепочка, оставленная внутри основной ветки, не
+     * выполнялась вовсе: растяжка шла одним проходом и без резкости.
+     */
+    private renderOutput() {
+        const dev = this.device;
+        const source = (this.enabled && this.sampleId > 0) ? this.accumTexture : this.sourceTex;
+        this.chained = this.easu && this.sharpness > 0 &&
+            (source.width < dev.width || source.height < dev.height);
+        if (this.chained) {
+            this.easuRenderTarget.resize(dev.width, dev.height);
+            this.easuRenderPass.render();
+        }
+        this.finalRenderPass.render();
+        this.chained = false;
+    }
+
     update() {
         if (!this.enabled) {
-            this.finalRenderPass.render();
+            this.renderOutput();
             return false;
         }
 
@@ -791,20 +812,7 @@ class Multiframe {
             this.updateRenderPass.render();
         }
 
-        // Растяжка и резкость — двумя проходами, как в эталонном FSR: EASU в цель разрешения
-        // экрана, затем RCAS по её выходу. Одним проходом резкость применить нельзя — RCAS
-        // смотрит на соседей выходного пикселя, а их пришлось бы считать EASU заново.
-        const dev = this.device;
-        const source = this.sampleId > 0 ? this.accumTexture : sourceTex;
-        this.chained = this.easu && this.sharpness > 0 &&
-            (source.width < dev.width || source.height < dev.height);
-        if (this.chained) {
-            this.easuRenderTarget.resize(dev.width, dev.height);
-            this.easuRenderPass.render();
-        }
-
-        this.finalRenderPass.render();
-        this.chained = false;
+        this.renderOutput();
 
         return this.sampleId < sampleCnt;
     }

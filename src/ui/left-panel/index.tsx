@@ -1511,7 +1511,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         {observerData?.debug?.tileDebug && (
                                             <>
                                         {materialActionButton(
-                                            observerData?.debug?.tileLineStyle === 'solid' ? t('Solid Frame', lang) : t('Checker Frame', lang),
+                                            // Подпись постоянная, подсветка означает «включено» — как у прочих
+                                            // кнопок панели. Прежде менялись обе, и ровный каркас читался как
+                                            // выключённый режим, хотя он и есть умолчание.
+                                            t('Checker Frame', lang),
                                             observerData?.debug?.tileLineStyle !== 'solid',
                                             () => {
                                                 // Каркас либо ровный, либо шахматный: одной кнопки с двумя состояниями хватает.
