@@ -250,6 +250,7 @@ const observerData: ObserverData = {
         tilePick: false,
         tileOrderLabels: false,
         tileOrderPerLod: false,
+        tileIdLabels: false,
         tileIsolatePick: false,
         tileFreeze: false,
         tilePaused: false,

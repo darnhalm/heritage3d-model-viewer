@@ -1550,7 +1550,7 @@ export class TileManager {
      *
      * @param out - Массив, куда добавлять записи; переиспользуется между кадрами.
      */
-    collectOrderLabels(out: Array<{ center: Vec3, order: number, lodOrder: number, depth: number }>) {
+    collectOrderLabels(out: Array<{ center: Vec3, order: number, lodOrder: number, id: number, depth: number }>) {
         out.length = 0;
         if (!this.rootTile || this.disposed) return;
         const stack: Tile[] = [this.rootTile];
@@ -1563,6 +1563,7 @@ export class TileManager {
                 center: tile.obb.center,
                 order: tile.loadSequence,
                 lodOrder: tile.lodSequence,
+                id: tile.id,
                 depth: tile.depth
             });
         }

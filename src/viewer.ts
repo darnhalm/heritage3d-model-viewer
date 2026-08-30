@@ -851,7 +851,7 @@ class Viewer {
     private tileOrderCanvas: HTMLCanvasElement | null = null;
 
     /** Центры и номера выбранных тайлов; массив переиспользуется между кадрами. */
-    private readonly tileOrderLabels: Array<{ center: Vec3, order: number, lodOrder: number, depth: number }> = [];
+    private readonly tileOrderLabels: Array<{ center: Vec3, order: number, lodOrder: number, id: number, depth: number }> = [];
 
     /**
      * Меши, которым проставлен цвет LOD, и глубина, под которую он посчитан. Цвет живёт в
@@ -6665,9 +6665,17 @@ class Viewer {
         );
         const transform = this.fragmentBoxEntity.getWorldTransform();
         const handles = this.fragmentHandleLayer.querySelectorAll<HTMLButtonElement>('.fragment-face-handle');
+        // У сферы одна величина — радиус, и шесть ручек по местам граней висели бы там, где
+        // у неё ничего нет. Оставляем одну, на положительной оси X.
+        const sphere = this.observer.get('fragment.shape') === 'sphere';
         handles.forEach((handle) => {
             const axis = Number(handle.dataset.axis);
             const sign = Number(handle.dataset.sign);
+            if (sphere && !(axis === 0 && sign === 1)) {
+                handle.style.display = 'none';
+                return;
+            }
+            handle.style.display = '';
             const local = new Vec3(
                 axis === 0 ? sign * 0.5 : 0,
                 axis === 1 ? sign * 0.5 : 0,
@@ -8745,7 +8753,9 @@ class Viewer {
     private updateTileOrderLabels() {
         // Не требуем включённых границ тайлов: номера — самостоятельный режим, и смотреть их
         // поверх чистой сцены обычно удобнее, чем поверх сетки рамок.
-        const enabled = !!this.tileManager && !!this.observer.get('debug.tileOrderLabels');
+        const showIds = !!this.observer.get('debug.tileIdLabels');
+        const enabled = !!this.tileManager &&
+            (!!this.observer.get('debug.tileOrderLabels') || showIds);
 
         if (!enabled) {
             if (this.tileOrderCanvas) this.tileOrderCanvas.style.display = 'none';
@@ -8796,14 +8806,17 @@ class Viewer {
         tileLabelViewInv.copy(this.camera.getWorldTransform()).invert();
         const perLod = !!this.observer.get('debug.tileOrderPerLod');
         const screen: Array<{ x: number, y: number, order: number, depth: number, lod: number }> = [];
-        for (const { center, order, lodOrder, depth: lod } of this.tileOrderLabels) {
+        for (const { center, order, lodOrder, id, depth: lod } of this.tileOrderLabels) {
             tileLabelViewInv.transformPoint(center, tileLabelView);
             // Камера смотрит вдоль минус Z, поэтому глубина — это минус координата.
             const depth = -tileLabelView.z;
             if (depth <= camera.nearClip || depth >= camera.farClip) continue;
             const point = camera.worldToScreen(center, tileLabelScreen);
             if (point.x < -40 || point.y < -20 || point.x > width + 40 || point.y > height + 20) continue;
-            screen.push({ x: point.x, y: point.y, order: perLod ? lodOrder : order, depth, lod });
+            // Идентификатор перекрывает порядок: это разные вопросы к одной картинке, и
+            // показывать оба числа в одном кружке негде.
+            const value = showIds ? id : (perLod ? lodOrder : order);
+            screen.push({ x: point.x, y: point.y, order: value, depth, lod });
         }
         screen.sort((a, b) => b.depth - a.depth);
 

@@ -99,6 +99,14 @@ export type BuildTreeOptions = {
  * @param options - База URL, накопленный трансформ и приёмник предупреждений.
  * @returns Корень построенного поддерева.
  */
+/**
+ * Счётчик номеров тайлов.
+ *
+ * Общий на модуль: внешние тайлсеты разбираются позже основного, и сквозная передача состояния
+ * через рекурсию ради меньших чисел усложнила бы разбор без пользы.
+ */
+let tileIdCounter = 0;
+
 export function buildTileTree(json: TileJson, options: BuildTreeOptions): Tile {
     const { baseUrl, tilesetToWorld, warnings } = options;
     const parent = options.parent ?? null;
@@ -135,6 +143,7 @@ export function buildTileTree(json: TileJson, options: BuildTreeOptions): Tile {
         contentUris,
         externalTilesetUri,
         externalRoot: null,
+        id: ++tileIdCounter,
         state: TILE_UNLOADED,
         entity: null,
         assets: [],

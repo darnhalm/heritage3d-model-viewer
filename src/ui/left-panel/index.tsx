@@ -1462,11 +1462,35 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         {materialActionButton(t('Color Tiles by LOD', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
                                         {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
                                         {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
+                                        {materialActionButton(t('Tile ID numbers', lang), !!observerData?.debug?.tileIdLabels, () => {
+                                            const next = !getViewer()?.observer?.get?.('debug.tileIdLabels');
+                                            setProperty('debug.tileIdLabels', next);
+                                            // Два числа в одном кружке не показать: режимы исключают друг друга.
+                                            if (next) setProperty('debug.tileOrderLabels', false);
+                                        })}
                                         {observerData?.debug?.tileOrderLabels && (
                                             materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
                                         )}
-                                        {materialActionButton(t('Freeze Camera + FOV', lang), !!observerData?.debug?.tileFreeze, () => toggleObserverBoolean('debug.tileFreeze', !!observerData?.debug?.tileFreeze))}
-                                        {materialActionButton(t('Pause Loading', lang), !!observerData?.debug?.tilePaused, () => toggleObserverBoolean('debug.tilePaused', !!observerData?.debug?.tilePaused))}
+                                        <Container class='tile-playback-toolbar'>
+                                            {([
+                                                ['debug.tileFreeze', 'tile-tool-freeze', 'Freeze Camera + FOV', !!observerData?.debug?.tileFreeze],
+                                                ['debug.tilePaused', observerData?.debug?.tilePaused ? 'tile-tool-play' : 'tile-tool-pause',
+                                                    observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', !!observerData?.debug?.tilePaused]
+                                            ] as const).map(([path, iconClass, title, active]) => (
+                                                <span key={path} title={t(title, lang)} style={{ display: 'contents' }}>
+                                                    <Button
+                                                        class={['secondary', 'fragment-tool-button', iconClass, ...(active ? ['active'] : [])]}
+                                                        aria-label={t(title, lang)}
+                                                        aria-pressed={active}
+                                                        onClick={() => {
+                                                            // Состояние читаем живым: обработчик pcui привязывается один раз.
+                                                            const now = !!getViewer()?.observer?.get?.(path);
+                                                            setProperty(path, !now);
+                                                        }}
+                                                    />
+                                                </span>
+                                            ))}
+                                        </Container>
                                         {observerData?.debug?.tileDebug && (
                                             <>
                                                 <div className='materials-layer-normals-row'>

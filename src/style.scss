@@ -2035,6 +2035,7 @@ input {
     font-size: 10px;
     line-height: 1.2;
 }
+.tile-playback-toolbar,
 .fragment-shape-toolbar,
 .fragment-mode-toolbar {
     display: flex;
@@ -2066,6 +2067,21 @@ input {
     .fragment-tool-move::before {
         -webkit-mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
         mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
+    }
+
+    .tile-tool-freeze::before {
+        -webkit-mask: url('static/icons/tile-freeze-icon.svg') no-repeat center / contain;
+        mask: url('static/icons/tile-freeze-icon.svg') no-repeat center / contain;
+    }
+
+    .tile-tool-pause::before {
+        -webkit-mask: url('static/icons/tile-pause-icon.svg') no-repeat center / contain;
+        mask: url('static/icons/tile-pause-icon.svg') no-repeat center / contain;
+    }
+
+    .tile-tool-play::before {
+        -webkit-mask: url('static/icons/tile-play-icon.svg') no-repeat center / contain;
+        mask: url('static/icons/tile-play-icon.svg') no-repeat center / contain;
     }
 
     .fragment-shape-box::before {
