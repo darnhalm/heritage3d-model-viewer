@@ -4008,7 +4008,12 @@ $panel-focus-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
     line-height: 1;
 }
 
-/* Снежинка садится в нижний правый угол камеры — заморожен не показ, а сама камера. */
+/*
+ * Заморозка: у камеры вырезана нижняя правая четверть, в неё поставлена снежинка.
+ *
+ * Вырез, а не наложение: снежинка поверх корпуса требовала обводки и всё равно читалась как
+ * грязь на значке. Пустое место под ней делает оба знака целыми и разборчивыми.
+ */
 .tile-playback-glyph-stack {
     position: relative;
     display: inline-flex;
@@ -4016,21 +4021,14 @@ $panel-focus-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
     justify-content: center;
 }
 
-.tile-playback-glyph-stack .tile-playback-glyph-badge {
-    position: absolute;
-    right: -7px;
-    bottom: -5px;
-    font-size: 20px;
-    /* Обводка цветом кнопки: снежинка не сливается с корпусом камеры под ней. */
-    text-shadow:
-        0 0 3px var(--panel-bg, #1e1e1e),
-        0 0 3px var(--panel-bg, #1e1e1e),
-        0 0 3px var(--panel-bg, #1e1e1e);
+.tile-playback-glyph-stack .material-symbols-outlined:first-child {
+    clip-path: polygon(0 0, 100% 0, 100% 52%, 52% 52%, 52% 100%, 0 100%);
 }
 
-.tile-playback-button.active .tile-playback-glyph-badge {
-    text-shadow:
-        0 0 3px var(--theme-primary, #f60),
-        0 0 3px var(--theme-primary, #f60),
-        0 0 3px var(--theme-primary, #f60);
+.tile-playback-glyph-stack .tile-playback-glyph-badge {
+    position: absolute;
+    right: -2px;
+    bottom: -2px;
+    font-size: 20px;
+    clip-path: none;
 }
