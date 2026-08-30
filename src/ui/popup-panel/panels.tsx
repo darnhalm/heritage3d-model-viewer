@@ -142,7 +142,8 @@ const TileOrderIllustration = (props: { mode: string }) => {
                 // Верх кадра дальше от камеры: грубость на экране падает с расстоянием.
                 const distance = 1 + (ROWS - 1 - r) * 1.3;
                 cells.push({
-                    c, r,
+                    c,
+                    r,
                     x: (c + 0.5) / COLS,
                     y: (r + 0.5) / ROWS,
                     distance,
@@ -151,20 +152,30 @@ const TileOrderIllustration = (props: { mode: string }) => {
             }
         }
 
-        const central = (cell: OrderCell, focus: { x: number, y: number }) =>
-            Math.hypot(cell.x - focus.x, (cell.y - focus.y) * 0.5) <= CONE;
+        // Пока шрифт иконок не загружен, `fillText` нарисовал бы имя глифа словами. Ждём его
+        // готовности: первый кадр иллюстрации в худшем случае идёт без стрелки.
+        let fontReady = false;
+        document.fonts?.load?.('20px "Material Symbols Outlined"', 'arrow_selector_tool')
+        .then(() => {
+            fontReady = true;
+        })
+        .catch(() => {
+            fontReady = false;
+        });
 
-        const orderFor = (focus: { x: number, y: number } | null): OrderCell[] =>
-            [...cells].sort((a, b) => {
-                if (focus) {
-                    const ca = central(a, focus) ? 1 : 0;
-                    const cb = central(b, focus) ? 1 : 0;
-                    if (ca !== cb) return cb - ca;
-                }
-                if (a.sse !== b.sse) return b.sse - a.sse;
-                return a.distance - b.distance;
-            });
+        const central = (cell: OrderCell, focus: { x: number, y: number }) => Math.hypot(cell.x - focus.x, (cell.y - focus.y) * 0.5) <= CONE;
 
+        const orderFor = (focus: { x: number, y: number } | null): OrderCell[] => [...cells].sort((a, b) => {
+            if (focus) {
+                const ca = central(a, focus) ? 1 : 0;
+                const cb = central(b, focus) ? 1 : 0;
+                if (ca !== cb) return cb - ca;
+            }
+            if (a.sse !== b.sse) return b.sse - a.sse;
+            return a.distance - b.distance;
+        });
+
+        const marker: 'arrow' | 'ring' = props.mode === 'surface' ? 'ring' : 'arrow';
         const draw = (seq: OrderCell[], upTo: number, focus: { x: number, y: number } | null, pointer: boolean) => {
             ctx.clearRect(0, 0, W, H);
             for (let k = 0; k < upTo; k++) {
@@ -185,7 +196,22 @@ const TileOrderIllustration = (props: { mode: string }) => {
             ctx.stroke();
             ctx.setLineDash([]);
 
-            if (!pointer || !fontReady) return;
+            if (!pointer) return;
+
+            if (marker === 'ring') {
+                // Тот же кружок, что маркер привязки к поверхности во вьюпорте: белое кольцо.
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+                ctx.lineWidth = 3.5;
+                ctx.beginPath();
+                ctx.arc(focus.x * W, focus.y * H, 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.98)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                return;
+            }
+
+            if (!fontReady) return;
             // Стрелка указателя — готовый глиф Material Symbols `arrow_selector_tool`, а не
             // самодельный многоугольник: рисованный вручную получался кривым, а глиф уже есть
             // в наборе шрифта, которым размечен весь интерфейс.
@@ -201,18 +227,8 @@ const TileOrderIllustration = (props: { mode: string }) => {
 
         const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-        // Пока шрифт иконок не загружен, `fillText` нарисовал бы имя глифа словами. Ждём его
-        // готовности и перерисовываем: первый кадр иллюстрации в худшем случае идёт без стрелки.
-        let fontReady = false;
-        document.fonts?.load?.('20px "Material Symbols Outlined"', 'arrow_selector_tool')
-        .then(() => {
-            fontReady = true;
-        })
-        .catch(() => {
-            fontReady = false;
-        });
-
-        if (props.mode !== 'cursor') {
+        const animated = props.mode === 'cursor' || props.mode === 'surface';
+        if (!animated) {
             const focus = props.mode === 'default' ? null : { x: 0.5, y: 0.5 };
             const seq = orderFor(focus);
             if (reduced) {
@@ -230,7 +246,7 @@ const TileOrderIllustration = (props: { mode: string }) => {
             return () => window.clearTimeout(timer);
         }
 
-        // Курсорный режим: указатель переезжает, очередь пересобирается от нового места.
+        // Курсорный режим и режим опорной точки: отметка переезжает, очередь пересобирается.
         if (reduced) {
             const focus = CURSOR_WAYPOINTS[0];
             draw(orderFor(focus), cells.length, focus, true);
@@ -583,6 +599,7 @@ class InfoPanel extends React.Component <{
                                         options={[
                                             { v: 'foveated', t: t('Center of view first', lang) },
                                             { v: 'cursor', t: t('Under the cursor first', lang) },
+                                            { v: 'surface', t: t('Around the grab point first', lang) },
                                             { v: 'default', t: t('By error and distance', lang) }
                                         ]}
                                         value={String(observerData.camera?.tilePriority ?? 'foveated')}
@@ -1339,24 +1356,24 @@ export const FragmentPanel = (props: { observerData: ObserverData, setProperty: 
                 )}
                 {/* Форму выбирают до выделения: она определяет, что именно появится по клику. */}
                 {!data.enabled && (
-                    <Container class='fragment-shape-toolbar'>
+                    <div className='tile-playback-toolbar'>
                         {([
-                            ['box', 'fragment-shape-box', 'Box shape'],
-                            ['sphere', 'fragment-shape-sphere', 'Sphere shape']
-                        ] as const).map(([shape, iconClass, title]) => (
-                            <span key={shape} title={t(title, lang)} style={{ display: 'contents' }}>
-                                <Button
-                                    class={[
-                                        'secondary', 'fragment-tool-button', iconClass,
-                                        ...((data.shape ?? 'box') === shape ? ['active'] : [])
-                                    ]}
-                                    aria-label={t(title, lang)}
-                                    aria-pressed={(data.shape ?? 'box') === shape}
-                                    onClick={() => props.setProperty('fragment.shape', shape)}
-                                />
-                            </span>
+                            ['box', 'deployed_code', 'Box shape'],
+                            ['sphere', 'circle', 'Sphere shape']
+                        ] as const).map(([shape, glyph, title]) => (
+                            <button
+                                key={shape}
+                                type='button'
+                                className={`tile-playback-button${(data.shape ?? 'box') === shape ? ' active' : ''}`}
+                                title={t(title, lang)}
+                                aria-label={t(title, lang)}
+                                aria-pressed={(data.shape ?? 'box') === shape}
+                                onClick={() => props.setProperty('fragment.shape', shape)}
+                            >
+                                <span className='material-symbols-outlined'>{glyph}</span>
+                            </button>
                         ))}
-                    </Container>
+                    </div>
                 )}
                 {data.initialized && (
                     <Container class='fragment-mode-toolbar'>

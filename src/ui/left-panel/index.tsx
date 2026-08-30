@@ -1471,31 +1471,39 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         {observerData?.debug?.tileOrderLabels && (
                                             materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
                                         )}
-                                        <Container class='tile-playback-toolbar'>
+                                        <div className='tile-playback-toolbar'>
                                             {([
-                                                ['debug.tileFreeze', 'tile-tool-freeze', 'Freeze Camera + FOV', !!observerData?.debug?.tileFreeze],
-                                                ['debug.tilePaused', observerData?.debug?.tilePaused ? 'tile-tool-play' : 'tile-tool-pause',
-                                                    observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', !!observerData?.debug?.tilePaused]
-                                            ] as const).map(([path, iconClass, title, active]) => (
-                                                <span key={path} title={t(title, lang)} style={{ display: 'contents' }}>
-                                                    <Button
-                                                        class={['secondary', 'fragment-tool-button', iconClass, ...(active ? ['active'] : [])]}
-                                                        aria-label={t(title, lang)}
-                                                        aria-pressed={active}
-                                                        onClick={() => {
-                                                            // Состояние читаем живым: обработчик pcui привязывается один раз.
-                                                            const now = !!getViewer()?.observer?.get?.(path);
-                                                            setProperty(path, !now);
-                                                        }}
-                                                    />
-                                                </span>
+                                                ['debug.tileFreeze', 'ac_unit', 'Freeze Camera + FOV', !!observerData?.debug?.tileFreeze],
+                                                ['debug.tilePaused', observerData?.debug?.tilePaused ? 'play_arrow' : 'pause',
+                                                    observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', !!observerData?.debug?.tilePaused],
+                                                ['debug.tileLineStyle', 'grid_4x4', 'Frame style', observerData?.debug?.tileLineStyle !== 'solid']
+                                            ] as const).map(([path, glyph, title, active]) => (
+                                                <button
+                                                    key={path}
+                                                    type='button'
+                                                    className={`tile-playback-button${active ? ' active' : ''}`}
+                                                    title={t(title, lang)}
+                                                    aria-label={t(title, lang)}
+                                                    aria-pressed={active}
+                                                    onClick={() => {
+                                                        // Состояние читаем живым: разметка перерисовывается, а замыкание нет.
+                                                        const observer = getViewer()?.observer;
+                                                        if (path === 'debug.tileLineStyle') {
+                                                            // Каркас всегда либо ровный, либо шахматный — одной кнопки хватает.
+                                                            const checker = observer?.get?.(path) !== 'solid';
+                                                            setProperty(path, checker ? 'solid' : 'checker');
+                                                            return;
+                                                        }
+                                                        setProperty(path, !observer?.get?.(path));
+                                                    }}
+                                                >
+                                                    <span className='material-symbols-outlined'>{glyph}</span>
+                                                </button>
                                             ))}
-                                        </Container>
+                                        </div>
                                         {observerData?.debug?.tileDebug && (
                                             <>
                                                 <div className='materials-layer-normals-row'>
-                                                    {materialActionButton(t('Solid Frame', lang), observerData?.debug?.tileLineStyle === 'solid', () => setProperty('debug.tileLineStyle', 'solid'))}
-                                                    {materialActionButton(t('Checker Frame', lang), observerData?.debug?.tileLineStyle !== 'solid', () => setProperty('debug.tileLineStyle', 'checker'))}
                                                 </div>
                                                 <div className='materials-layer-normals-row'>
                                                     {materialActionButton(t('By State', lang), (observerData?.debug?.tileDebugMode ?? 'state') !== 'lod', () => setProperty('debug.tileDebugMode', 'state'))}

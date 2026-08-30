@@ -243,9 +243,13 @@ const observerData: ObserverData = {
         withTextureOnly: false,
         texelDensityHeatmap: false,
         tileDebug: false,
-        tileDebugMode: 'state',
+        // По уровню детализации: раскраска по состоянию загрузки нужна реже, а понять, какой
+        // LOD сейчас на экране, хочется почти всегда.
+        tileDebugMode: 'lod',
         tileLineThickness: 2,
-        tileLineStyle: 'checker',
+        // Ровный каркас: шахматный полезен, когда рамки накладываются друг на друга, но при
+        // первом взгляде он читается хуже.
+        tileLineStyle: 'solid',
         tileCheckerFill: false,
         tilePick: false,
         tileOrderLabels: false,
@@ -455,6 +459,12 @@ const saveOptions = (observer: Observer, name: string) => {
         ...options.debug,
         alignmentMode: false
     } : options.debug;
+    // Вид каркаса — не долгоживущая настройка, а способ разглядеть наложенные рамки прямо
+    // сейчас. Сохранённый шахматный перебивал бы ровный по умолчанию у всех, кто хоть раз его
+    // включал, и умолчание было бы бессмысленным.
+    if (debug) {
+        delete debug.tileLineStyle;
+    }
     // `ortho` и `viewCube` — состояние текущего сеанса, а не настройка: проекцию включает
     // сам пользователь в режиме выравнивания, а куб виден только в нём. Сохранять их нельзя —
     // при следующей загрузке подпись кнопки говорила бы «Орто» при перспективной камере.
@@ -502,6 +512,8 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
         // могло сохраниться, поэтому отбрасываем и на загрузке.
         'camera.ortho', 'camera.viewCube',
         'camera.tilePriority',
+        // Вид каркаса начинается ровным каждый сеанс; см. `saveOptions`.
+        'debug.tileLineStyle',
         // Пределы расстояния привязаны к габаритам конкретной сцены. Сохранённые от прошлой
         // модели значения удерживали бы камеру там, где для новой модели нет никакого смысла.
         'camera.distanceLimitsManual', 'camera.distanceMin', 'camera.distanceMax',

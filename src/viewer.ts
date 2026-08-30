@@ -3031,7 +3031,22 @@ class Viewer {
         }
 
         const pointer = this.pointerFocus;
-        if (mode === 'cursor' && pointer.over && performance.now() - pointer.at < CURSOR_FOCUS_STALE_MS) {
+        const pointerFresh = pointer.over && performance.now() - pointer.at < CURSOR_FOCUS_STALE_MS;
+
+        // Опорная точка — то, вокруг чего вращают: сигнал внимания сильнее луча, но живёт он
+        // только пока точка найдена. Нет её — откатываемся к лучу, а затем ко взгляду.
+        if (mode === 'surface') {
+            const point = this.cameraControls.surfaceZoomTarget;
+            if (point) {
+                const dir = point.clone().sub(this.camera.getPosition());
+                if (dir.length() > 1e-6) {
+                    this.tileManager.focusDirection = dir.normalize();
+                    return;
+                }
+            }
+        }
+
+        if ((mode === 'cursor' || mode === 'surface') && pointerFresh) {
             this.tileManager.focusDirection = this.getPickRay(pointer.x, pointer.y).direction;
             return;
         }

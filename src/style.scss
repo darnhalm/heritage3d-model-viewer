@@ -2035,7 +2035,6 @@ input {
     font-size: 10px;
     line-height: 1.2;
 }
-.tile-playback-toolbar,
 .fragment-shape-toolbar,
 .fragment-mode-toolbar {
     display: flex;
@@ -2067,31 +2066,6 @@ input {
     .fragment-tool-move::before {
         -webkit-mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
         mask: url('static/icons/alignment-move-icon.svg') no-repeat center / contain;
-    }
-
-    .tile-tool-freeze::before {
-        -webkit-mask: url('static/icons/tile-freeze-icon.svg') no-repeat center / contain;
-        mask: url('static/icons/tile-freeze-icon.svg') no-repeat center / contain;
-    }
-
-    .tile-tool-pause::before {
-        -webkit-mask: url('static/icons/tile-pause-icon.svg') no-repeat center / contain;
-        mask: url('static/icons/tile-pause-icon.svg') no-repeat center / contain;
-    }
-
-    .tile-tool-play::before {
-        -webkit-mask: url('static/icons/tile-play-icon.svg') no-repeat center / contain;
-        mask: url('static/icons/tile-play-icon.svg') no-repeat center / contain;
-    }
-
-    .fragment-shape-box::before {
-        -webkit-mask: url('static/icons/fragment-box-icon.svg') no-repeat center / contain;
-        mask: url('static/icons/fragment-box-icon.svg') no-repeat center / contain;
-    }
-
-    .fragment-shape-sphere::before {
-        -webkit-mask: url('static/icons/fragment-sphere-icon.svg') no-repeat center / contain;
-        mask: url('static/icons/fragment-sphere-icon.svg') no-repeat center / contain;
     }
 
     .fragment-tool-rotate::before {
@@ -3986,4 +3960,45 @@ $panel-focus-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
     height: auto;
     margin: 6px 0 2px;
     border-radius: 4px;
+}
+
+/*
+ * Ряд квадратных кнопок отладки тайлов: заморозка, пауза и вид каркаса.
+ *
+ * Значки — глифы Material Symbols, а не маски из файлов: рисованные вручную выходили кривыми,
+ * а набор шрифта в проекте уже есть и размечает весь остальной интерфейс.
+ */
+.tile-playback-toolbar {
+    display: flex;
+    gap: 6px;
+    margin: 4px 0;
+}
+
+.tile-playback-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 1px solid var(--panel-border, #3a3a3a);
+    border-radius: 5px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.tile-playback-button:hover {
+    border-color: var(--theme-primary, #f60);
+}
+
+.tile-playback-button.active {
+    background: var(--theme-primary, #f60);
+    color: #101010;
+    border-color: var(--theme-primary, #f60);
+}
+
+.tile-playback-button .material-symbols-outlined {
+    font-size: 19px;
+    line-height: 1;
 }
