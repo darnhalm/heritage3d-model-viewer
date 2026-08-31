@@ -1092,6 +1092,17 @@ body:not(.ui-ready) #panel-left {
     border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+// Выбор схемы раскраски стоит сразу под кнопкой «Раскрасить модель» и подчинён ей по
+// ширине: список во всю строку читается как её продолжение, а не как отдельный элемент.
+.materials-layer-scheme {
+    display: block;
+    margin: 0 0 6px;
+
+    .materials-layer-scheme-select {
+        width: 100%;
+    }
+}
+
 .materials-layer-normals-row {
     display: flex;
     flex-direction: column;

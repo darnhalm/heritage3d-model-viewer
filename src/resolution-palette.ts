@@ -9,13 +9,19 @@
  * - белое — попадание в цель;
  * - синее — ошибка меньше целевой, разрешение выше необходимого.
  *
+ * Ось логарифмическая, и это важно. Уровни детализации идут вдвое: при каждом уточнении
+ * ошибка примерно делится пополам. На линейной оси соседние уровни у камеры разносило по
+ * цвету сильно, а вдали не разносило вовсе — всё выше двукратного превышения слипалось в
+ * один красный. В октавах шаг между соседними уровнями одинаков по всей сцене, и «вдвое
+ * грубее» отходит от белого ровно настолько же, насколько «вдвое детальнее».
+ *
  * Радужную шкалу (jet) намеренно не берём: её переходы к голубому и жёлтому глаз читает как
  * границу там, где в данных ничего не происходит, а в длинном зелёном участке настоящие
  * перепады теряются.
  */
 
-/** Во сколько раз ошибка должна превысить целевую, чтобы цвет дошёл до чистого красного. */
-const RESOLUTION_RED_AT = 2;
+/** Сколько октав отклонения укладывается в половину шкалы: от вчетверо детальнее до вчетверо грубее. */
+const RESOLUTION_LOG_RANGE = 2;
 
 const COARSE: [number, number, number] = [1, 0.24, 0.16];
 const ON_TARGET: [number, number, number] = [0.93, 0.93, 0.93];
@@ -38,11 +44,11 @@ const mix = (
  * @returns Компоненты RGB в диапазоне 0..1.
  */
 const resolutionColorRgb = (ratio: number): [number, number, number] => {
-    const value = Number.isFinite(ratio) ? Math.max(0, ratio) : RESOLUTION_RED_AT;
-    if (value <= 1) {
-        return mix(FINE, ON_TARGET, value);
-    }
-    return mix(ON_TARGET, COARSE, Math.min(1, (value - 1) / (RESOLUTION_RED_AT - 1)));
+    // Ноль и не-числа означают «ошибки нет» — это предел детальности, дальний край шкалы.
+    const octaves = ratio > 0 && Number.isFinite(ratio) ?
+        Math.log2(ratio) / RESOLUTION_LOG_RANGE : -1;
+    const t = Math.max(-1, Math.min(1, octaves));
+    return t <= 0 ? mix(ON_TARGET, FINE, -t) : mix(ON_TARGET, COARSE, t);
 };
 
 /**
@@ -70,4 +76,4 @@ const resolutionColorCss = (ratio: number): string => {
     return `#${hex(r)}${hex(g)}${hex(b)}`;
 };
 
-export { RESOLUTION_RED_AT, resolutionColorRgb, resolutionColorAbgr, resolutionColorCss };
+export { RESOLUTION_LOG_RANGE, resolutionColorRgb, resolutionColorAbgr, resolutionColorCss };

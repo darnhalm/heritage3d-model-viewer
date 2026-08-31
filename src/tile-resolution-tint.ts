@@ -12,8 +12,9 @@ import { Material, MeshInstance } from 'playcanvas';
  * у них одинаков. Ступенька остаётся там, где меняется уровень детализации, — и это не
  * артефакт, а сам предмет измерения.
  *
- * Палитра повторяет `resolution-palette.ts`; менять надо в обоих местах, шейдеру константы не
- * передать без лишней униформы.
+ * Палитра и логарифмическая ось повторяют `resolution-palette.ts`; менять надо в обоих местах,
+ * шейдеру константы не передать без лишней униформы. Множитель 0.5 у логарифма — это деление
+ * на две октавы полушкалы (`RESOLUTION_LOG_RANGE`).
  */
 const TINT_UNIFORMS_GLSL = `
 uniform float tileResolutionK;
@@ -29,10 +30,13 @@ const TINT_GLSL = `
 #ifdef FORWARD_PASS
     if (tileResolutionK > 0.0) {
         float tileResDistance = distance(vPositionW, view_position);
-        float tileResRatio = tileResDistance > 1e-4 ? tileResolutionK / tileResDistance : 2.0;
-        vec3 tileResColor = tileResRatio <= 1.0 ?
-            mix(vec3(0.2, 0.45, 1.0), vec3(0.93, 0.93, 0.93), tileResRatio) :
-            mix(vec3(0.93, 0.93, 0.93), vec3(1.0, 0.24, 0.16), min(1.0, tileResRatio - 1.0));
+        float tileResRatio = tileResDistance > 1e-4 ? tileResolutionK / tileResDistance : 4.0;
+        // Ось в октавах: уровни детализации идут вдвое, и только в логарифме шаг между
+        // соседними уровнями одинаков по всей сцене. Половина шкалы — две октавы.
+        float tileResT = clamp(log2(tileResRatio) * 0.5, -1.0, 1.0);
+        vec3 tileResColor = tileResT <= 0.0 ?
+            mix(vec3(0.93, 0.93, 0.93), vec3(0.2, 0.45, 1.0), -tileResT) :
+            mix(vec3(0.93, 0.93, 0.93), vec3(1.0, 0.24, 0.16), tileResT);
         gl_FragColor = vec4(gl_FragColor.rgb * tileResColor, gl_FragColor.a);
     }
 #endif
@@ -42,11 +46,13 @@ const TINT_WGSL = `
 #ifdef FORWARD_PASS
     if (uniform.tileResolutionK > 0.0) {
         let tileResDistance: f32 = distance(vPositionW, uniform.view_position);
-        let tileResRatio: f32 = select(2.0, uniform.tileResolutionK / tileResDistance, tileResDistance > 1e-4);
+        let tileResRatio: f32 = select(4.0, uniform.tileResolutionK / tileResDistance, tileResDistance > 1e-4);
+        // Ось в октавах — см. пояснение у версии на GLSL.
+        let tileResT: f32 = clamp(log2(tileResRatio) * 0.5, -1.0, 1.0);
         let tileResColor: vec3f = select(
-            mix(vec3f(0.93, 0.93, 0.93), vec3f(1.0, 0.24, 0.16), min(1.0, tileResRatio - 1.0)),
-            mix(vec3f(0.2, 0.45, 1.0), vec3f(0.93, 0.93, 0.93), tileResRatio),
-            tileResRatio <= 1.0
+            mix(vec3f(0.93, 0.93, 0.93), vec3f(1.0, 0.24, 0.16), tileResT),
+            mix(vec3f(0.93, 0.93, 0.93), vec3f(0.2, 0.45, 1.0), -tileResT),
+            tileResT <= 0.0
         );
         output.color = vec4f(output.color.rgb * tileResColor, output.color.a);
     }

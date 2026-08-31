@@ -111,7 +111,7 @@ import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
-import { RESOLUTION_RED_AT, resolutionColorCss, resolutionColorRgb } from './resolution-palette';
+import { RESOLUTION_LOG_RANGE, resolutionColorCss, resolutionColorRgb } from './resolution-palette';
 import { ShadowCatcher } from './shadow-catcher';
 import { normalizeThemeColor } from './theme';
 import { TileResolutionTint } from './tile-resolution-tint';
@@ -8906,8 +8906,10 @@ class Viewer {
             const stops: string[] = [];
             const steps = 24;
             for (let i = 0; i <= steps; i++) {
-                const ratio = (i / steps) * RESOLUTION_RED_AT;
-                stops.push(`${resolutionColorCss(ratio)} ${(i / steps) * 100}%`);
+                // Полоску размечаем по той же логарифмической оси, что и раскраску: слева
+                // вчетверо детальнее цели, справа вчетверо грубее.
+                const octaves = ((i / steps) * 2 - 1) * RESOLUTION_LOG_RANGE;
+                stops.push(`${resolutionColorCss(Math.pow(2, octaves))} ${(i / steps) * 100}%`);
             }
             const strip = document.createElement('div');
             strip.style.cssText = `height:100%;width:100%;background:linear-gradient(90deg,${stops.join(',')});`;
@@ -8916,7 +8918,9 @@ class Viewer {
 
         // Подписи ставим под теми же долями, что и переломы шкалы: цель приходится ровно на
         // середину, потому что красный набирается к двукратному превышению.
-        [['детальнее', 'flex-start'], ['цель', 'center'], ['грубее', 'flex-end']]
+        // Подписи держим короткими: HUD узкий, и длинные переносились на вторую строку.
+        // Что синее — детальнее, а красное — грубее, читается по самому градиенту.
+        [['1/4', 'flex-start'], ['цель', 'center'], ['x4', 'flex-end']]
         .forEach(([text, align]) => {
             const item = document.createElement('span');
             item.style.cssText = `flex:1;display:flex;justify-content:${align};color:#cfcfcf;`;
