@@ -850,7 +850,7 @@ class Viewer {
     private tileOrderCanvas: HTMLCanvasElement | null = null;
 
     /** Центры и номера выбранных тайлов; массив переиспользуется между кадрами. */
-    private readonly tileOrderLabels: Array<{ center: Vec3, order: number, lodOrder: number, id: number, depth: number }> = [];
+    private readonly tileOrderLabels: Array<{ center: Vec3, order: number, lodOrder: number, name: string, depth: number }> = [];
 
     /**
      * Меши, которым проставлен цвет LOD, и глубина, под которую он посчитан. Цвет живёт в
@@ -8849,8 +8849,8 @@ class Viewer {
         // неприменим. Из-за этого в ортогональном режиме пропадали все подписи разом.
         tileLabelViewInv.copy(this.camera.getWorldTransform()).invert();
         const perLod = !!this.observer.get('debug.tileOrderPerLod');
-        const screen: Array<{ x: number, y: number, order: number, depth: number, lod: number }> = [];
-        for (const { center, order, lodOrder, id, depth: lod } of this.tileOrderLabels) {
+        const screen: Array<{ x: number, y: number, text: string, depth: number, lod: number }> = [];
+        for (const { center, order, lodOrder, name, depth: lod } of this.tileOrderLabels) {
             tileLabelViewInv.transformPoint(center, tileLabelView);
             // Камера смотрит вдоль минус Z, поэтому глубина — это минус координата.
             const depth = -tileLabelView.z;
@@ -8858,9 +8858,9 @@ class Viewer {
             const point = camera.worldToScreen(center, tileLabelScreen);
             if (point.x < -40 || point.y < -20 || point.x > width + 40 || point.y > height + 20) continue;
             // Идентификатор перекрывает порядок: это разные вопросы к одной картинке, и
-            // показывать оба числа в одном кружке негде.
-            const value = showIds ? id : (perLod ? lodOrder : order);
-            screen.push({ x: point.x, y: point.y, order: value, depth, lod });
+            // показывать оба значения в одном кружке негде.
+            const value = showIds ? name : String(perLod ? lodOrder : order);
+            screen.push({ x: point.x, y: point.y, text: value, depth, lod });
         }
         screen.sort((a, b) => b.depth - a.depth);
 
@@ -8868,7 +8868,7 @@ class Viewer {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         for (const label of screen) {
-            const text = String(label.order);
+            const text = label.text;
             const w = ctx.measureText(text).width + 10;
             const h = 16;
             // Подложка в цвете уровня — та же палитра, что у легенды и полоски долей: номер

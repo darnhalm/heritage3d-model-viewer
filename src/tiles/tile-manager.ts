@@ -96,6 +96,40 @@ export const EDGE_WIDTH_UNIT = 0.001;
  * @param axis - Полуось бокса.
  * @returns Дробный индекс вдоль оси (вызывающий округляет).
  */
+/**
+ * Как тайл называется на самом деле.
+ *
+ * В спецификации 3D Tiles идентификатора у тайла нет: это безымянный узел дерева. Зато есть
+ * две вещи, по которым его можно узнать снаружи:
+ *
+ * - у неявной тайлизации — координаты узла `уровень/x/y`, каноническая адресация из
+ *   спецификации, по ней же строится путь к содержимому;
+ * - у обычной — имя файла содержимого, которое можно открыть и проверить.
+ *
+ * Сквозной счётчик (`tile.id`) остаётся лишь на случай, когда нет ни того, ни другого. Он
+ * зависит от порядка разбора и между запусками не совпадает, поэтому помечен решёткой —
+ * чтобы его не приняли за адрес.
+ *
+ * @param tile - Тайл.
+ * @returns Короткая подпись для оверлея.
+ */
+function tileIdentity(tile: Tile): string {
+    const coord = tile.implicit?.coord;
+    if (coord) {
+        // Четвёртая координата только у октодерева: у квадродерева она всегда ноль и шума в
+        // подписи не стоит.
+        return coord.z ? `${coord.level}/${coord.x}/${coord.y}/${coord.z}` :
+            `${coord.level}/${coord.x}/${coord.y}`;
+    }
+    const uri = tile.contentUris[0];
+    if (uri) {
+        const name = uri.split('?')[0].split('/').pop() ?? '';
+        const stem = name.replace(/\.[^.]+$/, '');
+        if (stem) return stem.length > 14 ? `…${stem.slice(-13)}` : stem;
+    }
+    return `#${tile.id}`;
+}
+
 export function gridIndex(center: Vec3, axis: Vec3): number {
     const lenSq = axis.lengthSq();
     if (lenSq < 1e-12) {
@@ -1564,7 +1598,7 @@ export class TileManager {
      *
      * @param out - Массив, куда добавлять записи; переиспользуется между кадрами.
      */
-    collectOrderLabels(out: Array<{ center: Vec3, order: number, lodOrder: number, id: number, depth: number }>) {
+    collectOrderLabels(out: Array<{ center: Vec3, order: number, lodOrder: number, name: string, depth: number }>) {
         out.length = 0;
         if (!this.rootTile || this.disposed) return;
         const stack: Tile[] = [this.rootTile];
@@ -1577,7 +1611,7 @@ export class TileManager {
                 center: tile.obb.center,
                 order: tile.loadSequence,
                 lodOrder: tile.lodSequence,
-                id: tile.id,
+                name: tileIdentity(tile),
                 depth: tile.depth
             });
         }
