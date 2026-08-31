@@ -1583,6 +1583,30 @@ export class TileManager {
     }
 
     /**
+     * Вехи истории: на какой по счёту загрузке впервые доехал тайл каждого уровня.
+     *
+     * По ним на шкале ставятся засечки — сразу видно, за сколько загрузок картинка добралась
+     * до нужной детализации, и не ушла ли большая часть очереди на уровни, которых зритель
+     * так и не дождался.
+     *
+     * @returns Пары «уровень — номер загрузки», по возрастанию номера.
+     */
+    getLoadOrderMilestones(): Array<{ depth: number, sequence: number }> {
+        if (!this.rootTile || this.disposed) return [];
+        const firstAtDepth = new Map<number, number>();
+        forEachTile(this.rootTile, (tile) => {
+            if (tile.loadSequence <= 0) return;
+            const seen = firstAtDepth.get(tile.depth);
+            if (seen === undefined || tile.loadSequence < seen) {
+                firstAtDepth.set(tile.depth, tile.loadSequence);
+            }
+        });
+        return [...firstAtDepth.entries()]
+        .map(([depth, sequence]) => ({ depth, sequence }))
+        .sort((a, b) => a.sequence - b.sequence);
+    }
+
+    /**
      * Максимальная глубина в дереве тайлов (включая внешние тайлсеты). Нужна панели, чтобы
      * задать верх ползунка LOD.
      *

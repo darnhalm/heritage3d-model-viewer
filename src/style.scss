@@ -1092,6 +1092,88 @@ body:not(.ui-ready) #panel-left {
     border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
+// Наэкранная шкала перемотки по истории загрузки тайлов. Появляется только при замороженной
+// камере: там история неподвижна и у шкалы есть начало и конец.
+#tile-replay-bar {
+    position: absolute;
+    left: 50%;
+    bottom: 64px;
+    transform: translateX(-50%);
+    z-index: 100;
+    width: min(560px, calc(100% - 32px));
+    padding: 8px 0 6px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.62);
+    font: 11px/1.2 ui-monospace, Menlo, monospace;
+    color: #e8e8e8;
+
+    .tile-replay-track {
+        position: relative;
+        width: 100%;
+        height: 34px;
+        // Дорожка ловит указатель целиком: скраб начинается с любой точки, а не только с бегунка.
+        cursor: pointer;
+        touch-action: none;
+
+        // Сама линия времени.
+        &::before {
+            content: '';
+            position: absolute;
+            left: 16px;
+            right: 16px;
+            top: 21px;
+            height: 2px;
+            border-radius: 1px;
+            background: rgba(255, 255, 255, 0.28);
+        }
+    }
+
+    .tile-replay-tick {
+        position: absolute;
+        top: 0;
+        transform: translateX(-50%);
+        padding-top: 6px;
+        color: #b9b9b9;
+        pointer-events: none;
+
+        // Штрих под подписью, чтобы число читалось как отметка, а не как надпись рядом.
+        &::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 20px;
+            width: 1px;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.35);
+        }
+    }
+
+    // Веха уровня: столбик в цвете уровня прямо на линии.
+    .tile-replay-mark {
+        position: absolute;
+        top: 16px;
+        width: 3px;
+        height: 12px;
+        margin-left: -1.5px;
+        border-radius: 1px;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+        pointer-events: none;
+    }
+
+    .tile-replay-cursor {
+        position: absolute;
+        top: 12px;
+        transform: translateX(-50%);
+        padding: 2px 6px;
+        border-radius: 3px;
+        background: #ff5a2d;
+        color: #fff;
+        font-weight: 700;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+}
+
 // Выбор схемы стоит сразу под кнопкой «Раскрасить модель» и подчинён ей: две кнопки в строку
 // читаются как её продолжение. Список тут был бы лишним раскрытием — вариантов всего два.
 // Селектор составной намеренно: у соседнего `.materials-layer-normals-row` направление
