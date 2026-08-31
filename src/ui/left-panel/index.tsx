@@ -1618,6 +1618,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             </>
                                         )}
 
+                                        {/* Осталась одна кнопка: пауза и перемотка живут на временной
+                                            шкале, которую эта заморозка и открывает. */}
                                         <div className='tile-playback-toolbar'>
                                             <button
                                                 type='button'
@@ -1633,37 +1635,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                     <span className='material-symbols-outlined tile-playback-glyph-badge'>ac_unit</span>
                                                 </span>
                                             </button>
-                                            <button
-                                                type='button'
-                                                className={`tile-playback-button${observerData?.debug?.tilePaused ? ' active' : ''}`}
-                                                title={t(observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', lang)}
-                                                aria-label={t(observerData?.debug?.tilePaused ? 'Resume Loading' : 'Pause Loading', lang)}
-                                                aria-pressed={!!observerData?.debug?.tilePaused}
-                                                onClick={() => toggleObserverBoolean('debug.tilePaused', !!observerData?.debug?.tilePaused)}
-                                            >
-                                                <span className='material-symbols-outlined'>
-                                                    {observerData?.debug?.tilePaused ? 'play_arrow' : 'pause'}
-                                                </span>
-                                            </button>
                                         </div>
-                                        {/* Перемотка истории загрузки: порядок доезда у нас записан, и по нему
-                                            можно отмотать показ назад. Ничего не выгружается — поздние тайлы
-                                            просто считаются ещё не пришедшими, и на экране остаётся родитель.
-                                            Показываем только при замороженной камере: иначе история растёт
-                                            прямо под рукой, и у шкалы нет ни начала, ни конца. */}
-                                        {!!observerData?.debug?.tileFreeze && (observerData?.scene?.tilesetLoadCount ?? 0) > 0 && (
-                                            <span title={t('Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.', lang)} style={{ display: 'contents' }}>
-                                                <Slider
-                                                    label={t('Replay loading', lang)}
-                                                    precision={0}
-                                                    min={-1}
-                                                    max={observerData?.scene?.tilesetLoadCount ?? 0}
-                                                    step={1}
-                                                    value={observerData?.debug?.tileReplay ?? -1}
-                                                    setProperty={(value: number) => setProperty('debug.tileReplay', value)}
-                                                />
-                                            </span>
-                                        )}
                                         {/* Изоляция уровня — один ползунок вместо пары «переключатель плюс
                                             появляющийся ползунок». Крайнее левое положение (-1) выключает её:
                                             отдельному тумблеру тут делать нечего, состояний всё равно одно. */}

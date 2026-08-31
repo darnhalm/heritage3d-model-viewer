@@ -1096,7 +1096,8 @@ body:not(.ui-ready) #panel-left {
 // те же селекторы, те же числа. Переменные его палитры подставлены значениями из
 // `src/ui/scss/colors.scss` и темы pcui, которую он использует:
 //   $bcg-primary #333, $bcg-darkest #181818, $clr-default #b3aaac, $clr-disabled #7c7678,
-//   $clr-active white, $clr-hilight #f60, $clr-icon-hilight #FFAF50, $error #fb222f.
+//   $clr-active white. Его акцентный оранжевый ($clr-hilight #f60) заменён на главный цвет
+//   темы вьюера — он настраивается зрителем, и жёсткий оранжевый с ним спорил.
 // Добавлено только позиционирование поверх канваса: у нас это оверлей, а не строка окна.
 #timeline-panel {
     position: absolute;
@@ -1145,10 +1146,10 @@ body:not(.ui-ready) #panel-left {
                 line-height: 24px;
 
                 &:hover {
-                    color: #ff9900;
+                    color: var(--theme-primary);
                     cursor: pointer;
                     box-shadow: none;
-                    border-color: #ff990088;
+                    border-color: rgba(var(--theme-primary-rgb), 0.53);
                 }
             }
         }
@@ -1196,14 +1197,14 @@ body:not(.ui-ready) #panel-left {
                     line-height: 24px;
 
                     &:hover {
-                        color: #ff9900;
+                        color: var(--theme-primary);
                         cursor: pointer;
                         box-shadow: none;
-                        border-color: #ff990088;
+                        border-color: rgba(var(--theme-primary-rgb), 0.53);
                     }
 
                     &.active {
-                        color: #f60;
+                        color: var(--theme-primary);
                     }
                 }
             }
@@ -1243,13 +1244,15 @@ body:not(.ui-ready) #panel-left {
 
                 &.cursor {
                     color: white;
-                    background-color: #f60;
+                    background-color: var(--theme-primary);
                     padding: 2px 6px;
                     border-radius: 4px;
                 }
 
                 &.key {
-                    background-color: #FFAF50;
+                    // Цвет проставляется из кода — тем же, каким покрашены сами тайлы.
+                    // Здесь запасное значение на случай, если цвет не задан.
+                    background-color: var(--theme-primary);
                     bottom: 22px;
                     width: 8px;
                     height: 8px;

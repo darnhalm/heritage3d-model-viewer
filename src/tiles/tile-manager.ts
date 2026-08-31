@@ -1591,18 +1591,22 @@ export class TileManager {
      *
      * @returns Пары «уровень — номер загрузки», по возрастанию номера.
      */
-    getLoadOrderMilestones(): Array<{ depth: number, sequence: number }> {
+    getLoadOrderMilestones(): Array<{ depth: number, sequence: number, errorRatio: number }> {
         if (!this.rootTile || this.disposed) return [];
-        const firstAtDepth = new Map<number, number>();
+        const firstAtDepth = new Map<number, Tile>();
         forEachTile(this.rootTile, (tile) => {
             if (tile.loadSequence <= 0) return;
             const seen = firstAtDepth.get(tile.depth);
-            if (seen === undefined || tile.loadSequence < seen) {
-                firstAtDepth.set(tile.depth, tile.loadSequence);
+            if (seen === undefined || tile.loadSequence < seen.loadSequence) {
+                firstAtDepth.set(tile.depth, tile);
             }
         });
         return [...firstAtDepth.entries()]
-        .map(([depth, sequence]) => ({ depth, sequence }))
+        .map(([depth, tile]) => ({
+            depth,
+            sequence: tile.loadSequence,
+            errorRatio: this.debugErrorRatio(tile)
+        }))
         .sort((a, b) => a.sequence - b.sequence);
     }
 

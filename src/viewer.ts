@@ -8741,6 +8741,8 @@ class Viewer {
             this.tileHudLegend = legend;
         }
         this.tileHud.style.display = 'block';
+        // Над временной шкалой, когда она открыта: иначе она накрывает нижние строки статистики.
+        this.tileHud.style.bottom = document.body.classList.contains('timeline-open') ? '76px' : '8px';
 
         if (gsplatEnabled && this.gsplatDebugStats) {
             const s = this.gsplatDebugStats;
@@ -9105,7 +9107,8 @@ class Viewer {
 
         const replay = Number(this.observer.get('debug.tileReplay') ?? -1);
         const milestones = manager.getLoadOrderMilestones();
-        const key = `${area.clientWidth}|${count}|${milestones.map(m => `${m.depth}:${m.sequence}`).join(',')}`;
+        const scheme = String(this.observer.get('debug.tileDebugMode') ?? 'lod');
+        const key = `${area.clientWidth}|${count}|${scheme}|${milestones.map(m => `${m.depth}:${m.sequence}`).join(',')}`;
         if (key !== this.tileReplayLayoutKey) {
             this.tileReplayLayoutKey = key;
             this.rebuildTileReplayTicks(area, count, milestones, replay);
@@ -9159,7 +9162,7 @@ class Viewer {
     private rebuildTileReplayTicks(
         area: HTMLElement,
         count: number,
-        milestones: Array<{ depth: number, sequence: number }>,
+        milestones: Array<{ depth: number, sequence: number, errorRatio: number }>,
         replay: number
     ) {
         area.innerHTML = '';
@@ -9192,11 +9195,15 @@ class Viewer {
             }
         }
 
-        milestones.forEach(({ depth, sequence }) => {
+        // Ромбики красим тем же, чем покрашена модель: схема одна на всё, иначе шкала
+        // говорила бы цветом одно, а сцена под ней — другое.
+        const byResolution = this.observer.get('debug.tileDebugMode') === 'resolution';
+        milestones.forEach(({ depth, sequence, errorRatio }) => {
             const key = document.createElement('div');
             key.classList.add('time-label', 'key');
             key.style.left = `${at(sequence)}px`;
-            key.style.backgroundColor = lodColorCss(depth);
+            key.style.backgroundColor = byResolution ?
+                resolutionColorCss(errorRatio) : lodColorCss(depth);
             key.title = `L${depth} — ${sequence}`;
             area.appendChild(key);
         });
