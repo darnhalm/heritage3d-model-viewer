@@ -1324,7 +1324,12 @@ export class TileManager {
      * @param callback - Вызывается для каждого видимого тайла: глубина и его меши.
      */
     forEachVisibleTile(
-        callback: (depth: number, meshInstances: MeshInstance[], errorRatio: number) => void
+        callback: (
+            depth: number,
+            meshInstances: MeshInstance[],
+            errorRatio: number,
+            resolutionK: number
+        ) => void
     ) {
         const visibleTiles = this.debugIsolatePicked && this.debugPickedTile ?
             [this.debugPickedTile] : this.prevSelection;
@@ -1332,7 +1337,12 @@ export class TileManager {
             if (!tile.entity?.enabled) {
                 return;
             }
-            callback(tile.depth, this.getTileMeshInstances(tile), this.debugErrorRatio(tile));
+            callback(
+                tile.depth,
+                this.getTileMeshInstances(tile),
+                this.debugErrorRatio(tile),
+                this.debugResolutionK(tile)
+            );
         });
     }
 
@@ -1644,6 +1654,20 @@ export class TileManager {
             this.view.viewportHeight
         );
         return sse / target;
+    }
+
+    /**
+     * Свёрнутый множитель для попиксельной раскраски: отношение ошибки к целевой равно
+     * `K / расстояние`. Всё, кроме расстояния, у тайла постоянно, поэтому шейдеру достаточно
+     * одного числа.
+     *
+     * @param tile - Тайл, чьи меши будут покрашены.
+     * @returns Множитель; ноль означает «красить нечем» и гасит раскраску в шейдере.
+     */
+    private debugResolutionK(tile: Tile): number {
+        const target = this.errorTarget();
+        if (!(target > 0) || !(tile.geometricError > 0)) return 0;
+        return (tile.geometricError * this.view.viewportHeight) / (this.view.sseDenominator * target);
     }
 
     /** Снять тайлсет со сцены и освободить всё, что он занимал. */

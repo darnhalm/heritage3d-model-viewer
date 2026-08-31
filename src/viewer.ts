@@ -114,6 +114,7 @@ import { PngExporter } from './png-exporter';
 import { RESOLUTION_RED_AT, resolutionColorCss, resolutionColorRgb } from './resolution-palette';
 import { ShadowCatcher } from './shadow-catcher';
 import { normalizeThemeColor } from './theme';
+import { TileResolutionTint } from './tile-resolution-tint';
 import { dimColor, EDGE_WIDTH_UNIT, gridIndex, TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, SurfacePivotController, type SceneHelperEntry } from './viewer/controllers';
@@ -614,6 +615,8 @@ class Viewer {
 
     /** Exact production clipping box and its reversible material shader injection. */
     private readonly fragmentClipMaterials = new ClipBoxMaterials();
+
+    private readonly tileResolutionTint = new TileResolutionTint();
 
     private fragmentBoxEntity: Entity;
 
@@ -6603,29 +6606,43 @@ class Viewer {
     private syncTileLodColors() {
         const enabled = !!this.tileManager && !!this.observer.get('debug.tileLodColor');
         if (!enabled) {
-            if (this.tileLodTinted.size > 0) {
+            if (this.tileLodTinted.size > 0 || this.tileResolutionTint.active) {
                 this.clearTileLodColors();
+                this.tileResolutionTint.clear();
                 this.renderNextFrame();
             }
             return;
         }
         const byResolution = this.observer.get('debug.tileDebugMode') === 'resolution';
+        // Две раскраски не смешиваем: у каждой свой способ, и остатки предыдущей были бы видны
+        // как умножение цвета дважды.
+        if (byResolution) {
+            if (this.tileLodTinted.size > 0) this.clearTileLodColors();
+        } else if (this.tileResolutionTint.active) {
+            this.tileResolutionTint.clear();
+        }
 
-        this.tileManager?.forEachVisibleTile((depth, meshInstances, errorRatio) => {
-            // Глубина у тайла постоянна, а отношение ошибки меняется с каждым шагом камеры.
-            // Поэтому ключ кэша во втором случае — огрублённое отношение: перекрашиваем, лишь
-            // когда цвет действительно сдвинулся, а не каждый кадр.
-            const key = byResolution ? -1 - Math.round(errorRatio * 40) : depth;
+        if (byResolution) {
+            // Здесь цвет считает шейдер: он меняется по поверхности вместе с расстоянием,
+            // поэтому одного значения на меш недостаточно.
+            this.tileManager?.forEachVisibleTile((_depth, meshInstances, _ratio, resolutionK) => {
+                meshInstances.forEach(meshInstance => this.tileResolutionTint.apply(meshInstance, resolutionK));
+            });
+            return;
+        }
+
+        this.tileManager?.forEachVisibleTile((depth, meshInstances) => {
             meshInstances.forEach((meshInstance) => {
-                if (this.tileLodTinted.get(meshInstance) === key) {
+                // Меш принадлежит одному тайлу, глубина у него не меняется: уже покрашенный
+                // меш пропускаем, чтобы не трогать параметры каждый кадр.
+                if (this.tileLodTinted.get(meshInstance) === depth) {
                     return;
                 }
                 const material = meshInstance.material as StandardMaterial | undefined;
                 if (!material) {
                     return;
                 }
-                const [r, g, b] = byResolution ?
-                    resolutionColorRgb(errorRatio) : lodColorRgb(depth);
+                const [r, g, b] = lodColorRgb(depth);
                 // Цветовые униформы движок передаёт в линейном пространстве (`Color.linear`).
                 const tint = (color: Color | undefined) => (color ? [
                     Math.pow(color.r, 2.2) * r,
@@ -6634,7 +6651,7 @@ class Viewer {
                 ] : [0, 0, 0]);
                 meshInstance.setParameter('material_emissive', tint(material.emissive));
                 meshInstance.setParameter('material_diffuse', tint(material.diffuse));
-                this.tileLodTinted.set(meshInstance, key);
+                this.tileLodTinted.set(meshInstance, depth);
             });
         });
     }
