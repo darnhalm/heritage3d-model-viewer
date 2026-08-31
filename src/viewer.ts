@@ -838,6 +838,9 @@ class Viewer {
 
     private frozenTileCamera: FrozenTileCamera | null = null;
 
+    /** Положение камеры на момент нажатия заморозки: к нему возвращаемся, когда снята перемотка. */
+    private frozenTileCameraAtFreeze: Mat4 | null = null;
+
     /** DOM-оверлей со статистикой тайлов; создаётся лениво при первом включении. */
     private tileHud: HTMLDivElement | null = null;
 
@@ -6893,7 +6896,17 @@ class Viewer {
 
     /** Применить к менеджеру текущую отметку перемотки из observer. */
     private applyTileReplay() {
-        this.tileManager?.setReplayLimit(Number(this.observer.get('debug.tileReplay') ?? -1));
+        const limit = Number(this.observer.get('debug.tileReplay') ?? -1);
+        this.tileManager?.setReplayLimit(limit);
+        // Вместе с отбором отматываем и саму камеру: тайлы ехали к тем её положениям, и без
+        // этого перемотка показывала бы их отбор от камеры на момент заморозки.
+        const world = this.tileManager?.applyReplayView(limit) ?? null;
+        if (this.frozenTileCamera) {
+            if (!this.frozenTileCameraAtFreeze) {
+                this.frozenTileCameraAtFreeze = this.frozenTileCamera.world.clone();
+            }
+            this.frozenTileCamera.world.copy(world ?? this.frozenTileCameraAtFreeze);
+        }
         this.renderNextFrame();
     }
 
@@ -6918,6 +6931,7 @@ class Viewer {
             return;
         }
         const camera = this.camera.camera;
+        this.frozenTileCameraAtFreeze = null;
         this.frozenTileCamera = {
             world: this.camera.getWorldTransform().clone(),
             focus: this.cameraControls.getFocus().clone(),

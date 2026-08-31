@@ -89,6 +89,19 @@ const lodColor = (depth: number) => lodColorAbgr(depth);
 export const EDGE_WIDTH_UNIT = 0.001;
 
 /**
+ * Сколько положений камеры хранить для перемотки.
+ *
+ * Храним от начала загрузки, а не скользящим окном: начало — единственный момент, когда дерево
+ * строится с нуля, и именно его разглядывают. Скользящее окно этот момент как раз и выбрасывает,
+ * потому что до него обычно доходят позже, чем через минуту.
+ *
+ * Запись при переполнении прекращается, а не вытесняет голову. Цена вопроса невелика: запись —
+ * две матрицы, вектор и два числа, около четверти килобайта; двадцать тысяч записей это меньше
+ * пяти мегабайт при бюджете тайлов в шестьдесят четыре.
+ */
+const LOAD_VIEW_HISTORY_LIMIT = 20000;
+
+/**
  * Индекс тайла вдоль его полуоси в единицах полного размера бокса — для шахматной чётности.
  * Сосед, смещённый на целый бокс вдоль оси, меняет индекс ровно на 1.
  *
@@ -475,12 +488,42 @@ export class TileManager {
     private readonly lodCounters = new Map<number, number>();
 
     /**
+     * След камеры вдоль истории загрузки: где она стояла в момент каждого доезда.
+     *
+     * Без него перемотка врёт наполовину: тайлы ехали к тем положениям камеры, а отбор для них
+     * считался бы от той, на которой нажали заморозку. Храним и матрицу вида-проекции для
+     * фрустума, и мировую матрицу — по ней рисуется сама камера.
+     */
+    private readonly loadViews: Array<{
+        sequence: number,
+        world: Mat4,
+        viewProj: Mat4,
+        cameraPos: Vec3,
+        viewportHeight: number,
+        sseDenominator: number
+    }> = [];
+
+    /**
      * Отметить тайл как доехавший: общий номер и номер внутри своего уровня.
      *
      * @param tile - Тайл, содержимое которого готово.
      */
     private markLoadOrder(tile: Tile) {
         tile.loadSequence = ++this.loadCounter;
+        const cameraComponent = this.camera.camera;
+        // Ограничение на длину следа: на долгом сеансе с перезагрузками кэша история растёт без
+        // предела, а разглядывают всегда её начало.
+        if (cameraComponent && this.loadViews.length < LOAD_VIEW_HISTORY_LIMIT) {
+            const viewProj = new Mat4().mul2(cameraComponent.projectionMatrix, cameraComponent.viewMatrix);
+            this.loadViews.push({
+                sequence: tile.loadSequence,
+                world: this.camera.getWorldTransform().clone(),
+                viewProj,
+                cameraPos: this.camera.getPosition().clone(),
+                viewportHeight: this.view.viewportHeight,
+                sseDenominator: this.view.sseDenominator
+            });
+        }
         const next = (this.lodCounters.get(tile.depth) ?? 0) + 1;
         this.lodCounters.set(tile.depth, next);
         tile.lodSequence = next;
@@ -1574,6 +1617,30 @@ export class TileManager {
     }
 
     /**
+     * Поставить отбор на ту камеру, что была в момент `limit`-й загрузки.
+     *
+     * Работает только на заморозке: там обход не обновляет вид сам, и наши значения держатся.
+     *
+     * @param limit - Отметка на истории; отрицательная снимает подмену.
+     * @returns Мировая матрица камеры того момента, чтобы вьюер нарисовал её на месте.
+     */
+    applyReplayView(limit: number): Mat4 | null {
+        if (limit < 0 || this.loadViews.length === 0) return null;
+        // Последняя запись не позже отметки: между двумя доездами камера не меняется для отбора.
+        let found = null as (typeof this.loadViews)[number] | null;
+        for (let i = 0; i < this.loadViews.length; i++) {
+            if (this.loadViews[i].sequence > limit) break;
+            found = this.loadViews[i];
+        }
+        if (!found) return null;
+        this.frustum.setFromMat4(found.viewProj);
+        this.view.cameraPos.copy(found.cameraPos);
+        this.view.viewportHeight = found.viewportHeight;
+        this.view.sseDenominator = found.sseDenominator;
+        return found.world;
+    }
+
+    /**
      * Сколько тайлов доехало за этот сеанс. Верхняя граница шкалы перемотки.
      *
      * @returns Число загрузок с начала показа модели.
@@ -1790,6 +1857,7 @@ export class TileManager {
         this.rootTile = null;
         this.loaded.clear();
         this.loadCounter = 0;
+        this.loadViews.length = 0;
         this.lodCounters.clear();
         this.prevSelection = [];
         this.root.destroy();
