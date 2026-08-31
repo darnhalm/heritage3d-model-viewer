@@ -77,6 +77,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Tile Bounds (OBB)': 'Tile Bounds (OBB)',
         'By State': 'By State',
         'By LOD': 'By LOD',
+        'By Resolution': 'By Resolution',
+        'Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.':
+            'Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.',
         'Spatial LOD Debug': 'Spatial LOD Debug',
         'Color Splats by LOD': 'Color Splats by LOD',
         'Color Tiles by LOD': 'Color Tiles by LOD',
@@ -438,7 +441,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.':
             'RCAS: контрастно-адаптивная резкость из AMD FidelityFX FSR 1.0. Усиливает кромки и не трогает ровные участки.',
         'EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.':
-            'EASU: растяжка изображения с восстановлением кромок из AMD FidelityFX FSR 1.0. Работает только при масштабе пикселя больше единицы.',
+            'EASU: повышение разрешения с восстановлением кромок из AMD FidelityFX FSR 1.0. Работает только при масштабе пикселя больше единицы.',
         'Manual distance limits': 'Пределы расстояния вручную',
         'Camera limits': 'Ограничители камеры',
         'Tile loading order': 'Порядок загрузки тайлов',
@@ -490,6 +493,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Tile Bounds (OBB)': 'Границы тайлов (OBB)',
         'By State': 'По состоянию',
         'By LOD': 'По LOD',
+        'By Resolution': 'По разрешению',
+        'Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.':
+            'Красит тайлы по тому, насколько их экранная ошибка отличается от целевой: красный — грубее заказанного, белый — попадание, синий — детальнее необходимого.',
         'Spatial LOD Debug': 'Отладка spatial LOD',
         'Color Splats by LOD': 'Раскраска сплатов по LOD',
         'Color Tiles by LOD': 'Раскраска тайлов по LOD',
@@ -666,7 +672,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Icons: Google Material Icons': 'Иконки: Google Material Symbols',
         'Flags: flag-icons': 'Флаги: flag-icons',
         'Tile streaming architecture inspired by NASA-AMMOS/3DTilesRendererJS (Apache License 2.0):': 'Архитектура потоковой загрузки тайлов вдохновлена NASA-AMMOS/3DTilesRendererJS (Apache License 2.0):',
-        'Edge upscaling and sharpening use the AMD FidelityFX FSR 1.0 algorithms, EASU and RCAS (MIT License):': 'Масштабирование и резкость используют алгоритмы AMD FidelityFX FSR 1.0 — EASU и RCAS (лицензия MIT):',
+        'Edge upscaling and sharpening use the AMD FidelityFX FSR 1.0 algorithms, EASU and RCAS (MIT License):': 'Повышение разрешения и резкость используют алгоритмы AMD FidelityFX FSR 1.0 — EASU и RCAS (лицензия MIT):',
         'HERITAGE3D.RU Project': 'Проект HERITAGE3D.RU',
         'Measure Mode': 'Режим измерения',
         'Enable measuring': 'Включить измерения',
@@ -903,6 +909,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Tile Bounds (OBB)': '瓦片边界 (OBB)',
         'By State': '按状态',
         'By LOD': '按 LOD',
+        'By Resolution': '按分辨率',
+        'Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.':
+            '按瓦片屏幕空间误差与目标值的偏差着色：红色表示比目标更粗糙，白色表示达标，蓝色表示超出所需精度。',
         'Spatial LOD Debug': 'Spatial LOD 调试',
         'Color Splats by LOD': '按 LOD 为点着色',
         'Color Tiles by LOD': '按 LOD 为瓦片着色',
@@ -1079,7 +1088,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Icons: Google Material Icons': '图标: Google Material Symbols',
         'Flags: flag-icons': '旗帜: flag-icons',
         'Tile streaming architecture inspired by NASA-AMMOS/3DTilesRendererJS (Apache License 2.0):': '瓦片流式加载架构参考了 NASA-AMMOS/3DTilesRendererJS（Apache License 2.0）：',
-        'Edge upscaling and sharpening use the AMD FidelityFX FSR 1.0 algorithms, EASU and RCAS (MIT License):': '缩放与锐化采用 AMD FidelityFX FSR 1.0 的 EASU 与 RCAS 算法 (MIT 许可)：',
+        'Edge upscaling and sharpening use the AMD FidelityFX FSR 1.0 algorithms, EASU and RCAS (MIT License):': '超分辨率与锐化采用 AMD FidelityFX FSR 1.0 的 EASU 与 RCAS 算法 (MIT 许可)：',
         'HERITAGE3D.RU Project': 'HERITAGE3D.RU 项目',
         'Measure Mode': '测量模式',
         'Enable measuring': '启用测量',

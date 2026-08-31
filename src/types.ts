@@ -162,7 +162,7 @@ export interface ObserverData {
         /** Отладочный оверлей тайлов: OBB активных тайлов + живой HUD. */
         tileDebug?: boolean,
         /** Раскраска OBB: по состоянию загрузки или по глубине LOD. */
-        tileDebugMode?: 'state' | 'lod',
+        tileDebugMode?: 'state' | 'lod' | 'resolution',
         /** Толщина контурных лент тайлов; 2 соответствует исходному размеру. */
         tileLineThickness?: number,
         /** Единый цвет каркаса или текущая шахматная схема. */

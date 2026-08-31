@@ -28,6 +28,7 @@ import { lodColorAbgr } from '../lod-palette';
 import { expandSubtree, loadSubtreeAt, readImplicitTiling } from './implicit-tiling';
 import { destroyTileContent, gltfUpAxisTransform, loadTileContent, type TileContentResult } from './tile-content';
 import { distanceToObb, makeWorldObb, screenSpaceError } from './tile-math';
+import { resolutionColorAbgr } from '../resolution-palette';
 import { TileRequestQueue, compareTilePriority } from './tile-request-queue';
 import {
     TILE_FAILED, TILE_LOADING, TILE_QUEUED, TILE_READY, TILE_UNLOADED,
@@ -36,7 +37,7 @@ import {
 import { buildTileTree, fetchTilesetJson, findTightBoundingBox, forEachTile, recomputeWorldVolumes } from './tileset-loader';
 
 /** Режим раскраски отладочных OBB тайлов. */
-export type TileDebugMode = 'state' | 'lod';
+export type TileDebugMode = 'state' | 'lod' | 'resolution';
 
 export type TileDebugStyle = {
     lineThickness: number;
@@ -1592,7 +1593,8 @@ export class TileManager {
             if (!tile.obb || (!tile.selected && !picked)) {
                 continue;
             }
-            const schemeColor = mode === 'lod' ? lodColor(tile.depth) : SELECTED_COLOR;
+            const schemeColor = mode === 'lod' ? lodColor(tile.depth) :
+                (mode === 'resolution' ? resolutionColorAbgr(this.debugErrorRatio(tile)) : SELECTED_COLOR);
             const color = picked ? PICKED_COLOR : schemeColor;
             const { center, halfAxes } = tile.obb;
 
@@ -1619,6 +1621,27 @@ export class TileManager {
                 );
             }
         }
+    }
+
+    /**
+     * Во сколько раз экранная ошибка тайла больше целевой.
+     *
+     * Считаем заново, а не берём `tile.error`: у листьев дерева он обнулён (уточнять дальше
+     * нечего), и раскраска показывала бы ноль там, где на экране обычная картинка.
+     *
+     * @param tile - Тайл, который сейчас рисуется.
+     * @returns Отношение; единица означает попадание в цель.
+     */
+    private debugErrorRatio(tile: Tile): number {
+        const target = this.errorTarget();
+        if (!(target > 0) || !tile.obb) return 0;
+        const sse = screenSpaceError(
+            tile.geometricError,
+            tile.distance,
+            this.view.sseDenominator,
+            this.view.viewportHeight
+        );
+        return sse / target;
     }
 
     /** Снять тайлсет со сцены и освободить всё, что он занимал. */

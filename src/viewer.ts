@@ -111,6 +111,7 @@ import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
+import { RESOLUTION_RED_AT, resolutionColorCss } from './resolution-palette';
 import { ShadowCatcher } from './shadow-catcher';
 import { normalizeThemeColor } from './theme';
 import { dimColor, EDGE_WIDTH_UNIT, gridIndex, TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
@@ -8695,7 +8696,11 @@ class Viewer {
             this.observer.get('debug.tileFreeze') ? 'FROZEN' : '',
             this.observer.get('debug.tilePaused') ? 'PAUSED' : ''
         ].filter(Boolean).join(' ');
-        this.renderLodLegend(s.depthCounts, mode === 'lod' || tileLodColor);
+        if (mode === 'resolution') {
+            this.renderResolutionLegend(true);
+        } else {
+            this.renderLodLegend(s.depthCounts, mode === 'lod' || tileLodColor);
+        }
         this.setHudText(
             `TILES ${s.tiles}   mode: ${mode}${flags ? `   ${flags}` : ''}\n` +
             `ready ${s.ready}  loading ${s.loading}  queued ${s.queued}  failed ${s.failed}\n` +
@@ -8848,6 +8853,51 @@ class Viewer {
             ctx.fillStyle = (0.299 * r + 0.587 * g + 0.114 * b) > 0.55 ? '#101010' : '#ffffff';
             ctx.fillText(text, label.x, label.y);
         }
+    }
+
+    /**
+     * Легенда для раскраски по разрешению: градиент вместо перечня уровней.
+     *
+     * Величина непрерывная, и перечислять её нечем — вместо квадратов уровней показываем саму
+     * шкалу и три подписи: детальнее цели, попадание, грубее цели.
+     *
+     * @param visible - Показывать ли легенду.
+     */
+    private renderResolutionLegend(visible: boolean) {
+        const legend = this.tileHudLegend;
+        if (!legend) return;
+        const bar = this.tileHudBar;
+        if (!visible) return;
+
+        legend.style.display = 'flex';
+        if (bar) bar.style.display = 'flex';
+        const key = 'resolution';
+        if (key === this.tileHudLegendKey) return;
+        this.tileHudLegendKey = key;
+        legend.replaceChildren();
+        bar?.replaceChildren();
+
+        if (bar) {
+            const stops: string[] = [];
+            const steps = 24;
+            for (let i = 0; i <= steps; i++) {
+                const ratio = (i / steps) * RESOLUTION_RED_AT;
+                stops.push(`${resolutionColorCss(ratio)} ${(i / steps) * 100}%`);
+            }
+            const strip = document.createElement('div');
+            strip.style.cssText = `height:100%;width:100%;background:linear-gradient(90deg,${stops.join(',')});`;
+            bar.appendChild(strip);
+        }
+
+        // Подписи ставим под теми же долями, что и переломы шкалы: цель приходится ровно на
+        // середину, потому что красный набирается к двукратному превышению.
+        [['детальнее', 'flex-start'], ['цель', 'center'], ['грубее', 'flex-end']]
+        .forEach(([text, align]) => {
+            const item = document.createElement('span');
+            item.style.cssText = `flex:1;display:flex;justify-content:${align};color:#cfcfcf;`;
+            item.textContent = text;
+            legend.appendChild(item);
+        });
     }
 
     private renderLodLegend(counts: number[], visible: boolean) {
