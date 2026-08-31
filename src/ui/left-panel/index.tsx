@@ -1549,7 +1549,16 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 setProperty={(value: number) => setProperty('debug.tileLodLevel', value)}
                                             />
                                         )}
-                                        {materialActionButton(t('Color Tiles by LOD', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
+                                        {materialActionButton(t('Color the model', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
+                                        {/* Схема общая для каркаса и поверхностей: держим её выше блока границ,
+                                            иначе при выключённых границах режим было бы не выбрать. */}
+                                        <div className='materials-layer-normals-row'>
+                                            {materialActionButton(t('By State', lang), (observerData?.debug?.tileDebugMode ?? 'lod') === 'state', () => setProperty('debug.tileDebugMode', 'state'))}
+                                            {materialActionButton(t('By LOD', lang), (observerData?.debug?.tileDebugMode ?? 'lod') === 'lod', () => setProperty('debug.tileDebugMode', 'lod'))}
+                                        </div>
+                                        <span title={t('Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.', lang)} style={{ display: 'contents' }}>
+                                            {materialActionButton(t('By Resolution', lang), observerData?.debug?.tileDebugMode === 'resolution', () => setProperty('debug.tileDebugMode', 'resolution'))}
+                                        </span>
                                         {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
                                         {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
                                         {observerData?.debug?.tileOrderLabels && (
@@ -1577,15 +1586,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 )}
                                                 <div className='materials-layer-normals-row'>
                                                 </div>
-                                                <div className='materials-layer-normals-row'>
-                                                    {/* Режимов стало три, поэтому подсветка идёт по точному совпадению:
-                                                        прежнее «всё, что не lod» зажигало бы «по состоянию» и на разрешении. */}
-                                                    {materialActionButton(t('By State', lang), (observerData?.debug?.tileDebugMode ?? 'lod') === 'state', () => setProperty('debug.tileDebugMode', 'state'))}
-                                                    {materialActionButton(t('By LOD', lang), (observerData?.debug?.tileDebugMode ?? 'lod') === 'lod', () => setProperty('debug.tileDebugMode', 'lod'))}
-                                                </div>
-                                                <span title={t('Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.', lang)} style={{ display: 'contents' }}>
-                                                    {materialActionButton(t('By Resolution', lang), observerData?.debug?.tileDebugMode === 'resolution', () => setProperty('debug.tileDebugMode', 'resolution'))}
-                                                </span>
                                                 {observerData?.debug?.tileLineStyle !== 'solid' && (
                                                     <>
                                                         {materialActionButton(t('Checker Fill', lang), !!observerData?.debug?.tileCheckerFill, () => toggleObserverBoolean('debug.tileCheckerFill', !!observerData?.debug?.tileCheckerFill))}

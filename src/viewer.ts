@@ -111,7 +111,7 @@ import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
-import { RESOLUTION_RED_AT, resolutionColorCss } from './resolution-palette';
+import { RESOLUTION_RED_AT, resolutionColorCss, resolutionColorRgb } from './resolution-palette';
 import { ShadowCatcher } from './shadow-catcher';
 import { normalizeThemeColor } from './theme';
 import { dimColor, EDGE_WIDTH_UNIT, gridIndex, TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
@@ -6588,9 +6588,13 @@ class Viewer {
     }
 
     /**
-     * Раскраска блоков тайлсета по уровню детализации.
+     * Раскраска блоков тайлсета — по уровню детализации либо по разрешению.
      *
-     * Работает как раскраска сплатов у движка: цвет уровня не заменяет исходный, а умножается
+     * Схему берём ту же, что у каркаса: режим один на обе картинки, иначе рамки и поверхности
+     * говорили бы разное. В режиме «по состоянию» красим по LOD — состояние описывает загрузку,
+     * а у видимых тайлов она одинакова, и раскраска вышла бы сплошной заливкой.
+     *
+     * Работает как раскраска сплатов у движка: цвет не заменяет исходный, а умножается
      * на него (`color.xyz *= uColorMultiply` в шейдере сплатов), поэтому текстура остаётся
      * видна. У фотограмметрии материалы unlit — цвет приходит из emissive, у обычных
      * PBR-тайлов из diffuse, поэтому подменяем оба: у lit-материала emissive чёрный и от
@@ -6605,19 +6609,23 @@ class Viewer {
             }
             return;
         }
+        const byResolution = this.observer.get('debug.tileDebugMode') === 'resolution';
 
-        this.tileManager?.forEachVisibleTile((depth, meshInstances) => {
+        this.tileManager?.forEachVisibleTile((depth, meshInstances, errorRatio) => {
+            // Глубина у тайла постоянна, а отношение ошибки меняется с каждым шагом камеры.
+            // Поэтому ключ кэша во втором случае — огрублённое отношение: перекрашиваем, лишь
+            // когда цвет действительно сдвинулся, а не каждый кадр.
+            const key = byResolution ? -1 - Math.round(errorRatio * 40) : depth;
             meshInstances.forEach((meshInstance) => {
-                // Меш принадлежит одному тайлу, глубина у него не меняется: уже покрашенный
-                // меш пропускаем, чтобы не трогать параметры каждый кадр.
-                if (this.tileLodTinted.get(meshInstance) === depth) {
+                if (this.tileLodTinted.get(meshInstance) === key) {
                     return;
                 }
                 const material = meshInstance.material as StandardMaterial | undefined;
                 if (!material) {
                     return;
                 }
-                const [r, g, b] = lodColorRgb(depth);
+                const [r, g, b] = byResolution ?
+                    resolutionColorRgb(errorRatio) : lodColorRgb(depth);
                 // Цветовые униформы движок передаёт в линейном пространстве (`Color.linear`).
                 const tint = (color: Color | undefined) => (color ? [
                     Math.pow(color.r, 2.2) * r,
@@ -6626,12 +6634,12 @@ class Viewer {
                 ] : [0, 0, 0]);
                 meshInstance.setParameter('material_emissive', tint(material.emissive));
                 meshInstance.setParameter('material_diffuse', tint(material.diffuse));
-                this.tileLodTinted.set(meshInstance, depth);
+                this.tileLodTinted.set(meshInstance, key);
             });
         });
     }
 
-    /** Снять раскраску по LOD со всех мешей, которым она была проставлена. */
+    /** Снять раскраску со всех мешей, которым она была проставлена. */
     private clearTileLodColors() {
         this.tileLodTinted.forEach((_depth, meshInstance) => {
             meshInstance.deleteParameter('material_emissive');

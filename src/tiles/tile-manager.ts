@@ -1323,14 +1323,16 @@ export class TileManager {
      *
      * @param callback - Вызывается для каждого видимого тайла: глубина и его меши.
      */
-    forEachVisibleTile(callback: (depth: number, meshInstances: MeshInstance[]) => void) {
+    forEachVisibleTile(
+        callback: (depth: number, meshInstances: MeshInstance[], errorRatio: number) => void
+    ) {
         const visibleTiles = this.debugIsolatePicked && this.debugPickedTile ?
             [this.debugPickedTile] : this.prevSelection;
         visibleTiles.forEach((tile) => {
             if (!tile.entity?.enabled) {
                 return;
             }
-            callback(tile.depth, this.getTileMeshInstances(tile));
+            callback(tile.depth, this.getTileMeshInstances(tile), this.debugErrorRatio(tile));
         });
     }
 
