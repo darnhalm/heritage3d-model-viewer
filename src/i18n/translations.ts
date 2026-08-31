@@ -79,6 +79,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By LOD': 'By LOD',
         'By Resolution': 'By Resolution',
         'Isolate LOD': 'Isolate LOD',
+        'Tile colour': 'Colour',
+        'Tile bounds': 'Bounds',
+        'Tile labels': 'Labels',
         'Leftmost position turns isolation off; further right shows only the chosen level.':
             'Leftmost position turns isolation off; further right shows only the chosen level.',
         'Color the model': 'Color the model',
@@ -499,6 +502,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By LOD': 'По LOD',
         'By Resolution': 'По разрешению',
         'Isolate LOD': 'Изолировать LOD',
+        'Tile colour': 'Цвет',
+        'Tile bounds': 'Границы',
+        'Tile labels': 'Подписи',
         'Leftmost position turns isolation off; further right shows only the chosen level.':
             'Крайнее левое положение выключает изоляцию; правее — показан только выбранный уровень',
         'Color the model': 'Раскрасить модель',
@@ -919,6 +925,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By LOD': '按 LOD',
         'By Resolution': '按分辨率',
         'Isolate LOD': '隔离 LOD',
+        'Tile colour': '颜色',
+        'Tile bounds': '边界',
+        'Tile labels': '标注',
         'Leftmost position turns isolation off; further right shows only the chosen level.':
             '最左位置关闭隔离；向右则只显示所选层级。',
         'Color the model': '为模型着色',

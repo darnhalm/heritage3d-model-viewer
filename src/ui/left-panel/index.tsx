@@ -1537,74 +1537,82 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {observerData?.scene?.isTileset && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Tiles Debug', lang)} (1)</div>
-                                        {materialActionButton(t('Color the model', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
-                                        {/* Схема общая для каркаса и поверхностей, поэтому список стоит выше блока
-                                            границ: при выключённых границах режим иначе было бы не выбрать.
-                                            Список, а не три кнопки: варианты взаимоисключающие, и выбранный виден
-                                            без чтения подсветки. */}
-                                        <span
-                                            className='materials-layer-scheme'
-                                            title={t('Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.', lang)}
-                                        >
-                                            <SelectInput
-                                                class='materials-layer-scheme-select'
-                                                type='string'
-                                                options={[
-                                                    { v: 'state', t: t('By State', lang) },
-                                                    { v: 'lod', t: t('By LOD', lang) },
-                                                    { v: 'resolution', t: t('By Resolution', lang) }
-                                                ]}
-                                                value={String(observerData?.debug?.tileDebugMode ?? 'lod')}
-                                                onChange={(value: unknown) => setProperty('debug.tileDebugMode', String(value ?? 'lod'))}
-                                            />
-                                        </span>
-                                        {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
-                                        {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
-                                        {observerData?.debug?.tileOrderLabels && (
-                                            materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
-                                        )}
-                                        {materialActionButton(t('Tile ID numbers', lang), !!observerData?.debug?.tileIdLabels, () => {
-                                            const next = !getViewer()?.observer?.get?.('debug.tileIdLabels');
-                                            setProperty('debug.tileIdLabels', next);
-                                            // Два числа в одном кружке не показать: режимы исключают друг друга.
-                                            if (next) setProperty('debug.tileOrderLabels', false);
-                                        })}
-                                        {observerData?.debug?.tileDebug && (
-                                            <>
-                                                {materialActionButton(
-                                                    // Подпись постоянная, подсветка означает «включено» — как у прочих
-                                                    // кнопок панели. Прежде менялись обе, и ровный каркас читался как
-                                                    // выключённый режим, хотя он и есть умолчание.
-                                                    t('Checker Frame', lang),
-                                                    observerData?.debug?.tileLineStyle !== 'solid',
-                                                    () => {
-                                                        // Каркас либо ровный, либо шахматный: одной кнопки с двумя состояниями хватает.
-                                                        const checker = getViewer()?.observer?.get?.('debug.tileLineStyle') !== 'solid';
-                                                        setProperty('debug.tileLineStyle', checker ? 'solid' : 'checker');
-                                                    }
-                                                )}
-                                                <div className='materials-layer-normals-row'>
-                                                </div>
-                                                {observerData?.debug?.tileLineStyle !== 'solid' && (
-                                                    <>
-                                                        {materialActionButton(t('Checker Fill', lang), !!observerData?.debug?.tileCheckerFill, () => toggleObserverBoolean('debug.tileCheckerFill', !!observerData?.debug?.tileCheckerFill))}
-                                                    </>
-                                                )}
-                                                <Slider
-                                                    label={t('Line Thickness', lang)}
-                                                    precision={1}
-                                                    min={0.5}
-                                                    max={8}
-                                                    step={0.5}
-                                                    value={observerData?.debug?.tileLineThickness ?? 2}
-                                                    setProperty={(value: number) => setProperty('debug.tileLineThickness', value)}
+                                        {/* Три группы вместо плоского списка: цвет, границы, подписи. Свёрнутые
+                                            занимают строку, а главные переключатели остаются в один клик —
+                                            в отладке их дёргают постоянно, прятать их за раскрытием дорого. */}
+                                        <details className='materials-layer-group' open>
+                                            <summary className='materials-layer-group-title'>{t('Tile colour', lang)}</summary>
+                                            {materialActionButton(t('Color the model', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
+                                            {/* Схема общая для каркаса и поверхностей, поэтому список живёт здесь:
+                                                при выключенных границах режим иначе было бы не выбрать. */}
+                                            <span
+                                                className='materials-layer-scheme'
+                                                title={t('Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.', lang)}
+                                            >
+                                                <SelectInput
+                                                    class='materials-layer-scheme-select'
+                                                    type='string'
+                                                    options={[
+                                                        { v: 'state', t: t('By State', lang) },
+                                                        { v: 'lod', t: t('By LOD', lang) },
+                                                        { v: 'resolution', t: t('By Resolution', lang) }
+                                                    ]}
+                                                    value={String(observerData?.debug?.tileDebugMode ?? 'lod')}
+                                                    onChange={(value: unknown) => setProperty('debug.tileDebugMode', String(value ?? 'lod'))}
                                                 />
-                                                {materialActionButton(t('Pick Tile', lang), !!observerData?.debug?.tilePick, () => toggleObserverBoolean('debug.tilePick', !!observerData?.debug?.tilePick))}
-                                                {observerData?.debug?.tilePick && (
-                                                    materialActionButton(t('Isolate Picked Tile', lang), !!observerData?.debug?.tileIsolatePick, () => toggleObserverBoolean('debug.tileIsolatePick', !!observerData?.debug?.tileIsolatePick))
-                                                )}
-                                            </>
-                                        )}
+                                            </span>
+                                        </details>
+
+                                        <details className='materials-layer-group'>
+                                            <summary className='materials-layer-group-title'>{t('Tile bounds', lang)}</summary>
+                                            {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
+                                            {observerData?.debug?.tileDebug && (
+                                                <>
+                                                    {materialActionButton(
+                                                        // Подпись постоянная, подсветка означает «включено» — как у прочих
+                                                        // кнопок панели. Прежде менялись обе, и ровный каркас читался как
+                                                        // выключённый режим, хотя он и есть умолчание.
+                                                        t('Checker Frame', lang),
+                                                        observerData?.debug?.tileLineStyle !== 'solid',
+                                                        () => {
+                                                            // Каркас либо ровный, либо шахматный: одной кнопки с двумя состояниями хватает.
+                                                            const checker = getViewer()?.observer?.get?.('debug.tileLineStyle') !== 'solid';
+                                                            setProperty('debug.tileLineStyle', checker ? 'solid' : 'checker');
+                                                        }
+                                                    )}
+                                                    {observerData?.debug?.tileLineStyle !== 'solid' && (
+                                                        materialActionButton(t('Checker Fill', lang), !!observerData?.debug?.tileCheckerFill, () => toggleObserverBoolean('debug.tileCheckerFill', !!observerData?.debug?.tileCheckerFill))
+                                                    )}
+                                                    <Slider
+                                                        label={t('Line Thickness', lang)}
+                                                        precision={1}
+                                                        min={0.5}
+                                                        max={8}
+                                                        step={0.5}
+                                                        value={observerData?.debug?.tileLineThickness ?? 2}
+                                                        setProperty={(value: number) => setProperty('debug.tileLineThickness', value)}
+                                                    />
+                                                    {materialActionButton(t('Pick Tile', lang), !!observerData?.debug?.tilePick, () => toggleObserverBoolean('debug.tilePick', !!observerData?.debug?.tilePick))}
+                                                    {observerData?.debug?.tilePick && (
+                                                        materialActionButton(t('Isolate Picked Tile', lang), !!observerData?.debug?.tileIsolatePick, () => toggleObserverBoolean('debug.tileIsolatePick', !!observerData?.debug?.tileIsolatePick))
+                                                    )}
+                                                </>
+                                            )}
+                                        </details>
+
+                                        <details className='materials-layer-group'>
+                                            <summary className='materials-layer-group-title'>{t('Tile labels', lang)}</summary>
+                                            {materialActionButton(t('Load order numbers', lang), !!observerData?.debug?.tileOrderLabels, () => toggleObserverBoolean('debug.tileOrderLabels', !!observerData?.debug?.tileOrderLabels))}
+                                            {observerData?.debug?.tileOrderLabels && (
+                                                materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
+                                            )}
+                                            {materialActionButton(t('Tile ID numbers', lang), !!observerData?.debug?.tileIdLabels, () => {
+                                                const next = !getViewer()?.observer?.get?.('debug.tileIdLabels');
+                                                setProperty('debug.tileIdLabels', next);
+                                                // Два числа в одном кружке не показать: режимы исключают друг друга.
+                                                if (next) setProperty('debug.tileOrderLabels', false);
+                                            })}
+                                        </details>
 
                                         <div className='tile-playback-toolbar'>
                                             <button
