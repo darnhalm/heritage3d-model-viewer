@@ -1648,8 +1648,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         </div>
                                         {/* Перемотка истории загрузки: порядок доезда у нас записан, и по нему
                                             можно отмотать показ назад. Ничего не выгружается — поздние тайлы
-                                            просто считаются ещё не пришедшими, и на экране остаётся родитель. */}
-                                        {(observerData?.scene?.tilesetLoadCount ?? 0) > 0 && (
+                                            просто считаются ещё не пришедшими, и на экране остаётся родитель.
+                                            Показываем только при замороженной камере: иначе история растёт
+                                            прямо под рукой, и у шкалы нет ни начала, ни конца. */}
+                                        {!!observerData?.debug?.tileFreeze && (observerData?.scene?.tilesetLoadCount ?? 0) > 0 && (
                                             <span title={t('Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.', lang)} style={{ display: 'contents' }}>
                                                 <Slider
                                                     label={t('Replay loading', lang)}

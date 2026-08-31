@@ -2674,6 +2674,11 @@ class Viewer {
                     this.tileManager?.setFrozen(true);
                     this.enterFrozenTileCameraInspector();
                 } else {
+                    // Перемотка живёт только внутри заморозки: без неё история растёт под
+                    // рукой, и у шкалы нет ни начала, ни конца. Снимаем её вместе с
+                    // заморозкой — иначе сцена осталась бы отмотанной, а ползунка, которым это
+                    // было сделано, на панели уже нет.
+                    this.observer.set('debug.tileReplay', -1);
                     this.restoreFrozenTileCameraView();
                     this.tileManager?.setFrozen(false);
                     this.captureFrozenTileCamera(false);
