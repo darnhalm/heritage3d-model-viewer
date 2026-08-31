@@ -79,6 +79,8 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By LOD': 'By LOD',
         'By Resolution': 'By Resolution',
         'Isolate LOD': 'Isolate LOD',
+        'Load order': 'Load order',
+        'Tile ID': 'Tile ID',
         'Tile labels': 'Labels',
         'Leftmost position turns isolation off; further right shows only the chosen level.':
             'Leftmost position turns isolation off; further right shows only the chosen level.',
@@ -500,6 +502,8 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By LOD': 'По LOD',
         'By Resolution': 'По разрешению',
         'Isolate LOD': 'Изолировать LOD',
+        'Load order': 'Порядок',
+        'Tile ID': 'Номер тайла',
         'Tile labels': 'Подписи',
         'Leftmost position turns isolation off; further right shows only the chosen level.':
             'Крайнее левое положение выключает изоляцию; правее — показан только выбранный уровень',
@@ -921,6 +925,8 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By LOD': '按 LOD',
         'By Resolution': '按分辨率',
         'Isolate LOD': '隔离 LOD',
+        'Load order': '加载顺序',
+        'Tile ID': '瓦片编号',
         'Tile labels': '标注',
         'Leftmost position turns isolation off; further right shows only the chosen level.':
             '最左位置关闭隔离；向右则只显示所选层级。',

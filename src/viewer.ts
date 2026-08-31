@@ -2603,6 +2603,11 @@ class Viewer {
                 this.renderNextFrame();
             },
             'debug.tileLodColor': () => this.renderNextFrame(),
+            // Подписи рисует оверлей поверх кадра, а кадр рисуется по требованию. Без этих
+            // трёх строк включённые подписи не появлялись, пока не тронешь камеру.
+            'debug.tileOrderLabels': () => this.renderNextFrame(),
+            'debug.tileIdLabels': () => this.renderNextFrame(),
+            'debug.tileOrderPerLod': () => this.renderNextFrame(),
             'debug.gsplatNodeBounds': () => this.renderNextFrame(),
             'debug.gsplatDebugMode': () => this.renderNextFrame(),
             'debug.gsplatFreeze': (enabled: boolean) => {

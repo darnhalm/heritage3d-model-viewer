@@ -1542,22 +1542,16 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             нет намеренно: в отладке эти переключатели дёргают постоянно, и лишнее
                                             раскрытие стоило бы клика на каждом заходе. */}
                                         {materialActionButton(t('Color the model', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
-                                        {observerData?.debug?.tileLodColor && (
-                                            <span
-                                                className='materials-layer-scheme'
-                                                title={t('Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.', lang)}
-                                            >
-                                                <SelectInput
-                                                    class='materials-layer-scheme-select'
-                                                    type='string'
-                                                    options={[
-                                                        { v: 'lod', t: t('By LOD', lang) },
-                                                        { v: 'resolution', t: t('By Resolution', lang) }
-                                                    ]}
-                                                    value={String(observerData?.debug?.tileDebugMode ?? 'lod')}
-                                                    onChange={(value: unknown) => setProperty('debug.tileDebugMode', String(value ?? 'lod'))}
-                                                />
-                                            </span>
+                                        {/* Схем всего две, и они общие для поверхностей и каркаса — поэтому
+                                            показываем их, когда включено любое из двух, а не только раскраска.
+                                            Двумя кнопками, а не списком: выбранная видна без раскрытия. */}
+                                        {(observerData?.debug?.tileLodColor || observerData?.debug?.tileDebug) && (
+                                            <div className='materials-layer-normals-row materials-layer-scheme-row'>
+                                                {materialActionButton(t('By LOD', lang), (observerData?.debug?.tileDebugMode ?? 'lod') !== 'resolution', () => setProperty('debug.tileDebugMode', 'lod'))}
+                                                <span title={t('Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.', lang)} style={{ display: 'contents' }}>
+                                                    {materialActionButton(t('By Resolution', lang), observerData?.debug?.tileDebugMode === 'resolution', () => setProperty('debug.tileDebugMode', 'resolution'))}
+                                                </span>
+                                            </div>
                                         )}
 
                                         {materialActionButton(t('Tile Bounds (OBB)', lang), !!observerData?.debug?.tileDebug, () => toggleObserverBoolean('debug.tileDebug', !!observerData?.debug?.tileDebug))}
@@ -1604,25 +1598,24 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             setProperty('debug.tileIdLabels', false);
                                         })}
                                         {(observerData?.debug?.tileOrderLabels || observerData?.debug?.tileIdLabels) && (
-                                            <span className='materials-layer-scheme'>
-                                                <SelectInput
-                                                    class='materials-layer-scheme-select'
-                                                    type='string'
-                                                    options={[
-                                                        { v: 'order', t: t('Load order numbers', lang) },
-                                                        { v: 'orderPerLod', t: t('Number within each LOD', lang) },
-                                                        { v: 'id', t: t('Tile ID numbers', lang) }
-                                                    ]}
-                                                    value={observerData?.debug?.tileIdLabels ? 'id' :
-                                                        (observerData?.debug?.tileOrderPerLod ? 'orderPerLod' : 'order')}
-                                                    onChange={(value: unknown) => {
-                                                        const kind = String(value ?? 'order');
-                                                        setProperty('debug.tileIdLabels', kind === 'id');
-                                                        setProperty('debug.tileOrderLabels', kind !== 'id');
-                                                        setProperty('debug.tileOrderPerLod', kind === 'orderPerLod');
-                                                    }}
-                                                />
-                                            </span>
+                                            <>
+                                                {/* Парой кнопок, как и схема раскраски: выбранное видно без раскрытия.
+                                                    Подписи короткие — «порядок» и «номер» помещаются в половину строки. */}
+                                                <div className='materials-layer-normals-row materials-layer-scheme-row'>
+                                                    {materialActionButton(t('Load order', lang), !observerData?.debug?.tileIdLabels, () => {
+                                                        setProperty('debug.tileIdLabels', false);
+                                                        setProperty('debug.tileOrderLabels', true);
+                                                    })}
+                                                    {materialActionButton(t('Tile ID', lang), !!observerData?.debug?.tileIdLabels, () => {
+                                                        // Два числа в одном кружке не показать: режимы исключают друг друга.
+                                                        setProperty('debug.tileOrderLabels', false);
+                                                        setProperty('debug.tileIdLabels', true);
+                                                    })}
+                                                </div>
+                                                {!observerData?.debug?.tileIdLabels && (
+                                                    materialActionButton(t('Number within each LOD', lang), !!observerData?.debug?.tileOrderPerLod, () => toggleObserverBoolean('debug.tileOrderPerLod', !!observerData?.debug?.tileOrderPerLod))
+                                                )}
+                                            </>
                                         )}
 
                                         <div className='tile-playback-toolbar'>
