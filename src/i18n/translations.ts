@@ -80,6 +80,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By Resolution': 'By Resolution',
         'Isolate LOD': 'Isolate LOD',
         'Replay loading': 'Replay loading',
+        'Step back': 'Step back',
+        Loop: 'Loop',
+        'Step forward': 'Step forward',
         'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.':
             'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.',
         'Load order': 'Load order',
@@ -506,6 +509,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By Resolution': 'По разрешению',
         'Isolate LOD': 'Изолировать LOD',
         'Replay loading': 'Перемотка загрузки',
+        'Step back': 'Шаг назад',
+        Loop: 'Зациклить',
+        'Step forward': 'Шаг вперёд',
         'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.':
             'Отматывает показ по записанному порядку загрузки; крайнее левое положение — сцена как есть сейчас',
         'Load order': 'Порядок',
@@ -932,6 +938,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By Resolution': '按分辨率',
         'Isolate LOD': '隔离 LOD',
         'Replay loading': '加载回放',
+        'Step back': '后退一步',
+        Loop: '循环',
+        'Step forward': '前进一步',
         'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.':
             '按记录的加载顺序回放；最左位置显示当前场景。',
         'Load order': '加载顺序',

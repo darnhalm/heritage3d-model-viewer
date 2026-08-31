@@ -1092,85 +1092,182 @@ body:not(.ui-ready) #panel-left {
     border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-// Наэкранная шкала перемотки по истории загрузки тайлов. Появляется только при замороженной
-// камере: там история неподвижна и у шкалы есть начало и конец.
-#tile-replay-bar {
+// Наэкранная шкала перемотки. Перенесено из supersplat, `src/ui/scss/timeline-panel.scss`:
+// те же селекторы, те же числа. Переменные его палитры подставлены значениями из
+// `src/ui/scss/colors.scss` и темы pcui, которую он использует:
+//   $bcg-primary #333, $bcg-darkest #181818, $clr-default #b3aaac, $clr-disabled #7c7678,
+//   $clr-active white, $clr-hilight #f60, $clr-icon-hilight #FFAF50, $error #fb222f.
+// Добавлено только позиционирование поверх канваса: у нас это оверлей, а не строка окна.
+#timeline-panel {
     position: absolute;
-    left: 50%;
-    bottom: 64px;
-    transform: translateX(-50%);
+    left: 0;
+    right: 0;
+    // Прижата к низу, как в образце.
+    bottom: 0;
     z-index: 100;
-    width: min(560px, calc(100% - 32px));
-    padding: 8px 0 6px;
-    border-radius: 6px;
-    background: rgba(0, 0, 0, 0.62);
-    font: 11px/1.2 ui-monospace, Menlo, monospace;
-    color: #e8e8e8;
 
-    .tile-replay-track {
-        position: relative;
-        width: 100%;
-        height: 34px;
-        // Дорожка ловит указатель целиком: скраб начинается с любой точки, а не только с бегунка.
-        cursor: pointer;
-        touch-action: none;
+    flex-direction: column;
+    border-top: none;
 
-        // Сама линия времени.
-        &::before {
-            content: '';
-            position: absolute;
-            left: 16px;
-            right: 16px;
-            top: 21px;
-            height: 2px;
-            border-radius: 1px;
-            background: rgba(255, 255, 255, 0.28);
+    &:not(.pcui-hidden) {
+        display: flex;
+    }
+
+    > #controls-wrap {
+        display: flex;
+        flex-direction: row;
+        background-color: #333;
+        justify-content: center;
+        padding: 1px;
+
+        > #button-controls {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+
+            > .button {
+                font-weight: bold;
+                font-size: 13px;
+
+                width: 36px;
+                height: 24px;
+                margin: 1px;
+                padding: 0;
+                flex-grow: 0;
+                flex-shrink: 0;
+
+                border: 1px solid transparent;
+                border-radius: 4px;
+                background-color: #282828;
+                color: #b3aaac;
+
+                text-align: center;
+                line-height: 24px;
+
+                &:hover {
+                    color: #ff9900;
+                    cursor: pointer;
+                    box-shadow: none;
+                    border-color: #ff990088;
+                }
+            }
+        }
+
+        > .spacer {
+            display: flex;
+            flex-grow: 1;
+            flex-basis: 0;
+            justify-content: flex-end;
+
+            > #settings-controls {
+                display: flex;
+                align-items: center;
+                gap: 1px;
+                margin-right: 1px;
+
+                > #speed {
+                    margin: 0;
+                    width: 80px;
+                    height: 24px;
+                    border: 1px solid transparent;
+                    border-radius: 4px;
+                    background-color: #282828;
+                    color: #b3aaac;
+                    font-size: 12px;
+                }
+
+                > #loop {
+                    font-weight: bold;
+                    font-size: 13px;
+
+                    width: 36px;
+                    height: 24px;
+                    margin: 0;
+                    padding: 0;
+                    flex-grow: 0;
+                    flex-shrink: 0;
+
+                    border: 1px solid transparent;
+                    border-radius: 4px;
+                    background-color: #282828;
+                    color: #b3aaac;
+
+                    text-align: center;
+                    line-height: 24px;
+
+                    &:hover {
+                        color: #ff9900;
+                        cursor: pointer;
+                        box-shadow: none;
+                        border-color: #ff990088;
+                    }
+
+                    &.active {
+                        color: #f60;
+                    }
+                }
+            }
         }
     }
 
-    .tile-replay-tick {
-        position: absolute;
-        top: 0;
-        transform: translateX(-50%);
-        padding-top: 6px;
-        color: #b9b9b9;
-        pointer-events: none;
+    > #ticks {
+        height: 38px;
+        background-color: #181818;
 
-        // Штрих под подписью, чтобы число читалось как отметка, а не как надпись рядом.
-        &::after {
-            content: '';
-            position: absolute;
-            left: 50%;
-            top: 20px;
-            width: 1px;
-            height: 5px;
-            background: rgba(255, 255, 255, 0.35);
+        > #ticks-area {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            touch-action: none;
+
+            > .time-tick {
+                position: absolute;
+                bottom: 1px;
+                width: 1px;
+                height: 5px;
+                transform: translate(-50%, 0);
+                background-color: #7c7678;
+                pointer-events: none;
+            }
+
+            > .time-label {
+                position: absolute;
+                font-size: 12px;
+                bottom: 1px;
+                transform: translate(-50%, 0);
+                padding: 2px;
+                pointer-events: none;
+
+                color: #b3aaac;
+
+                &.cursor {
+                    color: white;
+                    background-color: #f60;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                }
+
+                &.key {
+                    background-color: #FFAF50;
+                    bottom: 22px;
+                    width: 8px;
+                    height: 8px;
+                    padding: 0;
+                    // rectangle shape
+                    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+                    cursor: pointer;
+                    pointer-events: auto;
+                }
+            }
         }
     }
 
-    // Веха уровня: столбик в цвете уровня прямо на линии.
-    .tile-replay-mark {
-        position: absolute;
-        top: 16px;
-        width: 3px;
-        height: 12px;
-        margin-left: -1.5px;
-        border-radius: 1px;
-        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
-        pointer-events: none;
-    }
-
-    .tile-replay-cursor {
-        position: absolute;
-        top: 12px;
-        transform: translateX(-50%);
-        padding: 2px 6px;
-        border-radius: 3px;
-        background: #ff5a2d;
-        color: #fff;
-        font-weight: 700;
-        white-space: nowrap;
-        pointer-events: none;
+    // Значки берём из Material Symbols: своего шрифта `pc-icon` у нас нет.
+    .material-symbols-outlined {
+        font-size: 16px;
+        line-height: 24px;
+        vertical-align: middle;
     }
 }
 
@@ -1691,6 +1788,15 @@ input {
 
 .pcui-error-container > .pcui-button {
     min-width: 80px;
+}
+
+// Шкала перемотки прижата к низу и высотой примерно в шестьдесят пикселей: пока она открыта,
+// круглая панель уезжает выше, иначе она перекрывает ряд кнопок перемотки.
+// Второй селектор с двумя идентификаторами намеренно: в мобильной раскладке низ панели задаёт
+// правило `#popup > #popup-buttons-parent`, и по точности оно побеждало одиночный идентификатор.
+body.timeline-open #popup-buttons-parent,
+body.timeline-open #popup > #popup-buttons-parent {
+    bottom: 84px;
 }
 
 #popup-buttons-parent {

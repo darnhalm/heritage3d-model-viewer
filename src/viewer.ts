@@ -211,7 +211,7 @@ const DISTANCE_PUBLISH_INTERVAL_MS = 200;
  * этого срока приоритет откатывается к центру кадра.
  */
 /** Отступ по краям дорожки перемотки: под крайние подписи и чтобы бегунок не срезался. */
-const TILE_REPLAY_PADDING = 16;
+const TILE_REPLAY_PADDING = 20;
 
 const CURSOR_FOCUS_STALE_MS = 3000;
 const MIC_HELPER_NODE_RE = /^mic(?:[_-]|$)/i;
@@ -861,6 +861,21 @@ class Viewer {
 
     /** Отпечаток разметки: пересобираем деления только когда меняется её состав. */
     private tileReplayLayoutKey = '';
+
+    /** Идёт ли проигрывание истории. */
+    private tileReplayPlaying = false;
+
+    /** Зацикливать ли проигрывание. */
+    private tileReplayLoop = false;
+
+    /** Скорость проигрывания в загрузках за секунду. */
+    private tileReplaySpeed = 30;
+
+    /** Дробный остаток отметки: скорость редко кратна частоте кадров. */
+    private tileReplayCursorValue = 0;
+
+    /** Кнопки верхнего ряда — их вид зависит от состояния. */
+    private tileReplayPlayButton: HTMLElement | null = null;
 
     /** Центры и номера выбранных тайлов; массив переиспользуется между кадрами. */
     private readonly tileOrderLabels: Array<{ center: Vec3, order: number, lodOrder: number, name: string, depth: number }> = [];
@@ -7759,6 +7774,11 @@ class Viewer {
     }
 
     update(deltaTime: number) {
+        // Шаг проигрывания истории — здесь, а не в обновлении оверлея: запрос кадра изнутри
+        // самого кадра следующего не даёт, и проигрывание вставало после первого шага.
+        if (this.tileReplayPlaying) {
+            this.advanceTileReplay(this.tileManager?.getLoadedCount() ?? 0, deltaTime);
+        }
         this.updateCameraFlyTransition(deltaTime);
         this.updateDoubleClickZoomTransition(deltaTime);
 
@@ -8918,10 +8938,13 @@ class Viewer {
     /**
      * Наэкранная шкала перемотки по истории загрузки.
      *
-     * Собрана руками: готовой временной шкалы в pcui нет, а обычный ползунок не показывает ни
-     * делений, ни того, где история переходила на новый уровень. Разметка — обычные элементы,
-     * расставленные по пикселям; пересобираем её только когда меняется состав, а на движение
-     * бегунка двигаем один элемент.
+     * Разметка и стили перенесены из `supersplat` (`src/ui/timeline-panel.ts` и
+     * `src/ui/scss/timeline-panel.scss`): те же имена классов, те же отступы, тот же способ
+     * расстановки. Готовой временной шкалы в pcui нет, и там она тоже написана руками — своё
+     * изобретать незачем.
+     *
+     * Отличие одно, и оно про данные, а не про вид: ромбики отмечают не ключевые кадры, а
+     * первое появление каждого уровня детализации, и красятся цветом уровня.
      *
      * Крайнее правое положение означает «сейчас»: при замороженной камере подкачка стоит, и
      * последняя загрузка — это и есть текущее состояние сцены.
@@ -8930,6 +8953,9 @@ class Viewer {
         const manager = this.tileManager;
         const count = manager?.getLoadedCount() ?? 0;
         const enabled = !!manager && !!this.observer.get('debug.tileFreeze') && count > 0;
+        // Пока шкала внизу, поднимаем над ней круглую панель кнопок — иначе она садится ровно
+        // на ряд перемотки и закрывает его.
+        document.body.classList.toggle('timeline-open', enabled);
         if (!enabled) {
             if (this.tileReplayBar) this.tileReplayBar.style.display = 'none';
             return;
@@ -8937,121 +8963,250 @@ class Viewer {
 
         const sceneCanvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
         if (!this.tileReplayBar) {
-            const bar = document.createElement('div');
-            bar.id = 'tile-replay-bar';
-            const track = document.createElement('div');
-            track.className = 'tile-replay-track';
-            const cursor = document.createElement('div');
-            cursor.className = 'tile-replay-cursor';
-            track.appendChild(cursor);
-            bar.appendChild(track);
-            (sceneCanvas.parentElement ?? document.body).appendChild(bar);
-            this.tileReplayBar = bar;
-            this.tileReplayTrack = track;
-            this.tileReplayCursor = cursor;
+            const panel = document.createElement('div');
+            panel.id = 'timeline-panel';
 
-            // Скраб с захватом указателя: увод мыши за пределы дорожки не роняет перетаскивание,
-            // чего обычный ползунок не умеет.
-            let scrubbing = false;
-            const setFromEvent = (event: PointerEvent) => {
-                const rect = track.getBoundingClientRect();
+            // Верхний ряд из образца: транспорт по центру, настройки справа.
+            const controls = document.createElement('div');
+            controls.id = 'controls-wrap';
+            // Распорок две, слева и справа — так в образце кнопки и оказываются по центру, а
+            // настройки прижаты вправо. С одной распоркой кнопки уезжали влево.
+            const spacerLeft = document.createElement('div');
+            spacerLeft.className = 'spacer';
+            controls.appendChild(spacerLeft);
+            const buttons = document.createElement('div');
+            buttons.id = 'button-controls';
+            const lang = this.observer.get('ui.language') as string | undefined;
+            const makeButton = (glyph: string, hint: string, onClick: () => void) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'button';
+                button.title = hint;
+                const icon = document.createElement('span');
+                icon.className = 'material-symbols-outlined';
+                icon.textContent = glyph;
+                button.appendChild(icon);
+                button.addEventListener('click', onClick);
+                buttons.appendChild(button);
+                return button;
+            };
+            const step = (delta: number) => {
                 const total = manager.getLoadedCount();
-                const usable = Math.max(1, rect.width - TILE_REPLAY_PADDING * 2);
-                const t = (event.clientX - rect.left - TILE_REPLAY_PADDING) / usable;
-                const value = Math.round(Math.max(0, Math.min(1, t)) * total);
+                const now = Number(this.observer.get('debug.tileReplay') ?? -1);
+                const value = Math.max(0, Math.min(total, (now < 0 ? total : now) + delta));
+                this.tileReplayPlaying = false;
+                this.tileReplayCursorValue = value;
                 this.observer.set('debug.tileReplay', value >= total ? -1 : value);
             };
-            track.addEventListener('pointerdown', (event: PointerEvent) => {
-                if (!event.isPrimary) return;
+            makeButton('skip_previous', t('Step back', lang), () => step(-1));
+            this.tileReplayPlayButton = makeButton('play_arrow', t('Play', lang), () => {
+                const total = manager.getLoadedCount();
+                this.tileReplayPlaying = !this.tileReplayPlaying;
+                if (this.tileReplayPlaying) {
+                    // С конца проигрывать нечего: начинаем сначала.
+                    const now = Number(this.observer.get('debug.tileReplay') ?? -1);
+                    this.tileReplayCursorValue = now < 0 ? 0 : now;
+                    if (this.tileReplayCursorValue >= total) this.tileReplayCursorValue = 0;
+                    this.observer.set('debug.tileReplay', Math.floor(this.tileReplayCursorValue));
+                }
+                this.renderNextFrame();
+            });
+            makeButton('skip_next', t('Step forward', lang), () => step(1));
+            controls.appendChild(buttons);
+
+            const spacer = document.createElement('div');
+            spacer.className = 'spacer';
+            const settings = document.createElement('div');
+            settings.id = 'settings-controls';
+            const speed = document.createElement('select');
+            speed.id = 'speed';
+            [10, 30, 60, 120].forEach((value) => {
+                const option = document.createElement('option');
+                option.value = String(value);
+                option.textContent = `${value}/с`;
+                speed.appendChild(option);
+            });
+            speed.value = String(this.tileReplaySpeed);
+            speed.addEventListener('change', () => {
+                this.tileReplaySpeed = Number(speed.value) || 30;
+            });
+            settings.appendChild(speed);
+            const loop = document.createElement('button');
+            loop.type = 'button';
+            loop.id = 'loop';
+            loop.title = t('Loop', lang);
+            const loopIcon = document.createElement('span');
+            loopIcon.className = 'material-symbols-outlined';
+            loopIcon.textContent = 'repeat';
+            loop.appendChild(loopIcon);
+            loop.addEventListener('click', () => {
+                this.tileReplayLoop = !this.tileReplayLoop;
+                loop.classList.toggle('active', this.tileReplayLoop);
+            });
+            settings.appendChild(loop);
+            spacer.appendChild(settings);
+            controls.appendChild(spacer);
+            panel.appendChild(controls);
+
+            const ticks = document.createElement('div');
+            ticks.id = 'ticks';
+            const area = document.createElement('div');
+            area.id = 'ticks-area';
+            ticks.appendChild(area);
+            panel.appendChild(ticks);
+            (sceneCanvas.parentElement ?? document.body).appendChild(panel);
+            this.tileReplayBar = panel;
+            this.tileReplayTrack = area;
+
+            // Скраб с захватом указателя — как в образце: увод курсора за пределы дорожки не
+            // роняет перетаскивание, чего обычный ползунок не умеет.
+            let scrubbing = false;
+            const setFromEvent = (event: PointerEvent) => {
+                const total = manager.getLoadedCount();
+                const width = area.clientWidth - TILE_REPLAY_PADDING * 2;
+                const value = Math.max(0, Math.min(total,
+                    Math.floor((event.offsetX - TILE_REPLAY_PADDING) / Math.max(1, width) * total)));
+                this.observer.set('debug.tileReplay', value >= total ? -1 : value);
+            };
+            area.addEventListener('pointerdown', (event: PointerEvent) => {
+                if (scrubbing || !event.isPrimary) return;
                 scrubbing = true;
-                track.setPointerCapture(event.pointerId);
+                area.setPointerCapture(event.pointerId);
                 setFromEvent(event);
             });
-            track.addEventListener('pointermove', (event: PointerEvent) => {
+            area.addEventListener('pointermove', (event: PointerEvent) => {
                 if (scrubbing) setFromEvent(event);
             });
             const stop = (event: PointerEvent) => {
                 if (!scrubbing) return;
                 scrubbing = false;
-                track.releasePointerCapture(event.pointerId);
+                area.releasePointerCapture(event.pointerId);
             };
-            track.addEventListener('pointerup', stop);
-            track.addEventListener('pointercancel', stop);
+            area.addEventListener('pointerup', stop);
+            area.addEventListener('pointercancel', stop);
 
-            // Ширину дорожки нельзя измерить в том же кадре, где её только что показали, а
-            // при замороженной камере следующего кадра может и не быть — вьюер рисует по
-            // требованию. Наблюдатель размера сбрасывает отпечаток разметки и заказывает кадр,
-            // поэтому шкала раскладывается сразу и переживает изменение окна.
+            // Пересборка по изменению размера — тоже из образца. Заодно решает то, что ширину
+            // нельзя измерить в кадре, где дорожку только показали, а при замороженной камере
+            // следующего кадра может и не быть: вьюер рисует по требованию.
             new ResizeObserver(() => {
                 this.tileReplayLayoutKey = '';
                 this.renderNextFrame();
-            }).observe(track);
+            }).observe(area);
         }
 
-        const bar = this.tileReplayBar;
-        const track = this.tileReplayTrack as HTMLElement;
-        // Блоком, а не флексом: дорожка внутри флекса сжималась бы до содержимого, а всё её
-        // содержимое позиционировано абсолютно — ширина выходила нулевой, и разметка слипалась
-        // в левый край.
-        bar.style.display = 'block';
+        const panel = this.tileReplayBar;
+        const area = this.tileReplayTrack as HTMLElement;
+        panel.style.display = 'block';
 
-        const width = track.clientWidth;
-        const milestones = manager.getLoadOrderMilestones();
-        const key = `${width}|${count}|${milestones.map(m => `${m.depth}:${m.sequence}`).join(',')}`;
-        if (key !== this.tileReplayLayoutKey) {
-            this.tileReplayLayoutKey = key;
-            this.rebuildTileReplayTicks(track, width, count, milestones);
+        if (this.tileReplayPlayButton) {
+            const glyph = this.tileReplayPlayButton.querySelector('.material-symbols-outlined');
+            if (glyph) glyph.textContent = this.tileReplayPlaying ? 'pause' : 'play_arrow';
         }
 
         const replay = Number(this.observer.get('debug.tileReplay') ?? -1);
-        const cursor = this.tileReplayCursor as HTMLElement;
-        const usable = Math.max(1, width - TILE_REPLAY_PADDING * 2);
-        const at = replay < 0 ? count : replay;
-        cursor.style.left = `${TILE_REPLAY_PADDING + (at / Math.max(1, count)) * usable}px`;
-        cursor.textContent = replay < 0 ? 'сейчас' : String(replay);
+        const milestones = manager.getLoadOrderMilestones();
+        const key = `${area.clientWidth}|${count}|${milestones.map(m => `${m.depth}:${m.sequence}`).join(',')}`;
+        if (key !== this.tileReplayLayoutKey) {
+            this.tileReplayLayoutKey = key;
+            this.rebuildTileReplayTicks(area, count, milestones, replay);
+            return;
+        }
+
+        // Дешёвый путь: при движении отметки двигаем только бегунок, разметку не трогаем.
+        const cursor = this.tileReplayCursor;
+        if (cursor) {
+            const width = area.clientWidth - TILE_REPLAY_PADDING * 2;
+            const at = replay < 0 ? count : replay;
+            cursor.style.left = `${TILE_REPLAY_PADDING + Math.floor(at / Math.max(1, count) * width)}px`;
+            cursor.textContent = replay < 0 ? 'сейчас' : String(replay);
+        }
     }
 
     /**
-     * Пересобрать деления дорожки.
+     * Продвинуть проигрывание истории на один кадр.
      *
-     * @param track - Дорожка.
-     * @param width - Её ширина в пикселях.
+     * Отметку держим дробной: скорость задаётся в загрузках за секунду и редко кратна частоте
+     * кадров, а от округления на каждом кадре проигрывание шло бы рывками.
+     *
      * @param count - Всего загрузок.
-     * @param milestones - Вехи уровней.
+     * @param deltaTime - Время кадра в секундах.
+     */
+    private advanceTileReplay(count: number, deltaTime: number) {
+        if (count <= 0) return;
+        this.tileReplayCursorValue += this.tileReplaySpeed * (deltaTime || 1 / 60);
+        if (this.tileReplayCursorValue >= count) {
+            if (this.tileReplayLoop) {
+                this.tileReplayCursorValue = 0;
+            } else {
+                this.tileReplayCursorValue = count;
+                this.tileReplayPlaying = false;
+                this.observer.set('debug.tileReplay', -1);
+                return;
+            }
+        }
+        this.observer.set('debug.tileReplay', Math.floor(this.tileReplayCursorValue));
+        this.renderNextFrame();
+    }
+
+    /**
+     * Пересобрать разметку дорожки: подписи, мелкие деления, ромбики уровней и бегунок.
+     *
+     * @param area - Рабочая область дорожки.
+     * @param count - Всего загрузок.
+     * @param milestones - Первое появление каждого уровня.
+     * @param replay - Текущая отметка; отрицательная означает «сейчас».
      */
     private rebuildTileReplayTicks(
-        track: HTMLElement,
-        width: number,
+        area: HTMLElement,
         count: number,
-        milestones: Array<{ depth: number, sequence: number }>
+        milestones: Array<{ depth: number, sequence: number }>,
+        replay: number
     ) {
-        track.querySelectorAll('.tile-replay-tick, .tile-replay-mark').forEach(el => el.remove());
-        const usable = Math.max(1, width - TILE_REPLAY_PADDING * 2);
-        const at = (value: number) => TILE_REPLAY_PADDING + (value / Math.max(1, count)) * usable;
+        area.innerHTML = '';
+        const width = area.clientWidth - TILE_REPLAY_PADDING * 2;
+        const at = (value: number) => TILE_REPLAY_PADDING + Math.floor(value / Math.max(1, count) * width);
 
-        // Шаг подписей округляем вверх до ряда 1/2/5·10ⁿ — тогда на шкале стоят круглые числа,
-        // а не 37 и 74. Целимся примерно в одну подпись на 60 пикселей.
-        const minStep = Math.max(1, count / Math.max(1, Math.floor(usable / 60)));
+        // Шаг подписей округляем вверх до ряда 1/2/5·10ⁿ, целясь примерно в одну подпись на
+        // 50 пикселей: тогда числа на шкале круглые. Мелкие деления делят его на пять, а при
+        // шаге, не кратном пяти, — пополам.
+        const minStep = Math.max(1, count / Math.max(1, Math.floor(width / 50)));
         const magnitude = 10 ** Math.floor(Math.log10(minStep));
-        const step = [1, 2, 5, 10].map(m => m * magnitude).find(v => v >= minStep) ?? 10 * magnitude;
+        const labelStep = [1, 2, 5, 10].map(m => m * magnitude).find(v => v >= minStep) ?? 10 * magnitude;
+        const tickStep = labelStep === 1 ? 0 : labelStep / (labelStep % 5 === 0 ? 5 : 2);
 
-        for (let value = 0; value <= count; value += step) {
-            const tick = document.createElement('div');
-            tick.className = 'tile-replay-tick';
-            tick.style.left = `${at(value)}px`;
-            tick.textContent = String(Math.round(value));
-            track.appendChild(tick);
+        for (let value = 0; value < count; value += labelStep) {
+            const label = document.createElement('div');
+            label.classList.add('time-label');
+            label.style.left = `${at(value)}px`;
+            label.textContent = String(Math.round(value));
+            area.appendChild(label);
         }
 
-        // Засечки уровней — в цвете самого уровня, той же палитрой, что легенда и подписи.
+        if (tickStep > 0) {
+            for (let value = tickStep; value < count; value += tickStep) {
+                if (value % labelStep === 0) continue;
+                const tick = document.createElement('div');
+                tick.classList.add('time-tick');
+                tick.style.left = `${at(value)}px`;
+                area.appendChild(tick);
+            }
+        }
+
         milestones.forEach(({ depth, sequence }) => {
-            const mark = document.createElement('div');
-            mark.className = 'tile-replay-mark';
-            mark.style.left = `${at(sequence)}px`;
-            mark.style.background = lodColorCss(depth);
-            mark.title = `L${depth} — ${sequence}`;
-            track.appendChild(mark);
+            const key = document.createElement('div');
+            key.classList.add('time-label', 'key');
+            key.style.left = `${at(sequence)}px`;
+            key.style.backgroundColor = lodColorCss(depth);
+            key.title = `L${depth} — ${sequence}`;
+            area.appendChild(key);
         });
+
+        const cursor = document.createElement('div');
+        cursor.classList.add('time-label', 'cursor');
+        cursor.style.left = `${at(replay < 0 ? count : replay)}px`;
+        cursor.textContent = replay < 0 ? 'сейчас' : String(replay);
+        area.appendChild(cursor);
+        this.tileReplayCursor = cursor;
     }
 
     /**
