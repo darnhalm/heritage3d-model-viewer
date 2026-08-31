@@ -81,6 +81,10 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Isolate LOD': 'Isolate LOD',
         'Replay loading': 'Replay loading',
         'Step back': 'Step back',
+        'Record again': 'Record again',
+        'Start recording': 'Start recording',
+        'Stop recording': 'Stop recording',
+        'Exit timeline': 'Exit timeline',
         Loop: 'Loop',
         'Step forward': 'Step forward',
         'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.':
@@ -510,6 +514,10 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Isolate LOD': 'Изолировать LOD',
         'Replay loading': 'Перемотка загрузки',
         'Step back': 'Шаг назад',
+        'Record again': 'Записать заново',
+        'Start recording': 'Начать запись',
+        'Stop recording': 'Остановить запись',
+        'Exit timeline': 'Выйти из таймлайна',
         Loop: 'Зациклить',
         'Step forward': 'Шаг вперёд',
         'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.':
@@ -939,6 +947,10 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Isolate LOD': '隔离 LOD',
         'Replay loading': '加载回放',
         'Step back': '后退一步',
+        'Record again': '重新记录',
+        'Start recording': '开始录制',
+        'Stop recording': '停止录制',
+        'Exit timeline': '退出时间轴',
         Loop: '循环',
         'Step forward': '前进一步',
         'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.':

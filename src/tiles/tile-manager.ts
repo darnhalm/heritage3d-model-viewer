@@ -503,6 +503,36 @@ export class TileManager {
         sseDenominator: number
     }> = [];
 
+    /** Финальная поза эпизода: отдельный последний ключ после последней загрузки. */
+    private replayEndWorld: Mat4 | null = null;
+
+    /** Переиспользуемые значения для плавной интерполяции камеры при проигрывании. */
+    private readonly replayWorld = new Mat4();
+
+    private readonly replayFromPosition = new Vec3();
+
+    private readonly replayToPosition = new Vec3();
+
+    private readonly replayFromRotation = new Quat();
+
+    private readonly replayToRotation = new Quat();
+
+    private readonly replayRotation = new Quat();
+
+    /**
+     * Вид на момент заморозки: куда возвращать отбор, когда перемотку сняли.
+     *
+     * На заморозке обход вид не обновляет, а перемотка его подменяет. Без снимка возврат к
+     * «сейчас» оставлял бы отбор от той камеры, на которой стояла отметка, — сцена под
+     * снятой перемоткой была бы не та, что до неё.
+     */
+    private freezeView: {
+        viewProj: Mat4,
+        cameraPos: Vec3,
+        viewportHeight: number,
+        sseDenominator: number
+    } | null = null;
+
     /**
      * Отметить тайл как доехавший: общий номер и номер внутри своего уровня.
      *
@@ -1578,6 +1608,10 @@ export class TileManager {
      * @param value - Замораживать ли.
      */
     setFrozen(value: boolean) {
+        if (value !== this.frozen) {
+            this.freezeView = null;
+            if (!value) this.replayEndWorld = null;
+        }
         // Снимок делаем непосредственно в момент нажатия, а не полагаемся на данные
         // предыдущего кадра: визуализируемая камера и источник LOD должны совпадать точно.
         if (value && !this.frozen) {
@@ -1588,6 +1622,15 @@ export class TileManager {
                 this.view.cameraPos.copy(this.camera.getPosition());
                 this.view.viewportHeight = this.renderHeight();
                 this.view.sseDenominator = 2 * Math.tan(0.5 * verticalFovRadians(camera));
+                this.freezeView = {
+                    viewProj: tmpMat.clone(),
+                    cameraPos: this.view.cameraPos.clone(),
+                    viewportHeight: this.view.viewportHeight,
+                    sseDenominator: this.view.sseDenominator
+                };
+                // Поза на Stop — последний ключ единой анимации. Без него камера в конце
+                // прыгала от последней загрузки к положению, на котором запись остановили.
+                this.replayEndWorld = this.camera.getWorldTransform().clone();
             }
         }
         this.frozen = value;
@@ -1625,19 +1668,70 @@ export class TileManager {
      * @returns Мировая матрица камеры того момента, чтобы вьюер нарисовал её на месте.
      */
     applyReplayView(limit: number): Mat4 | null {
-        if (limit < 0 || this.loadViews.length === 0) return null;
-        // Последняя запись не позже отметки: между двумя доездами камера не меняется для отбора.
+        // Состав тайлов и отбор остаются ступенчатыми: берём последнюю загрузку не позже
+        // отметки. Только нарисованная камера интерполируется между ключами ниже.
         let found = null as (typeof this.loadViews)[number] | null;
-        for (let i = 0; i < this.loadViews.length; i++) {
-            if (this.loadViews[i].sequence > limit) break;
-            found = this.loadViews[i];
+        if (limit >= 0) {
+            for (let i = 0; i < this.loadViews.length; i++) {
+                if (this.loadViews[i].sequence > limit) break;
+                found = this.loadViews[i];
+            }
         }
-        if (!found) return null;
-        this.frustum.setFromMat4(found.viewProj);
-        this.view.cameraPos.copy(found.cameraPos);
-        this.view.viewportHeight = found.viewportHeight;
-        this.view.sseDenominator = found.sseDenominator;
-        return found.world;
+        // До первой загрузки отбор считаем от первого записанного вида: иначе в нулевой
+        // точке он на один кадр возвращался к финальной камере эпизода.
+        const selectionView = found ?? (limit >= 0 ? this.loadViews[0] : null);
+        if (!selectionView) {
+            // Отметку сняли, или до неё ничего не доехало: возвращаем вид на момент заморозки.
+            // Иначе отбор так и остался бы от камеры с отметки — обход его сам не обновит.
+            const freeze = this.freezeView;
+            if (freeze) {
+                this.frustum.setFromMat4(freeze.viewProj);
+                this.view.cameraPos.copy(freeze.cameraPos);
+                this.view.viewportHeight = freeze.viewportHeight;
+                this.view.sseDenominator = freeze.sseDenominator;
+            }
+            return null;
+        }
+        this.frustum.setFromMat4(selectionView.viewProj);
+        this.view.cameraPos.copy(selectionView.cameraPos);
+        this.view.viewportHeight = selectionView.viewportHeight;
+        this.view.sseDenominator = selectionView.sseDenominator;
+
+        // Камерные ключи занимают промежутки между отметками загрузок: первая записанная
+        // поза стоит в 0, вторая — в 1 и т.д. Финальная поза Stop стоит в конце шкалы. Так
+        // остаётся место и для плавного последнего отрезка после последней загрузки.
+        const first = this.loadViews[0];
+        if (!first) return null;
+        let fromWorld = first.world;
+        let toWorld = this.replayEndWorld ?? first.world;
+        let fromAt = 0;
+        let toAt = Math.max(1, this.loadCounter);
+        for (let i = 1; i < this.loadViews.length; i++) {
+            const nextAt = Math.max(0, this.loadViews[i].sequence - 1);
+            if (nextAt >= limit) {
+                toWorld = this.loadViews[i].world;
+                toAt = nextAt;
+                break;
+            }
+            fromWorld = this.loadViews[i].world;
+            fromAt = nextAt;
+        }
+
+        // Если прошли все загрузочные ключи, ведём к позе, на которой нажали Stop.
+        if (fromWorld === this.loadViews[this.loadViews.length - 1].world) {
+            toWorld = this.replayEndWorld ?? fromWorld;
+            toAt = Math.max(fromAt, this.loadCounter);
+        }
+        if (toAt <= fromAt || fromWorld === toWorld) return fromWorld;
+
+        const alpha = Math.max(0, Math.min(1, (limit - fromAt) / (toAt - fromAt)));
+        fromWorld.getTranslation(this.replayFromPosition);
+        toWorld.getTranslation(this.replayToPosition);
+        this.replayFromPosition.lerp(this.replayFromPosition, this.replayToPosition, alpha);
+        this.replayFromRotation.setFromMat4(fromWorld);
+        this.replayToRotation.setFromMat4(toWorld);
+        this.replayRotation.slerp(this.replayFromRotation, this.replayToRotation, alpha);
+        return this.replayWorld.setTRS(this.replayFromPosition, this.replayRotation, Vec3.ONE);
     }
 
     /**
@@ -1647,6 +1741,37 @@ export class TileManager {
      */
     getLoadedCount(): number {
         return this.loadCounter;
+    }
+
+    /**
+     * Начать новый эпизод записи: забыть историю загрузки и след камеры.
+     *
+     * История копится с момента загрузки модели, и без сброса обнулить её можно только
+     * перезагрузкой страницы — два эпизода подряд не отладить. Заодно лечится распухание
+     * шкалы: за полчаса полётов набегают тысячи делений, где начальная загрузка занимает
+     * один пиксель.
+     *
+     * Номера снимаем и с самих тайлов, включая внешние тайлсеты, — иначе подписи на сцене
+     * остались бы от прошлого эпизода и соврали бы. Уже доехавшие тайлы становятся фоном
+     * нового эпизода: с нулевым номером они не считаются поздними и никуда не пропадают.
+     */
+    resetLoadHistory() {
+        this.loadCounter = 0;
+        this.loadViews.length = 0;
+        this.replayEndWorld = null;
+        this.lodCounters.clear();
+        this.replayLimit = -1;
+        const walk = (tile: Tile) => {
+            tile.loadSequence = 0;
+            tile.lodSequence = 0;
+            const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
+            for (let i = 0; i < children.length; ++i) {
+                walk(children[i]);
+            }
+        };
+        if (this.rootTile) {
+            walk(this.rootTile);
+        }
     }
 
     /**

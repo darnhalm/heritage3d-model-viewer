@@ -466,6 +466,7 @@ class SettingsService {
         o.set('debug.tilePick', false);
         o.set('debug.tileIsolatePick', false);
         o.set('debug.tileFreeze', false);
+        o.set('debug.tileRecording', false);
         o.set('debug.tilePaused', false);
         o.set('debug.tileLodLock', false);
         o.set('debug.tileLodLevel', 0);
@@ -601,7 +602,8 @@ class SettingsService {
             // плеере. Визуальные предпочтения можно восстановить, активные режимы — нет.
             if (['debug.tileDebug', 'debug.tileCheckerFill', 'debug.tilePick', 'debug.tileIsolatePick',
                 'debug.gsplatLodColor', 'debug.gsplatNodeBounds', 'debug.gsplatFreeze', 'debug.gsplatPaused',
-                'debug.tileFreeze', 'debug.tilePaused', 'debug.tileLodLock', 'debug.tileLodColor'].indexOf(path) !== -1) {
+                'debug.tileFreeze', 'debug.tileRecording', 'debug.tilePaused', 'debug.tileLodLock',
+                'debug.tileLodColor'].indexOf(path) !== -1) {
                 this.observer.set(path, false);
                 return;
             }

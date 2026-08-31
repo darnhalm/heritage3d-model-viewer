@@ -183,6 +183,8 @@ export interface ObserverData {
         tileIsolatePick?: boolean,
         /** Заморозка отбора: LOD считается от камеры на момент заморозки. */
         tileFreeze?: boolean,
+        /** Идёт ли запись нового эпизода истории загрузки тайлов. */
+        tileRecording?: boolean,
         /** Пауза загрузки тайлов; после снятия очередь продолжает работу. */
         tilePaused?: boolean,
         /** Зажим уровня LOD: показывать не глубже выбранной глубины. */

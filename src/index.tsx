@@ -265,6 +265,7 @@ const observerData: ObserverData = {
         tileIdLabels: false,
         tileIsolatePick: false,
         tileFreeze: false,
+        tileRecording: false,
         tilePaused: false,
         tileLodLock: false,
         tileLodLevel: 0,

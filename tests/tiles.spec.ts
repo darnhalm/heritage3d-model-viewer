@@ -66,11 +66,7 @@ test('tile material debug buttons switch off on a second click', async ({ page }
         await expect.poll(() => page.evaluate(({ path }) => (window as any).viewer.observer.get(path), { path })).toBe(false);
     };
 
-    await toggle('Isolate LOD Level', 'debug.tileLodLock');
     await toggle('Tile Bounds (OBB)', 'debug.tileDebug');
-    await toggle('Freeze Camera + FOV', 'debug.tileFreeze');
-    await toggle('Pause Loading', 'debug.tilePaused');
-
     await page.evaluate(() => {
         const observer = (window as any).viewer.observer;
         observer.set('debug.tileDebug', true);
@@ -81,6 +77,44 @@ test('tile material debug buttons switch off on a second click', async ({ page }
 
     await page.evaluate(() => (window as any).viewer.observer.set('debug.tilePick', true));
     await toggle('Isolate Picked Tile', 'debug.tileIsolatePick');
+
+    // Для истории загрузки вместо технических Freeze/Pause показан явный цикл записи.
+    const startRecording = page.getByRole('button', { name: 'Start recording', exact: true });
+    const stopRecording = page.getByRole('button', { name: 'Stop recording', exact: true });
+    const exitTimeline = page.getByRole('button', { name: 'Exit timeline', exact: true });
+    await expect(startRecording).toBeEnabled();
+    await expect(stopRecording).toHaveCount(0);
+    await expect(exitTimeline).toHaveCount(0);
+
+    await startRecording.click();
+    await expect.poll(() => page.evaluate(() => ({
+        recording: (window as any).viewer.observer.get('debug.tileRecording'),
+        frozen: (window as any).viewer.observer.get('debug.tileFreeze'),
+        paused: (window as any).viewer.observer.get('debug.tilePaused')
+    }))).toEqual({ recording: true, frozen: false, paused: false });
+    await expect(startRecording).toBeDisabled();
+    await expect(stopRecording).toBeEnabled();
+    await expect(exitTimeline).toHaveCount(0);
+
+    await stopRecording.click();
+    await expect.poll(() => page.evaluate(() => ({
+        recording: (window as any).viewer.observer.get('debug.tileRecording'),
+        frozen: (window as any).viewer.observer.get('debug.tileFreeze'),
+        paused: (window as any).viewer.observer.get('debug.tilePaused')
+    }))).toEqual({ recording: false, frozen: true, paused: true });
+    await expect(startRecording).toBeEnabled();
+    await expect(stopRecording).toHaveCount(0);
+    await expect(exitTimeline).toBeEnabled();
+
+    await exitTimeline.click();
+    await expect.poll(() => page.evaluate(() => ({
+        recording: (window as any).viewer.observer.get('debug.tileRecording'),
+        frozen: (window as any).viewer.observer.get('debug.tileFreeze'),
+        paused: (window as any).viewer.observer.get('debug.tilePaused')
+    }))).toEqual({ recording: false, frozen: false, paused: false });
+    await expect(startRecording).toBeEnabled();
+    await expect(stopRecording).toHaveCount(0);
+    await expect(exitTimeline).toHaveCount(0);
 });
 
 /** Дождаться, пока обход выберет хотя бы один тайл с готовым контентом. */
@@ -606,6 +640,7 @@ test('отладочный оверлей тайлов: OBB активных т�
                 tilePick: true,
                 tileIsolatePick: true,
                 tileFreeze: true,
+                tileRecording: true,
                 tilePaused: true,
                 tileLodLock: true
             }
@@ -616,6 +651,7 @@ test('отладочный оверлей тайлов: OBB активных т�
             tilePick: viewer.observer.get('debug.tilePick'),
             tileIsolatePick: viewer.observer.get('debug.tileIsolatePick'),
             tileFreeze: viewer.observer.get('debug.tileFreeze'),
+            tileRecording: viewer.observer.get('debug.tileRecording'),
             tilePaused: viewer.observer.get('debug.tilePaused'),
             tileLodLock: viewer.observer.get('debug.tileLodLock')
         };
@@ -626,6 +662,7 @@ test('отладочный оверлей тайлов: OBB активных т�
         tilePick: false,
         tileIsolatePick: false,
         tileFreeze: false,
+        tileRecording: false,
         tilePaused: false,
         tileLodLock: false
     });
@@ -889,6 +926,77 @@ test('production fragment box clips tile geometry exactly and restores materials
 
 const setFlag = (page: Page, key: string, value: unknown) =>
     page.evaluate(([k, v]) => (window as any).viewer.observer.set(k, v), [key, value] as const);
+
+test('модуль таймлайна загружается только при первом входе в редактор', async ({ page }) => {
+    test.skip(!await samplesAvailable(page, DISCRETE_LOD),
+        'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
+
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+
+    await page.goto(`/?load=${encodeURIComponent(DISCRETE_LOD)}`);
+    await waitForViewer(page);
+    await waitForTiles(page);
+
+    const initial = await page.evaluate(() => ({
+        panelExists: !!document.querySelector('#timeline-panel'),
+        timelineRequests: performance.getEntriesByType('resource')
+        .filter(entry => entry.name.includes('tile-replay-timeline')).length
+    }));
+    expect(initial).toEqual({ panelExists: false, timelineRequests: 0 });
+
+    await setFlag(page, 'debug.tileFreeze', true);
+    await pumpFrames(page, 2);
+    await expect(page.locator('#timeline-panel')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource')
+    .filter(entry => entry.name.includes('tile-replay-timeline')).length)).toBe(1);
+    expect(pageErrors).toEqual([]);
+});
+
+test('таймлайн плавно интерполирует камеру между ключевыми кадрами', async ({ page }) => {
+    test.skip(!await samplesAvailable(page, DISCRETE_LOD),
+        'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
+
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(error.message));
+
+    await page.goto(`/?load=${encodeURIComponent(DISCRETE_LOD)}`);
+    await waitForViewer(page);
+    await waitForTiles(page);
+    await setFlag(page, 'debug.tileFreeze', true);
+
+    const halfway = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const manager = viewer.tileManager;
+        const template = manager.loadViews[0];
+        if (!template) return null;
+
+        // Два детерминированных ключа с одинаковым поворотом: середина дробной отметки
+        // должна дать середину позиции, а не одну из двух ступеней.
+        const firstWorld = template.world.clone().setFromEulerAngles(0, 0, 0);
+        const secondWorld = template.world.clone().setFromEulerAngles(0, 90, 0);
+        secondWorld.data[12] = 10;
+        manager.loadViews.length = 0;
+        manager.loadViews.push(
+            { ...template, sequence: 1, world: firstWorld },
+            { ...template, sequence: 2, world: secondWorld }
+        );
+        manager.loadCounter = 2;
+
+        viewer.observer.set('debug.tileReplay', 0.5);
+        return {
+            x: viewer.frozenTileCamera.world.data[12],
+            yaw: viewer.frozenTileCamera.world.getEulerAngles().y,
+            replayLimit: manager.replayLimit
+        };
+    });
+
+    expect(halfway).not.toBeNull();
+    expect(halfway?.x).toBeCloseTo(5, 4);
+    expect(halfway?.yaw).toBeCloseTo(45, 3);
+    expect(halfway?.replayLimit).toBeCloseTo(0.5, 6);
+    expect(pageErrors).toEqual([]);
+});
 
 test('Фаза 2: заморозка фрустума фиксирует отбор при движении камеры', async ({ page }) => {
     test.skip(!await samplesAvailable(page, DISCRETE_LOD),

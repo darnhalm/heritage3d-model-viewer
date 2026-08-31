@@ -1618,23 +1618,53 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                             </>
                                         )}
 
-                                        {/* Осталась одна кнопка: пауза и перемотка живут на временной
-                                            шкале, которую эта заморозка и открывает. */}
+                                        {/* Последовательный цикл: в обычном режиме видна только запись;
+                                            во время записи рядом появляется Stop; после Stop он сменяется
+                                            выходом из редактора таймлайна. Заморозка остаётся внутренней
+                                            деталью режима просмотра. */}
                                         <div className='tile-playback-toolbar'>
                                             <button
                                                 type='button'
-                                                className={`tile-playback-button${observerData?.debug?.tileFreeze ? ' active' : ''}`}
-                                                title={t('Freeze Camera + FOV', lang)}
-                                                aria-label={t('Freeze Camera + FOV', lang)}
-                                                aria-pressed={!!observerData?.debug?.tileFreeze}
-                                                onClick={() => toggleObserverBoolean('debug.tileFreeze', !!observerData?.debug?.tileFreeze)}
+                                                className={`tile-playback-button${observerData?.debug?.tileRecording ? ' active' : ''}`}
+                                                title={t('Start recording', lang)}
+                                                aria-label={t('Start recording', lang)}
+                                                aria-pressed={!!observerData?.debug?.tileRecording}
+                                                disabled={!!observerData?.debug?.tileRecording}
+                                                onClick={() => setProperty('debug.tileRecording', true)}
                                             >
-                                                {/* Камера со снежинкой в нижнем правом углу: заморожен не показ, а камера. */}
+                                                {/* Камера с красной точкой: записываются её путь и история тайлов. */}
                                                 <span className='tile-playback-glyph-stack'>
                                                     <span className='material-symbols-outlined'>photo_camera</span>
-                                                    <span className='material-symbols-outlined tile-playback-glyph-badge'>ac_unit</span>
+                                                    <span className='material-symbols-outlined tile-playback-glyph-badge tile-recording-badge'>circle</span>
                                                 </span>
                                             </button>
+                                            {!!observerData?.debug?.tileRecording && (
+                                                <button
+                                                    type='button'
+                                                    className='tile-playback-button'
+                                                    title={t('Stop recording', lang)}
+                                                    aria-label={t('Stop recording', lang)}
+                                                    onClick={() => setProperty('debug.tileRecording', false)}
+                                                >
+                                                    <span className='material-symbols-outlined'>stop</span>
+                                                </button>
+                                            )}
+                                            {!observerData?.debug?.tileRecording && !!observerData?.debug?.tileFreeze && (
+                                                <button
+                                                    type='button'
+                                                    className='tile-playback-button'
+                                                    title={t('Exit timeline', lang)}
+                                                    aria-label={t('Exit timeline', lang)}
+                                                    onClick={() => {
+                                                        // Выход возвращает живую камеру и сразу продолжает стриминг:
+                                                        // оставленная Stop-пауза вне редактора была бы невидимой ловушкой.
+                                                        setProperty('debug.tileFreeze', false);
+                                                        setProperty('debug.tilePaused', false);
+                                                    }}
+                                                >
+                                                    <span className='material-symbols-outlined'>close</span>
+                                                </button>
+                                            )}
                                         </div>
                                         {/* Изоляция уровня — один ползунок вместо пары «переключатель плюс
                                             появляющийся ползунок». Крайнее левое положение (-1) выключает её:
