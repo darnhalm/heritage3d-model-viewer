@@ -1537,18 +1537,6 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                 {observerData?.scene?.isTileset && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Tiles Debug', lang)} (1)</div>
-                                        {materialActionButton(t('Isolate LOD Level', lang), !!observerData?.debug?.tileLodLock, () => toggleObserverBoolean('debug.tileLodLock', !!observerData?.debug?.tileLodLock))}
-                                        {observerData?.debug?.tileLodLock && (
-                                            <Slider
-                                                label={t('LOD Level', lang)}
-                                                precision={0}
-                                                min={0}
-                                                max={Math.max(0, observerData?.scene?.tilesetMaxDepth ?? 0)}
-                                                step={1}
-                                                value={Math.min(observerData?.debug?.tileLodLevel ?? 0, observerData?.scene?.tilesetMaxDepth ?? 0)}
-                                                setProperty={(value: number) => setProperty('debug.tileLodLevel', value)}
-                                            />
-                                        )}
                                         {materialActionButton(t('Color the model', lang), !!observerData?.debug?.tileLodColor, () => toggleObserverBoolean('debug.tileLodColor', !!observerData?.debug?.tileLodColor))}
                                         {/* Схема общая для каркаса и поверхностей, поэтому список стоит выше блока
                                             границ: при выключённых границах режим иначе было бы не выбрать.
@@ -1646,6 +1634,26 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 </span>
                                             </button>
                                         </div>
+                                        {/* Изоляция уровня — один ползунок вместо пары «переключатель плюс
+                                            появляющийся ползунок». Крайнее левое положение (-1) выключает её:
+                                            отдельному тумблеру тут делать нечего, состояний всё равно одно. */}
+                                        <span title={t('Leftmost position turns isolation off; further right shows only the chosen level.', lang)} style={{ display: 'contents' }}>
+                                            <Slider
+                                                label={t('Isolate LOD', lang)}
+                                                precision={0}
+                                                min={-1}
+                                                max={Math.max(0, observerData?.scene?.tilesetMaxDepth ?? 0)}
+                                                step={1}
+                                                value={observerData?.debug?.tileLodLock ?
+                                                    Math.min(observerData?.debug?.tileLodLevel ?? 0, observerData?.scene?.tilesetMaxDepth ?? 0) : -1}
+                                                setProperty={(value: number) => {
+                                                    // Уровень и признак изоляции ходят парой: сначала уровень,
+                                                    // иначе включённая изоляция успела бы показать прежний.
+                                                    if (value >= 0) setProperty('debug.tileLodLevel', value);
+                                                    setProperty('debug.tileLodLock', value >= 0);
+                                                }}
+                                            />
+                                        </span>
                                     </div>
                                 )}
                             </div>

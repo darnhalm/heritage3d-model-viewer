@@ -78,6 +78,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By State': 'By State',
         'By LOD': 'By LOD',
         'By Resolution': 'By Resolution',
+        'Isolate LOD': 'Isolate LOD',
+        'Leftmost position turns isolation off; further right shows only the chosen level.':
+            'Leftmost position turns isolation off; further right shows only the chosen level.',
         'Color the model': 'Color the model',
         'Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.':
             'Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.',
@@ -495,6 +498,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By State': 'По состоянию',
         'By LOD': 'По LOD',
         'By Resolution': 'По разрешению',
+        'Isolate LOD': 'Изолировать LOD',
+        'Leftmost position turns isolation off; further right shows only the chosen level.':
+            'Крайнее левое положение выключает изоляцию; правее — показан только выбранный уровень',
         'Color the model': 'Раскрасить модель',
         'Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.':
             'Красит тайлы по тому, насколько их экранная ошибка отличается от целевой: красный — грубее заказанного, белый — попадание, синий — детальнее необходимого.',
@@ -912,6 +918,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By State': '按状态',
         'By LOD': '按 LOD',
         'By Resolution': '按分辨率',
+        'Isolate LOD': '隔离 LOD',
+        'Leftmost position turns isolation off; further right shows only the chosen level.':
+            '最左位置关闭隔离；向右则只显示所选层级。',
         'Color the model': '为模型着色',
         'Colours tiles by how far their screen-space error is from the target: red is coarser than asked for, white is on target, blue is finer than needed.':
             '按瓦片屏幕空间误差与目标值的偏差着色：红色表示比目标更粗糙，白色表示达标，蓝色表示超出所需精度。',
