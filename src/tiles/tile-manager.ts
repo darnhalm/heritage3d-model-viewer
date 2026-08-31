@@ -123,9 +123,14 @@ function tileIdentity(tile: Tile): string {
     }
     const uri = tile.contentUris[0];
     if (uri) {
-        const name = uri.split('?')[0].split('/').pop() ?? '';
-        const stem = name.replace(/\.[^.]+$/, '');
-        if (stem) return stem.length > 14 ? `…${stem.slice(-13)}` : stem;
+        // Берём папку вместе с именем. Одного имени мало: набор из нескольких внешних
+        // тайлсетов повторяет в каждом одну и ту же схему имён (`a`, `b0`, `c00`…), и на
+        // экране появлялись пары одинаковых подписей из разных веток.
+        const parts = uri.split('?')[0].split('/').filter(Boolean);
+        const name = (parts.pop() ?? '').replace(/\.[^.]+$/, '');
+        const folder = parts.pop() ?? '';
+        const label = folder ? `${folder}/${name}` : name;
+        if (label) return label.length > 16 ? `…${label.slice(-15)}` : label;
     }
     return `#${tile.id}`;
 }
@@ -413,6 +418,12 @@ export class TileManager {
      * SSE не дотягивает, не грузятся, а видны только достигнутые тайлы уровня.
      */
     private lodIsolate: number | null = null;
+
+    /**
+     * Отметка на истории загрузки: показывать только то, что доехало не позже неё.
+     * `-1` — перемотка выключена.
+     */
+    private replayLimit = -1;
 
     /** Production clipping volume in world → unit-box local coordinates. */
     private clipBoxWorldToLocal: Mat4 | null = null;
@@ -890,6 +901,12 @@ export class TileManager {
         // закрывающим нельзя, иначе родитель снимет свой контент и на его месте до
         // прихода масок будет дыра.
         if (tile.implicit && !tile.implicit.expanded) {
+            return false;
+        }
+        // Перемотка истории: тайл, доехавший позже отметки, для отбора ещё не существует —
+        // ровно как в тот момент времени. Возвращаем «не закрывает», поэтому на экране
+        // остаётся родитель, и кадр совпадает с тем, что зритель тогда и видел.
+        if (this.replayLimit >= 0 && tile.loadSequence > this.replayLimit) {
             return false;
         }
         if (tile.contentUris.length === 0) {
@@ -1542,6 +1559,27 @@ export class TileManager {
      */
     setLodIsolate(depth: number | null) {
         this.lodIsolate = depth;
+    }
+
+    /**
+     * Отмотать показ к моменту, когда доехало ровно `limit` тайлов.
+     *
+     * Перемотка ничего не выгружает: она лишь делает вид, что поздние тайлы ещё не пришли,
+     * и обход останавливается на родителе — так же, как это было на самом деле.
+     *
+     * @param limit - Сколько первых загрузок показывать; `-1` снимает перемотку.
+     */
+    setReplayLimit(limit: number) {
+        this.replayLimit = limit;
+    }
+
+    /**
+     * Сколько тайлов доехало за этот сеанс. Верхняя граница шкалы перемотки.
+     *
+     * @returns Число загрузок с начала показа модели.
+     */
+    getLoadedCount(): number {
+        return this.loadCounter;
     }
 
     /**

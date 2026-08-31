@@ -1646,6 +1646,22 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                 </span>
                                             </button>
                                         </div>
+                                        {/* Перемотка истории загрузки: порядок доезда у нас записан, и по нему
+                                            можно отмотать показ назад. Ничего не выгружается — поздние тайлы
+                                            просто считаются ещё не пришедшими, и на экране остаётся родитель. */}
+                                        {(observerData?.scene?.tilesetLoadCount ?? 0) > 0 && (
+                                            <span title={t('Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.', lang)} style={{ display: 'contents' }}>
+                                                <Slider
+                                                    label={t('Replay loading', lang)}
+                                                    precision={0}
+                                                    min={-1}
+                                                    max={observerData?.scene?.tilesetLoadCount ?? 0}
+                                                    step={1}
+                                                    value={observerData?.debug?.tileReplay ?? -1}
+                                                    setProperty={(value: number) => setProperty('debug.tileReplay', value)}
+                                                />
+                                            </span>
+                                        )}
                                         {/* Изоляция уровня — один ползунок вместо пары «переключатель плюс
                                             появляющийся ползунок». Крайнее левое положение (-1) выключает её:
                                             отдельному тумблеру тут делать нечего, состояний всё равно одно. */}

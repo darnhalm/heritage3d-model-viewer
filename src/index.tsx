@@ -253,6 +253,7 @@ const observerData: ObserverData = {
         // По уровню детализации: раскраска по состоянию загрузки нужна реже, а понять, какой
         // LOD сейчас на экране, хочется почти всегда.
         tileDebugMode: 'lod',
+        tileReplay: -1,
         tileLineThickness: 1,
         // Ровный каркас: шахматный полезен, когда рамки накладываются друг на друга, но при
         // первом взгляде он читается хуже.
@@ -343,7 +344,8 @@ const observerData: ObserverData = {
         unlit: false,
         isTileset: false,
         tilesetLit: null,
-        tilesetMaxDepth: 0
+        tilesetMaxDepth: 0,
+        tilesetLoadCount: 0
     },
     runtime: {
         activeDeviceType: '',

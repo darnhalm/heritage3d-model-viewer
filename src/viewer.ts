@@ -2605,6 +2605,7 @@ class Viewer {
             'debug.tileLodColor': () => this.renderNextFrame(),
             // Подписи рисует оверлей поверх кадра, а кадр рисуется по требованию. Без этих
             // трёх строк включённые подписи не появлялись, пока не тронешь камеру.
+            'debug.tileReplay': () => this.applyTileReplay(),
             'debug.tileOrderLabels': () => this.renderNextFrame(),
             'debug.tileIdLabels': () => this.renderNextFrame(),
             'debug.tileOrderPerLod': () => this.renderNextFrame(),
@@ -6412,6 +6413,7 @@ class Viewer {
         this.observer.set('debug.gsplatFreeze', false);
         this.observer.set('debug.gsplatPaused', false);
         this.observer.set('scene.tilesetMaxDepth', 0);
+        this.observer.set('scene.tilesetLoadCount', 0);
 
         const manager = new TileManager({
             app: this.app,
@@ -6854,6 +6856,12 @@ class Viewer {
      */
     getTileStats() {
         return this.tileManager?.getStats() ?? null;
+    }
+
+    /** Применить к менеджеру текущую отметку перемотки из observer. */
+    private applyTileReplay() {
+        this.tileManager?.setReplayLimit(Number(this.observer.get('debug.tileReplay') ?? -1));
+        this.renderNextFrame();
     }
 
     /** Применить к менеджеру текущую изоляцию уровня LOD из observer. */
@@ -8575,6 +8583,10 @@ class Viewer {
         this.debugTiles.update();
         this.debugTilesFill.update();
         this.debugTilesSolid.update();
+        const loaded = this.tileManager?.getLoadedCount() ?? 0;
+        if (loaded !== Number(this.observer.get('scene.tilesetLoadCount') ?? 0)) {
+            this.observer.set('scene.tilesetLoadCount', loaded);
+        }
         this.updateTileHud();
         this.drawFrozenTileCamera();
 

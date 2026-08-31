@@ -163,6 +163,8 @@ export interface ObserverData {
         tileDebug?: boolean,
         /** Раскраска OBB: по состоянию загрузки или по глубине LOD. */
         tileDebugMode?: 'lod' | 'resolution',
+        /** Отметка на истории загрузки: показывать первые N доехавших тайлов; -1 — выключено. */
+        tileReplay?: number,
         /** Толщина контурных лент тайлов; 2 соответствует исходному размеру. */
         tileLineThickness?: number,
         /** Единый цвет каркаса или текущая шахматная схема. */
@@ -284,7 +286,8 @@ export interface ObserverData {
         isTileset?: boolean,
         tilesetLit?: boolean | null,
         /** Глубина дерева тайлов — верх ползунка LOD в панели. */
-        tilesetMaxDepth?: number
+        tilesetMaxDepth?: number,
+        tilesetLoadCount?: number
     },
     morphs?: Record<string, {
         name: string,

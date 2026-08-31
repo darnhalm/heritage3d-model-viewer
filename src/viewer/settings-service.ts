@@ -456,6 +456,7 @@ class SettingsService {
         // держим здесь же — сброс выполняется при каждой загрузке модели и перебил бы умолчания
         // наблюдателя, задай мы их только там.
         o.set('debug.tileDebugMode', 'lod');
+        o.set('debug.tileReplay', -1);
         o.set('debug.tileLineThickness', 1);
         o.set('debug.tileLineStyle', 'solid');
         o.set('debug.tileCheckerFill', false);

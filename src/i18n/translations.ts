@@ -79,6 +79,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By LOD': 'By LOD',
         'By Resolution': 'By Resolution',
         'Isolate LOD': 'Isolate LOD',
+        'Replay loading': 'Replay loading',
+        'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.':
+            'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.',
         'Load order': 'Load order',
         'Tile ID': 'Tile ID',
         'Tile labels': 'Labels',
@@ -502,6 +505,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By LOD': 'По LOD',
         'By Resolution': 'По разрешению',
         'Isolate LOD': 'Изолировать LOD',
+        'Replay loading': 'Перемотка загрузки',
+        'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.':
+            'Отматывает показ по записанному порядку загрузки; крайнее левое положение — сцена как есть сейчас',
         'Load order': 'Порядок',
         'Tile ID': 'Номер тайла',
         'Tile labels': 'Подписи',
@@ -925,6 +931,9 @@ export const translations: Record<Lang, Record<string, string>> = {
         'By LOD': '按 LOD',
         'By Resolution': '按分辨率',
         'Isolate LOD': '隔离 LOD',
+        'Replay loading': '加载回放',
+        'Rewinds the view along the recorded load order; leftmost position shows the scene as it is now.':
+            '按记录的加载顺序回放；最左位置显示当前场景。',
         'Load order': '加载顺序',
         'Tile ID': '瓦片编号',
         'Tile labels': '标注',
