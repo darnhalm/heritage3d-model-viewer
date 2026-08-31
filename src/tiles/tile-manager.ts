@@ -37,7 +37,9 @@ import {
 import { buildTileTree, fetchTilesetJson, findTightBoundingBox, forEachTile, recomputeWorldVolumes } from './tileset-loader';
 
 /** Режим раскраски отладочных OBB тайлов. */
-export type TileDebugMode = 'state' | 'lod' | 'resolution';
+// Режима «по состоянию» здесь нет намеренно: рисуются только выбранные тайлы, и красить их
+// всех одним цветом означало сообщать то, что и так видно по факту отрисовки.
+export type TileDebugMode = 'lod' | 'resolution';
 
 export type TileDebugStyle = {
     lineThickness: number;
@@ -71,7 +73,6 @@ const STATE_COLORS: Record<string, number> = {
     [TILE_FAILED]: 0xff0000ff // красный — ошибка
 };
 /** Ярко-голубой — тайл выбран обходом для отрисовки (перекрывает цвет состояния). */
-const SELECTED_COLOR = 0xffffff00;
 /** Белый контур — тайл, выбранный кликом в инспекторе. */
 const PICKED_COLOR = 0xffffffff;
 /**
@@ -1605,8 +1606,8 @@ export class TileManager {
             if (!tile.obb || (!tile.selected && !picked)) {
                 continue;
             }
-            const schemeColor = mode === 'lod' ? lodColor(tile.depth) :
-                (mode === 'resolution' ? resolutionColorAbgr(this.debugErrorRatio(tile)) : SELECTED_COLOR);
+            const schemeColor = mode === 'resolution' ?
+                resolutionColorAbgr(this.debugErrorRatio(tile)) : lodColor(tile.depth);
             const color = picked ? PICKED_COLOR : schemeColor;
             const { center, halfAxes } = tile.obb;
 

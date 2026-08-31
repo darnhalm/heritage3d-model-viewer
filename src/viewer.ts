@@ -6594,8 +6594,7 @@ class Viewer {
      * Раскраска блоков тайлсета — по уровню детализации либо по разрешению.
      *
      * Схему берём ту же, что у каркаса: режим один на обе картинки, иначе рамки и поверхности
-     * говорили бы разное. В режиме «по состоянию» красим по LOD — состояние описывает загрузку,
-     * а у видимых тайлов она одинакова, и раскраска вышла бы сплошной заливкой.
+     * говорили бы разное.
      *
      * Работает как раскраска сплатов у движка: цвет не заменяет исходный, а умножается
      * на него (`color.xyz *= uColorMultiply` в шейдере сплатов), поэтому текстура остаётся
@@ -8553,7 +8552,7 @@ class Viewer {
         this.debugTilesSolid.clear();
         this.debugTilesFill.clear();
         if (this.tileManager && this.observer.get('debug.tileDebug')) {
-            const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'state';
+            const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'lod';
             const style: TileDebugStyle = {
                 lineThickness: Number(this.observer.get('debug.tileLineThickness') ?? 2),
                 checker: this.observer.get('debug.tileLineStyle') !== 'solid',
@@ -8716,7 +8715,7 @@ class Viewer {
         // нехваткой это главное, что объясняет, почему картинка загрубела.
         const sse = s.errorTargetScale > 1.01 ?
             `   SSE ${s.errorTarget.toFixed(1)}px x${s.errorTargetScale.toFixed(2)} (memory)` : '';
-        const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'state';
+        const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'lod';
         const flags = [
             this.observer.get('debug.tileFreeze') ? 'FROZEN' : '',
             this.observer.get('debug.tilePaused') ? 'PAUSED' : ''

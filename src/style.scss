@@ -1092,53 +1092,6 @@ body:not(.ui-ready) #panel-left {
     border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-// Группы отладки тайлов: цвет, границы, подписи. Свёрнутая занимает одну строку, поэтому
-// длинный плоский список не давит на остальную панель. Заголовок словом, а не значком:
-// «границы» и «подписи» не рисуются так, чтобы их узнавали без подсказки.
-.materials-layer-group {
-    margin-bottom: 6px;
-
-    > .materials-layer-group-title {
-        cursor: pointer;
-        user-select: none;
-        list-style: none;
-        padding: 3px 0 4px 14px;
-        position: relative;
-        font-size: 11px;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: #9b9b9b;
-
-        &::-webkit-details-marker {
-            display: none;
-        }
-
-        // Треугольник рисуем сами: встроенный маркер по-разному выглядит в браузерах и
-        // не подчиняется цвету панели.
-        &::before {
-            content: '';
-            position: absolute;
-            left: 2px;
-            top: 50%;
-            width: 0;
-            height: 0;
-            border-left: 4px solid currentcolor;
-            border-top: 3.5px solid transparent;
-            border-bottom: 3.5px solid transparent;
-            transform: translateY(-50%);
-            transition: transform 0.12s ease;
-        }
-
-        &:hover {
-            color: #d8d8d8;
-        }
-    }
-
-    &[open] > .materials-layer-group-title::before {
-        transform: translateY(-50%) rotate(90deg);
-    }
-}
-
 // Выбор схемы раскраски стоит сразу под кнопкой «Раскрасить модель» и подчинён ей по
 // ширине: список во всю строку читается как её продолжение, а не как отдельный элемент.
 .materials-layer-scheme {
