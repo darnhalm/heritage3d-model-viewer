@@ -15,12 +15,18 @@ import PopupPanel from './popup-panel';
 import SelectedNode from './selected-node';
 import { isMobileLayout } from '../helpers';
 
+// The editor timeline is not part of the player startup. React requests this chunk only when
+// the POI tab becomes active for the first time.
+const PoiTimeline = React.lazy(() => import('./poi-timeline'));
+
 // Через сколько применить изменения observer, если кадр так и не наступил.
 // Полтора кадра при 60 Гц: пока кадры идут, страховка никогда не срабатывает первой.
 const STATE_UPDATE_FALLBACK_MS = 25;
 
 // Тот же приём для полосы прогресса: без кадров её двигает таймер.
 const POI_PROGRESS_FALLBACK_MS = 25;
+
+const TOGGLE_POI_TIMELINE_PLAYBACK_EVENT = 'model-viewer:toggle-poi-timeline-playback';
 
 type PoiUiEntry = {
     id: string;
@@ -80,6 +86,10 @@ class App extends React.Component<{ observer: Observer }> {
     // принять этот переход за обычную паузу и снова заморозить камеру.
     private poiStopPending: boolean = false;
 
+    // A playhead seek owns the next observer render: componentDidUpdate must preserve the
+    // exact elapsed value instead of treating the playing=false change as an ordinary pause.
+    private poiSeekPending: boolean = false;
+
     constructor(props: { observer: Observer }) {
         super(props);
 
@@ -89,6 +99,10 @@ class App extends React.Component<{ observer: Observer }> {
         props.observer.on('*:set', this.scheduleStateUpdate);
 
         this.updatePoiProgress();
+    }
+
+    componentDidMount(): void {
+        document.addEventListener(TOGGLE_POI_TIMELINE_PLAYBACK_EVENT, this.toggleTourPlayback);
     }
 
     private setOverallProgress = (pct: number) => {
@@ -196,6 +210,7 @@ class App extends React.Component<{ observer: Observer }> {
     };
 
     componentWillUnmount(): void {
+        document.removeEventListener(TOGGLE_POI_TIMELINE_PLAYBACK_EVENT, this.toggleTourPlayback);
         if (this.stateUpdateRaf !== null) {
             window.cancelAnimationFrame(this.stateUpdateRaf);
             this.stateUpdateRaf = null;
@@ -280,7 +295,9 @@ class App extends React.Component<{ observer: Observer }> {
         }
 
         const list = this.getPoiList();
-        if (this.poiStopPending && !playing) {
+        if (this.poiSeekPending) {
+            this.poiSeekPending = false;
+        } else if (this.poiStopPending && !playing) {
             // Stop уже отменил перелёт и сбросил таймеры. Не вызываем pauseCard
             // повторно на отложенном React-обновлении observer.
             this.poiStopPending = false;
@@ -374,7 +391,10 @@ class App extends React.Component<{ observer: Observer }> {
     }
 
     private toggleTourPlayback = () => {
-        const playing = !!this.state?.poi?.playing;
+        // Read the live observer value: keyboard presses can arrive before React has
+        // rendered the preceding change, and stale component state would turn Play on
+        // twice instead of producing Play → Pause.
+        const playing = !!this.props.observer.get('poi.playing');
         if (playing) {
             this._setStateProperty('poi.playing', false);
             return;
@@ -389,6 +409,73 @@ class App extends React.Component<{ observer: Observer }> {
             }
         }
         this._setStateProperty('poi.playing', true);
+    };
+
+    private selectRelativePoi = (delta: number) => {
+        const list = this.getPoiList();
+        if (list.length === 0) return;
+        const activeId = String(this.state?.poi?.activeId ?? '');
+        const currentIndex = Math.max(0, list.findIndex(poi => String(poi.id) === activeId));
+        const next = list[(currentIndex + delta + list.length) % list.length];
+        if (next?.id) window.viewer?.focusPoi?.(String(next.id));
+    };
+
+    /**
+     * Absolute real time of the POI tour, used by the lazy timeline cursor.
+     *
+     * @returns Seconds from the beginning of the first POI track.
+     */
+    private getPoiPlaybackTime = () => {
+        const list = this.getPoiList();
+        const activeId = String(this.state?.poi?.activeId ?? '');
+        const activeIndex = list.findIndex(poi => String(poi.id) === activeId);
+        if (activeIndex < 0) return 0;
+        const before = list.slice(0, activeIndex).reduce((sum, poi) => (
+            sum + (poi.duration ?? DEFAULT_POI_DURATION_SECONDS) + (poi.holdTime ?? DEFAULT_POI_HOLD_TIME_SECONDS)
+        ), 0);
+        const cardTotal = this.currentPoiDuration + this.currentPoiHoldTime;
+        const elapsed = this.poiPausedElapsed ?? (this.currentPoiStartTime > 0 ?
+            Math.max(0, (Date.now() - this.currentPoiStartTime) / 1000) : 0);
+        return before + Math.min(cardTotal, elapsed);
+    };
+
+    private seekTour = (absoluteTime: number) => {
+        const list = this.getPoiList();
+        if (list.length === 0) return;
+        const totals = list.map(poi => (
+            (poi.duration ?? DEFAULT_POI_DURATION_SECONDS) + (poi.holdTime ?? DEFAULT_POI_HOLD_TIME_SECONDS)
+        ));
+        const total = totals.reduce((sum, value) => sum + value, 0);
+        const time = Math.max(0, Math.min(Number.isFinite(absoluteTime) ? absoluteTime : 0, total));
+        let before = 0;
+        let index = list.length - 1;
+        for (let i = 0; i < list.length; i++) {
+            if (time < before + totals[i] || i === list.length - 1) {
+                index = i;
+                break;
+            }
+            before += totals[i];
+        }
+
+        this.poiPlaybackToken++;
+        if (this.poiSlideshowTimeout !== null) {
+            clearTimeout(this.poiSlideshowTimeout);
+            this.poiSlideshowTimeout = null;
+        }
+        this.poiSeekPending = true;
+        this._setStateProperty('poi.playing', false);
+
+        const poi = list[index];
+        const elapsed = Math.max(0, time - before);
+        this.activePoiId = String(poi.id);
+        this.currentPoiDuration = poi.duration ?? DEFAULT_POI_DURATION_SECONDS;
+        this.currentPoiHoldTime = poi.holdTime ?? DEFAULT_POI_HOLD_TIME_SECONDS;
+        this.currentPoiStartTime = Date.now() - elapsed * 1000;
+        this.poiPausedElapsed = elapsed;
+        window.viewer?.focusPoi?.(this.activePoiId);
+        window.viewer?.pauseCameraFly?.();
+        this.ensurePoiProgressLoop();
+        this.emitTourState('paused');
     };
 
     private stopTour = () => {
@@ -435,6 +522,7 @@ class App extends React.Component<{ observer: Observer }> {
             this.state?.fragment?.enabled);
         const crowdedByFragment = fragmentBusy && isMobileLayout();
         const showPoiPlayer = poiList.length > 0 && !(embed?.enabled && !embed?.tour) && !crowdedByFragment;
+        const showPoiTimeline = !embed?.enabled && !!this.state?.poi?.enabled;
         // Переключатель проекции живёт под навигационным кубом и показывается вместе с ним.
         const showProjectionToggle = !!this.state?.camera?.viewCube;
         const orthographic = !!this.state?.camera?.ortho;
@@ -498,6 +586,20 @@ class App extends React.Component<{ observer: Observer }> {
             )}
             <div id='canvas-wrapper'>
                 <canvas id="application-canvas" ref={this.canvasRef} />
+                {showPoiTimeline && (
+                    <React.Suspense fallback={null}>
+                        <PoiTimeline
+                            observerData={this.state}
+                            setProperty={this._setStateProperty}
+                            onTogglePlay={this.toggleTourPlayback}
+                            onStop={this.stopTour}
+                            onPrevious={() => this.selectRelativePoi(-1)}
+                            onNext={() => this.selectRelativePoi(1)}
+                            onSeek={this.seekTour}
+                            getPlaybackTime={this.getPoiPlaybackTime}
+                        />
+                    </React.Suspense>
+                )}
                 {showEmbedLoadingBackdrop && (
                     <div id='embed-loading-backdrop'>
                         <img src={embed.placeholderUrl} alt='' />

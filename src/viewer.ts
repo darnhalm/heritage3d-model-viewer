@@ -16,6 +16,7 @@ import {
     KEY_ESCAPE,
     KEY_F,
     KEY_R,
+    KEY_SPACE,
     LAYERID_DEPTH,
     LAYERID_SKYBOX,
     PIXELFORMAT_DEPTH,
@@ -118,6 +119,7 @@ import { TileResolutionTint } from './tile-resolution-tint';
 import { dimColor, EDGE_WIDTH_UNIT, gridIndex, TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import type { TileReplayTimeline, TimelineState as TileReplayTimelineState } from './ui/tile-replay-timeline';
+import type { TimelineUnit } from './ui/timeline-units';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, SurfacePivotController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry, intersectMeshTriangles } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
@@ -147,6 +149,8 @@ const MOTION_SETTLE_MS = 180;
  * включается там, где оно и нужно, — на долгом облёте.
  */
 const MOTION_ONSET_MS = 100;
+
+const TOGGLE_POI_TIMELINE_PLAYBACK_EVENT = 'model-viewer:toggle-poi-timeline-playback';
 
 type MeshoptDecoderModule = typeof import('../lib/meshopt_decoder.module.js')['MeshoptDecoder'];
 
@@ -235,6 +239,29 @@ type FrozenTileCamera = {
     farClip: number;
     orthographic: boolean;
     orthoHeight: number;
+};
+
+type PoiCameraView = {
+    position: [number, number, number];
+    focus: [number, number, number];
+    fov?: number;
+};
+
+type PoiObserverView = {
+    position: Vec3;
+    focus: Vec3;
+    fov: number;
+};
+
+type PoiObserverTransition = {
+    elapsed: number;
+    duration: number;
+    startPosition: Vec3;
+    startFocus: Vec3;
+    startFov: number;
+    endPosition: Vec3;
+    endFocus: Vec3;
+    endFov: number;
 };
 
 type GSplatDebugStats = {
@@ -828,6 +855,12 @@ class Viewer {
     /** Полупрозрачный объём FOV замороженной камеры. */
     debugTileCameraSolid: DebugSolid;
 
+    /** Каркас, направление и путь виртуальной камеры POI во внешнем режиме просмотра. */
+    debugPoiObserverCamera: DebugLines;
+
+    /** Полупрозрачный объём FOV виртуальной камеры POI. */
+    debugPoiObserverCameraSolid: DebugSolid;
+
     /** Visible contour of the production clipping volume. */
     debugFragmentBox: DebugLines;
 
@@ -858,14 +891,23 @@ class Viewer {
 
     private tileReplayTimelineLoading: Promise<void> | null = null;
 
+    /** Prevent Stop from reopening Freeze while the Materials tab is being left. */
+    private closingTileDebugMode = false;
+
     /** Идёт ли проигрывание истории. */
     private tileReplayPlaying = false;
 
     /** Зацикливать ли проигрывание. */
     private tileReplayLoop = false;
 
-    /** Скорость проигрывания в загрузках за секунду. */
-    private tileReplaySpeed = 30;
+    /** Real-time playback multiplier. */
+    private tileReplaySpeed = 1;
+
+    /** Universal display mode; canonical recording data is always seconds. */
+    private tileReplayDisplayUnit: TimelineUnit = 'timecode';
+
+    /** Независим от скорости проигрывания и используется только для перевода кадры ↔ время. */
+    private tileReplayFps = 30;
 
     /** Дробный остаток отметки: скорость редко кратна частоте кадров. */
     private tileReplayCursorValue = 0;
@@ -1109,6 +1151,20 @@ class Viewer {
         endFov: number;
     } | null = null;
 
+    /** Внешний просмотр POI не захватывает рабочую камеру пользователя. */
+    private poiObserverMode = false;
+
+    private poiObserverView: PoiObserverView | null = null;
+
+    private poiObserverTransition: PoiObserverTransition | null = null;
+
+    private pausedPoiObserverFly: {
+        position: [number, number, number];
+        focus: [number, number, number];
+        fov: number;
+        remaining: number;
+    } | null = null;
+
     private doubleClickZoomTransition: {
         elapsed: number;
         duration: number;
@@ -1327,6 +1383,16 @@ class Viewer {
                     this.resetCamera();
                     break;
                 }
+                case KEY_SPACE: {
+                    // Let focused controls keep their native Space behavior and ignore key
+                    // repeat so one long press cannot rapidly flip playback several times.
+                    if (el && (el.tagName === 'BUTTON' || el.tagName === 'A')) break;
+                    if (event.event?.repeat) break;
+                    if (this.toggleActiveTimelinePlayback()) {
+                        event.event?.preventDefault();
+                    }
+                    break;
+                }
             }
         });
         // create the light
@@ -1515,6 +1581,8 @@ class Viewer {
         this.debugTilesSolid = new DebugSolid(app, camera);
         this.debugTileCamera = new DebugLines(app, camera);
         this.debugTileCameraSolid = new DebugSolid(app, camera);
+        this.debugPoiObserverCamera = new DebugLines(app, camera);
+        this.debugPoiObserverCameraSolid = new DebugSolid(app, camera);
         // false → обычный тест глубины: рёбра бокса скрываются за геометрией, и видно, где
         // именно бокс входит в модель. С overlay-режимом бокс лежал поверх модели целиком.
         this.debugFragmentBoxSolid = new DebugSolid(app, camera, false);
@@ -1798,7 +1866,7 @@ class Viewer {
                 })(),
                 fov: this.camera.camera.fov
             }),
-            applyCameraView: (view, duration) => this.flyToCameraView(view, duration),
+            applyCameraView: (view, duration) => this.applyPoiCameraView(view, duration),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
         this.microphoneController = new MicrophoneController({
@@ -2689,6 +2757,7 @@ class Viewer {
             // Start очищает эпизод и возвращает живой стриминг, Stop фиксирует его и
             // открывает таймлайн. Сам tileFreeze остаётся внутренним режимом просмотра.
             'debug.tileRecording': (recording: boolean) => {
+                if (this.closingTileDebugMode) return;
                 if (recording) {
                     this.startTileReplayRecording();
                 } else {
@@ -2771,6 +2840,8 @@ class Viewer {
                     if (this.observer.get('debug.withTextureOnly')) {
                         this.observer.set('debug.withTextureOnly', false);
                     }
+                } else if (this.poiObserverMode) {
+                    this.setPoiObserverMode(false);
                 }
                 this.canvas.style.cursor = enabled ? 'crosshair' : '';
                 this.renderNextFrame();
@@ -4792,33 +4863,135 @@ class Viewer {
         this.renderNextFrame();
     }
 
-    flyToCameraView(view: { position: [number, number, number]; focus: [number, number, number]; fov?: number }, duration = 1.0) {
+    private normalizePoiCameraView(view: PoiCameraView | null | undefined, fallbackFov: number): PoiObserverView | null {
+        const isTriple = (value: unknown): value is [number, number, number] => Array.isArray(value) &&
+            value.length >= 3 && value.slice(0, 3).every(n => typeof n === 'number' && Number.isFinite(n));
+        if (!isTriple(view?.position) || !isTriple(view?.focus)) return null;
+
+        const rawFov = typeof view.fov === 'number' && Number.isFinite(view.fov) ? view.fov : fallbackFov;
+        return {
+            position: new Vec3(view.position[0], view.position[1], view.position[2]),
+            focus: new Vec3(view.focus[0], view.focus[1], view.focus[2]),
+            fov: math.clamp(rawFov, 1, 179)
+        };
+    }
+
+    private getActivePoiCameraView(): PoiCameraView | null {
+        try {
+            const list = JSON.parse(String(this.observer.get('poi.list') ?? '[]')) as Array<{ id?: string; camera?: PoiCameraView }>;
+            if (!Array.isArray(list)) return null;
+            const activeId = String(this.observer.get('poi.activeId') ?? '');
+            return list.find(poi => poi?.id === activeId)?.camera ?? null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Toggle the external POI camera. In this mode tour navigation drives only a virtual
+     * frustum while the user's orbit camera remains enabled and independent.
+     *
+     * @param enabled - Whether the external observer is active.
+     */
+    setPoiObserverMode(enabled: boolean) {
+        const next = !!enabled;
+        if (this.poiObserverMode === next) return;
+
+        this.poiObserverMode = next;
+        this.poiObserverTransition = null;
+        this.pausedPoiObserverFly = null;
+        if (next) {
+            // A half-finished regular POI flight must not keep ownership of the user camera.
+            this.pausedCameraFly = null;
+            if (this.cameraFlyTransition || this.doubleClickZoomTransition) this.stopCameraFlyTransition();
+            const selected = this.normalizePoiCameraView(this.getActivePoiCameraView(), this.camera.camera.fov);
+            this.poiObserverView = selected ?? {
+                position: this.cameraControls.getPosition(),
+                focus: this.cameraControls.getFocus(),
+                fov: this.camera.camera.fov
+            };
+        } else {
+            this.poiObserverView = null;
+        }
+        this.renderNextFrame();
+    }
+
+    /**
+     * Small read-only snapshot used by diagnostics and browser regression tests.
+     *
+     * @returns Current external-observer state and virtual camera pose.
+     */
+    getPoiObserverState() {
+        const view = this.poiObserverView;
+        return {
+            enabled: this.poiObserverMode,
+            transitioning: !!this.poiObserverTransition,
+            position: view ? [view.position.x, view.position.y, view.position.z] : null,
+            focus: view ? [view.focus.x, view.focus.y, view.focus.z] : null,
+            fov: view?.fov ?? null
+        };
+    }
+
+    private applyPoiCameraView(view: PoiCameraView, duration = 1.0) {
+        if (this.poiObserverMode) {
+            this.flyPoiObserverCameraTo(view, duration);
+        } else {
+            this.flyToCameraView(view, duration);
+        }
+    }
+
+    private flyPoiObserverCameraTo(view: PoiCameraView, duration = 1.0) {
+        const target = this.normalizePoiCameraView(view, this.poiObserverView?.fov ?? this.camera.camera.fov);
+        if (!target) {
+            this.renderNextFrame();
+            return;
+        }
+        const current = this.poiObserverView ?? {
+            position: this.cameraControls.getPosition(),
+            focus: this.cameraControls.getFocus(),
+            fov: this.camera.camera.fov
+        };
+        this.pausedPoiObserverFly = null;
+        this.poiObserverTransition = {
+            elapsed: 0,
+            duration: Math.max(0.01, Number.isFinite(duration) ? duration : 1),
+            startPosition: current.position.clone(),
+            startFocus: current.focus.clone(),
+            startFov: current.fov,
+            endPosition: target.position,
+            endFocus: target.focus,
+            endFov: target.fov
+        };
+        this.poiObserverView = {
+            position: current.position.clone(),
+            focus: current.focus.clone(),
+            fov: current.fov
+        };
+        this.renderNextFrame();
+    }
+
+    flyToCameraView(view: PoiCameraView, duration = 1.0) {
         // Ракурсы точек интереса приходят из `.model-viewer-settings.json`, а его пишет
         // пользователь и может править руками. Точка с недописанным `camera` (скажем,
         // `{}` или обрезанным массивом) раньше валила вьюер прямо здесь, на `position[0]`.
         // Теперь такой ракурс считаем несохранённым: точка становится активной, камера
         // остаётся на месте — ровно как у точки, у которой вида и не было.
-        const isTriple = (value: unknown): value is [number, number, number] => Array.isArray(value) &&
-            value.length >= 3 && value.slice(0, 3).every(n => typeof n === 'number' && Number.isFinite(n));
-        if (!isTriple(view?.position) || !isTriple(view?.focus)) {
+        const target = this.normalizePoiCameraView(view, this.camera.camera.fov);
+        if (!target) {
             this.renderNextFrame();
             return;
         }
 
-        const endPosition = new Vec3(view.position[0], view.position[1], view.position[2]);
-        const endFocus = new Vec3(view.focus[0], view.focus[1], view.focus[2]);
-        const endFov = typeof view.fov === 'number' && Number.isFinite(view.fov) ? view.fov : this.camera.camera.fov;
-
         this.stopCameraFlyTransition();
         this.cameraFlyTransition = {
             elapsed: 0,
-            duration: Math.max(0.01, duration),
+            duration: Math.max(0.01, Number.isFinite(duration) ? duration : 1),
             startPosition: this.cameraControls.getPosition(),
             startFocus: this.cameraControls.getFocus(),
             startFov: this.camera.camera.fov,
-            endPosition,
-            endFocus,
-            endFov
+            endPosition: target.position,
+            endFocus: target.focus,
+            endFov: target.fov
         };
         this.cameraControls.enabled = false;
         this.renderNextFrame();
@@ -4838,6 +5011,23 @@ class Viewer {
      * @returns Остаток времени перелёта в секундах.
      */
     pauseCameraFly(): number {
+        if (this.poiObserverMode) {
+            const tr = this.poiObserverTransition;
+            if (!tr) {
+                this.pausedPoiObserverFly = null;
+                return 0;
+            }
+            const remaining = Math.max(0, tr.duration - tr.elapsed);
+            this.pausedPoiObserverFly = {
+                position: [tr.endPosition.x, tr.endPosition.y, tr.endPosition.z],
+                focus: [tr.endFocus.x, tr.endFocus.y, tr.endFocus.z],
+                fov: tr.endFov,
+                remaining
+            };
+            this.poiObserverTransition = null;
+            this.renderNextFrame();
+            return remaining;
+        }
         const tr = this.cameraFlyTransition;
         if (!tr) {
             this.pausedCameraFly = null;
@@ -4857,6 +5047,13 @@ class Viewer {
 
     /** Продолжить прерванный паузой перелёт к той же цели за оставшееся время. */
     resumeCameraFly() {
+        if (this.poiObserverMode) {
+            const paused = this.pausedPoiObserverFly;
+            this.pausedPoiObserverFly = null;
+            if (!paused || paused.remaining <= 0.001) return;
+            this.flyPoiObserverCameraTo({ position: paused.position, focus: paused.focus, fov: paused.fov }, paused.remaining);
+            return;
+        }
         const paused = this.pausedCameraFly;
         this.pausedCameraFly = null;
         if (!paused || paused.remaining <= 0.001) return;
@@ -4866,7 +5063,10 @@ class Viewer {
     /** Полностью отменить перелёт камеры (Stop тура): без снапа к цели. */
     cancelCameraFly() {
         this.pausedCameraFly = null;
+        this.pausedPoiObserverFly = null;
+        this.poiObserverTransition = null;
         if (this.cameraFlyTransition) this.stopCameraFlyTransition();
+        this.renderNextFrame();
     }
 
     private updateCameraFlyTransition(dt: number) {
@@ -4890,6 +5090,22 @@ class Viewer {
             this.fitCameraClipPlanes();
             this.stopCameraFlyTransition();
         }
+    }
+
+    private updatePoiObserverTransition(dt: number) {
+        const transition = this.poiObserverTransition;
+        const view = this.poiObserverView;
+        if (!transition || !view) return;
+
+        transition.elapsed = Math.min(transition.elapsed + dt, transition.duration);
+        const alpha = transition.elapsed / transition.duration;
+        const eased = alpha * alpha * (3 - 2 * alpha);
+        view.position.lerp(transition.startPosition, transition.endPosition, eased);
+        view.focus.lerp(transition.startFocus, transition.endFocus, eased);
+        view.fov = math.lerp(transition.startFov, transition.endFov, eased);
+        this.renderNextFrame();
+
+        if (alpha >= 1) this.poiObserverTransition = null;
     }
 
     private updateDoubleClickZoomTransition(dt: number) {
@@ -6947,15 +7163,90 @@ class Viewer {
         this.renderNextFrame();
     }
 
+    /** Tile debugging is scoped strictly to the open Materials tab. */
+    exitTileDebugMode() {
+        this.closingTileDebugMode = true;
+        this.tileManager?.stopLoadHistory();
+        this.tileReplayPlaying = false;
+        this.tileReplayCursorValue = 0;
+        this.observer.set('debug.tileRecording', false);
+        this.observer.set('debug.tileFreeze', false);
+        this.observer.set('debug.tilePaused', false);
+        this.observer.set('debug.tileReplay', -1);
+        [
+            'debug.tileDebug', 'debug.tileLodColor', 'debug.tileOrderLabels',
+            'debug.tileIdLabels', 'debug.tileOrderPerLod', 'debug.tilePick',
+            'debug.tileIsolatePick', 'debug.tileCheckerFill', 'debug.tileLodLock'
+        ].forEach(path => this.observer.set(path, false));
+        this.tileManager?.setFrozen(false);
+        this.tileManager?.setPaused(false);
+        this.tileReplayTimeline?.destroy();
+        this.tileReplayTimeline = null;
+        document.body.classList.remove('timeline-open');
+        this.closingTileDebugMode = false;
+        this.renderNextFrame();
+    }
+
     /** Остановить запись и перейти к просмотру зафиксированного эпизода на таймлайне. */
     private stopTileReplayRecording() {
         if (!this.tileManager) return;
+        this.tileManager.stopLoadHistory();
         this.tileReplayPlaying = false;
         this.observer.set('debug.tileReplay', -1);
         if (!this.observer.get('debug.tileFreeze')) {
             this.observer.set('debug.tileFreeze', true);
         }
         this.renderNextFrame();
+    }
+
+    /**
+     * Toggle whichever timeline is currently available to the user.
+     *
+     * @returns Whether a timeline handled the shortcut.
+     */
+    private toggleActiveTimelinePlayback() {
+        if (document.body.classList.contains('poi-timeline-open')) {
+            let hasPoi = false;
+            try {
+                const list = JSON.parse(String(this.observer.get('poi.list') ?? '[]'));
+                hasPoi = Array.isArray(list) && list.some(poi => !poi?.trigger);
+            } catch { /* malformed external state: leave the empty timeline stopped */ }
+            if (!hasPoi) return false;
+            document.dispatchEvent(new Event(TOGGLE_POI_TIMELINE_PLAYBACK_EVENT));
+            return true;
+        }
+
+        if (document.body.classList.contains('timeline-open')) {
+            return this.toggleTileReplayPlayback();
+        }
+
+        try {
+            const animations = JSON.parse(String(this.observer.get('animation.list') ?? '[]'));
+            if (Array.isArray(animations) && animations.length > 0) {
+                this.observer.set('animation.playing', !this.observer.get('animation.playing'));
+                return true;
+            }
+        } catch { /* malformed external state: there is no usable animation timeline */ }
+        return false;
+    }
+
+    /**
+     * Toggle tile-history playback and restart from the beginning when it is at the end.
+     *
+     * @returns Whether a recorded tile timeline was available.
+     */
+    private toggleTileReplayPlayback() {
+        const total = this.tileManager?.getRecordingDuration() ?? 0;
+        if (total <= 0) return false;
+        this.tileReplayPlaying = !this.tileReplayPlaying;
+        if (this.tileReplayPlaying) {
+            const now = Number(this.observer.get('debug.tileReplay') ?? -1);
+            this.tileReplayCursorValue = now < 0 ? 0 : now;
+            if (this.tileReplayCursorValue >= total) this.tileReplayCursorValue = 0;
+            this.observer.set('debug.tileReplay', this.tileReplayCursorValue);
+        }
+        this.renderNextFrame();
+        return true;
     }
 
     /** Применить к менеджеру текущую изоляцию уровня LOD из observer. */
@@ -7126,6 +7417,79 @@ class Viewer {
         this.debugTileCameraSolid.frustumFaces(nearCorners, farCorners);
         this.debugTileCamera.update();
         this.debugTileCameraSolid.update();
+    }
+
+    /** Draw the authored POI path and the independently animated virtual camera. */
+    private drawPoiObserverCamera() {
+        this.debugPoiObserverCamera.clear();
+        this.debugPoiObserverCameraSolid.clear();
+
+        const view = this.poiObserverView;
+        if (!this.poiObserverMode || !view) {
+            this.debugPoiObserverCamera.update();
+            this.debugPoiObserverCameraSolid.update();
+            return;
+        }
+
+        // The saved camera positions make the authored route readable even while playback is
+        // stopped. Invalid/partial settings entries are simply omitted from the path.
+        try {
+            const list = JSON.parse(String(this.observer.get('poi.list') ?? '[]')) as Array<{
+                trigger?: boolean;
+                camera?: PoiCameraView;
+            }>;
+            const keyframes = Array.isArray(list) ? list
+            .filter(poi => !poi?.trigger)
+            .map(poi => this.normalizePoiCameraView(poi?.camera, view.fov))
+            .filter((camera): camera is PoiObserverView => !!camera) : [];
+            for (let i = 1; i < keyframes.length; ++i) {
+                this.debugPoiObserverCamera.line(keyframes[i - 1].position, keyframes[i].position, 0xc0ffb33c);
+            }
+        } catch {
+            // A malformed POI list must not take down rendering; the current frustum still works.
+        }
+
+        const forward = view.focus.clone().sub(view.position);
+        const focusDistance = forward.length();
+        if (focusDistance < 1e-6) forward.set(0, 0, -1);
+        else forward.mulScalar(1 / focusDistance);
+        const upHint = Math.abs(forward.y) > 0.98 ? new Vec3(0, 0, 1) : new Vec3(0, 1, 0);
+        const right = new Vec3().cross(forward, upHint).normalize();
+        const up = new Vec3().cross(right, forward).normalize();
+
+        const radius = Math.max(this.sceneBounds.halfExtents.length(), 0.05);
+        const farDistance = Math.max(radius * 0.35, Math.min(Math.max(focusDistance, radius * 0.35), radius * 1.5));
+        const nearDistance = Math.max(farDistance * 0.04, 0.005);
+        const aspect = Math.max(0.1, this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight));
+        const verticalFov = math.clamp(view.fov, 1, 179) * math.DEG_TO_RAD;
+        const cornersAt = (distance: number) => {
+            const halfHeight = Math.tan(verticalFov * 0.5) * distance;
+            const halfWidth = halfHeight * aspect;
+            return [
+                [-halfWidth, halfHeight],
+                [halfWidth, halfHeight],
+                [halfWidth, -halfHeight],
+                [-halfWidth, -halfHeight]
+            ].map(([x, y]) => view.position.clone()
+            .add(right.clone().mulScalar(x))
+            .add(up.clone().mulScalar(y))
+            .add(forward.clone().mulScalar(distance)));
+        };
+        const nearCorners = cornersAt(nearDistance);
+        const farCorners = cornersAt(farDistance);
+
+        // Cyan is the route/current view, yellow is the optical direction, and the translucent
+        // volume makes the saved field of view legible against the model from either side.
+        this.debugPoiObserverCamera.line(view.position, view.focus, 0xffffd24a);
+        for (let i = 0; i < 4; ++i) {
+            const next = (i + 1) % 4;
+            this.debugPoiObserverCamera.line(nearCorners[i], nearCorners[next], 0xffffffff);
+            this.debugPoiObserverCamera.line(farCorners[i], farCorners[next], 0xc0ffb33c);
+            this.debugPoiObserverCamera.line(view.position, farCorners[i], 0xa0ffb33c);
+        }
+        this.debugPoiObserverCameraSolid.frustumFaces(nearCorners, farCorners, 0x123cb3ff, 0x0a4ad2ff);
+        this.debugPoiObserverCamera.update();
+        this.debugPoiObserverCameraSolid.update();
     }
 
     // set the currently selected track
@@ -7839,14 +8203,18 @@ class Viewer {
         // Шаг проигрывания истории — здесь, а не в обновлении оверлея: запрос кадра изнутри
         // самого кадра следующего не даёт, и проигрывание вставало после первого шага.
         if (this.tileReplayPlaying) {
-            this.advanceTileReplay(this.tileManager?.getLoadedCount() ?? 0, deltaTime);
+            this.advanceTileReplay(this.tileManager?.getRecordingDuration() ?? 0, deltaTime);
         }
         this.updateCameraFlyTransition(deltaTime);
+        this.updatePoiObserverTransition(deltaTime);
         this.updateDoubleClickZoomTransition(deltaTime);
 
         // update the orbit camera
         if (!this.cameraFlyTransition && !this.doubleClickZoomTransition) {
             this.cameraControls.update(deltaTime);
+        }
+        if (this.observer.get('debug.tileRecording')) {
+            this.tileManager?.recordFrame();
         }
 
         // Surface markers use the camera pose produced above. In particular, a pan marker must
@@ -8690,6 +9058,7 @@ class Viewer {
         this.updateTileHud();
         this.updateTileReplayBar();
         this.drawFrozenTileCamera();
+        this.drawPoiObserverCamera();
 
         // Exact production clipping and its persistent oriented-box contour. Newly
         // streamed materials are discovered here before the frame is submitted.
@@ -9008,16 +9377,17 @@ class Viewer {
      * расстановки. Готовой временной шкалы в pcui нет, и там она тоже написана руками — своё
      * изобретать незачем.
      *
-     * Отличие одно, и оно про данные, а не про вид: ромбики отмечают не ключевые кадры, а
-     * первое появление каждого уровня детализации, и красятся цветом уровня.
+     * Отличие про данные: ромбики отмечают первое появление каждого уровня детализации,
+     * контурные кольца — его последнюю загрузку внутри записи. Оба вида вех красятся цветом
+     * уровня и не выдают последнюю активность за гарантию полной загрузки LOD.
      *
      * Крайнее правое положение означает «сейчас»: при замороженной камере подкачка стоит, и
      * последняя загрузка — это и есть текущее состояние сцены.
      */
     private updateTileReplayBar() {
         const manager = this.tileManager;
-        const count = manager?.getLoadedCount() ?? 0;
-        const enabled = !!manager && !!this.observer.get('debug.tileFreeze') && count > 0;
+        const duration = manager?.getRecordingDuration() ?? 0;
+        const enabled = !!manager && !!this.observer.get('debug.tileFreeze') && duration > 0;
         // Пока шкала внизу, поднимаем над ней круглую панель кнопок — иначе она садится ровно
         // на ряд перемотки и закрывает его.
         document.body.classList.toggle('timeline-open', enabled);
@@ -9035,38 +9405,47 @@ class Viewer {
             const sceneCanvas = this.app.graphicsDevice.canvas as HTMLCanvasElement;
             const parent = sceneCanvas.parentElement ?? document.body;
             this.tileReplayTimelineLoading = import('./ui/tile-replay-timeline').then(({ TileReplayTimeline }) => {
-                if (this.destroyed) return;
+                if (this.destroyed || !this.observer.get('debug.tileFreeze')) {
+                    this.tileReplayTimelineLoading = null;
+                    return;
+                }
                 this.tileReplayTimeline = new TileReplayTimeline(parent, {
                     stepBack: t('Step back', lang),
                     play: t('Play', lang),
                     stepForward: t('Step forward', lang),
                     loop: t('Loop', lang),
                     recordAgain: t('Record again', lang),
-                    now: 'сейчас'
+                    milestoneTitle: t('LOD {level} first appeared · frame {frame}', lang),
+                    lastMilestoneTitle: t('LOD {level} last load in recording · frame {frame}', lang),
+                    now: lang === 'ru' ? 'сейчас' : (lang === 'zh' ? '当前' : 'now'),
+                    timeUnit: t('Time unit', lang),
+                    timecode: t('Timecode', lang),
+                    frames: t('Frames', lang)
                 }, {
                     onStep: (delta) => {
-                        const total = this.tileManager?.getLoadedCount() ?? 0;
+                        const total = this.tileManager?.getRecordingDuration() ?? 0;
                         const now = Number(this.observer.get('debug.tileReplay') ?? -1);
-                        const base = now < 0 ? total : Math.floor(now);
-                        const value = Math.max(0, Math.min(total, base + delta));
+                        const base = now < 0 ? total : now;
+                        const value = Math.max(0, Math.min(total, base + delta / this.tileReplayFps));
                         this.tileReplayPlaying = false;
                         this.tileReplayCursorValue = value;
                         this.observer.set('debug.tileReplay', value >= total ? -1 : value);
                     },
                     onTogglePlay: () => {
-                        const total = this.tileManager?.getLoadedCount() ?? 0;
-                        this.tileReplayPlaying = !this.tileReplayPlaying;
-                        if (this.tileReplayPlaying) {
-                            // С конца проигрывать нечего: начинаем сначала.
-                            const now = Number(this.observer.get('debug.tileReplay') ?? -1);
-                            this.tileReplayCursorValue = now < 0 ? 0 : now;
-                            if (this.tileReplayCursorValue >= total) this.tileReplayCursorValue = 0;
-                            this.observer.set('debug.tileReplay', this.tileReplayCursorValue);
-                        }
-                        this.renderNextFrame();
+                        this.toggleTileReplayPlayback();
                     },
                     onSpeed: (speed) => {
                         this.tileReplaySpeed = speed;
+                    },
+                    onUnit: (unit) => {
+                        this.tileReplayDisplayUnit = unit;
+                        this.tileReplayTimeline?.invalidate();
+                        this.renderNextFrame();
+                    },
+                    onFps: (fps) => {
+                        this.tileReplayFps = Math.max(1, Math.min(240, Math.round(fps)));
+                        this.tileReplayTimeline?.invalidate();
+                        this.renderNextFrame();
                     },
                     onToggleLoop: () => {
                         this.tileReplayLoop = !this.tileReplayLoop;
@@ -9074,7 +9453,7 @@ class Viewer {
                     },
                     onRecordAgain: () => this.observer.set('debug.tileRecording', true),
                     onScrub: (value) => {
-                        const total = this.tileManager?.getLoadedCount() ?? 0;
+                        const total = this.tileManager?.getRecordingDuration() ?? 0;
                         this.observer.set('debug.tileReplay', value >= total ? -1 : value);
                     },
                     onRequestRender: () => this.renderNextFrame()
@@ -9089,11 +9468,13 @@ class Viewer {
         }
 
         const state: TileReplayTimelineState = {
-            count,
+            duration,
             replay: Number(this.observer.get('debug.tileReplay') ?? -1),
             playing: this.tileReplayPlaying,
             loop: this.tileReplayLoop,
             speed: this.tileReplaySpeed,
+            displayUnit: this.tileReplayDisplayUnit,
+            fps: this.tileReplayFps,
             scheme: this.observer.get('debug.tileDebugMode') === 'resolution' ? 'resolution' : 'lod',
             milestones: manager.getLoadOrderMilestones()
         };
@@ -9106,17 +9487,17 @@ class Viewer {
      * Отметку держим дробной: скорость задаётся в загрузках за секунду и редко кратна частоте
      * кадров, а от округления на каждом кадре проигрывание шло бы рывками.
      *
-     * @param count - Всего загрузок.
+     * @param duration - Real recording duration in seconds.
      * @param deltaTime - Время кадра в секундах.
      */
-    private advanceTileReplay(count: number, deltaTime: number) {
-        if (count <= 0) return;
+    private advanceTileReplay(duration: number, deltaTime: number) {
+        if (duration <= 0) return;
         this.tileReplayCursorValue += this.tileReplaySpeed * (deltaTime || 1 / 60);
-        if (this.tileReplayCursorValue >= count) {
+        if (this.tileReplayCursorValue >= duration) {
             if (this.tileReplayLoop) {
                 this.tileReplayCursorValue = 0;
             } else {
-                this.tileReplayCursorValue = count;
+                this.tileReplayCursorValue = duration;
                 this.tileReplayPlaying = false;
                 this.observer.set('debug.tileReplay', -1);
                 return;

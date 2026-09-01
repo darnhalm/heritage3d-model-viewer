@@ -115,6 +115,18 @@ test('tile material debug buttons switch off on a second click', async ({ page }
     await expect(startRecording).toBeEnabled();
     await expect(stopRecording).toHaveCount(0);
     await expect(exitTimeline).toHaveCount(0);
+
+    // Tile debugging belongs to Materials only: leaving the tab tears down every mode.
+    await page.evaluate(() => (window as any).viewer.observer.set('debug.tileDebug', true));
+    await startRecording.click();
+    await page.locator('.left-panel-tab-scene').click();
+    await expect.poll(() => page.evaluate(() => ({
+        debug: (window as any).viewer.observer.get('debug.tileDebug'),
+        recording: (window as any).viewer.observer.get('debug.tileRecording'),
+        frozen: (window as any).viewer.observer.get('debug.tileFreeze'),
+        paused: (window as any).viewer.observer.get('debug.tilePaused')
+    }))).toEqual({ debug: false, recording: false, frozen: false, paused: false });
+    await expect(page.locator('#timeline-panel')).toHaveCount(0);
 });
 
 /** Дождаться, пока обход выберет хотя бы один тайл с готовым контентом. */
@@ -945,11 +957,109 @@ test('модуль таймлайна загружается только при
     }));
     expect(initial).toEqual({ panelExists: false, timelineRequests: 0 });
 
-    await setFlag(page, 'debug.tileFreeze', true);
+    await setFlag(page, 'debug.tileRecording', true);
+    await page.waitForTimeout(120);
+    const cachedSelectionEvent = await page.evaluate(() => {
+        const manager = (window as any).viewer.tileManager;
+        const cached = manager.prevSelection[0];
+        if (!cached) return null;
+        const before = manager.loadCounter;
+        cached.loadSequence = 0;
+        manager.prevSelection = [];
+        manager.applySelection([cached]);
+        return {
+            counterAdvanced: manager.loadCounter > before,
+            time: cached.loadTime
+        };
+    });
+    expect(cachedSelectionEvent).not.toBeNull();
+    expect(cachedSelectionEvent?.counterAdvanced).toBe(true);
+    expect(cachedSelectionEvent?.time).toBeGreaterThan(0);
+    await setFlag(page, 'debug.tileRecording', false);
     await pumpFrames(page, 2);
     await expect(page.locator('#timeline-panel')).toBeVisible();
     await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource')
     .filter(entry => entry.name.includes('tile-replay-timeline')).length)).toBe(1);
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('Space');
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.tileReplayPlaying)).toBe(true);
+    await page.keyboard.press('Space');
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.tileReplayPlaying)).toBe(false);
+
+    const milestones = await page.evaluate(() => (window as any).viewer.tileManager.getLoadOrderMilestones());
+    const externalTilesetMilestone = await page.evaluate(() => {
+        const manager = (window as any).viewer.tileManager;
+        const root = manager.rootTile;
+        const externalRoot = root?.children?.[0];
+        if (!root || !externalRoot) return null;
+        const previousExternalRoot = root.externalRoot;
+        const previousRootSequence = root.loadSequence;
+        const previousSequence = externalRoot.loadSequence;
+        const previousTime = externalRoot.loadTime;
+        try {
+            // External tilesets replace the wrapper's ordinary children at traversal time.
+            // Their recorded tiles must still contribute LOD milestones to the timeline.
+            root.externalRoot = externalRoot;
+            root.loadSequence = 0;
+            externalRoot.loadSequence = 1234;
+            externalRoot.loadTime = 3.5;
+            return manager.getLoadOrderMilestones().find((item: { sequence: number }) => item.sequence === 1234) ?? null;
+        } finally {
+            root.externalRoot = previousExternalRoot;
+            root.loadSequence = previousRootSequence;
+            externalRoot.loadSequence = previousSequence;
+            externalRoot.loadTime = previousTime;
+        }
+    });
+    expect(externalTilesetMilestone).toMatchObject({ sequence: 1234, time: 3.5 });
+    const markers = await page.locator('.time-label.key[data-kind="first"]').evaluateAll(elements => elements.map((element) => ({
+        kind: (element as HTMLElement).dataset.kind,
+        depth: Number((element as HTMLElement).dataset.depth),
+        sequence: Number((element as HTMLElement).dataset.sequence),
+        title: element.getAttribute('title'),
+        ariaLabel: element.getAttribute('aria-label')
+    })));
+    expect(markers.length).toBeGreaterThan(0);
+    expect(markers.map(({ depth, sequence }) => ({ depth, sequence }))).toEqual(
+        milestones.map(({ depth, sequence }: { depth: number, sequence: number }) => ({ depth, sequence }))
+    );
+    expect(new Set(markers.map(marker => marker.depth)).size).toBe(markers.length);
+    markers.forEach(({ kind, depth, sequence, title, ariaLabel }) => {
+        expect(kind).toBe('first');
+        expect(title).toBe(`LOD ${depth} first appeared · frame ${sequence}`);
+        expect(ariaLabel).toBe(title);
+    });
+
+    const lastMarkers = await page.locator('.time-label.key[data-kind="last"]').evaluateAll(elements => elements.map((element) => ({
+        kind: (element as HTMLElement).dataset.kind,
+        depth: Number((element as HTMLElement).dataset.depth),
+        sequence: Number((element as HTMLElement).dataset.sequence),
+        title: element.getAttribute('title'),
+        ariaLabel: element.getAttribute('aria-label')
+    })));
+    expect(lastMarkers.length).toBe(milestones.length);
+    expect(lastMarkers.map(({ depth, sequence }) => ({ depth, sequence }))).toEqual(
+        milestones.map(({ depth, lastSequence }: { depth: number, lastSequence: number }) => ({ depth, sequence: lastSequence }))
+    );
+    lastMarkers.forEach(({ kind, depth, sequence, title, ariaLabel }) => {
+        expect(kind).toBe('last');
+        expect(title).toBe(`LOD ${depth} last load in recording · frame ${sequence}`);
+        expect(ariaLabel).toBe(title);
+    });
+
+    const timecodeLabels = await page.locator('#ticks-area > .time-label:not(.key):not(.cursor)').allTextContents();
+    await expect(page.locator('#tile-timeline-unit option')).toHaveCount(2);
+    await page.locator('#tile-timeline-unit').selectOption('frames');
+    await page.locator('#tile-timeline-fps').selectOption('60');
+    await pumpFrames(page, 2);
+    const frameLabels = await page.locator('#ticks-area > .time-label:not(.key):not(.cursor)').allTextContents();
+    expect(frameLabels).not.toEqual(timecodeLabels);
+    // Unit conversion is presentation-only: milestone source frames remain unchanged.
+    const markersAfterUnitSwitch = await page.locator('.time-label.key[data-kind="first"]').evaluateAll(elements => elements.map(element => ({
+        depth: Number((element as HTMLElement).dataset.depth),
+        sequence: Number((element as HTMLElement).dataset.sequence)
+    })));
+    expect(markersAfterUnitSwitch).toEqual(markers.map(({ depth, sequence }) => ({ depth, sequence })));
     expect(pageErrors).toEqual([]);
 });
 
@@ -963,7 +1073,9 @@ test('таймлайн плавно интерполирует камеру ме
     await page.goto(`/?load=${encodeURIComponent(DISCRETE_LOD)}`);
     await waitForViewer(page);
     await waitForTiles(page);
-    await setFlag(page, 'debug.tileFreeze', true);
+    await setFlag(page, 'debug.tileRecording', true);
+    await page.waitForTimeout(120);
+    await setFlag(page, 'debug.tileRecording', false);
 
     const halfway = await page.evaluate(() => {
         const viewer = (window as any).viewer;
@@ -978,10 +1090,11 @@ test('таймлайн плавно интерполирует камеру ме
         secondWorld.data[12] = 10;
         manager.loadViews.length = 0;
         manager.loadViews.push(
-            { ...template, sequence: 1, world: firstWorld },
-            { ...template, sequence: 2, world: secondWorld }
+            { ...template, sequence: 1, time: 0, world: firstWorld },
+            { ...template, sequence: 2, time: 1, world: secondWorld }
         );
         manager.loadCounter = 2;
+        manager.recordingDuration = 1;
 
         viewer.observer.set('debug.tileReplay', 0.5);
         return {

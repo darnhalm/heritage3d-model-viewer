@@ -310,7 +310,11 @@ export interface ObserverData {
         enabled: boolean,
         activeId?: string,
         list: string,
-        playing?: boolean
+        playing?: boolean,
+        /** Authoring frame rate used only to convert the POI timeline display. */
+        timeline?: {
+            fps?: number
+        }
     },
     measure: {
         enabled: boolean,

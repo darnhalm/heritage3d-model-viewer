@@ -359,7 +359,10 @@ const observerData: ObserverData = {
     poi: {
         enabled: false,
         activeId: '',
-        list: '[]'
+        list: '[]',
+        timeline: {
+            fps: 30
+        }
     },
     measure: {
         enabled: false,

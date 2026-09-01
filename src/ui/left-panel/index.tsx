@@ -82,6 +82,7 @@ type ViewerApi = {
     setCameraProjection?: (ortho: boolean) => void;
     isOrthographic?: () => boolean;
     pulsePois?: () => void;
+    exitTileDebugMode?: () => void;
     reorderPoi?: (sourceId: string, targetId: string) => void;
     setSelectedMaterialFactor?: (channel: 'metallic' | 'roughness' | 'opacity', value: number) => void;
     setSelectedDiffuseColor?: (value: { r: number; g: number; b: number }) => void;
@@ -979,6 +980,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                 this.props.setProperty('poi.enabled', true);
                 getViewer()?.pulsePois?.();
             }
+            if (!isExpanded && this.state.tab === 'materials') {
+                getViewer()?.exitTileDebugMode?.();
+            }
             // First time the user opens the panel — run the guided tour.
             // Сам тур тянет driver.js и лежит отдельным чанком: грузим его только когда
             // он и правда понадобится, а «уже видели» проверяем без загрузки.
@@ -1014,6 +1018,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
     }
 
     componentWillUnmount(): void {
+        if (this.state.tab === 'materials') getViewer()?.exitTileDebugMode?.();
         if (this.poiSaveTimer) {
             clearTimeout(this.poiSaveTimer);
         }
@@ -1037,6 +1042,10 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
 
         if (prevState.tab === this.state.tab) {
             return;
+        }
+
+        if (prevState.tab === 'materials' && this.state.tab !== 'materials') {
+            getViewer()?.exitTileDebugMode?.();
         }
 
         const poiEnabled = this.props.observerData?.poi?.enabled ?? false;

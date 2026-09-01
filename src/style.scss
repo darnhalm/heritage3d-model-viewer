@@ -1166,9 +1166,10 @@ body:not(.ui-ready) #panel-left {
                 gap: 1px;
                 margin-right: 1px;
 
-                > #speed {
+                > .timeline-select {
                     margin: 0;
-                    width: 80px;
+                    min-width: 74px;
+                    max-width: 112px;
                     height: 24px;
                     border: 1px solid transparent;
                     border-radius: 4px;
@@ -1263,6 +1264,25 @@ body:not(.ui-ready) #panel-left {
                     clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
                     cursor: pointer;
                     pointer-events: auto;
+
+                    &.first {
+                        z-index: 2;
+                    }
+
+                    // Последняя загрузка этого LOD в эпизоде — контурное кольцо. Оно не
+                    // утверждает, что весь уровень загружен, а лишь закрывает записанный
+                    // диапазон его активности. При совпадении с первой загрузкой окружает ромб.
+                    &.last {
+                        z-index: 1;
+                        bottom: 20px;
+                        width: 12px;
+                        height: 12px;
+                        box-sizing: border-box;
+                        border: 2px solid var(--theme-primary);
+                        border-radius: 50%;
+                        background-color: #181818;
+                        clip-path: none;
+                    }
                 }
             }
         }
@@ -1273,6 +1293,335 @@ body:not(.ui-ready) #panel-left {
         font-size: 16px;
         line-height: 24px;
         vertical-align: middle;
+    }
+}
+
+// Редактор хронометража POI. Он монтируется только при открытой вкладке точек интереса,
+// поэтому эти селекторы не означают наличия панели или обработчиков в обычном плеере.
+#poi-timeline-panel {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 101;
+    height: 84px;
+    color: #b3aaac;
+    background: #181818;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    user-select: none;
+
+    .poi-timeline-toolbar {
+        position: relative;
+        height: 30px;
+        padding: 2px 8px;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #333;
+    }
+
+    .poi-timeline-name {
+        flex: 0 0 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .poi-timeline-transport {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 2px;
+
+        button {
+            display: grid;
+            place-items: center;
+            width: 26px;
+            height: 26px;
+            padding: 0;
+            border: 0;
+            border-radius: 4px;
+            color: #b3aaac;
+            background: transparent;
+            cursor: pointer;
+
+            &:hover,
+            &:focus-visible {
+                color: #fff;
+                background: #282828;
+                outline: none;
+            }
+
+            &.active {
+                color: #fff;
+                background: var(--theme-primary);
+            }
+
+            &:disabled {
+                color: #6f6b6c;
+                background: transparent;
+                cursor: default;
+            }
+        }
+    }
+
+    .poi-timeline-settings {
+        flex: 0 1 auto;
+        justify-content: flex-start;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-right: auto;
+        flex-shrink: 0;
+
+        label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            width: auto;
+            flex: 0 0 auto;
+            font-size: 11px;
+        }
+
+        select {
+            height: 24px;
+            min-width: 86px;
+            margin: 0;
+            padding: 0 6px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            color: #b3aaac;
+            background: #282828;
+            font-size: 12px;
+
+            &:hover,
+            &:focus-visible {
+                border-color: rgba(var(--theme-primary-rgb), 0.53);
+                outline: none;
+            }
+        }
+    }
+
+    .poi-timeline-track {
+        position: relative;
+        height: 54px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        touch-action: none;
+    }
+
+    .poi-timeline-content {
+        position: relative;
+        height: 100%;
+        min-width: 100%;
+    }
+
+    .poi-timeline-axis {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+    }
+
+    .poi-timeline-axis-tick {
+        position: absolute;
+        top: 8px;
+        bottom: 0;
+        width: 1px;
+        background: rgba(124, 118, 120, 0.42);
+
+        > span {
+            position: absolute;
+            left: 0;
+            bottom: 1px;
+            padding: 1px 3px;
+            transform: translateX(-50%);
+            color: #8f898b;
+            background: #181818;
+            font-size: 10px;
+            white-space: nowrap;
+        }
+    }
+
+    .poi-timeline-transition,
+    .poi-timeline-hold {
+        position: absolute;
+        top: 12px;
+        height: 14px;
+        box-sizing: border-box;
+        pointer-events: none;
+    }
+
+    // Контурная «скобка» — участок реального движения камеры к ключевому виду.
+    .poi-timeline-transition {
+        border: 1px solid #7c7678;
+        border-bottom-width: 2px;
+        background: repeating-linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.42) 0,
+            rgba(255, 255, 255, 0.42) 2px,
+            rgba(255, 255, 255, 0.035) 2px,
+            rgba(255, 255, 255, 0.035) 6px
+        );
+    }
+
+    .poi-timeline-hold {
+        border: 1px solid transparent;
+        opacity: 0.94;
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34), 0 0 5px rgba(255, 255, 255, 0.14);
+    }
+
+    .poi-timeline-marker {
+        position: absolute;
+        // Конец удержания совпадает с началом следующего POI. Круг должен принимать
+        // клик в месте пересечения, а высокая засечка остаётся доступна ниже него.
+        z-index: 5;
+        top: 1px;
+        display: grid;
+        place-items: center;
+        width: 22px;
+        height: 22px;
+        padding: 0;
+        transform: translateX(-50%);
+        border: 2px solid rgba(255, 255, 255, 0.72);
+        border-radius: 50%;
+        text-align: center;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+
+        &.active {
+            box-shadow: 0 0 0 2px #fff, 0 0 8px 2px currentColor;
+        }
+
+        &:focus-visible {
+            outline: 2px solid #fff;
+            outline-offset: 2px;
+        }
+    }
+
+    .poi-timeline-cursor {
+        position: absolute;
+        z-index: 6;
+        bottom: 1px;
+        transform: translateX(-50%);
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: #fff;
+        background-color: var(--theme-primary);
+        font-size: 12px;
+        white-space: nowrap;
+        pointer-events: none;
+    }
+
+    .poi-timeline-handle {
+        position: absolute;
+        z-index: 4;
+        top: 2px;
+        display: grid;
+        place-items: center;
+        width: 14px;
+        height: 44px;
+        padding: 0;
+        transform: translateX(-50%);
+        border: 0;
+        border-radius: 4px;
+        background: transparent;
+        cursor: ew-resize;
+        touch-action: none;
+
+        &::before {
+            content: '';
+            width: 5px;
+            height: 36px;
+            box-sizing: border-box;
+            border: 1px solid currentColor;
+            border-radius: 3px;
+            background: color-mix(in srgb, currentColor 18%, #fff);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 5px rgba(255, 255, 255, 0.42);
+        }
+
+        &:hover,
+        &:focus-visible {
+            outline: none;
+        }
+
+        &:hover::before,
+        &:focus-visible::before {
+            width: 7px;
+            border-color: #fff;
+            background: var(--theme-primary);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.72), 0 0 8px var(--theme-primary);
+        }
+    }
+
+    .poi-timeline-empty {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #7c7678;
+        font-size: 12px;
+        pointer-events: none;
+    }
+}
+
+// Панель POI выше тайловой по z-index. Если обе нужны одновременно, тайловую поднимаем
+// целиком, а основные круглые кнопки — над всем стеком.
+body.poi-timeline-open:not(.timeline-open) #popup-buttons-parent,
+body.poi-timeline-open:not(.timeline-open) #popup > #popup-buttons-parent {
+    bottom: 104px;
+}
+
+body.poi-timeline-open.timeline-open #timeline-panel {
+    bottom: 84px;
+}
+
+body.poi-timeline-open.timeline-open #popup-buttons-parent,
+body.poi-timeline-open.timeline-open #popup > #popup-buttons-parent {
+    bottom: 168px;
+}
+
+@media (max-width: 620px) {
+    #poi-timeline-panel {
+        .poi-timeline-toolbar {
+            gap: 4px;
+            padding-inline: 4px;
+        }
+
+        .poi-timeline-name,
+        .poi-timeline-settings label > span {
+            display: none;
+        }
+
+        .poi-timeline-settings {
+            flex: 1 1 auto;
+            justify-content: flex-end;
+            gap: 4px;
+        }
+
+        .poi-timeline-transport {
+            position: static;
+            transform: none;
+        }
+
+        .poi-timeline-settings select {
+            min-width: 74px;
+            max-width: 120px;
+        }
+    }
+
+    #timeline-panel > #controls-wrap > .spacer > #settings-controls > .timeline-select {
+        min-width: 62px;
+        max-width: 82px;
     }
 }
 

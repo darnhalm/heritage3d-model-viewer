@@ -659,6 +659,15 @@ class PoiController {
                 marker.addEventListener('click', (event) => {
                     event.preventDefault();
                     event.stopPropagation();
+                    // In edit mode mousedown on a marker starts a model-surface drag and
+                    // selects the POI immediately. Some browsers still emit click after
+                    // mouseup even when mousedown was prevented, which used to start the
+                    // POI camera/clip animation at the end of every drag.
+                    if (this.observer.get('poi.enabled')) {
+                        this.setActivePoi(poi.id);
+                        this.renderNextFrame();
+                        return;
+                    }
                     const cur = this.getPoiList().find(x => x.id === poi.id);
                     if (cur?.trigger) {
                         // Каждый клик по триггеру — отдельный «хит» (нота играется КАЖДЫЙ

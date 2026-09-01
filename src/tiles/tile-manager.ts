@@ -484,6 +484,12 @@ export class TileManager {
      */
     private loadCounter = 0;
 
+    /** Monotonic start of the explicit recording; null outside recording. */
+    private recordingStartMs: number | null = null;
+
+    /** Real duration of the last/current recording in seconds. */
+    private recordingDuration = 0;
+
     /** Счётчики порядка загрузки по уровням детализации: ключ — глубина тайла. */
     private readonly lodCounters = new Map<number, number>();
 
@@ -496,6 +502,7 @@ export class TileManager {
      */
     private readonly loadViews: Array<{
         sequence: number,
+        time: number,
         world: Mat4,
         viewProj: Mat4,
         cameraPos: Vec3,
@@ -539,24 +546,37 @@ export class TileManager {
      * @param tile - Тайл, содержимое которого готово.
      */
     private markLoadOrder(tile: Tile) {
+        if (this.recordingStartMs === null) return;
         tile.loadSequence = ++this.loadCounter;
-        const cameraComponent = this.camera.camera;
-        // Ограничение на длину следа: на долгом сеансе с перезагрузками кэша история растёт без
-        // предела, а разглядывают всегда её начало.
-        if (cameraComponent && this.loadViews.length < LOAD_VIEW_HISTORY_LIMIT) {
-            const viewProj = new Mat4().mul2(cameraComponent.projectionMatrix, cameraComponent.viewMatrix);
-            this.loadViews.push({
-                sequence: tile.loadSequence,
-                world: this.camera.getWorldTransform().clone(),
-                viewProj,
-                cameraPos: this.camera.getPosition().clone(),
-                viewportHeight: this.view.viewportHeight,
-                sseDenominator: this.view.sseDenominator
-            });
-        }
+        tile.loadTime = this.recordingElapsed();
         const next = (this.lodCounters.get(tile.depth) ?? 0) + 1;
         this.lodCounters.set(tile.depth, next);
         tile.lodSequence = next;
+    }
+
+    private recordingElapsed() {
+        return this.recordingStartMs === null ? this.recordingDuration :
+            Math.max(0, (performance.now() - this.recordingStartMs) / 1000);
+    }
+
+    /** Capture the camera continuously, so replay is one time-based keyframe animation. */
+    recordFrame() {
+        if (this.recordingStartMs === null || this.loadViews.length >= LOAD_VIEW_HISTORY_LIMIT) return;
+        const cameraComponent = this.camera.camera;
+        if (!cameraComponent) return;
+        const time = this.recordingElapsed();
+        const last = this.loadViews[this.loadViews.length - 1];
+        if (last && time - last.time < 1 / 60) return;
+        this.recordingDuration = time;
+        this.loadViews.push({
+            sequence: this.loadCounter,
+            time,
+            world: this.camera.getWorldTransform().clone(),
+            viewProj: new Mat4().mul2(cameraComponent.projectionMatrix, cameraComponent.viewMatrix),
+            cameraPos: this.camera.getPosition().clone(),
+            viewportHeight: this.view.viewportHeight,
+            sseDenominator: this.view.sseDenominator
+        });
     }
 
     /**
@@ -979,7 +999,7 @@ export class TileManager {
         // Перемотка истории: тайл, доехавший позже отметки, для отбора ещё не существует —
         // ровно как в тот момент времени. Возвращаем «не закрывает», поэтому на экране
         // остаётся родитель, и кадр совпадает с тем, что зритель тогда и видел.
-        if (this.replayLimit >= 0 && tile.loadSequence > this.replayLimit) {
+        if (this.replayLimit >= 0 && tile.loadSequence > 0 && tile.loadTime > this.replayLimit) {
             return false;
         }
         if (tile.contentUris.length === 0) {
@@ -1172,6 +1192,17 @@ export class TileManager {
             selection.some((tile, i) => this.prevSelection[i] !== tile);
 
         if (!changed) return;
+
+        // A cached tile does not fire attachContent again. During an explicit recording,
+        // mark it when it first becomes selected by the moving camera; otherwise every
+        // cached LOD is stamped at t=0 and all timeline milestones collapse into one dot.
+        if (this.recordingStartMs !== null) {
+            selection.forEach((tile) => {
+                if (tile.state === TILE_READY && tile.loadSequence <= 0) {
+                    this.markLoadOrder(tile);
+                }
+            });
+        }
 
         this.prevSelection.forEach((tile) => {
             tile.selected = false;
@@ -1668,12 +1699,11 @@ export class TileManager {
      * @returns Мировая матрица камеры того момента, чтобы вьюер нарисовал её на месте.
      */
     applyReplayView(limit: number): Mat4 | null {
-        // Состав тайлов и отбор остаются ступенчатыми: берём последнюю загрузку не позже
-        // отметки. Только нарисованная камера интерполируется между ключами ниже.
+        // Состав тайлов остаётся ступенчатым, а камера следует непрерывному временному следу.
         let found = null as (typeof this.loadViews)[number] | null;
         if (limit >= 0) {
             for (let i = 0; i < this.loadViews.length; i++) {
-                if (this.loadViews[i].sequence > limit) break;
+                if (this.loadViews[i].time > limit) break;
                 found = this.loadViews[i];
             }
         }
@@ -1697,17 +1727,14 @@ export class TileManager {
         this.view.viewportHeight = selectionView.viewportHeight;
         this.view.sseDenominator = selectionView.sseDenominator;
 
-        // Камерные ключи занимают промежутки между отметками загрузок: первая записанная
-        // поза стоит в 0, вторая — в 1 и т.д. Финальная поза Stop стоит в конце шкалы. Так
-        // остаётся место и для плавного последнего отрезка после последней загрузки.
         const first = this.loadViews[0];
         if (!first) return null;
         let fromWorld = first.world;
         let toWorld = this.replayEndWorld ?? first.world;
         let fromAt = 0;
-        let toAt = Math.max(1, this.loadCounter);
+        let toAt = Math.max(0.001, this.recordingDuration);
         for (let i = 1; i < this.loadViews.length; i++) {
-            const nextAt = Math.max(0, this.loadViews[i].sequence - 1);
+            const nextAt = this.loadViews[i].time;
             if (nextAt >= limit) {
                 toWorld = this.loadViews[i].world;
                 toAt = nextAt;
@@ -1720,7 +1747,7 @@ export class TileManager {
         // Если прошли все загрузочные ключи, ведём к позе, на которой нажали Stop.
         if (fromWorld === this.loadViews[this.loadViews.length - 1].world) {
             toWorld = this.replayEndWorld ?? fromWorld;
-            toAt = Math.max(fromAt, this.loadCounter);
+            toAt = Math.max(fromAt, this.recordingDuration);
         }
         if (toAt <= fromAt || fromWorld === toWorld) return fromWorld;
 
@@ -1744,6 +1771,15 @@ export class TileManager {
     }
 
     /**
+     * Real duration used as the timeline extent.
+     *
+     * @returns Seconds since Record was pressed, or the final recorded duration.
+     */
+    getRecordingDuration(): number {
+        return this.recordingElapsed();
+    }
+
+    /**
      * Начать новый эпизод записи: забыть историю загрузки и след камеры.
      *
      * История копится с момента загрузки модели, и без сброса обнулить её можно только
@@ -1759,10 +1795,12 @@ export class TileManager {
         this.loadCounter = 0;
         this.loadViews.length = 0;
         this.replayEndWorld = null;
+        this.recordingDuration = 0;
         this.lodCounters.clear();
         this.replayLimit = -1;
         const walk = (tile: Tile) => {
             tile.loadSequence = 0;
+            tile.loadTime = 0;
             tile.lodSequence = 0;
             const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
             for (let i = 0; i < children.length; ++i) {
@@ -1772,32 +1810,73 @@ export class TileManager {
         if (this.rootTile) {
             walk(this.rootTile);
         }
+        this.recordingStartMs = performance.now();
+        // Only the currently visible cached tiles belong to the initial state. Other cached
+        // tiles are stamped later, when camera movement selects them for the first time.
+        this.prevSelection.forEach((tile) => {
+            if (tile.state === TILE_READY) this.markLoadOrder(tile);
+        });
+        this.recordFrame();
+    }
+
+    /** Finish the real-time episode at the exact Stop instant. */
+    stopLoadHistory() {
+        if (this.recordingStartMs === null) return;
+        this.recordFrame();
+        this.recordingDuration = this.recordingElapsed();
+        this.recordingStartMs = null;
+        this.replayEndWorld = this.camera.getWorldTransform().clone();
     }
 
     /**
-     * Вехи истории: на какой по счёту загрузке впервые доехал тайл каждого уровня.
+     * Вехи истории для каждого LOD: первое появление и последняя загрузка в эпизоде.
      *
-     * По ним на шкале ставятся засечки — сразу видно, за сколько загрузок картинка добралась
-     * до нужной детализации, и не ушла ли большая часть очереди на уровни, которых зритель
-     * так и не дождался.
+     * Последнюю загрузку намеренно не называем «уровень загружен полностью»: запись знает
+     * только фактически доехавшие тайлы и не может доказать, что у уровня не осталось
+     * невидимых или ещё не запрошенных частей. Это честная граница активности LOD внутри
+     * конкретного записанного эпизода.
      *
-     * @returns Пары «уровень — номер загрузки», по возрастанию номера.
+     * @returns Вехи уровней по возрастанию первого появления.
      */
-    getLoadOrderMilestones(): Array<{ depth: number, sequence: number, errorRatio: number }> {
+    getLoadOrderMilestones(): Array<{
+        depth: number,
+        sequence: number,
+        errorRatio: number,
+        lastSequence: number,
+        lastErrorRatio: number,
+        time: number,
+        lastTime: number
+    }> {
         if (!this.rootTile || this.disposed) return [];
         const firstAtDepth = new Map<number, Tile>();
-        forEachTile(this.rootTile, (tile) => {
-            if (tile.loadSequence <= 0) return;
-            const seen = firstAtDepth.get(tile.depth);
-            if (seen === undefined || tile.loadSequence < seen.loadSequence) {
-                firstAtDepth.set(tile.depth, tile);
+        const lastAtDepth = new Map<number, Tile>();
+        const stack = [this.rootTile];
+        while (stack.length > 0) {
+            const tile = stack.pop()!;
+            if (tile.loadSequence > 0) {
+                const seen = firstAtDepth.get(tile.depth);
+                if (seen === undefined || tile.loadSequence < seen.loadSequence) {
+                    firstAtDepth.set(tile.depth, tile);
+                }
+                const lastSeen = lastAtDepth.get(tile.depth);
+                if (lastSeen === undefined || tile.loadSequence > lastSeen.loadSequence) {
+                    lastAtDepth.set(tile.depth, tile);
+                }
             }
-        });
+            const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
+            for (let i = children.length - 1; i >= 0; --i) {
+                stack.push(children[i]);
+            }
+        }
         return [...firstAtDepth.entries()]
         .map(([depth, tile]) => ({
             depth,
             sequence: tile.loadSequence,
-            errorRatio: this.debugErrorRatio(tile)
+            errorRatio: this.debugErrorRatio(tile),
+            lastSequence: lastAtDepth.get(depth)?.loadSequence ?? tile.loadSequence,
+            lastErrorRatio: this.debugErrorRatio(lastAtDepth.get(depth) ?? tile),
+            time: tile.loadTime,
+            lastTime: lastAtDepth.get(depth)?.loadTime ?? tile.loadTime
         }))
         .sort((a, b) => a.sequence - b.sequence);
     }

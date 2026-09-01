@@ -1,5 +1,10 @@
 import { lodColorCss } from '../lod-palette';
 import { resolutionColorCss } from '../resolution-palette';
+import {
+    TIMELINE_FPS_OPTIONS,
+    formatTimelineSeconds,
+    type TimelineUnit
+} from './timeline-units';
 
 /** Отступ по краям дорожки: под крайние подписи и чтобы бегунок не срезался. */
 const PADDING = 20;
@@ -8,14 +13,20 @@ type Milestone = {
     depth: number;
     sequence: number;
     errorRatio: number;
+    lastSequence: number;
+    lastErrorRatio: number;
+    time: number;
+    lastTime: number;
 };
 
 type TimelineState = {
-    count: number;
+    duration: number;
     replay: number;
     playing: boolean;
     loop: boolean;
     speed: number;
+    displayUnit: TimelineUnit;
+    fps: number;
     scheme: 'lod' | 'resolution';
     milestones: Milestone[];
 };
@@ -26,13 +37,20 @@ type TimelineLabels = {
     stepForward: string;
     loop: string;
     recordAgain: string;
+    milestoneTitle: string;
+    lastMilestoneTitle: string;
     now: string;
+    timeUnit: string;
+    timecode: string;
+    frames: string;
 };
 
 type TimelineCallbacks = {
     onStep: (delta: number) => void;
     onTogglePlay: () => void;
     onSpeed: (speed: number) => void;
+    onUnit: (unit: TimelineUnit) => void;
+    onFps: (fps: number) => void;
     onToggleLoop: () => void;
     onRecordAgain: () => void;
     onScrub: (value: number) => void;
@@ -54,20 +72,34 @@ class TileReplayTimeline {
 
     private readonly speedSelect: HTMLSelectElement;
 
+    private readonly unitSelect: HTMLSelectElement;
+
+    private readonly fpsSelect: HTMLSelectElement;
+
     private readonly loopButton: HTMLButtonElement;
 
     private readonly resizeObserver: ResizeObserver;
 
     private readonly nowLabel: string;
 
+    private readonly milestoneTitleTemplate: string;
+
+    private readonly lastMilestoneTitleTemplate: string;
+
     private cursor: HTMLDivElement | null = null;
 
     private layoutKey = '';
 
-    private count = 0;
+    private duration = 0;
+
+    private displayUnit: TimelineUnit = 'timecode';
+
+    private fps = 30;
 
     constructor(parent: HTMLElement, labels: TimelineLabels, callbacks: TimelineCallbacks) {
         this.nowLabel = labels.now;
+        this.milestoneTitleTemplate = labels.milestoneTitle;
+        this.lastMilestoneTitleTemplate = labels.lastMilestoneTitle;
         const panel = document.createElement('div');
         panel.id = 'timeline-panel';
 
@@ -101,15 +133,50 @@ class TileReplayTimeline {
         spacer.className = 'spacer';
         const settings = document.createElement('div');
         settings.id = 'settings-controls';
-        const speed = document.createElement('select');
-        speed.id = 'speed';
-        [10, 30, 60, 120].forEach((value) => {
+
+        const unit = document.createElement('select');
+        unit.id = 'tile-timeline-unit';
+        unit.className = 'timeline-select';
+        unit.title = labels.timeUnit;
+        unit.setAttribute('aria-label', labels.timeUnit);
+        ([
+            ['timecode', labels.timecode],
+            ['frames', labels.frames]
+        ] as Array<[TimelineUnit, string]>).forEach(([value, label]) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = label;
+            unit.appendChild(option);
+        });
+        unit.addEventListener('change', () => callbacks.onUnit(unit.value as TimelineUnit));
+        settings.appendChild(unit);
+        this.unitSelect = unit;
+
+        const fpsSelect = document.createElement('select');
+        fpsSelect.id = 'tile-timeline-fps';
+        fpsSelect.className = 'timeline-select';
+        fpsSelect.title = 'FPS';
+        fpsSelect.setAttribute('aria-label', 'FPS');
+        TIMELINE_FPS_OPTIONS.forEach((value) => {
             const option = document.createElement('option');
             option.value = String(value);
-            option.textContent = `${value}/с`;
+            option.textContent = `${value} FPS`;
+            fpsSelect.appendChild(option);
+        });
+        fpsSelect.addEventListener('change', () => callbacks.onFps(Number(fpsSelect.value) || 30));
+        settings.appendChild(fpsSelect);
+        this.fpsSelect = fpsSelect;
+
+        const speed = document.createElement('select');
+        speed.id = 'speed';
+        speed.className = 'timeline-select';
+        [0.25, 0.5, 1, 2].forEach((value) => {
+            const option = document.createElement('option');
+            option.value = String(value);
+            option.textContent = `${value}×`;
             speed.appendChild(option);
         });
-        speed.addEventListener('change', () => callbacks.onSpeed(Number(speed.value) || 30));
+        speed.addEventListener('change', () => callbacks.onSpeed(Number(speed.value) || 1));
         settings.appendChild(speed);
         this.speedSelect = speed;
 
@@ -152,8 +219,8 @@ class TileReplayTimeline {
         let scrubbing = false;
         const setFromEvent = (event: PointerEvent) => {
             const width = area.clientWidth - PADDING * 2;
-            const value = Math.max(0, Math.min(this.count,
-                (event.offsetX - PADDING) / Math.max(1, width) * this.count));
+            const value = Math.max(0, Math.min(this.duration,
+                (event.offsetX - PADDING) / Math.max(1, width) * this.duration));
             callbacks.onScrub(value);
         };
         area.addEventListener('pointerdown', (event: PointerEvent) => {
@@ -182,22 +249,26 @@ class TileReplayTimeline {
 
     update(state: TimelineState) {
         this.panel.style.display = 'block';
-        this.count = state.count;
+        this.duration = state.duration;
+        this.displayUnit = state.displayUnit;
+        this.fps = state.fps;
         if (this.speedSelect.value !== String(state.speed)) {
             this.speedSelect.value = String(state.speed);
         }
+        if (this.unitSelect.value !== state.displayUnit) this.unitSelect.value = state.displayUnit;
+        if (this.fpsSelect.value !== String(state.fps)) this.fpsSelect.value = String(state.fps);
         this.loopButton.classList.toggle('active', state.loop);
         const glyph = this.playButton.querySelector('.material-symbols-outlined');
         if (glyph) glyph.textContent = state.playing ? 'pause' : 'play_arrow';
 
-        const key = `${this.area.clientWidth}|${state.count}|${state.scheme}|${
-            state.milestones.map(m => `${m.depth}:${m.sequence}`).join(',')}`;
+        const key = `${this.area.clientWidth}|${state.duration}|${state.scheme}|${state.displayUnit}|${state.fps}|${
+            state.milestones.map(m => `${m.depth}:${m.time}:${m.lastTime}`).join(',')}`;
         if (key !== this.layoutKey) {
             this.layoutKey = key;
             this.rebuild(state);
             return;
         }
-        this.updateCursor(state.replay, state.count);
+        this.updateCursor(state.replay, state.duration);
     }
 
     hide() {
@@ -213,32 +284,32 @@ class TileReplayTimeline {
         this.panel.remove();
     }
 
-    private updateCursor(replay: number, count: number) {
+    private updateCursor(replay: number, duration: number) {
         if (!this.cursor) return;
         const width = this.area.clientWidth - PADDING * 2;
-        const at = replay < 0 ? count : replay;
-        this.cursor.style.left = `${PADDING + Math.floor(at / Math.max(1, count) * width)}px`;
-        this.cursor.textContent = replay < 0 ? this.nowLabel : String(Math.floor(replay));
+        const at = replay < 0 ? duration : replay;
+        this.cursor.style.left = `${PADDING + Math.floor(at / Math.max(0.001, duration) * width)}px`;
+        this.cursor.textContent = replay < 0 ? this.nowLabel : formatTimelineSeconds(replay, this.displayUnit, this.fps);
     }
 
     private rebuild(state: TimelineState) {
         this.area.innerHTML = '';
         const width = this.area.clientWidth - PADDING * 2;
-        const at = (value: number) => PADDING + Math.floor(value / Math.max(1, state.count) * width);
-        const minStep = Math.max(1, state.count / Math.max(1, Math.floor(width / 50)));
+        const at = (value: number) => PADDING + Math.floor(value / Math.max(0.001, state.duration) * width);
+        const minStep = Math.max(0.001, state.duration / Math.max(1, Math.floor(width / 90)));
         const magnitude = 10 ** Math.floor(Math.log10(minStep));
         const labelStep = [1, 2, 5, 10].map(m => m * magnitude).find(v => v >= minStep) ?? 10 * magnitude;
         const tickStep = labelStep === 1 ? 0 : labelStep / (labelStep % 5 === 0 ? 5 : 2);
 
-        for (let value = 0; value < state.count; value += labelStep) {
+        for (let value = 0; value < state.duration; value += labelStep) {
             const label = document.createElement('div');
             label.classList.add('time-label');
             label.style.left = `${at(value)}px`;
-            label.textContent = String(Math.round(value));
+            label.textContent = formatTimelineSeconds(value, state.displayUnit, state.fps);
             this.area.appendChild(label);
         }
         if (tickStep > 0) {
-            for (let value = tickStep; value < state.count; value += tickStep) {
+            for (let value = tickStep; value < state.duration; value += tickStep) {
                 if (value % labelStep === 0) continue;
                 const tick = document.createElement('div');
                 tick.classList.add('time-tick');
@@ -247,21 +318,45 @@ class TileReplayTimeline {
             }
         }
 
-        state.milestones.forEach(({ depth, sequence, errorRatio }) => {
-            const key = document.createElement('div');
-            key.classList.add('time-label', 'key');
-            key.style.left = `${at(sequence)}px`;
-            key.style.backgroundColor = state.scheme === 'resolution' ?
+        state.milestones.forEach(({ depth, sequence, errorRatio, lastSequence, lastErrorRatio, time, lastTime }) => {
+            const first = document.createElement('div');
+            first.classList.add('time-label', 'key', 'first');
+            first.style.left = `${at(time)}px`;
+            first.style.backgroundColor = state.scheme === 'resolution' ?
                 resolutionColorCss(errorRatio) : lodColorCss(depth);
-            key.title = `L${depth} — ${sequence}`;
-            this.area.appendChild(key);
+            const title = this.milestoneTitleTemplate
+            .replace('{level}', String(depth))
+            .replace('{frame}', String(sequence));
+            first.title = title;
+            first.setAttribute('aria-label', title);
+            first.dataset.kind = 'first';
+            first.dataset.depth = String(depth);
+            first.dataset.sequence = String(sequence);
+            this.area.appendChild(first);
+
+            // Контурное кольцо менее заметно, чем ромбик. Если у уровня в записи только один
+            // тайл, кольцо окажется вокруг ромбика и честно покажет, что обе вехи совпали.
+            const last = document.createElement('div');
+            last.classList.add('time-label', 'key', 'last');
+            last.style.left = `${at(lastTime)}px`;
+            last.style.borderColor = state.scheme === 'resolution' ?
+                resolutionColorCss(lastErrorRatio) : lodColorCss(depth);
+            const lastTitle = this.lastMilestoneTitleTemplate
+            .replace('{level}', String(depth))
+            .replace('{frame}', String(lastSequence));
+            last.title = lastTitle;
+            last.setAttribute('aria-label', lastTitle);
+            last.dataset.kind = 'last';
+            last.dataset.depth = String(depth);
+            last.dataset.sequence = String(lastSequence);
+            this.area.appendChild(last);
         });
 
         const cursor = document.createElement('div');
         cursor.classList.add('time-label', 'cursor');
         this.area.appendChild(cursor);
         this.cursor = cursor;
-        this.updateCursor(state.replay, state.count);
+        this.updateCursor(state.replay, state.duration);
     }
 }
 

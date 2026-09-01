@@ -364,7 +364,18 @@ class SettingsService {
                     } catch {
                         return [];
                     }
-                })()
+                })(),
+                // FPS belongs to the authored POI timeline: unlike the selected display unit,
+                // it defines how seconds are read as project frames and therefore travels with
+                // the model. Old settings without this branch keep the observer default (30).
+                timeline: {
+                    fps: (() => {
+                        const poi = options.poi as Record<string, unknown> | undefined;
+                        const timeline = poi?.timeline as Record<string, unknown> | undefined;
+                        const value = Number(timeline?.fps);
+                        return Number.isFinite(value) ? Math.max(1, Math.min(240, Math.round(value))) : 30;
+                    })()
+                }
             }
         };
         const materialOverrides = this.getMaterialOverrides();

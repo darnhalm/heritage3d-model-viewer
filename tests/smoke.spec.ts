@@ -30,6 +30,69 @@ test('boots the viewer shell', async ({ page }) => {
     expect(state.mouseButtonsInverted).toBe(false);
 });
 
+test('space toggles model animation playback and ignores focused fields', async ({ page }) => {
+    await page.goto('/');
+    await waitForViewer(page);
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.observer.set('animation.list', JSON.stringify(['Test animation']));
+        const input = document.createElement('input');
+        input.id = 'space-hotkey-input';
+        document.body.appendChild(input);
+        input.focus();
+    });
+
+    await page.keyboard.press('Space');
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('animation.playing'))).toBe(false);
+
+    await page.evaluate(() => {
+        document.getElementById('space-hotkey-input')?.remove();
+        (document.activeElement as HTMLElement | null)?.blur();
+    });
+    await page.keyboard.press('Space');
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('animation.playing'))).toBe(true);
+    await page.keyboard.press('Space');
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('animation.playing'))).toBe(false);
+});
+
+test('poi timeline uses the tile-style draggable cursor and hatched transitions', async ({ page }) => {
+    test.setTimeout(90000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.evaluate(() => {
+        document.getElementById('panel-left')?.classList.add('expanded');
+    });
+    await page.locator('.left-panel-tab-poi').click();
+    await page.evaluate(() => {
+        const observer = (window as any).viewer.observer;
+        observer.set('poi.list', JSON.stringify([
+            { id: 'scrub-1', number: 1, title: 'First', color: '#123abc', duration: 0.8, holdTime: 1, position: [0, 0, 0], normal: [0, 1, 0] },
+            { id: 'scrub-2', number: 2, title: 'Second', color: '#fedcba', duration: 2, holdTime: 1, position: [0, 0, 0], normal: [0, 1, 0] }
+        ]));
+        observer.set('poi.activeId', 'scrub-1');
+        observer.set('poi.playing', false);
+    });
+
+    await expect(page.locator('.poi-timeline-transition')).toHaveCount(2);
+    await expect(page.locator('.poi-timeline-transition').first()).toHaveCSS('background-image', /repeating-linear-gradient/);
+    await expect(page.locator('.poi-timeline-cursor')).toBeVisible();
+    await expect(page.locator('.poi-timeline-cursor')).toHaveCSS('background-color', /rgb/);
+
+    const track = await page.locator('.poi-timeline-track').boundingBox();
+    const cursor = await page.locator('.poi-timeline-cursor').boundingBox();
+    expect(track).not.toBeNull();
+    expect(cursor).not.toBeNull();
+    const y = cursor!.y + cursor!.height / 2;
+    await page.mouse.move(cursor!.x + cursor!.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(track!.x + 24 + 2.2 * 88, y);
+    await page.mouse.up();
+
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.observer.get('poi.activeId'))).toBe('scrub-2');
+    expect(Number.parseFloat(await page.locator('.poi-timeline-cursor').evaluate(element => (element as HTMLElement).style.left))).toBeGreaterThan(200);
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('poi.playing'))).toBe(false);
+});
+
 test('fly movement speed is configurable from the Controls menu and saved', async ({ page }) => {
     test.setTimeout(120000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
@@ -865,7 +928,7 @@ test('completed measurements stay editable, area closes on double click, and JSO
 });
 
 test('poi tab stays stable and edits persist to observer state', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(120000);
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => {
         pageErrors.push(error.message);
@@ -879,6 +942,11 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
         const filenames = observer?.get('scene.filenames');
         return Array.isArray(filenames) && filenames.includes('BoxTextured.glb');
     });
+
+    // The editor timeline must not be part of player startup.
+    expect(await page.locator('#poi-timeline-panel').count()).toBe(0);
+    expect(await page.evaluate(() => performance.getEntriesByType('resource')
+    .filter(entry => entry.name.includes('poi-timeline')).length)).toBe(0);
 
     await page.evaluate(() => {
         document.getElementById('panel-left')?.classList.add('expanded');
@@ -895,6 +963,16 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     expect(Math.max(...tabTops) - Math.min(...tabTops)).toBeLessThanOrEqual(1);
 
     await page.locator('.left-panel-tab-poi').click();
+    await expect(page.locator('#poi-timeline-panel')).toBeVisible();
+    await expect(page.locator('.poi-timeline-empty')).toBeVisible();
+    const poiToolbarLayout = await page.locator('#poi-timeline-panel').evaluate((panel) => {
+        const settings = panel.querySelector('.poi-timeline-settings')?.getBoundingClientRect();
+        const transport = panel.querySelector('.poi-timeline-transport')?.getBoundingClientRect();
+        return { settingsLeft: settings?.left ?? 0, transportLeft: transport?.left ?? 0 };
+    });
+    expect(poiToolbarLayout.settingsLeft).toBeLessThan(poiToolbarLayout.transportLeft);
+    await expect.poll(() => page.evaluate(() => performance.getEntriesByType('resource')
+    .filter(entry => entry.name.includes('poi-timeline')).length)).toBe(1);
     // Рядом с моделью лежит файл настроек с `camera.fov: 150`: при таком угле коробка
     // занимает считанные пиксели в центре кадра, и клик по фиксированному смещению
     // приходился в пустоту — точка не ставилась. Возвращаем обычный угол и бьём в центр
@@ -902,6 +980,7 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     await page.evaluate(() => (window as any).viewer?.observer?.set('camera.fov', 45));
     await page.locator('#application-canvas').click();
     await expect(page.locator('.poi-list-item')).toHaveCount(1);
+    await expect(page.locator('.poi-timeline-marker')).toHaveCount(1);
     const newPoiDefaults = await page.evaluate(() => {
         const raw = (window as any).viewer?.observer?.get('poi.list');
         const list = JSON.parse(String(raw ?? '[]'));
@@ -936,6 +1015,34 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     await expect(page.locator('.poi-list-secondary-button-retake-view')).toHaveCSS('font-size', '0px');
     await expect(page.locator('.poi-list-delete')).toHaveClass(/pcui-button/);
 
+    // A marker press is also how POI dragging starts in edit mode. Browsers may emit a
+    // click after mouseup, but that follow-up click must only select the POI, never start
+    // its camera/clip animation.
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        (window as any).__poiCameraApplyCount = 0;
+        (window as any).__originalPoiApplyCameraView = viewer.poiController.applyCameraView;
+        viewer.poiController.applyCameraView = () => {
+            (window as any).__poiCameraApplyCount += 1;
+        };
+        viewer.observer.set('poi.activeId', '');
+    });
+    const modelPoiMarker = page.getByRole('button', { name: 'POI 1', exact: true });
+    await expect(modelPoiMarker).toBeVisible();
+    await modelPoiMarker.click();
+    const editMarkerResult = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const result = {
+            activeId: viewer.observer.get('poi.activeId'),
+            cameraApplyCount: (window as any).__poiCameraApplyCount
+        };
+        viewer.poiController.applyCameraView = (window as any).__originalPoiApplyCameraView;
+        delete (window as any).__originalPoiApplyCameraView;
+        delete (window as any).__poiCameraApplyCount;
+        return result;
+    });
+    expect(editMarkerResult).toEqual({ activeId: 'poi-smoke-1', cameraApplyCount: 0 });
+
     // `.poi-list-description` — обёртка pcui, само поле лежит внутри неё.
     const poiDescription = page.locator('.poi-list-description textarea').first();
     await poiDescription.click();
@@ -950,6 +1057,71 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
     expect(poiState[0]?.description).toBe('Smoke description');
     expect(poiState[0]?.color).toBe('#123abc');
 
+    // A trigger does not occupy tour time. Regular POIs produce a camera bracket, an
+    // arrival marker and a hold range. Display conversion never rewrites source seconds.
+    await page.evaluate(() => {
+        const observer = (window as any).viewer.observer;
+        const list = JSON.parse(String(observer.get('poi.list')));
+        observer.set('poi.list', JSON.stringify([
+            { ...list[0], duration: 0.8, holdTime: 1 },
+            { id: 'poi-smoke-2', number: 2, title: 'POI 2', color: '#fedcba', duration: 2, holdTime: 1,
+                camera: {}, position: [0, 0, 0], normal: [0, 1, 0] },
+            { id: 'poi-trigger', number: 3, title: 'Trigger', color: '#ff0000', duration: 9, holdTime: 9,
+                trigger: true, position: [0, 0, 0], normal: [0, 1, 0] }
+        ]));
+    });
+    await expect(page.locator('.poi-timeline-marker')).toHaveCount(2);
+    await expect(page.locator('.poi-timeline-transition')).toHaveCount(2);
+    await expect(page.locator('.poi-timeline-hold')).toHaveCount(2);
+    await expect(page.locator('.poi-timeline-transport button')).toHaveCount(5);
+    await expect(page.locator('.poi-timeline-marker').first()).toHaveText('1');
+    await expect(page.locator('.poi-timeline-marker').nth(1)).toHaveText('2');
+    await expect(page.locator('.poi-timeline-marker').first()).toHaveCSS('display', 'grid');
+    await expect(page.locator('.poi-timeline-marker').first()).toHaveCSS('place-items', 'center');
+    await expect(page.locator('.poi-timeline-marker').first()).toHaveCSS('text-align', 'center');
+    await expect(page.locator('.poi-timeline-marker').first()).toHaveCSS('background-color', 'rgb(18, 58, 188)');
+    await expect(page.locator('.poi-timeline-transition').first()).toHaveCSS('background-image', /repeating-linear-gradient/);
+    await expect(page.locator('.poi-timeline-hold').first()).toHaveCSS('background-color', 'rgb(212, 220, 243)');
+    await expect(page.locator('#poi-timeline-unit option')).toHaveCount(2);
+
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('Space');
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.observer.get('poi.playing'))).toBe(true);
+    await page.keyboard.press('Space');
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.observer.get('poi.playing'))).toBe(false);
+
+    const secondsTicks = await page.locator('.poi-timeline-axis-tick span').allTextContents();
+    await page.locator('#poi-timeline-unit').selectOption('frames');
+    await page.locator('#poi-timeline-fps').selectOption('60');
+    const frameTicks = await page.locator('.poi-timeline-axis-tick span').allTextContents();
+    expect(frameTicks).not.toEqual(secondsTicks);
+    const savedTimeline = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        return {
+            sourceDuration: JSON.parse(String(viewer.observer.get('poi.list')))[0].duration,
+            fps: viewer.observer.get('poi.timeline.fps'),
+            savedFps: viewer.settingsService.getSettingsData().poi.timeline.fps
+        };
+    });
+    expect(savedTimeline).toEqual({ sourceDuration: 0.8, fps: 60, savedFps: 60 });
+
+    const durationHandle = page.locator('.poi-timeline-transition-handle[data-poi-id="poi-smoke-1"]');
+    const markerBeforeDrag = await page.locator('.poi-timeline-marker[data-poi-id="poi-smoke-1"]').boundingBox();
+    const durationHandleBox = await durationHandle.boundingBox();
+    expect(durationHandleBox).not.toBeNull();
+    expect(durationHandleBox!.width).toBeGreaterThanOrEqual(14);
+    expect(durationHandleBox!.height).toBeGreaterThanOrEqual(44);
+    await page.mouse.move(durationHandleBox!.x + 4, durationHandleBox!.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(durationHandleBox!.x + 44, durationHandleBox!.y + 8);
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => {
+        const list = JSON.parse(String((window as any).viewer.observer.get('poi.list')));
+        return list[0].duration;
+    })).toBeGreaterThan(0.8);
+    const markerAfterDrag = await page.locator('.poi-timeline-marker[data-poi-id="poi-smoke-1"]').boundingBox();
+    expect(markerAfterDrag?.x).toBeCloseTo(markerBeforeDrag?.x ?? 0, 1);
+
     const focusedPoi = await page.evaluate(() => {
         const viewer = (window as any).viewer;
         viewer?.clearFocusedPoi?.();
@@ -957,6 +1129,67 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
         return viewer?.observer?.get('poi.activeId');
     });
     expect(focusedPoi).toBe('poi-smoke-1');
+
+    // External observer playback animates a separate frustum. The user's orbit camera stays
+    // enabled and exactly where it was, and leaving the POI editor tears the mode down.
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.cancelCameraFly();
+        const position = viewer.cameraControls.getPosition();
+        const focus = viewer.cameraControls.getFocus();
+        viewer.observer.set('poi.list', JSON.stringify([
+            {
+                id: 'poi-smoke-1', number: 1, title: 'POI 1', color: '#123abc', duration: 0.8, holdTime: 1,
+                camera: { position: [position.x, position.y, position.z], focus: [focus.x, focus.y, focus.z], fov: 45 },
+                position: [0, 0, 0], normal: [0, 1, 0]
+            },
+            {
+                id: 'poi-smoke-2', number: 2, title: 'POI 2', color: '#fedcba', duration: 0.8, holdTime: 1,
+                camera: {
+                    position: [position.x + 1, position.y + 0.25, position.z],
+                    focus: [focus.x + 0.2, focus.y, focus.z],
+                    fov: 60
+                },
+                position: [0, 0, 0], normal: [0, 1, 0]
+            }
+        ]));
+        viewer.observer.set('poi.activeId', 'poi-smoke-1');
+    });
+    const observerButton = page.getByRole('button', { name: 'Observe camera externally', exact: true });
+    await expect(observerButton).toHaveAttribute('aria-pressed', 'false');
+    const userCameraBefore = await page.evaluate(() => {
+        const position = (window as any).viewer.cameraControls.getPosition();
+        return [position.x, position.y, position.z];
+    });
+    await observerButton.click();
+    await expect(observerButton).toHaveAttribute('aria-pressed', 'true');
+    await page.locator('.poi-timeline-marker[data-poi-id="poi-smoke-2"]').click();
+    await expect.poll(() => page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        return viewer.getPoiObserverState().position?.[0] ?? Number.NEGATIVE_INFINITY;
+    })).toBeGreaterThan(userCameraBefore[0]);
+    const externalObserver = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const userPosition = viewer.cameraControls.getPosition();
+        return {
+            state: viewer.getPoiObserverState(),
+            userPosition: [userPosition.x, userPosition.y, userPosition.z],
+            controlsEnabled: viewer.cameraControls.enabled,
+            linesVisible: viewer.debugPoiObserverCamera.meshInstances.some((instance: any) => instance.visible),
+            solidVisible: viewer.debugPoiObserverCameraSolid.meshInstance.visible
+        };
+    });
+    expect(externalObserver.state.enabled).toBe(true);
+    expect(externalObserver.state.position[0]).toBeGreaterThan(userCameraBefore[0]);
+    expect(externalObserver.userPosition).toEqual(userCameraBefore);
+    expect(externalObserver.controlsEnabled).toBe(true);
+    expect(externalObserver.linesVisible).toBe(true);
+    expect(externalObserver.solidVisible).toBe(true);
+
+    await page.locator('.left-panel-tab-scene').click();
+    await expect(page.locator('#poi-timeline-panel')).toHaveCount(0);
+    await expect(page.locator('body')).not.toHaveClass(/poi-timeline-open/);
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.getPoiObserverState().enabled)).toBe(false);
     expect(pageErrors).toEqual([]);
 });
 
