@@ -1,11 +1,11 @@
 {
     "route": [
-        { "id": "overview", "distance": 3.2, "azimuth": 35, "elevation": 32 },
-        { "id": "front", "distance": 1.35, "azimuth": 5, "elevation": 18 },
-        { "id": "right", "distance": 1.15, "azimuth": 95, "elevation": 12 },
-        { "id": "rear", "distance": 1.25, "azimuth": 185, "elevation": 20 },
-        { "id": "left", "distance": 1.1, "azimuth": 275, "elevation": 10 },
-        { "id": "overview-return", "distance": 3.2, "azimuth": 35, "elevation": 32 }
+        { "id": "overview", "distance": 3.2, "azimuth": 35, "elevation": 32, "focus": [0.38, 0.46] },
+        { "id": "front", "distance": 1.35, "azimuth": 5, "elevation": 18, "focus": [0.64, 0.42] },
+        { "id": "right", "distance": 1.15, "azimuth": 95, "elevation": 12, "focus": [0.36, 0.54] },
+        { "id": "rear", "distance": 1.25, "azimuth": 185, "elevation": 20, "focus": [0.62, 0.48] },
+        { "id": "left", "distance": 1.1, "azimuth": 275, "elevation": 10, "focus": [0.4, 0.43] },
+        { "id": "overview-return", "distance": 3.2, "azimuth": 35, "elevation": 32, "focus": [0.6, 0.47] }
     ],
     "scenes": [
         {
@@ -16,7 +16,9 @@
             "suites": ["smoke", "full"],
             "variants": [
                 { "id": "error-distance", "label": "SSE: error + distance", "tilePriority": "default" },
-                { "id": "center-first", "label": "SSE: center first", "tilePriority": "foveated" }
+                { "id": "center-first", "label": "SSE: center first", "tilePriority": "foveated" },
+                { "id": "cursor-first", "label": "SSE: cursor first", "tilePriority": "cursor" },
+                { "id": "surface-first", "label": "SSE: surface point first", "tilePriority": "surface" }
             ]
         },
         {
@@ -27,7 +29,9 @@
             "suites": ["production", "full"],
             "variants": [
                 { "id": "error-distance", "label": "SSE: error + distance", "tilePriority": "default" },
-                { "id": "center-first", "label": "SSE: center first", "tilePriority": "foveated" }
+                { "id": "center-first", "label": "SSE: center first", "tilePriority": "foveated" },
+                { "id": "cursor-first", "label": "SSE: cursor first", "tilePriority": "cursor" },
+                { "id": "surface-first", "label": "SSE: surface point first", "tilePriority": "surface" }
             ]
         },
         {
@@ -35,7 +39,7 @@
             "label": "JUMA spatial GSplat",
             "kind": "gsplat",
             "path": "models/JUMA_55000-lod/tiles/lod-meta.json",
-            "suites": ["production", "full"],
+            "suites": ["formats", "full"],
             "variants": [
                 { "id": "distance-fov", "label": "Spatial LOD: distance + FOV" }
             ]

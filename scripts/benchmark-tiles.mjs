@@ -135,8 +135,55 @@ const setRoutePoint = (page, point) => page.evaluate((routePoint) => {
     viewer.renderNextFrame();
 }, point);
 
-const takeSample = (page, stage) => page.evaluate(({ stageName }) => {
+const takeSample = (page, stage, tilePriority, routePoint) => page.evaluate(({ stageName, priority, focus }) => {
     const viewer = window.viewer;
+    const canvas = viewer.canvas;
+    const rect = canvas.getBoundingClientRect();
+    const requestedFocus = Array.isArray(focus) ? focus : [0.5, 0.5];
+    const primaryX = Math.max(0, Math.min(rect.width, requestedFocus[0] * rect.width));
+    const primaryY = Math.max(0, Math.min(rect.height, requestedFocus[1] * rect.height));
+    let focusSource = priority === 'default' ? 'legacy' : 'view';
+    let focusX = 0.5;
+    let focusY = 0.5;
+
+    // Keep cursor-driven focus fresh exactly as real pointer movement does. Surface focus first
+    // tries the scripted point, then moves halfway toward the centre and finally tries the centre;
+    // this makes the route deterministic while avoiding a silent fallback when the first ray hits
+    // the background rather than the model.
+    if (priority === 'cursor' || priority === 'surface') {
+        canvas.dispatchEvent(new PointerEvent('pointermove', {
+            clientX: rect.left + primaryX,
+            clientY: rect.top + primaryY,
+            pointerType: 'mouse',
+            bubbles: true
+        }));
+        focusSource = priority === 'surface' ? 'cursor-fallback' : 'cursor';
+        focusX = primaryX / Math.max(1, rect.width);
+        focusY = primaryY / Math.max(1, rect.height);
+    }
+    if (priority === 'surface') {
+        const candidates = [
+            [primaryX, primaryY],
+            [(primaryX + rect.width * 0.5) / 2, (primaryY + rect.height * 0.5) / 2],
+            [rect.width * 0.5, rect.height * 0.5]
+        ];
+        let hit = null;
+        let hitScreen = null;
+        for (const candidate of candidates) {
+            hit = viewer.measurementController?.pickSurfacePoint(candidate[0], candidate[1]) ?? null;
+            if (hit) {
+                hitScreen = candidate;
+                break;
+            }
+        }
+        viewer.cameraControls.setSurfaceZoomTarget(hit);
+        if (hit && hitScreen) {
+            focusSource = 'surface';
+            focusX = hitScreen[0] / Math.max(1, rect.width);
+            focusY = hitScreen[1] / Math.max(1, rect.height);
+        }
+    }
+
     const started = performance.now();
     viewer.app.tick(started);
     const tickMs = performance.now() - started;
@@ -158,6 +205,9 @@ const takeSample = (page, stage) => page.evaluate(({ stageName }) => {
     return {
         timeMs: elapsed,
         stage: stageName,
+        focusSource,
+        focusX,
+        focusY,
         tickMs,
         kind: tileStats ? 'tiles' : (gsplat ? 'gsplat' : 'pending'),
         selected: tileStats?.selected ?? gsplat?.visibleNodes ?? 0,
@@ -182,7 +232,7 @@ const takeSample = (page, stage) => page.evaluate(({ stageName }) => {
             (gsplat ? gsplatLods.map((count, lod) => `${lod}:${count || 0}`).join('|') : ''),
         heapBytes: heap
     };
-}, { stageName: stage });
+}, { stageName: stage, priority: tilePriority, focus: routePoint?.focus });
 
 const isReady = (sample, kind) => (kind === 'tiles' ? sample.selected > 0 : sample.activeSplats > 0);
 const isSettled = sample => sample.loading === 0 && sample.queued === 0 && sample.pending === 0 &&
@@ -223,7 +273,7 @@ const runPass = async ({ context, scene, variant, pass, run }) => {
     const samples = [];
     const startedAt = Date.now();
     while (Date.now() - startedAt < startupMs) {
-        const sample = await takeSample(page, 'startup');
+        const sample = await takeSample(page, 'startup', variant.tilePriority, config.route[0]);
         samples.push(sample);
         if (isReady(sample, scene.kind)) break;
         await delay(sampleMs);
@@ -236,7 +286,7 @@ const runPass = async ({ context, scene, variant, pass, run }) => {
         await setRoutePoint(page, point);
         const until = Date.now() + stepMs;
         while (Date.now() < until) {
-            samples.push(await takeSample(page, point.id));
+            samples.push(await takeSample(page, point.id, variant.tilePriority, point));
             await delay(sampleMs);
         }
         if (screenshots) {
@@ -248,7 +298,7 @@ const runPass = async ({ context, scene, variant, pass, run }) => {
     let stable = 0;
     const settleUntil = Date.now() + settleMs;
     while (Date.now() < settleUntil && stable < 10) {
-        const sample = await takeSample(page, 'settle');
+        const sample = await takeSample(page, 'settle', variant.tilePriority, config.route.at(-1));
         samples.push(sample);
         stable = isSettled(sample) ? stable + 1 : 0;
         await delay(sampleMs);
@@ -264,6 +314,12 @@ const runPass = async ({ context, scene, variant, pass, run }) => {
     })));
     if (samples.some(sample => sample.tileRecording || sample.pinnedTiles > 0)) {
         throw new Error('Passive benchmark invariant failed: tile recording or cache pins became active');
+    }
+    if (variant.tilePriority === 'cursor' && !samples.some(sample => sample.focusSource === 'cursor')) {
+        throw new Error('Cursor priority never received its scripted pointer focus');
+    }
+    if (variant.tilePriority === 'surface' && !samples.some(sample => sample.focusSource === 'surface')) {
+        throw new Error('Surface priority never resolved its scripted point on the model');
     }
     await page.close();
     return { samples, responses, resources, pageErrors };
@@ -335,6 +391,11 @@ const summarize = ({ scene, variant, pass, run, samples, responses, resources, p
         peakSelected: Math.max(0, ...samples.map(sample => sample.selected)),
         peakActiveSplats: Math.max(0, ...samples.map(sample => sample.activeSplats)),
         peakErrorScale: round(Math.max(1, ...samples.map(sample => sample.errorTargetScale))),
+        exactFocusPercent: round(samples.filter((sample) => {
+            if (variant.tilePriority === 'cursor') return sample.focusSource === 'cursor';
+            if (variant.tilePriority === 'surface') return sample.focusSource === 'surface';
+            return true;
+        }).length / Math.max(1, samples.length) * 100),
         tickP50Ms: round(quantile(samples.map(sample => sample.tickMs), 0.5)),
         tickP95Ms: round(quantile(samples.map(sample => sample.tickMs), 0.95)),
         tickP99Ms: round(quantile(samples.map(sample => sample.tickMs), 0.99)),
@@ -397,11 +458,11 @@ const summaryColumns = [
     'timeToFirstVisibleMs', 'timeToFirstStateChangeMs', 'timeToSettledMs', 'deepestLod', 'stateChanges',
     'fallbackCount', 'blankTimeMs', 'requestCount', 'uniqueRequestCount', 'duplicateRequests',
     'transferredBytes', 'peakCachedBytes', 'peakHeapBytes', 'peakQueued', 'peakLoading', 'peakReady',
-    'peakSelected', 'peakActiveSplats', 'peakErrorScale', 'tickP50Ms', 'tickP95Ms', 'tickP99Ms'
+    'peakSelected', 'peakActiveSplats', 'peakErrorScale', 'exactFocusPercent', 'tickP50Ms', 'tickP95Ms', 'tickP99Ms'
 ];
 const summaryRows = results.map(result => summaryColumns.map(column => csv(result[column])).join(','));
 const summaryCsv = [summaryColumns.join(','), ...summaryRows].join('\n');
-const sampleColumns = ['id', 'timeMs', 'stage', 'tickMs', 'selected', 'ready', 'loading', 'queued', 'pending',
+const sampleColumns = ['id', 'timeMs', 'stage', 'focusSource', 'focusX', 'focusY', 'tickMs', 'selected', 'ready', 'loading', 'queued', 'pending',
     'bytes', 'bytesBudget', 'errorTarget', 'errorTargetScale', 'maxDepth', 'activeSplats', 'splatBudget',
     'transitioning', 'loadCount', 'tileRecording', 'pinnedTiles', 'heapBytes', 'signature'];
 const sampleRows = results.flatMap(result => result.samples.map((sample) => {
@@ -428,6 +489,7 @@ const aggregates = [...aggregateGroups.values()].map(group => ({
     timeToSettledMs: round(quantile(group.map(item => item.timeToSettledMs), 0.5)),
     transferredBytes: round(quantile(group.map(item => item.transferredBytes), 0.5)),
     fallbackCount: round(quantile(group.map(item => item.fallbackCount), 0.5)),
+    exactFocusPercent: round(quantile(group.map(item => item.exactFocusPercent), 0.5)),
     tickP95Ms: round(quantile(group.map(item => item.tickP95Ms), 0.5))
 }));
 const comparisonGroups = new Map();
@@ -462,14 +524,15 @@ const markdown = [
     '',
     '> The harness is external and passive: tile recording is disabled, cache entries are not pinned, and no benchmark code is shipped in the viewer.',
     '',
-    '| Scene | Variant | Cache | First visible | Settled | Requests | Transfer | LOD changes | Fallbacks | Tick p95 |',
-    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|',
-    ...results.map(result => `| ${result.scene} | ${result.variant} | ${result.pass} | ${result.timeToFirstVisibleMs} ms | ${result.timeToSettledMs} ms | ${result.requestCount} | ${formatBytes(result.transferredBytes)} | ${result.stateChanges} | ${result.fallbackCount} | ${result.tickP95Ms} ms |`),
+    '| Scene | Variant | Cache | Focus active | First visible | Settled | Requests | Transfer | LOD changes | Fallbacks | Tick p95 |',
+    '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    ...results.map(result => `| ${result.scene} | ${result.variant} | ${result.pass} | ${result.exactFocusPercent}% | ${result.timeToFirstVisibleMs} ms | ${result.timeToSettledMs} ms | ${result.requestCount} | ${formatBytes(result.transferredBytes)} | ${result.stateChanges} | ${result.fallbackCount} | ${result.tickP95Ms} ms |`),
     ...(comparisonLines.length ? ['', '## Same-scene findings', '', ...comparisonLines] : []),
     '',
     '## Interpretation notes',
     '',
     '- Compare variants of the same scene directly. Cross-format rows with different source scenes are diagnostic, not a quality ranking.',
+    '- `Focus active` verifies that cursor and surface modes received their scripted focus instead of silently falling back to the centre of view.',
     '- `Fallbacks` counts depth decreases within one fixed camera waypoint; route-driven coarsening is excluded.',
     '- Transfer size prefers response `Content-Length` and falls back to Resource Timing when available.',
     '- GPU time and decoded VRAM are not exposed reliably by browsers; tick CPU and source bytes are proxies.',
@@ -495,7 +558,7 @@ body{margin:24px;background:#111;color:#eee;font:14px/1.45 system-ui,sans-serif}
 <p>The harness is external and passive. Compare variants of the same source scene directly; cross-format rows are diagnostic only.</p>
 ${comparisonLines.length ? `<section class="card"><h2>Same-scene findings</h2><ul>${comparisonLines.map(line => `<li>${escapeHtml(line.replace(/^- |\*\*/g, ''))}</li>`).join('')}</ul></section><br>` : ''}
 <div class="grid">${results.map(result => `<section class="card"><h2>${escapeHtml(result.scene)} — ${escapeHtml(result.variant)} (${result.pass})</h2><div class="metrics">
-<span class="metric">first ${result.timeToFirstVisibleMs} ms</span><span class="metric">settled ${result.timeToSettledMs} ms</span><span class="metric">${result.requestCount} requests</span><span class="metric">${formatBytes(result.transferredBytes)}</span><span class="metric">${result.fallbackCount} fallbacks</span><span class="metric">tick p95 ${result.tickP95Ms} ms</span></div>
+<span class="metric">focus ${result.exactFocusPercent}%</span><span class="metric">first ${result.timeToFirstVisibleMs} ms</span><span class="metric">settled ${result.timeToSettledMs} ms</span><span class="metric">${result.requestCount} requests</span><span class="metric">${formatBytes(result.transferredBytes)}</span><span class="metric">${result.fallbackCount} fallbacks</span><span class="metric">tick p95 ${result.tickP95Ms} ms</span></div>
 <div class="charts"><div><p>Selected tiles / nodes</p>${chart(result, 'selected', '#64d8ff')}</div><div><p>LOD depth</p>${chart(result, 'maxDepth', '#ffd84a')}</div><div><p>Queued + pending</p>${chart({ ...result, samples: result.samples.map(sample => ({ queue: sample.queued + sample.pending })) }, 'queue', '#ff8c69')}</div><div><p>Cached bytes</p>${chart(result, 'bytes', '#9fe870')}</div></div></section>`).join('')}</div>
 ${skipped.length ? `<h2>Skipped</h2><ul class="warn">${skipped.map(item => `<li>${escapeHtml(item.sceneId)}: ${escapeHtml(item.reason)}</li>`).join('')}</ul>` : ''}
 </body></html>`;
