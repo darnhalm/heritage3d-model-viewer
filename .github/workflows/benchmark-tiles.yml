@@ -87,7 +87,7 @@ jobs:
       # query string, cookies, заголовков авторизации и содержимого пользовательских моделей.
       - name: Upload benchmark report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: tile-benchmark-${{ github.run_id }}
           path: benchmark-results
