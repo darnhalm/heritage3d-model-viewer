@@ -300,6 +300,29 @@ body:not(.ui-ready) #panel-left {
     visibility: hidden;
 }
 
+.timeline-zoom-svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    background-color: currentColor;
+    mask-position: center;
+    mask-repeat: no-repeat;
+    mask-size: contain;
+    -webkit-mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+
+    &.zoom-in-icon {
+        mask-image: url('./static/icons/zoom-in.svg');
+        -webkit-mask-image: url('./static/icons/zoom-in.svg');
+    }
+
+    &.zoom-out-icon {
+        mask-image: url('./static/icons/zoom-out.svg');
+        -webkit-mask-image: url('./static/icons/zoom-out.svg');
+    }
+}
+
 #panel-left {
     width: 32px !important;
     min-width: 32px !important;

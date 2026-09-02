@@ -2295,16 +2295,16 @@ class Viewer {
     private activeSurfaceNavigationEvent(): SurfaceNavigationEvent | null {
         if (this.surfaceNavigationEvents.length === 0) return null;
         const replay = Number(this.observer.get('debug.tileReplay') ?? -1);
-        if (!this.observer.get('debug.tileFreeze') || replay < 0) {
-            return this.surfaceNavigationEvents[this.surfaceNavigationEvents.length - 1];
-        }
+        // Recording captures the point but deliberately shows no overlay on the model.
+        // Surface markers belong to replay, where the recorded camera and event time exist.
+        if (this.observer.get('debug.tileRecording') || !this.observer.get('debug.tileFreeze') || replay < 0) return null;
         for (let i = this.surfaceNavigationEvents.length - 1; i >= 0; --i) {
             if (this.surfaceNavigationEvents[i].time <= replay) return this.surfaceNavigationEvents[i];
         }
         return null;
     }
 
-    /** Draw a camera-facing 3D target at the surface point of the current recorded gesture. */
+    /** Draw a camera-facing circle at the surface point of the current replay event. */
     private drawSurfaceNavigationCursor() {
         const event = this.activeSurfaceNavigationEvent();
         if (!event) return;
@@ -2325,8 +2325,19 @@ class Viewer {
         .mulScalar(radius * 0.08)
         .add(point);
         const color = event.type === 'pan' ? 0xff00d7ff : 0xffffffff;
-        const rings = event.type === 'zoom' ? [1, 1.55] : [0.9, 1];
-        rings.forEach((scale) => {
+        const outlineColor = 0xff101010;
+        const baseRings = event.type === 'zoom' ? [1, 1.55] : [1];
+        // Debug lines are one pixel wide. Closely spaced rings form a thicker colored band,
+        // while the dark inner/outer edges keep white and yellow visible on light geometry.
+        const rings = baseRings.flatMap(scale => [
+            { scale: scale - 0.1, color: outlineColor },
+            { scale: scale - 0.045, color },
+            { scale, color },
+            { scale: scale + 0.045, color },
+            { scale: scale + 0.1, color: outlineColor }
+        ]);
+        rings.forEach((ring) => {
+            const { scale } = ring;
             let previousX = 1;
             let previousY = 0;
             for (let i = 1; i <= 20; ++i) {
@@ -2347,34 +2358,11 @@ class Viewer {
                     center.y + this.surfaceCursorRight.y * radiusX + this.surfaceCursorUp.y * radiusY,
                     center.z + this.surfaceCursorRight.z * radiusX + this.surfaceCursorUp.z * radiusY
                 );
-                this.debugSurfaceCursor.line(this.surfaceCursorA, this.surfaceCursorB, color);
+                this.debugSurfaceCursor.line(this.surfaceCursorA, this.surfaceCursorB, ring.color);
                 previousX = x;
                 previousY = y;
             }
         });
-        const crossRadius = radius * 1.3;
-        this.surfaceCursorA.set(
-            center.x - this.surfaceCursorRight.x * crossRadius,
-            center.y - this.surfaceCursorRight.y * crossRadius,
-            center.z - this.surfaceCursorRight.z * crossRadius
-        );
-        this.surfaceCursorB.set(
-            center.x + this.surfaceCursorRight.x * crossRadius,
-            center.y + this.surfaceCursorRight.y * crossRadius,
-            center.z + this.surfaceCursorRight.z * crossRadius
-        );
-        this.debugSurfaceCursor.line(this.surfaceCursorA, this.surfaceCursorB, color);
-        this.surfaceCursorA.set(
-            center.x - this.surfaceCursorUp.x * crossRadius,
-            center.y - this.surfaceCursorUp.y * crossRadius,
-            center.z - this.surfaceCursorUp.z * crossRadius
-        );
-        this.surfaceCursorB.set(
-            center.x + this.surfaceCursorUp.x * crossRadius,
-            center.y + this.surfaceCursorUp.y * crossRadius,
-            center.z + this.surfaceCursorUp.z * crossRadius
-        );
-        this.debugSurfaceCursor.line(this.surfaceCursorA, this.surfaceCursorB, color);
     }
 
     /**

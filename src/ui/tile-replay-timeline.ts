@@ -232,8 +232,8 @@ class TileReplayTimeline {
         zoomOut.title = `${labels.zoom} −`;
         zoomOut.setAttribute('aria-label', zoomOut.title);
         const zoomOutIcon = document.createElement('span');
-        zoomOutIcon.className = 'material-symbols-outlined';
-        zoomOutIcon.textContent = 'zoom_out';
+        zoomOutIcon.className = 'timeline-zoom-svg zoom-out-icon';
+        zoomOutIcon.setAttribute('aria-hidden', 'true');
         zoomOut.appendChild(zoomOutIcon);
         zoomOut.disabled = true;
         settings.appendChild(zoomOut);
@@ -249,8 +249,8 @@ class TileReplayTimeline {
         zoomIn.title = `${labels.zoom} +`;
         zoomIn.setAttribute('aria-label', zoomIn.title);
         const zoomInIcon = document.createElement('span');
-        zoomInIcon.className = 'material-symbols-outlined';
-        zoomInIcon.textContent = 'zoom_in';
+        zoomInIcon.className = 'timeline-zoom-svg zoom-in-icon';
+        zoomInIcon.setAttribute('aria-hidden', 'true');
         zoomIn.appendChild(zoomInIcon);
         settings.appendChild(zoomIn);
         spacer.appendChild(settings);

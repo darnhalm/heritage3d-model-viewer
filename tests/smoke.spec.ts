@@ -55,6 +55,24 @@ test('space toggles model animation playback and ignores focused fields', async 
     expect(await page.evaluate(() => (window as any).viewer.observer.get('animation.playing'))).toBe(false);
 });
 
+test('legacy Material Icons font loads only for a helper with a custom ligature icon', async ({ page }) => {
+    await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+
+    await expect(page.locator('#material-icons-font')).toHaveCount(0);
+    await page.evaluate(() => (window as any).viewer.setHelper({
+        id: 'custom-helper-icon',
+        name: 'Custom helper',
+        position: [0, 0, 0],
+        icon: 'headphones'
+    }));
+    await expect(page.locator('#material-icons-font')).toHaveAttribute(
+        'href',
+        'https://fonts.googleapis.com/icon?family=Material+Icons'
+    );
+    await expect(page.locator('.mic-marker .material-icons')).toHaveText('headphones');
+});
+
 test('poi timeline uses the tile-style draggable cursor and hatched transitions', async ({ page }) => {
     test.setTimeout(90000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
@@ -77,6 +95,9 @@ test('poi timeline uses the tile-style draggable cursor and hatched transitions'
     await expect(page.locator('.poi-timeline-transition').first()).toHaveCSS('background-image', /repeating-linear-gradient/);
     await expect(page.locator('.poi-timeline-cursor')).toBeVisible();
     await expect(page.locator('.poi-timeline-cursor')).toHaveCSS('background-color', /rgb/);
+    await expect(page.locator('.poi-timeline-zoom .zoom-in-icon')).toHaveCount(1);
+    await expect(page.locator('.poi-timeline-zoom .zoom-out-icon')).toHaveCount(1);
+    await expect(page.locator('.poi-timeline-zoom')).not.toContainText(/zoom_(?:in|out)/);
 
     const contentWidthBeforeZoom = await page.locator('.poi-timeline-content').evaluate(element => element.getBoundingClientRect().width);
     await page.getByRole('button', { name: 'Zoom +', exact: true }).click();

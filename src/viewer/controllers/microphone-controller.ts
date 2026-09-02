@@ -22,6 +22,16 @@ type MicrophoneControllerArgs = {
 
 const isMicHelper = (value: string) => /^mic(?:[_-]|$)/i.test(value) || /^mic[A-Z0-9]/.test(value);
 
+/** Load the legacy ligature font only for hosts that actually send `helper.icon`. */
+const ensureMaterialIconsFont = () => {
+    if (document.getElementById('material-icons-font')) return;
+    const link = document.createElement('link');
+    link.id = 'material-icons-font';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/icon?family=Material+Icons';
+    document.head.appendChild(link);
+};
+
 class MicrophoneController {
     private canvas: HTMLCanvasElement;
 
@@ -113,6 +123,7 @@ class MicrophoneController {
 
         const label = helper.name || helper.id;
         // Material-иконка, если задана; иначе эмодзи по типу (микрофон/прочее).
+        if (helper.icon) ensureMaterialIconsFont();
         const iconHtml = helper.icon ?
             `<span class="mic-icon material-icons">${helper.icon}</span>` :
             `<span class="mic-icon">${isMicHelper(helper.id) || isMicHelper(label) ? '🎤' : '●'}</span>`;

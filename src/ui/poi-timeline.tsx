@@ -208,9 +208,9 @@ const PoiTimeline = ({ observerData, setProperty, onTogglePlay, onStop, onPrevio
             </div>
             <div className='poi-timeline-settings'>
                 <div className='poi-timeline-zoom' aria-label={t('Zoom', lang)}>
-                    <button type='button' disabled={zoom <= 1} title={`${t('Zoom', lang)} −`} aria-label={`${t('Zoom', lang)} −`} onClick={() => changeZoom(-1)}><span className='material-symbols-outlined'>zoom_out</span></button>
+                    <button type='button' disabled={zoom <= 1} title={`${t('Zoom', lang)} −`} aria-label={`${t('Zoom', lang)} −`} onClick={() => changeZoom(-1)}><span className='timeline-zoom-svg zoom-out-icon' aria-hidden='true' /></button>
                     <span>{Math.round(zoom * 100)}%</span>
-                    <button type='button' disabled={zoom >= 4} title={`${t('Zoom', lang)} +`} aria-label={`${t('Zoom', lang)} +`} onClick={() => changeZoom(1)}><span className='material-symbols-outlined'>zoom_in</span></button>
+                    <button type='button' disabled={zoom >= 4} title={`${t('Zoom', lang)} +`} aria-label={`${t('Zoom', lang)} +`} onClick={() => changeZoom(1)}><span className='timeline-zoom-svg zoom-in-icon' aria-hidden='true' /></button>
                 </div>
                 <label><span>{t('Time unit', lang)}</span><select id='poi-timeline-unit' value={unit} aria-label={t('Time unit', lang)} onChange={event => setUnit(event.target.value as TimelineUnit)}>{unitOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                 <label><span>FPS</span><select id='poi-timeline-fps' value={fps} aria-label='FPS' onChange={event => setProperty('poi.timeline.fps', normalizeTimelineFps(event.target.value))}>{fpsOptions.map(value => <option key={value} value={value}>{value} FPS</option>)}</select></label>

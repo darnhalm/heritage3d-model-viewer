@@ -24,16 +24,6 @@ import './style.scss';
 import { version as modelViewerVersion } from '../package.json';
 import { isMobileLayout, SD_PIXEL_SCALE } from './helpers';
 
-// Google Material Icons — для иконок в лейблах хелперов (слушатель/микрофон).
-// Подключаем рантаймом (в style.scss мешает порядок @use/@import).
-if (typeof document !== 'undefined' && !document.getElementById('material-icons-font')) {
-    const link = document.createElement('link');
-    link.id = 'material-icons-font';
-    link.rel = 'stylesheet';
-    link.href = 'https://fonts.googleapis.com/icon?family=Material+Icons';
-    document.head.appendChild(link);
-}
-
 // Permit some additional properties to be set on the window
 declare global {
     interface LaunchParams {
