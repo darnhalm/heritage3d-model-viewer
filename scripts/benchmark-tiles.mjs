@@ -19,6 +19,8 @@ const baseUrl = new URL(process.env.BENCH_URL ?? 'http://127.0.0.1:4173/');
 const suite = process.env.BENCH_TILE_SUITE ?? 'production';
 const requestedScenes = new Set((process.env.BENCH_TILE_SCENES ?? '')
 .split(',').map(value => value.trim()).filter(Boolean));
+const requestedVariants = new Set((process.env.BENCH_TILE_VARIANTS ?? '')
+.split(',').map(value => value.trim()).filter(Boolean));
 const passes = (process.env.BENCH_TILE_PASSES ?? 'cold,warm')
 .split(',').map(value => value.trim()).filter(value => value === 'cold' || value === 'warm');
 const runs = Math.max(1, Number(process.env.BENCH_RUNS ?? 1));
@@ -90,7 +92,10 @@ const scenes = config.scenes.filter(scene => (requestedScenes.size ?
     requestedScenes.has(scene.id) : scene.suites.includes(suite)));
 if (scenes.length === 0) throw new Error(`No scenes selected for suite "${suite}"`);
 
-const cases = scenes.flatMap(scene => scene.variants.map(variant => ({ scene, variant })));
+const cases = scenes.flatMap(scene => scene.variants
+.filter(variant => requestedVariants.size === 0 || requestedVariants.has(variant.id))
+.map(variant => ({ scene, variant })));
+if (cases.length === 0) throw new Error('No tile priority variants matched BENCH_TILE_VARIANTS');
 const browser = await chromium.launch({
     headless,
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
@@ -133,9 +138,12 @@ const setRoutePoint = (page, point) => page.evaluate((routePoint) => {
     viewer.cameraControls.reset(focus, position);
     viewer.fitCameraClipPlanes();
     viewer.renderNextFrame();
+    // Apply the scripted pose before cursor/surface picking. CameraControls commits its pending
+    // pose during a tick; picking in the same task before that tick would use the previous view.
+    viewer.app.tick(performance.now());
 }, point);
 
-const takeSample = (page, stage, tilePriority, routePoint) => page.evaluate(({ stageName, priority, focus }) => {
+const takeSample = (page, stage, tilePriority, routePoint) => page.evaluate(async ({ stageName, priority, focus }) => {
     const viewer = window.viewer;
     const canvas = viewer.canvas;
     const rect = canvas.getBoundingClientRect();
@@ -167,18 +175,70 @@ const takeSample = (page, stage, tilePriority, routePoint) => page.evaluate(({ s
             [(primaryX + rect.width * 0.5) / 2, (primaryY + rect.height * 0.5) / 2],
             [rect.width * 0.5, rect.height * 0.5]
         ];
-        let hit = null;
+        const cached = window.__tileBenchmarkSurfaceFocus;
+        let hit = cached?.stage === stageName ? cached.point : null;
         let hitScreen = null;
-        for (const candidate of candidates) {
-            hit = viewer.measurementController?.pickSurfacePoint(candidate[0], candidate[1]) ?? null;
-            if (hit) {
-                hitScreen = candidate;
-                break;
+        let surfaceMethod = cached?.stage === stageName ? cached.method : null;
+        if (hit) {
+            hitScreen = cached.screen;
+        } else {
+            for (const candidate of candidates) {
+                hit = viewer.measurementController?.pickSurfacePoint(candidate[0], candidate[1]) ?? null;
+                if (hit) {
+                    hitScreen = candidate;
+                    surfaceMethod = 'mesh';
+                    break;
+                }
+            }
+            // The real navigation controller also falls back from its synchronous mesh test to
+            // the GPU depth picker. Some production tiles do not expose CPU-pickable geometry,
+            // so exercising that same path is required for a genuine surface-mode comparison.
+            if (!hit && viewer.tileManager?.prevSelection?.length) {
+                for (const candidate of candidates) {
+                    hit = await viewer.picker?.pick(candidate[0], candidate[1]) ?? null;
+                    if (hit) {
+                        hitScreen = candidate;
+                        surfaceMethod = 'depth';
+                        break;
+                    }
+                }
+            }
+            // Headless GPU readback can be unavailable even though tiles are visible. Tile
+            // priority consumes only the direction to the point, not its depth, so the centre of
+            // the visible tile volume nearest the requested screen point is an equivalent stable
+            // direction proxy and still targets actual streamed content.
+            if (!hit) {
+                const visible = viewer.tileManager?.getVisibleMeshInstances?.() ?? [];
+                let nearest = null;
+                let nearestDistance = Number.POSITIVE_INFINITY;
+                for (const meshInstance of visible) {
+                    const centre = meshInstance.aabb?.center;
+                    if (!centre) continue;
+                    const screen = viewer.fragmentWorldToCssScreen(centre);
+                    const distance = Math.hypot(screen.x - primaryX, screen.y - primaryY);
+                    if (distance < nearestDistance) {
+                        nearest = { point: centre.clone(), screen: [screen.x, screen.y] };
+                        nearestDistance = distance;
+                    }
+                }
+                if (nearest) {
+                    hit = nearest.point;
+                    hitScreen = nearest.screen;
+                    surfaceMethod = 'tile-volume';
+                }
+            }
+            if (hit && hitScreen) {
+                window.__tileBenchmarkSurfaceFocus = {
+                    stage: stageName,
+                    point: hit,
+                    screen: hitScreen,
+                    method: surfaceMethod
+                };
             }
         }
         viewer.cameraControls.setSurfaceZoomTarget(hit);
         if (hit && hitScreen) {
-            focusSource = 'surface';
+            focusSource = `surface-${surfaceMethod ?? 'unknown'}`;
             focusX = hitScreen[0] / Math.max(1, rect.width);
             focusY = hitScreen[1] / Math.max(1, rect.height);
         }
@@ -318,7 +378,8 @@ const runPass = async ({ context, scene, variant, pass, run }) => {
     if (variant.tilePriority === 'cursor' && !samples.some(sample => sample.focusSource === 'cursor')) {
         throw new Error('Cursor priority never received its scripted pointer focus');
     }
-    if (variant.tilePriority === 'surface' && !samples.some(sample => sample.focusSource === 'surface')) {
+    if (variant.tilePriority === 'surface' && !samples.some(sample => sample.stage !== 'startup' &&
+        sample.focusSource.startsWith('surface-'))) {
         throw new Error('Surface priority never resolved its scripted point on the model');
     }
     await page.close();
@@ -391,11 +452,11 @@ const summarize = ({ scene, variant, pass, run, samples, responses, resources, p
         peakSelected: Math.max(0, ...samples.map(sample => sample.selected)),
         peakActiveSplats: Math.max(0, ...samples.map(sample => sample.activeSplats)),
         peakErrorScale: round(Math.max(1, ...samples.map(sample => sample.errorTargetScale))),
-        exactFocusPercent: round(samples.filter((sample) => {
+        exactFocusPercent: round(samples.filter(sample => sample.stage !== 'startup').filter((sample) => {
             if (variant.tilePriority === 'cursor') return sample.focusSource === 'cursor';
-            if (variant.tilePriority === 'surface') return sample.focusSource === 'surface';
+            if (variant.tilePriority === 'surface') return sample.focusSource.startsWith('surface-');
             return true;
-        }).length / Math.max(1, samples.length) * 100),
+        }).length / Math.max(1, samples.filter(sample => sample.stage !== 'startup').length) * 100),
         tickP50Ms: round(quantile(samples.map(sample => sample.tickMs), 0.5)),
         tickP95Ms: round(quantile(samples.map(sample => sample.tickMs), 0.95)),
         tickP99Ms: round(quantile(samples.map(sample => sample.tickMs), 0.99)),
