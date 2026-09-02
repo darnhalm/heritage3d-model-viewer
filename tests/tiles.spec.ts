@@ -1009,7 +1009,13 @@ test('модуль таймлайна загружается только при
     });
     await pumpFrames(page, 2);
     // Double-click zoom uses two outlined five-ring bands with no crosshair/helper lines.
-    expect(await page.evaluate(() => (window as any).viewer.debugSurfaceCursor.vertexCursor)).toBe(400);
+    expect(await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        return {
+            count: viewer.debugSurfaceCursor.mesh.primitive[0].count,
+            visible: viewer.debugSurfaceCursor.meshInstances[0].visible
+        };
+    })).toEqual({ count: 400, visible: true });
     const timelineWidthBeforeZoom = await page.locator('#ticks-area').evaluate(element => element.clientWidth);
     await page.getByRole('button', { name: 'Zoom +' }).click();
     await expect.poll(() => page.locator('#ticks-area').evaluate(element => element.clientWidth)).toBeGreaterThan(timelineWidthBeforeZoom);
@@ -1137,6 +1143,51 @@ test('таймлайн плавно интерполирует камеру ме
     expect(halfway?.yaw).toBeCloseTo(45, 3);
     expect(halfway?.replayLimit).toBeCloseTo(0.5, 6);
     expect(pageErrors).toEqual([]);
+});
+
+test('запись сохраняет ранние LOD-срезы при вытеснении кэша и воспроизводит точный выбор', async ({ page }) => {
+    test.skip(!await samplesAvailable(page, DISCRETE_LOD),
+        'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');
+
+    await page.goto(`/?load=${encodeURIComponent(DISCRETE_LOD)}`);
+    await waitForViewer(page);
+    await waitForTiles(page);
+    await setFlag(page, 'debug.tileRecording', true);
+    await page.waitForTimeout(50);
+
+    const result = await page.evaluate(() => {
+        const manager = (window as any).viewer.tileManager;
+        const initial = manager.prevSelection.slice();
+        if (initial.length === 0) return null;
+
+        // A second exact state can consist of a subset (or an empty selection for a
+        // one-tile sample). It is deliberately injected through the same selection path
+        // used by traversal so the test stays independent from camera/SSE constants.
+        const next = initial.length > 1 ? initial.slice(0, 1) : [];
+        manager.applySelection(next);
+        const second = manager.recordedSelections[1];
+        manager.stopLoadHistory();
+        manager.setFrozen(true);
+
+        // Force cache pressure after the early state is no longer selected. Every tile that
+        // appeared in the recording must remain resident for replay.
+        manager.options.maxCachedTiles = 0;
+        manager.evictStale(Number.MAX_SAFE_INTEGER, 0);
+        manager.setReplayLimit(second.time);
+        manager.update();
+
+        return {
+            snapshots: manager.recordedSelections.length,
+            retained: initial.every((tile: any) => manager.recordedTiles.has(tile) && !!tile.entity),
+            expected: second.tiles.map((tile: any) => tile.id),
+            selected: manager.prevSelection.map((tile: any) => tile.id)
+        };
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.snapshots).toBeGreaterThanOrEqual(2);
+    expect(result?.retained).toBe(true);
+    expect(result?.selected).toEqual(result?.expected);
 });
 
 test('Фаза 2: заморозка фрустума фиксирует отбор при движении камеры', async ({ page }) => {

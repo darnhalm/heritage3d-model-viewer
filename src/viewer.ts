@@ -7281,6 +7281,7 @@ class Viewer {
     exitTileDebugMode() {
         this.closingTileDebugMode = true;
         this.tileManager?.stopLoadHistory();
+        this.tileManager?.releaseRecordedSelections();
         this.tileReplayPlaying = false;
         this.tileReplayCursorValue = 0;
         this.observer.set('debug.tileRecording', false);

@@ -490,6 +490,22 @@ export class TileManager {
     /** Real duration of the last/current recording in seconds. */
     private recordingDuration = 0;
 
+    /**
+     * Exact rendered tile sets captured whenever selection changes during recording.
+     *
+     * Load timestamps alone cannot reproduce cached-tile switches: a camera can select an
+     * already loaded branch without causing another network event. Keeping the actual slices
+     * also makes replay independent from later SSE/cache decisions.
+     */
+    private readonly recordedSelections: Array<{ time: number, tiles: Tile[] }> = [];
+
+    /**
+     * Tiles that appeared in at least one recorded slice. They stay resident until the next
+     * recording (or the debug session ends), otherwise cache eviction turns the beginning of a
+     * long replay into the nearest coarse ancestor while only its recent tail remains correct.
+     */
+    private readonly recordedTiles = new Set<Tile>();
+
     /** Счётчики порядка загрузки по уровням детализации: ключ — глубина тайла. */
     private readonly lodCounters = new Map<number, number>();
 
@@ -577,6 +593,43 @@ export class TileManager {
             viewportHeight: this.view.viewportHeight,
             sseDenominator: this.view.sseDenominator
         });
+    }
+
+    /**
+     * Capture one exact rendered LOD slice and retain its content for deterministic replay.
+     *
+     * @param selection - Tiles rendered in the current frame.
+     */
+    private recordSelection(selection: Tile[]) {
+        if (this.recordingStartMs === null || this.recordedSelections.length >= LOAD_VIEW_HISTORY_LIMIT) return;
+        const last = this.recordedSelections[this.recordedSelections.length - 1];
+        if (last && last.tiles.length === selection.length &&
+            selection.every((tile, index) => last.tiles[index] === tile)) return;
+
+        const tiles = selection.slice();
+        tiles.forEach(tile => this.recordedTiles.add(tile));
+        this.recordedSelections.push({ time: this.recordingElapsed(), tiles });
+    }
+
+    /**
+     * Return the last exact rendered slice at or before the replay cursor.
+     *
+     * @param time - Replay cursor in seconds.
+     * @returns The recorded selection, or `null` when no state was captured.
+     */
+    private recordedSelectionAt(time: number): Tile[] | null {
+        if (this.recordedSelections.length === 0) return null;
+        let low = 0;
+        let high = this.recordedSelections.length - 1;
+        while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            if (this.recordedSelections[middle].time <= time) {
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
+        }
+        return this.recordedSelections[low].tiles;
     }
 
     /**
@@ -818,6 +871,18 @@ export class TileManager {
         const cachedBytes = this.cachedBytes();
         const byteBudget = this.cacheByteBudget();
         this.updateErrorTargetScale(cachedBytes, byteBudget);
+
+        // Replay the exact set that was rendered at this instant. Re-running traversal from
+        // camera/load timestamps is only an approximation and loses cached selection changes.
+        if (this.frozen && this.replayLimit >= 0) {
+            const recorded = this.recordedSelectionAt(this.replayLimit);
+            if (recorded) {
+                const selection = recorded.filter(tile => tile.state === TILE_READY && !!tile.entity);
+                this.applySelection(selection);
+                this.updateStats(selection, byteBudget);
+                return;
+            }
+        }
 
         const selection: Tile[] = [];
         this.visit(this.rootTile, selection);
@@ -1202,6 +1267,7 @@ export class TileManager {
                     this.markLoadOrder(tile);
                 }
             });
+            this.recordSelection(selection);
         }
 
         this.prevSelection.forEach((tile) => {
@@ -1381,7 +1447,7 @@ export class TileManager {
         }
 
         const candidates = [...this.loaded].filter(tile => tile !== this.debugPickedTile &&
-            !tile.selected && tile.lastUsedFrame !== this.frame);
+            !this.recordedTiles.has(tile) && !tile.selected && tile.lastUsedFrame !== this.frame);
         candidates.sort((a, b) => compareTilePriority(b, a, this.frame));
 
         for (const tile of candidates) {
@@ -1794,6 +1860,8 @@ export class TileManager {
     resetLoadHistory() {
         this.loadCounter = 0;
         this.loadViews.length = 0;
+        this.recordedSelections.length = 0;
+        this.recordedTiles.clear();
         this.replayEndWorld = null;
         this.recordingDuration = 0;
         this.lodCounters.clear();
@@ -1816,7 +1884,14 @@ export class TileManager {
         this.prevSelection.forEach((tile) => {
             if (tile.state === TILE_READY) this.markLoadOrder(tile);
         });
+        this.recordSelection(this.prevSelection);
         this.recordFrame();
+    }
+
+    /** Release replay-only cache pins when tile debugging is closed. */
+    releaseRecordedSelections() {
+        this.recordedSelections.length = 0;
+        this.recordedTiles.clear();
     }
 
     /** Finish the real-time episode at the exact Stop instant. */
@@ -2062,6 +2137,8 @@ export class TileManager {
         this.loaded.clear();
         this.loadCounter = 0;
         this.loadViews.length = 0;
+        this.recordedSelections.length = 0;
+        this.recordedTiles.clear();
         this.lodCounters.clear();
         this.prevSelection = [];
         this.root.destroy();
