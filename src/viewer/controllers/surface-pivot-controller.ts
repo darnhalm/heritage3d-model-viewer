@@ -24,6 +24,7 @@ type SurfacePivotState =
         canvasY: number;
         lastClientX: number;
         lastClientY: number;
+        gestureRecorded: boolean;
     }
     | {
         state: 'active';
@@ -46,6 +47,8 @@ type SurfacePivotControllerArgs = {
     renderNextFrame: () => void;
     /** Синхронный пик поверхности: колесу нужен ответ в том же кадре. */
     pickSurfaceSync: (x: number, y: number) => Vec3 | null;
+    /** Notify the tile-debug recorder only after a drag has resolved to a real surface point. */
+    onSurfaceGesture?: (gesture: SurfaceGesture, point: Vec3) => void;
 };
 
 /** Как долго точка под курсором считается свежей внутри одной серии прокруток, мс. */
@@ -77,6 +80,8 @@ class SurfacePivotController {
     private readonly renderNextFrame: () => void;
 
     private readonly pickSurfaceSync: (x: number, y: number) => Vec3 | null;
+
+    private readonly onSurfaceGesture?: (gesture: SurfaceGesture, point: Vec3) => void;
 
     private state: SurfacePivotState = { state: 'idle' };
 
@@ -117,7 +122,8 @@ class SurfacePivotController {
             canvasX: event.clientX - rect.left,
             canvasY: event.clientY - rect.top,
             lastClientX: event.clientX,
-            lastClientY: event.clientY
+            lastClientY: event.clientY,
+            gestureRecorded: false
         };
         if (gesture === 'orbit') {
             this.cameraControls.beginSurfaceOrbit();
@@ -154,6 +160,13 @@ class SurfacePivotController {
             event.clientX - state.startClientX,
             event.clientY - state.startClientY
         ) > threshold) {
+            // Record short drags immediately: an async GPU pick can finish after pointerup,
+            // while the synchronous triangle pick still gives us an exact surface point.
+            const point = this.pickSurfaceSync(state.canvasX, state.canvasY);
+            if (point) {
+                state.gestureRecorded = true;
+                this.onSurfaceGesture?.(state.gesture, point);
+            }
             this.pickSurface(state);
         }
     };
@@ -170,6 +183,7 @@ class SurfacePivotController {
         this.canvas = args.canvas;
         this.picker = args.picker;
         this.pickSurfaceSync = args.pickSurfaceSync;
+        this.onSurfaceGesture = args.onSurfaceGesture;
         this.cameraControls = args.cameraControls;
         this.canStart = args.canStart;
         this.mouseButtonsInverted = args.mouseButtonsInverted;
@@ -272,6 +286,7 @@ class SurfacePivotController {
                 current.lastClientY - current.startClientY
             );
         }
+        if (!current.gestureRecorded) this.onSurfaceGesture?.(current.gesture, point);
         this.marker?.classList.toggle('touch', current.input !== 'mouse');
         this.marker?.classList.add('visible');
         this.updateMarker();

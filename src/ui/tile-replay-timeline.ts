@@ -3,6 +3,7 @@ import { resolutionColorCss } from '../resolution-palette';
 import {
     TIMELINE_FPS_OPTIONS,
     formatTimelineSeconds,
+    stepTimelineZoom,
     type TimelineUnit
 } from './timeline-units';
 
@@ -19,6 +20,11 @@ type Milestone = {
     lastTime: number;
 };
 
+type SurfaceEvent = {
+    type: 'orbit' | 'pan' | 'zoom';
+    time: number;
+};
+
 type TimelineState = {
     duration: number;
     replay: number;
@@ -29,6 +35,7 @@ type TimelineState = {
     fps: number;
     scheme: 'lod' | 'resolution';
     milestones: Milestone[];
+    surfaceEvents: SurfaceEvent[];
 };
 
 type TimelineLabels = {
@@ -43,6 +50,9 @@ type TimelineLabels = {
     timeUnit: string;
     timecode: string;
     frames: string;
+    zoom: string;
+    orbit: string;
+    pan: string;
 };
 
 type TimelineCallbacks = {
@@ -68,6 +78,8 @@ class TileReplayTimeline {
 
     private readonly area: HTMLDivElement;
 
+    private readonly ticks: HTMLDivElement;
+
     private readonly playButton: HTMLButtonElement;
 
     private readonly speedSelect: HTMLSelectElement;
@@ -86,6 +98,12 @@ class TileReplayTimeline {
 
     private readonly lastMilestoneTitleTemplate: string;
 
+    private readonly labelsOrbit: string;
+
+    private readonly labelsPan: string;
+
+    private readonly labelsZoom: string;
+
     private cursor: HTMLDivElement | null = null;
 
     private layoutKey = '';
@@ -96,10 +114,15 @@ class TileReplayTimeline {
 
     private fps = 30;
 
+    private zoom = 1;
+
     constructor(parent: HTMLElement, labels: TimelineLabels, callbacks: TimelineCallbacks) {
         this.nowLabel = labels.now;
         this.milestoneTitleTemplate = labels.milestoneTitle;
         this.lastMilestoneTitleTemplate = labels.lastMilestoneTitle;
+        this.labelsOrbit = labels.orbit;
+        this.labelsPan = labels.pan;
+        this.labelsZoom = labels.zoom;
         const panel = document.createElement('div');
         panel.id = 'timeline-panel';
 
@@ -202,6 +225,34 @@ class TileReplayTimeline {
         restart.appendChild(restartIcon);
         restart.addEventListener('click', callbacks.onRecordAgain);
         settings.appendChild(restart);
+
+        const zoomOut = document.createElement('button');
+        zoomOut.type = 'button';
+        zoomOut.className = 'timeline-zoom-button';
+        zoomOut.title = `${labels.zoom} −`;
+        zoomOut.setAttribute('aria-label', zoomOut.title);
+        const zoomOutIcon = document.createElement('span');
+        zoomOutIcon.className = 'material-symbols-outlined';
+        zoomOutIcon.textContent = 'zoom_out';
+        zoomOut.appendChild(zoomOutIcon);
+        zoomOut.disabled = true;
+        settings.appendChild(zoomOut);
+
+        const zoomValue = document.createElement('span');
+        zoomValue.className = 'timeline-zoom-value';
+        zoomValue.textContent = '100%';
+        settings.appendChild(zoomValue);
+
+        const zoomIn = document.createElement('button');
+        zoomIn.type = 'button';
+        zoomIn.className = 'timeline-zoom-button';
+        zoomIn.title = `${labels.zoom} +`;
+        zoomIn.setAttribute('aria-label', zoomIn.title);
+        const zoomInIcon = document.createElement('span');
+        zoomInIcon.className = 'material-symbols-outlined';
+        zoomInIcon.textContent = 'zoom_in';
+        zoomIn.appendChild(zoomInIcon);
+        settings.appendChild(zoomIn);
         spacer.appendChild(settings);
         controls.appendChild(spacer);
         panel.appendChild(controls);
@@ -215,6 +266,28 @@ class TileReplayTimeline {
         parent.appendChild(panel);
         this.panel = panel;
         this.area = area;
+        this.ticks = ticks;
+
+        const setZoom = (next: number) => {
+            if (next === this.zoom) return;
+            const viewportWidth = Math.max(1, ticks.clientWidth);
+            const oldWidth = Math.max(1, area.clientWidth - PADDING * 2);
+            const centerRatio = Math.max(0, Math.min(1,
+                (ticks.scrollLeft + viewportWidth / 2 - PADDING) / oldWidth));
+            this.zoom = next;
+            area.style.width = `${Math.max(viewportWidth, viewportWidth * this.zoom)}px`;
+            zoomValue.textContent = `${Math.round(this.zoom * 100)}%`;
+            zoomOut.disabled = this.zoom <= 1;
+            zoomIn.disabled = this.zoom >= 4;
+            this.invalidate();
+            requestAnimationFrame(() => {
+                const newWidth = Math.max(1, area.clientWidth - PADDING * 2);
+                ticks.scrollLeft = PADDING + centerRatio * newWidth - viewportWidth / 2;
+                callbacks.onRequestRender();
+            });
+        };
+        zoomOut.addEventListener('click', () => setZoom(stepTimelineZoom(this.zoom, -1)));
+        zoomIn.addEventListener('click', () => setZoom(stepTimelineZoom(this.zoom, 1)));
 
         let scrubbing = false;
         const setFromEvent = (event: PointerEvent) => {
@@ -241,10 +314,11 @@ class TileReplayTimeline {
         area.addEventListener('pointercancel', stop);
 
         this.resizeObserver = new ResizeObserver(() => {
+            this.area.style.width = `${Math.max(1, this.ticks.clientWidth * this.zoom)}px`;
             this.invalidate();
             callbacks.onRequestRender();
         });
-        this.resizeObserver.observe(area);
+        this.resizeObserver.observe(ticks);
     }
 
     update(state: TimelineState) {
@@ -261,8 +335,9 @@ class TileReplayTimeline {
         const glyph = this.playButton.querySelector('.material-symbols-outlined');
         if (glyph) glyph.textContent = state.playing ? 'pause' : 'play_arrow';
 
-        const key = `${this.area.clientWidth}|${state.duration}|${state.scheme}|${state.displayUnit}|${state.fps}|${
-            state.milestones.map(m => `${m.depth}:${m.time}:${m.lastTime}`).join(',')}`;
+        const key = `${this.area.clientWidth}|${this.zoom}|${state.duration}|${state.scheme}|${state.displayUnit}|${state.fps}|${
+            state.milestones.map(m => `${m.depth}:${m.time}:${m.lastTime}`).join(',')}|${
+            state.surfaceEvents.map(event => `${event.type}:${event.time}`).join(',')}`;
         if (key !== this.layoutKey) {
             this.layoutKey = key;
             this.rebuild(state);
@@ -350,6 +425,19 @@ class TileReplayTimeline {
             last.dataset.depth = String(depth);
             last.dataset.sequence = String(lastSequence);
             this.area.appendChild(last);
+        });
+
+        const eventNames = { orbit: this.labelsOrbit, pan: this.labelsPan, zoom: this.labelsZoom };
+        state.surfaceEvents.forEach((event, index) => {
+            const marker = document.createElement('div');
+            marker.classList.add('time-label', 'surface-event', event.type);
+            marker.style.left = `${at(event.time)}px`;
+            marker.dataset.kind = event.type;
+            marker.dataset.time = String(event.time);
+            const title = `${eventNames[event.type]} ${index + 1} · ${formatTimelineSeconds(event.time, state.displayUnit, state.fps)}`;
+            marker.title = title;
+            marker.setAttribute('aria-label', title);
+            this.area.appendChild(marker);
         });
 
         const cursor = document.createElement('div');

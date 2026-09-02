@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { t } from '../i18n/translations';
 import { DEFAULT_POI_DURATION_SECONDS, DEFAULT_POI_HOLD_TIME_SECONDS } from '../poi-defaults';
 import { ObserverData } from '../types';
-import { TIMELINE_FPS_OPTIONS, formatTimelineSeconds, normalizeTimelineFps, type TimelineUnit } from './timeline-units';
+import { TIMELINE_FPS_OPTIONS, formatTimelineSeconds, normalizeTimelineFps, stepTimelineZoom, type TimelineUnit } from './timeline-units';
 
 type PoiTimelineEntry = {
     id: string;
@@ -59,8 +59,10 @@ const PoiTimeline = ({ observerData, setProperty, onTogglePlay, onStop, onPrevio
     const [unit, setUnit] = useState<TimelineUnit>('timecode');
     const [playbackTime, setPlaybackTime] = useState(0);
     const [observerMode, setObserverMode] = useState(false);
+    const [zoom, setZoom] = useState(1);
     const stopDraggingRef = useRef<(() => void) | null>(null);
     const scrubbingRef = useRef(false);
+    const trackRef = useRef<HTMLDivElement>(null);
     const fps = normalizeTimelineFps(observerData.poi?.timeline?.fps);
     const poiList = useMemo(() => parsePoiList(observerData.poi?.list ?? '[]'), [observerData.poi?.list]);
     const segments = useMemo(() => {
@@ -76,7 +78,8 @@ const PoiTimeline = ({ observerData, setProperty, onTogglePlay, onStop, onPrevio
         });
     }, [poiList]);
     const duration = segments.length > 0 ? segments[segments.length - 1].end : 0;
-    const contentWidth = Math.max(560, duration * PIXELS_PER_SECOND + TRACK_PADDING * 2);
+    const pixelsPerSecond = PIXELS_PER_SECOND * zoom;
+    const contentWidth = Math.max(560, duration * pixelsPerSecond + TRACK_PADDING * 2);
     const activeId = observerData.poi?.activeId ?? '';
     const playing = !!observerData.poi?.playing;
     const canObserve = segments.some(({ poi }) => (
@@ -118,7 +121,7 @@ const PoiTimeline = ({ observerData, setProperty, onTogglePlay, onStop, onPrevio
         const maxValue = field === 'duration' ? 10 : 60;
         const update = (pointerEvent: PointerEvent) => {
             if (!pointerEvent.isPrimary) return;
-            const rounded = Math.round(clamp(initialValue + (pointerEvent.clientX - initialX) / PIXELS_PER_SECOND, 0, maxValue) * 100) / 100;
+            const rounded = Math.round(clamp(initialValue + (pointerEvent.clientX - initialX) / pixelsPerSecond, 0, maxValue) * 100) / 100;
             if (field === 'duration') window.viewer?.updatePoiDuration?.(segment.poi.id, rounded);
             else window.viewer?.updatePoiHoldTime?.(segment.poi.id, rounded);
         };
@@ -140,7 +143,7 @@ const PoiTimeline = ({ observerData, setProperty, onTogglePlay, onStop, onPrevio
         if (!event.isPrimary || duration <= 0) return;
         const track = event.currentTarget;
         const rect = track.getBoundingClientRect();
-        const time = clamp((event.clientX - rect.left + track.scrollLeft - TRACK_PADDING) / PIXELS_PER_SECOND, 0, duration);
+        const time = clamp((event.clientX - rect.left + track.scrollLeft - TRACK_PADDING) / pixelsPerSecond, 0, duration);
         setPlaybackTime(time);
         onSeek(time);
     };
@@ -166,8 +169,20 @@ const PoiTimeline = ({ observerData, setProperty, onTogglePlay, onStop, onPrevio
         { value: 'frames', label: t('Frames', lang) }
     ];
     const fpsOptions = Array.from(new Set<number>([...TIMELINE_FPS_OPTIONS, fps])).sort((a, b) => a - b);
-    const tickStep = duration > 20 ? 5 : duration > 8 ? 2 : 1;
+    const tickStep = pixelsPerSecond >= 150 ? 0.5 : pixelsPerSecond >= 70 ? 1 : pixelsPerSecond >= 40 ? 2 : 5;
     const tickValues = Array.from({ length: Math.floor(duration / tickStep) + 1 }, (_, index) => index * tickStep);
+    const changeZoom = (direction: -1 | 1) => {
+        const next = stepTimelineZoom(zoom, direction);
+        if (next === zoom) return;
+        const track = trackRef.current;
+        const centerTime = track ?
+            clamp((track.scrollLeft + track.clientWidth / 2 - TRACK_PADDING) / pixelsPerSecond, 0, duration) : 0;
+        setZoom(next);
+        requestAnimationFrame(() => {
+            if (!track) return;
+            track.scrollLeft = TRACK_PADDING + centerTime * PIXELS_PER_SECOND * next - track.clientWidth / 2;
+        });
+    };
 
     return <div id='poi-timeline-panel' aria-label={t('POI timeline', lang)}>
         <div className='poi-timeline-toolbar'>
@@ -192,28 +207,33 @@ const PoiTimeline = ({ observerData, setProperty, onTogglePlay, onStop, onPrevio
                 ><span className='material-symbols-outlined'>view_in_ar</span></button>
             </div>
             <div className='poi-timeline-settings'>
+                <div className='poi-timeline-zoom' aria-label={t('Zoom', lang)}>
+                    <button type='button' disabled={zoom <= 1} title={`${t('Zoom', lang)} −`} aria-label={`${t('Zoom', lang)} −`} onClick={() => changeZoom(-1)}><span className='material-symbols-outlined'>zoom_out</span></button>
+                    <span>{Math.round(zoom * 100)}%</span>
+                    <button type='button' disabled={zoom >= 4} title={`${t('Zoom', lang)} +`} aria-label={`${t('Zoom', lang)} +`} onClick={() => changeZoom(1)}><span className='material-symbols-outlined'>zoom_in</span></button>
+                </div>
                 <label><span>{t('Time unit', lang)}</span><select id='poi-timeline-unit' value={unit} aria-label={t('Time unit', lang)} onChange={event => setUnit(event.target.value as TimelineUnit)}>{unitOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                 <label><span>FPS</span><select id='poi-timeline-fps' value={fps} aria-label='FPS' onChange={event => setProperty('poi.timeline.fps', normalizeTimelineFps(event.target.value))}>{fpsOptions.map(value => <option key={value} value={value}>{value} FPS</option>)}</select></label>
             </div>
         </div>
-        <div className='poi-timeline-track' onPointerDown={startScrubbing} onPointerMove={continueScrubbing} onPointerUp={stopScrubbing} onPointerCancel={stopScrubbing}>
+        <div ref={trackRef} className='poi-timeline-track' onPointerDown={startScrubbing} onPointerMove={continueScrubbing} onPointerUp={stopScrubbing} onPointerCancel={stopScrubbing}>
             <div className='poi-timeline-content' style={{ width: `${contentWidth}px` }}>
-                <div className='poi-timeline-axis' aria-hidden='true'>{tickValues.map(value => <div className='poi-timeline-axis-tick' key={value} style={{ left: `${TRACK_PADDING + value * PIXELS_PER_SECOND}px` }}><span>{formatTimelineSeconds(value, unit, fps)}</span></div>)}</div>
+                <div className='poi-timeline-axis' aria-hidden='true'>{tickValues.map(value => <div className='poi-timeline-axis-tick' key={value} style={{ left: `${TRACK_PADDING + value * pixelsPerSecond}px` }}><span>{formatTimelineSeconds(value, unit, fps)}</span></div>)}</div>
                 {segments.map((segment) => {
                     const color = safeColor(segment.poi.color);
                     const label = String(segment.poi.title ?? `POI ${segment.poi.number}`);
-                    const left = TRACK_PADDING + segment.start * PIXELS_PER_SECOND;
-                    const arrival = TRACK_PADDING + segment.arrival * PIXELS_PER_SECOND;
-                    const end = TRACK_PADDING + segment.end * PIXELS_PER_SECOND;
+                    const left = TRACK_PADDING + segment.start * pixelsPerSecond;
+                    const arrival = TRACK_PADDING + segment.arrival * pixelsPerSecond;
+                    const end = TRACK_PADDING + segment.end * pixelsPerSecond;
                     return <React.Fragment key={segment.poi.id}>
-                        <div className='poi-timeline-transition' data-poi-id={segment.poi.id} style={{ left: `${left}px`, width: `${segment.duration * PIXELS_PER_SECOND}px`, borderColor: color, color }} title={`${label} · ${t('Camera transition', lang)} · ${formatTimelineSeconds(segment.duration, unit, fps)}`} />
-                        <div className='poi-timeline-hold' data-poi-id={segment.poi.id} style={{ left: `${arrival}px`, width: `${segment.holdTime * PIXELS_PER_SECOND}px`, backgroundColor: mixWithWhite(color, 0.18), borderColor: mixWithWhite(color, 0.48) }} title={`${label} · ${t('Hold', lang)} · ${formatTimelineSeconds(segment.holdTime, unit, fps)}`} />
+                        <div className='poi-timeline-transition' data-poi-id={segment.poi.id} style={{ left: `${left}px`, width: `${segment.duration * pixelsPerSecond}px`, borderColor: color, color }} title={`${label} · ${t('Camera transition', lang)} · ${formatTimelineSeconds(segment.duration, unit, fps)}`} />
+                        <div className='poi-timeline-hold' data-poi-id={segment.poi.id} style={{ left: `${arrival}px`, width: `${segment.holdTime * pixelsPerSecond}px`, backgroundColor: mixWithWhite(color, 0.18), borderColor: mixWithWhite(color, 0.48) }} title={`${label} · ${t('Hold', lang)} · ${formatTimelineSeconds(segment.holdTime, unit, fps)}`} />
                         <button type='button' className={`poi-timeline-marker${activeId === segment.poi.id ? ' active' : ''}`} data-poi-id={segment.poi.id} style={{ left: `${left}px`, backgroundColor: color, color: contrastColor(color) }} title={`${label} · ${formatTimelineSeconds(segment.start, unit, fps)}`} aria-label={`${label} · ${formatTimelineSeconds(segment.start, unit, fps)}`} onClick={() => window.viewer?.focusPoi?.(segment.poi.id)}>{segment.poi.number}</button>
                         <button type='button' className='poi-timeline-handle poi-timeline-transition-handle' data-poi-id={segment.poi.id} data-field='duration' style={{ left: `${arrival}px`, color }} title={t('Drag to change camera transition duration', lang)} onPointerDown={event => startDrag(event, segment, 'duration')} />
                         <button type='button' className='poi-timeline-handle poi-timeline-hold-handle' data-poi-id={segment.poi.id} data-field='holdTime' style={{ left: `${end}px`, color }} title={t('Drag to change hold duration', lang)} onPointerDown={event => startDrag(event, segment, 'holdTime')} />
                     </React.Fragment>;
                 })}
-                {segments.length > 0 && <div className='poi-timeline-cursor' style={{ left: `${TRACK_PADDING + playbackTime * PIXELS_PER_SECOND}px` }}>{formatTimelineSeconds(playbackTime, unit, fps)}</div>}
+                {segments.length > 0 && <div className='poi-timeline-cursor' style={{ left: `${TRACK_PADDING + playbackTime * pixelsPerSecond}px` }}>{formatTimelineSeconds(playbackTime, unit, fps)}</div>}
                 {segments.length === 0 && <div className='poi-timeline-empty'>{t('Add a POI to build the timeline', lang)}</div>}
             </div>
         </div>

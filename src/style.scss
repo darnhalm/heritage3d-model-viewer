@@ -1180,7 +1180,8 @@ body:not(.ui-ready) #panel-left {
 
                 // `#restart` — добавление к образцу: та же кнопка, что и `#loop`.
                 > #loop,
-                > #restart {
+                > #restart,
+                > .timeline-zoom-button {
                     font-weight: bold;
                     font-size: 13px;
 
@@ -1210,6 +1211,13 @@ body:not(.ui-ready) #panel-left {
                         color: var(--theme-primary);
                     }
                 }
+
+                > .timeline-zoom-value {
+                    min-width: 38px;
+                    color: #b3aaac;
+                    font: 11px/24px ui-monospace, Menlo, monospace;
+                    text-align: center;
+                }
             }
         }
     }
@@ -1217,10 +1225,14 @@ body:not(.ui-ready) #panel-left {
     > #ticks {
         height: 38px;
         background-color: #181818;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: thin;
 
         > #ticks-area {
             position: relative;
             width: 100%;
+            min-width: 100%;
             height: 100%;
             cursor: pointer;
             touch-action: none;
@@ -1282,6 +1294,34 @@ body:not(.ui-ready) #panel-left {
                         border-radius: 50%;
                         background-color: #181818;
                         clip-path: none;
+                    }
+                }
+
+                &.surface-event {
+                    z-index: 3;
+                    bottom: 21px;
+                    width: 7px;
+                    height: 7px;
+                    padding: 0;
+                    border: 1px solid rgba(0, 0, 0, 0.75);
+                    border-radius: 50%;
+                    background: #fff;
+                    box-shadow: 0 0 4px rgba(255, 255, 255, 0.7);
+                    pointer-events: auto;
+
+                    &.pan {
+                        background: #ffd84a;
+                        box-shadow: 0 0 4px rgba(255, 216, 74, 0.8);
+                    }
+
+                    &.zoom {
+                        width: 11px;
+                        height: 11px;
+                        bottom: 19px;
+                        box-sizing: border-box;
+                        border: 2px double #fff;
+                        background: #181818;
+                        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85), 0 0 5px #fff;
                     }
                 }
             }
@@ -1405,6 +1445,44 @@ body:not(.ui-ready) #panel-left {
             &:focus-visible {
                 border-color: rgba(var(--theme-primary-rgb), 0.53);
                 outline: none;
+            }
+        }
+    }
+
+    .poi-timeline-zoom {
+        display: flex;
+        align-items: center;
+        gap: 1px;
+
+        > span:not(.material-symbols-outlined) {
+            min-width: 38px;
+            color: #b3aaac;
+            font: 11px/24px ui-monospace, Menlo, monospace;
+            text-align: center;
+        }
+
+        button {
+            display: grid;
+            place-items: center;
+            width: 26px;
+            height: 24px;
+            padding: 0;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            color: #b3aaac;
+            background: #282828;
+            cursor: pointer;
+
+            &:hover:not(:disabled),
+            &:focus-visible {
+                color: var(--theme-primary);
+                border-color: rgba(var(--theme-primary-rgb), 0.53);
+                outline: none;
+            }
+
+            &:disabled {
+                color: #6f6b6c;
+                cursor: default;
             }
         }
     }

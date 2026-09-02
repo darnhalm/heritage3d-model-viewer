@@ -975,6 +975,13 @@ test('модуль таймлайна загружается только при
     expect(cachedSelectionEvent).not.toBeNull();
     expect(cachedSelectionEvent?.counterAdvanced).toBe(true);
     expect(cachedSelectionEvent?.time).toBeGreaterThan(0);
+    for (const type of ['orbit', 'pan', 'zoom'] as const) {
+        await page.evaluate((eventType) => {
+            const viewer = (window as any).viewer;
+            viewer.recordSurfaceNavigationEvent(eventType, viewer.cameraControls.getFocus());
+        }, type);
+        await page.waitForTimeout(30);
+    }
     await setFlag(page, 'debug.tileRecording', false);
     await pumpFrames(page, 2);
     await expect(page.locator('#timeline-panel')).toBeVisible();
@@ -985,6 +992,14 @@ test('модуль таймлайна загружается только при
     await expect.poll(() => page.evaluate(() => (window as any).viewer.tileReplayPlaying)).toBe(true);
     await page.keyboard.press('Space');
     await expect.poll(() => page.evaluate(() => (window as any).viewer.tileReplayPlaying)).toBe(false);
+
+    await expect(page.locator('.time-label.surface-event')).toHaveCount(3);
+    await expect(page.locator('.time-label.surface-event.orbit')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+    await expect(page.locator('.time-label.surface-event.pan')).toHaveCSS('background-color', 'rgb(255, 216, 74)');
+    await expect(page.locator('.time-label.surface-event.zoom')).toHaveCSS('border-style', 'double');
+    const timelineWidthBeforeZoom = await page.locator('#ticks-area').evaluate(element => element.clientWidth);
+    await page.getByRole('button', { name: 'Zoom +' }).click();
+    await expect.poll(() => page.locator('#ticks-area').evaluate(element => element.clientWidth)).toBeGreaterThan(timelineWidthBeforeZoom);
 
     const milestones = await page.evaluate(() => (window as any).viewer.tileManager.getLoadOrderMilestones());
     const externalTilesetMilestone = await page.evaluate(() => {

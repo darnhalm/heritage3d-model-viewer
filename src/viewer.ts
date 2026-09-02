@@ -173,6 +173,12 @@ const loadMeshoptDecoder = (): Promise<MeshoptDecoderModule> => {
 /** Обёрнутый на время freeze метод `GSplatWorld.update` — сигнатуру движок не раскрывает. */
 type GSplatWorldUpdate = (...args: any[]) => any;
 
+type SurfaceNavigationEvent = {
+    type: 'orbit' | 'pan' | 'zoom';
+    time: number;
+    point: Vec3;
+};
+
 // model filename extensions
 const modelExtensions = ['gltf', 'glb', 'vox'];
 const defaultSceneBounds = new BoundingBox(new Vec3(0, 1, 0), new Vec3(1, 1, 1));
@@ -852,6 +858,9 @@ class Viewer {
     /** Каркас, оси и сетка замороженной камеры отбора тайлов. */
     debugTileCamera: DebugLines;
 
+    /** Surface point used by a recorded orbit, pan or double-click zoom event. */
+    debugSurfaceCursor: DebugLines;
+
     /** Полупрозрачный объём FOV замороженной камеры. */
     debugTileCameraSolid: DebugSolid;
 
@@ -911,6 +920,19 @@ class Viewer {
 
     /** Дробный остаток отметки: скорость редко кратна частоте кадров. */
     private tileReplayCursorValue = 0;
+
+    /** Navigation gestures captured during the current tile-debug recording. */
+    private readonly surfaceNavigationEvents: SurfaceNavigationEvent[] = [];
+
+    private readonly surfaceCursorA = new Vec3();
+
+    private readonly surfaceCursorB = new Vec3();
+
+    private readonly surfaceCursorCenter = new Vec3();
+
+    private readonly surfaceCursorRight = new Vec3();
+
+    private readonly surfaceCursorUp = new Vec3();
 
     /** Центры и номера выбранных тайлов; массив переиспользуется между кадрами. */
     private readonly tileOrderLabels: Array<{ center: Vec3, order: number, lodOrder: number, name: string, depth: number }> = [];
@@ -1581,6 +1603,7 @@ class Viewer {
         this.debugTilesSolid = new DebugSolid(app, camera);
         this.debugTileCamera = new DebugLines(app, camera);
         this.debugTileCameraSolid = new DebugSolid(app, camera);
+        this.debugSurfaceCursor = new DebugLines(app, camera, false);
         this.debugPoiObserverCamera = new DebugLines(app, camera);
         this.debugPoiObserverCameraSolid = new DebugSolid(app, camera);
         // false → обычный тест глубины: рёбра бокса скрываются за геометрией, и видно, где
@@ -1839,7 +1862,8 @@ class Viewer {
             worldToScreen: point => this.fragmentWorldToCssScreen(point),
             renderNextFrame: this.renderNextFrame.bind(this),
             // Ленивая ссылка: контроллер измерений создаётся следом, а зовётся это уже в рантайме.
-            pickSurfaceSync: (x, y) => this.measurementController?.pickSurfacePoint(x, y) ?? null
+            pickSurfaceSync: (x, y) => this.measurementController?.pickSurfacePoint(x, y) ?? null,
+            onSurfaceGesture: (gesture, point) => this.recordSurfaceNavigationEvent(gesture, point)
         });
         this.measurementController = new MeasurementController({
             canvas: this.canvas,
@@ -2034,6 +2058,7 @@ class Viewer {
         this.showDoubleClickFeedback(x, y);
         const result = await this.picker.pick(x, y);
         if (!result) return;
+        this.recordSurfaceNavigationEvent('zoom', result);
         const startPosition = this.cameraControls.getPosition();
         const startFocus = this.cameraControls.getFocus();
         const zoomDirection = result.clone().sub(startPosition);
@@ -2250,6 +2275,106 @@ class Viewer {
         const info = manager.setDebugPickedMeshInstance(bestMesh);
         this.renderNextFrame();
         return info;
+    }
+
+    /**
+     * Capture only navigation gestures that resolved to an actual model surface.
+     *
+     * @param type - Orbit, pan or double-click zoom.
+     * @param point - Resolved world-space point on the visible surface.
+     */
+    private recordSurfaceNavigationEvent(type: SurfaceNavigationEvent['type'], point: Vec3) {
+        const manager = this.tileManager;
+        if (!manager || !this.observer.get('debug.tileRecording')) return;
+        const time = manager.getRecordingDuration();
+        this.surfaceNavigationEvents.push({ type, time, point: point.clone() });
+        this.tileReplayTimeline?.invalidate();
+        this.renderNextFrame();
+    }
+
+    private activeSurfaceNavigationEvent(): SurfaceNavigationEvent | null {
+        if (this.surfaceNavigationEvents.length === 0) return null;
+        const replay = Number(this.observer.get('debug.tileReplay') ?? -1);
+        if (!this.observer.get('debug.tileFreeze') || replay < 0) {
+            return this.surfaceNavigationEvents[this.surfaceNavigationEvents.length - 1];
+        }
+        for (let i = this.surfaceNavigationEvents.length - 1; i >= 0; --i) {
+            if (this.surfaceNavigationEvents[i].time <= replay) return this.surfaceNavigationEvents[i];
+        }
+        return null;
+    }
+
+    /** Draw a camera-facing 3D target at the surface point of the current recorded gesture. */
+    private drawSurfaceNavigationCursor() {
+        const event = this.activeSurfaceNavigationEvent();
+        if (!event) return;
+        const point = event.point;
+        const cameraWorld = this.camera.getWorldTransform();
+        cameraWorld.getX(this.surfaceCursorRight).normalize();
+        cameraWorld.getY(this.surfaceCursorUp).normalize();
+        const height = Math.max(1, this.canvas.clientHeight);
+        const distance = Math.max(this.camera.camera.nearClip, point.distance(this.camera.getPosition()));
+        const radius = Math.max(
+            this.sceneBounds.halfExtents.length() * 0.0005,
+            distance * Math.tan(this.camera.camera.fov * Math.PI / 360) * 18 / height
+        );
+        // Lift the target a fraction towards the camera so it cannot z-fight with the picked surface.
+        const center = this.surfaceCursorCenter.copy(this.camera.getPosition())
+        .sub(point)
+        .normalize()
+        .mulScalar(radius * 0.08)
+        .add(point);
+        const color = event.type === 'pan' ? 0xff00d7ff : 0xffffffff;
+        const rings = event.type === 'zoom' ? [1, 1.55] : [0.9, 1];
+        rings.forEach((scale) => {
+            let previousX = 1;
+            let previousY = 0;
+            for (let i = 1; i <= 20; ++i) {
+                const angle = i / 20 * Math.PI * 2;
+                const x = Math.cos(angle);
+                const y = Math.sin(angle);
+                const previousRadiusX = previousX * radius * scale;
+                const previousRadiusY = previousY * radius * scale;
+                const radiusX = x * radius * scale;
+                const radiusY = y * radius * scale;
+                this.surfaceCursorA.set(
+                    center.x + this.surfaceCursorRight.x * previousRadiusX + this.surfaceCursorUp.x * previousRadiusY,
+                    center.y + this.surfaceCursorRight.y * previousRadiusX + this.surfaceCursorUp.y * previousRadiusY,
+                    center.z + this.surfaceCursorRight.z * previousRadiusX + this.surfaceCursorUp.z * previousRadiusY
+                );
+                this.surfaceCursorB.set(
+                    center.x + this.surfaceCursorRight.x * radiusX + this.surfaceCursorUp.x * radiusY,
+                    center.y + this.surfaceCursorRight.y * radiusX + this.surfaceCursorUp.y * radiusY,
+                    center.z + this.surfaceCursorRight.z * radiusX + this.surfaceCursorUp.z * radiusY
+                );
+                this.debugSurfaceCursor.line(this.surfaceCursorA, this.surfaceCursorB, color);
+                previousX = x;
+                previousY = y;
+            }
+        });
+        const crossRadius = radius * 1.3;
+        this.surfaceCursorA.set(
+            center.x - this.surfaceCursorRight.x * crossRadius,
+            center.y - this.surfaceCursorRight.y * crossRadius,
+            center.z - this.surfaceCursorRight.z * crossRadius
+        );
+        this.surfaceCursorB.set(
+            center.x + this.surfaceCursorRight.x * crossRadius,
+            center.y + this.surfaceCursorRight.y * crossRadius,
+            center.z + this.surfaceCursorRight.z * crossRadius
+        );
+        this.debugSurfaceCursor.line(this.surfaceCursorA, this.surfaceCursorB, color);
+        this.surfaceCursorA.set(
+            center.x - this.surfaceCursorUp.x * crossRadius,
+            center.y - this.surfaceCursorUp.y * crossRadius,
+            center.z - this.surfaceCursorUp.z * crossRadius
+        );
+        this.surfaceCursorB.set(
+            center.x + this.surfaceCursorUp.x * crossRadius,
+            center.y + this.surfaceCursorUp.y * crossRadius,
+            center.z + this.surfaceCursorUp.z * crossRadius
+        );
+        this.debugSurfaceCursor.line(this.surfaceCursorA, this.surfaceCursorB, color);
     }
 
     /**
@@ -7151,6 +7276,7 @@ class Viewer {
         }
 
         this.tileManager?.resetLoadHistory();
+        this.surfaceNavigationEvents.length = 0;
         this.tileReplayPlaying = false;
         this.tileReplayCursorValue = 0;
         // Разметку заставляем пересобраться явно: число загрузок после сброса может совпасть
@@ -7182,6 +7308,7 @@ class Viewer {
         this.tileManager?.setPaused(false);
         this.tileReplayTimeline?.destroy();
         this.tileReplayTimeline = null;
+        this.surfaceNavigationEvents.length = 0;
         document.body.classList.remove('timeline-open');
         this.closingTileDebugMode = false;
         this.renderNextFrame();
@@ -9032,6 +9159,7 @@ class Viewer {
         this.debugTiles.clear();
         this.debugTilesSolid.clear();
         this.debugTilesFill.clear();
+        this.debugSurfaceCursor.clear();
         if (this.tileManager && this.observer.get('debug.tileDebug')) {
             const mode = (this.observer.get('debug.tileDebugMode') as TileDebugMode) ?? 'lod';
             const style: TileDebugStyle = {
@@ -9051,6 +9179,8 @@ class Viewer {
         this.debugTiles.update();
         this.debugTilesFill.update();
         this.debugTilesSolid.update();
+        this.drawSurfaceNavigationCursor();
+        this.debugSurfaceCursor.update();
         const loaded = this.tileManager?.getLoadedCount() ?? 0;
         if (loaded !== Number(this.observer.get('scene.tilesetLoadCount') ?? 0)) {
             this.observer.set('scene.tilesetLoadCount', loaded);
@@ -9420,7 +9550,10 @@ class Viewer {
                     now: lang === 'ru' ? 'сейчас' : (lang === 'zh' ? '当前' : 'now'),
                     timeUnit: t('Time unit', lang),
                     timecode: t('Timecode', lang),
-                    frames: t('Frames', lang)
+                    frames: t('Frames', lang),
+                    zoom: t('Zoom', lang),
+                    orbit: t('Orbit', lang),
+                    pan: t('Pan', lang)
                 }, {
                     onStep: (delta) => {
                         const total = this.tileManager?.getRecordingDuration() ?? 0;
@@ -9476,7 +9609,8 @@ class Viewer {
             displayUnit: this.tileReplayDisplayUnit,
             fps: this.tileReplayFps,
             scheme: this.observer.get('debug.tileDebugMode') === 'resolution' ? 'resolution' : 'lod',
-            milestones: manager.getLoadOrderMilestones()
+            milestones: manager.getLoadOrderMilestones(),
+            surfaceEvents: this.surfaceNavigationEvents.map(event => ({ type: event.type, time: event.time }))
         };
         this.tileReplayTimeline.update(state);
     }

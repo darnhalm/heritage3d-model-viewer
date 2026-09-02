@@ -78,6 +78,12 @@ test('poi timeline uses the tile-style draggable cursor and hatched transitions'
     await expect(page.locator('.poi-timeline-cursor')).toBeVisible();
     await expect(page.locator('.poi-timeline-cursor')).toHaveCSS('background-color', /rgb/);
 
+    const contentWidthBeforeZoom = await page.locator('.poi-timeline-content').evaluate(element => element.getBoundingClientRect().width);
+    await page.getByRole('button', { name: 'Zoom +', exact: true }).click();
+    await expect.poll(() => page.locator('.poi-timeline-content').evaluate(element => element.getBoundingClientRect().width))
+    .toBeGreaterThan(contentWidthBeforeZoom);
+    await page.getByRole('button', { name: 'Zoom −', exact: true }).click();
+
     const track = await page.locator('.poi-timeline-track').boundingBox();
     const cursor = await page.locator('.poi-timeline-cursor').boundingBox();
     expect(track).not.toBeNull();

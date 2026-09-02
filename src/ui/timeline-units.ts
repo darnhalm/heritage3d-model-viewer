@@ -1,6 +1,13 @@
 type TimelineUnit = 'timecode' | 'frames';
 
 const TIMELINE_FPS_OPTIONS = [24, 25, 30, 50, 60] as const;
+const TIMELINE_ZOOM_STEPS = [1, 1.5, 2, 3, 4] as const;
+
+const stepTimelineZoom = (current: number, direction: -1 | 1) => {
+    const safe = Number.isFinite(current) ? current : 1;
+    if (direction > 0) return TIMELINE_ZOOM_STEPS.find(value => value > safe + 1e-6) ?? TIMELINE_ZOOM_STEPS[TIMELINE_ZOOM_STEPS.length - 1];
+    return [...TIMELINE_ZOOM_STEPS].reverse().find(value => value < safe - 1e-6) ?? TIMELINE_ZOOM_STEPS[0];
+};
 
 const normalizeTimelineFps = (value: unknown, fallback = 30) => {
     const numeric = Number(value);
@@ -30,7 +37,9 @@ const formatTimelineSeconds = (seconds: number, unit: TimelineUnit, fps: number)
 
 export {
     TIMELINE_FPS_OPTIONS,
+    TIMELINE_ZOOM_STEPS,
     formatTimelineSeconds,
     normalizeTimelineFps,
+    stepTimelineZoom,
     type TimelineUnit
 };
