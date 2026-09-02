@@ -8,3 +8,5 @@ dist
 ._*
 # артефакты прогонов Playwright: видео, трассы, снимки упавших тестов
 test-results/
+# локальные JSON/CSV/HTML-отчёты пассивного benchmark тайлизации
+benchmark-results/

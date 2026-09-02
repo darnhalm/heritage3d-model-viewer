@@ -1,0 +1,87 @@
+{
+    "route": [
+        { "id": "overview", "distance": 3.2, "azimuth": 35, "elevation": 32 },
+        { "id": "front", "distance": 1.35, "azimuth": 5, "elevation": 18 },
+        { "id": "right", "distance": 1.15, "azimuth": 95, "elevation": 12 },
+        { "id": "rear", "distance": 1.25, "azimuth": 185, "elevation": 20 },
+        { "id": "left", "distance": 1.1, "azimuth": 275, "elevation": 10 },
+        { "id": "overview-return", "distance": 3.2, "azimuth": 35, "elevation": 32 }
+    ],
+    "scenes": [
+        {
+            "id": "discrete-lod",
+            "label": "Cesium Discrete LOD sample",
+            "kind": "tiles",
+            "path": "models/3d-tiles/1.0/TilesetWithDiscreteLOD/tileset.json",
+            "suites": ["smoke", "full"],
+            "variants": [
+                { "id": "error-distance", "label": "SSE: error + distance", "tilePriority": "default" },
+                { "id": "center-first", "label": "SSE: center first", "tilePriority": "foveated" }
+            ]
+        },
+        {
+            "id": "kronstadt",
+            "label": "Kronstadt Naval Cathedral",
+            "kind": "tiles",
+            "path": "models/3d-tiles/Kronstadt_Naval_Cathedral/tileset.json",
+            "suites": ["production", "full"],
+            "variants": [
+                { "id": "error-distance", "label": "SSE: error + distance", "tilePriority": "default" },
+                { "id": "center-first", "label": "SSE: center first", "tilePriority": "foveated" }
+            ]
+        },
+        {
+            "id": "juma",
+            "label": "JUMA spatial GSplat",
+            "kind": "gsplat",
+            "path": "models/JUMA_55000-lod/tiles/lod-meta.json",
+            "suites": ["production", "full"],
+            "variants": [
+                { "id": "distance-fov", "label": "Spatial LOD: distance + FOV" }
+            ]
+        },
+        {
+            "id": "hram",
+            "label": "Hram implicit octree",
+            "kind": "tiles",
+            "path": "models/3d-tiles/hram/tileset.json",
+            "suites": ["full"],
+            "variants": [
+                { "id": "implicit-center", "label": "Implicit SSE: center first", "tilePriority": "foveated" }
+            ]
+        },
+        {
+            "id": "armour",
+            "label": "Armour explicit tiles",
+            "kind": "tiles",
+            "path": "models/3d-tiles/armour/tileset.json",
+            "suites": ["full"],
+            "comparisonGroup": "armour",
+            "variants": [
+                { "id": "explicit", "label": "Explicit hierarchy", "tilePriority": "foveated" }
+            ]
+        },
+        {
+            "id": "armour-o2t",
+            "label": "Armour Obj2Tiles",
+            "kind": "tiles",
+            "path": "models/3d-tiles/armour-o2t/tileset.json",
+            "suites": ["full"],
+            "comparisonGroup": "armour",
+            "variants": [
+                { "id": "obj2tiles", "label": "Obj2Tiles hierarchy", "tilePriority": "foveated" }
+            ]
+        },
+        {
+            "id": "armour-noroot",
+            "label": "Armour without root content",
+            "kind": "tiles",
+            "path": "models/3d-tiles/armour-noroot/tileset.json",
+            "suites": ["full"],
+            "comparisonGroup": "armour",
+            "variants": [
+                { "id": "no-root", "label": "No root proxy", "tilePriority": "foveated" }
+            ]
+        }
+    ]
+}

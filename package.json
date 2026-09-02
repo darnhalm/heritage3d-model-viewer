@@ -58,6 +58,7 @@
         "build": "rollup -c",
         "benchmark:navigation": "npm run build && node scripts/benchmark-navigation.mjs",
         "benchmark:render-scale": "npm run build && node scripts/benchmark-render-scale.mjs",
+        "benchmark:tiles": "npm run build && node scripts/benchmark-tiles.mjs",
         "develop": "cross-env BUILD_TYPE=debug concurrently --kill-others \"npm run watch\" \"npm run serve\"",
         "lint": "eslint src rollup.config.mjs eslint.config.mjs",
         "lint:fix": "eslint src rollup.config.mjs eslint.config.mjs --fix",
