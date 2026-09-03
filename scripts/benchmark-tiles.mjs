@@ -190,23 +190,10 @@ const takeSample = (page, stage, tilePriority, routePoint) => page.evaluate(asyn
                     break;
                 }
             }
-            // The real navigation controller also falls back from its synchronous mesh test to
-            // the GPU depth picker. Some production tiles do not expose CPU-pickable geometry,
-            // so exercising that same path is required for a genuine surface-mode comparison.
-            if (!hit && viewer.tileManager?.prevSelection?.length) {
-                for (const candidate of candidates) {
-                    hit = await viewer.picker?.pick(candidate[0], candidate[1]) ?? null;
-                    if (hit) {
-                        hitScreen = candidate;
-                        surfaceMethod = 'depth';
-                        break;
-                    }
-                }
-            }
-            // Headless GPU readback can be unavailable even though tiles are visible. Tile
-            // priority consumes only the direction to the point, not its depth, so the centre of
-            // the visible tile volume nearest the requested screen point is an equivalent stable
-            // direction proxy and still targets actual streamed content.
+            // Tile priority consumes only the direction to the point, not its depth. Using the
+            // centre of the visible tile volume nearest the requested screen point is therefore
+            // an equivalent stable direction proxy. Prefer it over GPU depth readback so the
+            // surface variant measures loading order rather than the extra cost of picking.
             if (!hit) {
                 const visible = viewer.tileManager?.getVisibleMeshInstances?.() ?? [];
                 let nearest = null;
@@ -225,6 +212,18 @@ const takeSample = (page, stage, tilePriority, routePoint) => page.evaluate(asyn
                     hit = nearest.point;
                     hitScreen = nearest.screen;
                     surfaceMethod = 'tile-volume';
+                }
+            }
+            // Keep the real navigation controller's GPU depth path as a final fallback for a
+            // scene that is renderable but does not expose visible tile mesh instances.
+            if (!hit && viewer.tileManager?.prevSelection?.length) {
+                for (const candidate of candidates) {
+                    hit = await viewer.picker?.pick(candidate[0], candidate[1]) ?? null;
+                    if (hit) {
+                        hitScreen = candidate;
+                        surfaceMethod = 'depth';
+                        break;
+                    }
                 }
             }
             if (hit && hitScreen) {
