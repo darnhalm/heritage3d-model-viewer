@@ -2,10 +2,8 @@
 
 Форк **[PlayCanvas Model Viewer](https://github.com/playcanvas/model-viewer)** (glTF 2.0, движок PlayCanvas, PCUI, Observer) для задач каталогов цифрового наследия, встраивания и работы со сценой. Технологическая основа сохранена; изменена продуктовая оболочка и добавлены функции ниже.
 
-> Детальный перечень правок и заметки по безопасности — в [`docs/CHANGELOG-FORK.md`](docs/CHANGELOG-FORK.md).
->
 > ⚠️ Ветка `main` содержит Heritage3D-форк; обновления upstream PlayCanvas пока не влиты.
-> Постобработка (вкладка Effects) и AR/WebXR-режим из форка **удалены** — см. `docs/CHANGELOG-FORK.md`.
+> Постобработка (вкладка Effects) и AR/WebXR-режим из форка **удалены**.
 >
 > 🖥 **Графика:** по умолчанию WebGPU с автоматическим откатом на WebGL2; `?webgl` — принудительно
 > WebGL2. Gaussian Splats (PLY / SOG / SPZ / LOD) идут через unified GSplat pipeline движка:
@@ -13,7 +11,7 @@
 > не поддерживает) и передаётся движку как compressed PLY.
 >
 > 🧱 **Тяжёлые сцены:** `scripts/make-lod.sh` (и быстрое действие Finder) нарезает сплат на
-> тайлы Streamed SOG и заливает в бакет — см. [`docs/MAKE-LOD.md`](docs/MAKE-LOD.md).
+> тайлы Streamed SOG и заливает в бакет.
 
 ---
 
@@ -96,8 +94,6 @@
 
 > Плеер предоставляет **нейтральные** примитивы (хелперы, POI, анимация). Доменные надстройки — например, **микрофоны и пространственный звук** — реализованы на стороне хоста (etnophonica) поверх этих хелперов, а не в самом плеере.
 
-📄 Полная спецификация: [`docs/api/EMBED-API.md`](docs/api/EMBED-API.md) (формат сообщений, примеры приёма событий), [`docs/api/API-COMMANDS-RU.md`](docs/api/API-COMMANDS-RU.md) (HTTP-API портала + postMessage + capabilities/policy), OpenAPI — [`docs/api/openapi.yaml`](docs/api/openapi.yaml).
-
 ---
 
 ## Что остаётся «как у PlayCanvas»
@@ -105,8 +101,6 @@
 - Загрузка **glTF / GLB** и связанные возможности движка.
 - Камера орбита / fly, небо, свет, анимации, выбор камеры из glTF.
 - Базовый стек: **PlayCanvas Engine**, **Observer**, **PCUI (React)**. Лицензия — **MIT**.
-
-📄 Расширенная версия этого сравнения: [`docs/FORK-VS-UPSTREAM.md`](docs/FORK-VS-UPSTREAM.md)
 
 ---
 

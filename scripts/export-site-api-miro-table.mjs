@@ -1,9 +1,12 @@
 import fs from "node:fs/promises";
-import { SpreadsheetFile, Workbook } from "/Users/darnhalm/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/@oai/artifact-tool/dist/artifact_tool.mjs";
+import path from "node:path";
 
-const outputPath = "/Users/darnhalm/Documents/CURSOR/model-viewer/docs/api/miro-import/site-api-table.xlsx";
-const jsonPath = "/Users/darnhalm/Documents/CURSOR/model-viewer/docs/api/miro-import/site-api-table-data.json";
-const mdPath = "/Users/darnhalm/Documents/CURSOR/model-viewer/docs/api/SITE-API-DRAFT-RU.md";
+const artifactToolPath = process.env.ARTIFACT_TOOL_PATH;
+if (!artifactToolPath) throw new Error("Set ARTIFACT_TOOL_PATH to artifact_tool.mjs");
+const { SpreadsheetFile, Workbook } = await import(artifactToolPath);
+const outputPath = path.resolve("docs/api/miro-import/site-api-table.xlsx");
+const jsonPath = path.resolve("docs/api/miro-import/site-api-table-data.json");
+const mdPath = path.resolve("docs/api/SITE-API-DRAFT-RU.md");
 
 const methodStyle = {
   GET: { fill: "#55A2FF", font: "#05070A" },
@@ -476,7 +479,7 @@ sheet.getRange("F:F").format.columnWidthPx = 330;
 sheet.getRange("G:G").format.columnWidthPx = 360;
 sheet.freezePanes.freezeRows(3);
 
-await fs.mkdir("/Users/darnhalm/Documents/CURSOR/model-viewer/docs/api/miro-import", { recursive: true });
+await fs.mkdir(path.dirname(outputPath), { recursive: true });
 await fs.writeFile(jsonPath, JSON.stringify({
   title: "API сайта Heritage3D",
   summary: "Черновик для ТЗ портала: H3DID, карточки объектов, метаданные, права, публикация, каталог и связь с сервером хранения.",

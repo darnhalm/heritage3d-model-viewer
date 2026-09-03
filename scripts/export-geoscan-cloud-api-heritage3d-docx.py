@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
@@ -5,7 +7,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 
-OUTPUT = "/Users/darnhalm/Documents/CURSOR/model-viewer/docs/api/Geoscan Cloud API для Heritage3D.docx"
+OUTPUT = Path(__file__).resolve().parents[1] / "docs/api/Geoscan Cloud API для Heritage3D.docx"
 
 
 def set_run(run, size=11, color="111827", bold=False, italic=False, font="Calibri"):

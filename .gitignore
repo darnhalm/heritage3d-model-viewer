@@ -10,3 +10,5 @@ dist
 test-results/
 # локальные JSON/CSV/HTML-отчёты пассивного benchmark тайлизации
 benchmark-results/
+# внутренняя проектная документация хранится только локально
+/docs/

@@ -1,8 +1,11 @@
 import fs from "node:fs/promises";
-import { SpreadsheetFile, Workbook } from "/Users/darnhalm/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/@oai/artifact-tool/dist/artifact_tool.mjs";
+import path from "node:path";
 
-const input = "/Users/darnhalm/Documents/CURSOR/model-viewer/docs/api/miro-import/storage-player-api-table-data.json";
-const outputPath = "/Users/darnhalm/Documents/CURSOR/model-viewer/docs/api/miro-import/storage-player-api-table.xlsx";
+const artifactToolPath = process.env.ARTIFACT_TOOL_PATH;
+if (!artifactToolPath) throw new Error("Set ARTIFACT_TOOL_PATH to artifact_tool.mjs");
+const { SpreadsheetFile, Workbook } = await import(artifactToolPath);
+const input = path.resolve("docs/api/miro-import/storage-player-api-table-data.json");
+const outputPath = path.resolve("docs/api/miro-import/storage-player-api-table.xlsx");
 
 const methodStyle = {
   GET: { label: "GET", fill: "#55A2FF", font: "#05070A" },
@@ -478,7 +481,7 @@ console.log(inspect.ndjson);
 
 console.log("Preview render skipped: export target is an editable XLSX table.");
 
-await fs.mkdir("/Users/darnhalm/Documents/CURSOR/model-viewer/docs/api/miro-import", { recursive: true });
+await fs.mkdir(path.dirname(outputPath), { recursive: true });
 const xlsx = await SpreadsheetFile.exportXlsx(workbook);
 await xlsx.save(outputPath);
 console.log(`Saved ${outputPath}`);

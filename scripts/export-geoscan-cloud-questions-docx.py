@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
@@ -6,7 +8,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 
-OUTPUT = "/Users/darnhalm/Documents/CURSOR/model-viewer/docs/api/GEOSCAN-CLOUD-QUESTIONS-RU.docx"
+OUTPUT = Path(__file__).resolve().parents[1] / "docs/api/GEOSCAN-CLOUD-QUESTIONS-RU.docx"
 
 
 QUESTIONS = [
