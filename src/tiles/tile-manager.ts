@@ -484,6 +484,11 @@ export class TileManager {
      */
     private loadCounter = 0;
 
+    /** Независимый от recording счётчик для подписей живой загрузки. */
+    private arrivalCounter = 0;
+
+    private readonly arrivalLodCounters = new Map<number, number>();
+
     /** Monotonic start of the explicit recording; null outside recording. */
     private recordingStartMs: number | null = null;
 
@@ -562,6 +567,12 @@ export class TileManager {
      * @param tile - Тайл, содержимое которого готово.
      */
     private markLoadOrder(tile: Tile) {
+        if (tile.arrivalSequence <= 0) {
+            tile.arrivalSequence = ++this.arrivalCounter;
+            const arrivalInLod = (this.arrivalLodCounters.get(tile.depth) ?? 0) + 1;
+            this.arrivalLodCounters.set(tile.depth, arrivalInLod);
+            tile.arrivalLodSequence = arrivalInLod;
+        }
         if (this.recordingStartMs === null) return;
         tile.loadSequence = ++this.loadCounter;
         tile.loadTime = this.recordingElapsed();
@@ -2018,11 +2029,11 @@ export class TileManager {
             const tile = stack.pop() as Tile;
             const children = tile.externalRoot ? [tile.externalRoot] : tile.children;
             for (let i = 0; i < children.length; ++i) stack.push(children[i]);
-            if (!tile.selected || !tile.obb || tile.loadSequence <= 0) continue;
+            if (!tile.selected || !tile.obb || tile.arrivalSequence <= 0) continue;
             out.push({
                 center: tile.obb.center,
-                order: tile.loadSequence,
-                lodOrder: tile.lodSequence,
+                order: tile.loadSequence > 0 ? tile.loadSequence : tile.arrivalSequence,
+                lodOrder: tile.loadSequence > 0 ? tile.lodSequence : tile.arrivalLodSequence,
                 name: tileIdentity(tile),
                 depth: tile.depth
             });

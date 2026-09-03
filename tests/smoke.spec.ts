@@ -162,6 +162,7 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
         viewer.observer.set('camera.flySpeed', 2.5);
         viewer.observer.set('camera.surfacePivot', false);
         viewer.observer.set('camera.mouseButtonsInverted', true);
+        viewer.observer.set('camera.tilePriority', 'surface');
         const settings = viewer.settingsService.getSettingsData();
         return {
             observerSpeed: viewer.observer.get('camera.flySpeed'),
@@ -179,7 +180,7 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
         savedSpeed: 2.5,
         savedSurfacePivot: false,
         savedMouseButtonsInverted: true,
-        cookie: expect.stringContaining('model-viewer-camera-navigation-v4=0.1')
+        cookie: expect.stringContaining('model-viewer-camera-navigation-v5=0.1.mouse.surface')
     });
 });
 

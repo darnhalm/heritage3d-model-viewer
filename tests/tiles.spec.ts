@@ -170,6 +170,47 @@ const placeCameraAtScene = async (page: Page, distance: number) => {
     await pumpFrames(page, 120);
 };
 
+test('tile loading priority survives reload in the user navigation cookie', async ({ page }) => {
+    await page.goto(`/?load=${DISCRETE_LOD}`);
+    await waitForViewer(page);
+    await page.evaluate(() => {
+        const observer = (window as any).viewer.observer;
+        observer.set('camera.tilePriority', 'surface');
+        localStorage.removeItem('model-viewer-uistate');
+    });
+    await expect.poll(() => page.evaluate(() => document.cookie))
+    .toContain('model-viewer-camera-navigation-v5=1.0.mouse.surface');
+
+    await page.reload();
+    await waitForViewer(page);
+    await expect.poll(() => page.evaluate(() =>
+        (window as any).viewer.observer.get('camera.tilePriority'))).toBe('surface');
+});
+
+test('tile loading labels are visible without starting a recording', async ({ page }) => {
+    test.skip(!(await samplesAvailable(page, DISCRETE_LOD)), 'Локальный tileset sample отсутствует');
+
+    await page.goto(`/?load=${DISCRETE_LOD}`);
+    await waitForViewer(page);
+    await waitForTiles(page);
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.observer.set('debug.tileOrderLabels', true);
+        viewer.renderNextFrame();
+    });
+    await pumpFrames(page, 5);
+
+    await expect(page.locator('#tile-order-labels')).toBeVisible();
+    await expect.poll(() => page.locator('#tile-order-labels').evaluate((canvas: HTMLCanvasElement) => {
+        const pixels = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data;
+        if (!pixels) return false;
+        for (let i = 3; i < pixels.length; i += 4) {
+            if (pixels[i] !== 0) return true;
+        }
+        return false;
+    })).toBe(true);
+});
+
 test('автоматически применяет tileset.model-viewer-settings.json', async ({ page }) => {
     test.skip(!await samplesAvailable(page, DISCRETE_LOD),
         'Нет сэмплов: запустите scripts/fetch-3d-tiles-samples.sh');

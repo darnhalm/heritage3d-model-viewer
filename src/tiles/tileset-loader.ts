@@ -156,6 +156,8 @@ export function buildTileTree(json: TileJson, options: BuildTreeOptions): Tile {
         loadSequence: 0,
         loadTime: 0,
         lodSequence: 0,
+        arrivalSequence: 0,
+        arrivalLodSequence: 0,
         selected: false,
         wasRefined: false,
         loadToken: null,

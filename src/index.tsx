@@ -405,7 +405,7 @@ const observerData: ObserverData = {
 
 // Version the cookie when the shipped defaults change so an automatically persisted value from
 // the previous rollout does not silently override the new layout.
-const NAVIGATION_COOKIE = 'model-viewer-camera-navigation-v4';
+const NAVIGATION_COOKIE = 'model-viewer-camera-navigation-v5';
 
 // Версия поднята из-за устройства ввода. Первая сборка с этой настройкой умолчанием ставила
 // «определять автоматически» и успела записать `auto` в куки всем, кто её открывал. Умолчанием
@@ -414,6 +414,7 @@ const NAVIGATION_COOKIE = 'model-viewer-camera-navigation-v4';
 //
 // Из старой куки переносим только точку вращения и инверсию кнопок: их выбирали руками, терять
 // их незачем. Устройство ввода из неё игнорируется и берётся из умолчаний.
+const NAVIGATION_COOKIE_PREVIOUS = 'model-viewer-camera-navigation-v4';
 const NAVIGATION_COOKIE_LEGACY = 'model-viewer-camera-navigation-v3';
 const NAVIGATION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 let lastNavigationCookieValue: string | null = null;
@@ -424,7 +425,10 @@ const saveNavigationCookie = (observer: Observer) => {
         const mouseButtonsInverted = observer.get('camera.mouseButtonsInverted') === true ? '1' : '0';
         // Третий сегмент добавлен позже: куки из двух сегментов читаются как «auto».
         const pointerDevice = String(observer.get('camera.pointerDevice') ?? 'auto');
-        const value = `${surfacePivot}.${mouseButtonsInverted}.${pointerDevice}`;
+        const requestedTilePriority = String(observer.get('camera.tilePriority') ?? 'default');
+        const tilePriority = ['default', 'foveated', 'cursor', 'surface'].includes(requestedTilePriority) ?
+            requestedTilePriority : 'default';
+        const value = `${surfacePivot}.${mouseButtonsInverted}.${pointerDevice}.${tilePriority}`;
         // The global observer listener also receives render/runtime changes. Avoid rewriting the
         // same cookie on each of them; navigation preferences change only from explicit UI input.
         if (value === lastNavigationCookieValue) return;
@@ -441,17 +445,23 @@ const loadNavigationCookie = (observer: Observer) => {
             .find(part => part.startsWith(prefix))?.slice(prefix.length);
         };
         const current = read(NAVIGATION_COOKIE);
-        // Из старой куки берём только два первых сегмента, устройство ввода из неё не переносим.
-        const value = current ?? read(NAVIGATION_COOKIE_LEGACY)?.split('.').slice(0, 2).join('.');
+        // v4 содержит три навигационных поля; в v5 к ним добавлен выбор
+        // порядка загрузки тайлов. Из v3 по-прежнему берём только два поля.
+        const value = current ?? read(NAVIGATION_COOKIE_PREVIOUS) ??
+            read(NAVIGATION_COOKIE_LEGACY)?.split('.').slice(0, 2).join('.');
         if (!value) return;
         if (current) lastNavigationCookieValue = value;
-        const [surfacePivot, mouseButtonsInverted, pointerDevice] = value.split('.');
+        const [surfacePivot, mouseButtonsInverted, pointerDevice, tilePriority] = value.split('.');
         if (surfacePivot === '0' || surfacePivot === '1') observer.set('camera.surfacePivot', surfacePivot === '1');
         if (mouseButtonsInverted === '0' || mouseButtonsInverted === '1') {
             observer.set('camera.mouseButtonsInverted', mouseButtonsInverted === '1');
         }
         if (pointerDevice === 'auto' || pointerDevice === 'mouse' || pointerDevice === 'trackpad') {
             observer.set('camera.pointerDevice', pointerDevice);
+        }
+        if (tilePriority === 'default' || tilePriority === 'foveated' ||
+            tilePriority === 'cursor' || tilePriority === 'surface') {
+            observer.set('camera.tilePriority', tilePriority);
         }
     } catch { /* cookies unavailable */ }
 };
@@ -483,9 +493,8 @@ const saveOptions = (observer: Observer, name: string) => {
         // Keeping another copy here would let stale defaults override a later rollout.
         delete camera.surfacePivot;
         delete camera.mouseButtonsInverted;
-        // Порядок загрузки — не свойство пользователя и не свойство модели: это режим, который
-        // включают на время, чтобы посмотреть. Сохранённое значение перебивало бы умолчание при
-        // каждой правке умолчания, а этой ловушкой мы уже обжигались на HD и на устройстве ввода.
+        // Порядок загрузки — общая пользовательская настройка. Она хранится в той же
+        // версионной cookie, что и навигация, а не в настройках отдельной модели.
         delete camera.tilePriority;
         // Пределы расстояния — свойство конкретной сцены, а не пользователя: расстояние в
         // единицах одной модели для другой бессмысленно. Их место — в файле настроек модели,
