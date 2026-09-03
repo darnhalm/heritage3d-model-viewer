@@ -173,6 +173,7 @@ const loadMeshoptDecoder = (): Promise<MeshoptDecoderModule> => {
 /** Обёрнутый на время freeze метод `GSplatWorld.update` — сигнатуру движок не раскрывает. */
 type GSplatWorldUpdate = (...args: any[]) => any;
 type GSplatDebugColorGetter = () => number[][] | undefined;
+type GSplatBudgetEnforcer = (budget: number, camera: any) => void;
 
 type SurfaceNavigationEvent = {
     type: 'orbit' | 'pan' | 'zoom';
@@ -964,6 +965,9 @@ class Viewer {
 
     /** Штатные getter-ы палитры; мы меняем только направление шкалы LOD-отладки. */
     private readonly gsplatWorldDebugColorGetters = new WeakMap<object, GSplatDebugColorGetter>();
+
+    /** Штатные budget-enforcer-ы; обёртка превращает целевой бюджет в строгий потолок. */
+    private readonly gsplatWorldBudgetEnforcers = new WeakMap<object, GSplatBudgetEnforcer>();
 
     private readonly gsplatDebugColorsByMaxLod = new Map<number, number[][]>();
 
@@ -2009,8 +2013,10 @@ class Viewer {
             this.renderNextFrame();
         });
 
-        // Global splat budget. Only caps octree (LOD/streamed) scenes — plain PLY/SOG are unaffected
-        // (see GSplatWorld._enforceBudget) — so a budget here just bounds streaming memory/perf.
+        // Global splat budget. Only caps octree (LOD/streamed) scenes — plain PLY/SOG are unaffected.
+        // PlayCanvas штатно использует это значение как цель и повышает детализацию, чтобы заполнить
+        // свободный бюджет. Ниже syncGSplatBudgetCeilings меняет семантику на «только потолок»:
+        // естественный выбор по расстоянию сохраняется, а дальние узлы огрубляются лишь при превышении.
         gsplatParams.splatBudget = platform.mobile ? 1500000 : 3000000;
 
         // Let detail drop behind the camera. The engine picks a LOD per octree node from its
@@ -8327,6 +8333,10 @@ class Viewer {
     }
 
     update(deltaTime: number) {
+        // GSplatWorld создаётся лениво уже после загрузки сцены. Устанавливаем cap-only бюджет до
+        // `framerender`, где движок впервые рассчитывает LOD и формирует очередь загрузки.
+        this.syncGSplatBudgetCeilings();
+
         // Менеджер spatial-сцены может появиться уже после нажатия кнопки. Патчим его
         // до `framerender`, где PlayCanvas переносит цвета в work buffer.
         if (this.observer.get('debug.gsplatLodColor')) this.syncGSplatLodDebugPalette();
@@ -9922,6 +9932,59 @@ class Viewer {
                     this.gsplatDebugColorsByMaxLod.set(maxLod, colors);
                 }
                 return colors;
+            };
+        }
+    }
+
+    /**
+     * Делает `splatBudget` верхним пределом, а не целью заполнения.
+     *
+     * Штатный GSplatWorld масштабирует дистанции в обе стороны и при недоборе бюджета принудительно
+     * повышает LOD ближайших узлов. Здесь сначала всегда рассчитывается естественный LOD при scale=1.
+     * Балансировщик вызывается только при превышении: в этой ветке он идёт от дальних bucket-ов и
+     * последовательно выбирает более грубые уровни. Padding строк GPU-текстур учитывается так же,
+     * как в движке, поэтому ограничение сохраняет исходную защиту видеопамяти.
+     */
+    private syncGSplatBudgetCeilings() {
+        for (const manager of this.getGSplatManagers()) {
+            const world = manager.world;
+            if (!world || this.gsplatWorldBudgetEnforcers.has(world) ||
+                typeof world._enforceBudget !== 'function') continue;
+
+            const original = world._enforceBudget as GSplatBudgetEnforcer;
+            this.gsplatWorldBudgetEnforcers.set(world, original);
+            world._enforceBudget = (budget: number, camera: any) => {
+                const textureWidth = Math.max(1, Number(world._workBuffer?.textureSize) || 1);
+                let fixedSplats = 0;
+                let paddingEstimate = 0;
+
+                for (const placement of world._layerPlacements ?? []) {
+                    const numSplats = Number(placement.resource?.numSplats ?? 0);
+                    fixedSplats += numSplats;
+                    paddingEstimate += (textureWidth - numSplats % textureWidth) % textureWidth;
+                }
+
+                const octreeBudget = Math.max(1, budget - fixedSplats);
+                const globalMaxDistance = world.computeGlobalMaxDistance(camera);
+                let naturalSplats = 0;
+
+                for (const inst of world._octreeInstances?.values?.() ?? []) {
+                    naturalSplats += inst.evaluateOptimalLods(camera, world._scene.gsplat, 1, globalMaxDistance);
+                    for (const placement of inst.activePlacements ?? []) {
+                        const numSplats = Number(placement.resource?.numSplats ?? 0);
+                        paddingEstimate += (textureWidth - numSplats % textureWidth) % textureWidth;
+                    }
+                }
+
+                const adjustedBudget = Math.max(1, octreeBudget - paddingEstimate);
+                world._budgetScale = 1;
+                if (naturalSplats > adjustedBudget) {
+                    world._budgetBalancer.balance(world._octreeInstances, adjustedBudget);
+                }
+
+                for (const inst of world._octreeInstances?.values?.() ?? []) {
+                    inst.applyLodChanges(inst.octree.lodLevels - 1, world._scene.gsplat);
+                }
             };
         }
     }

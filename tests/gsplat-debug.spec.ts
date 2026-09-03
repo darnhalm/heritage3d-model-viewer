@@ -146,3 +146,51 @@ test('GSplat LOD colors run from coarse red to fine like 3D Tiles', async ({ pag
     expect(palette.colors[palette.maxLod]).toEqual(lodColorRgb(0));
     expect(palette.colors[0]).toEqual(lodColorRgb(palette.maxLod));
 });
+
+test('GSplat budget only coarsens natural LOD when the ceiling is exceeded', async ({ page }) => {
+    test.skip(!(await page.request.get(JUMA)).ok(), 'Локальный JUMA spatial LOD отсутствует');
+
+    await page.goto(`/?load=${JUMA}`);
+    await page.waitForFunction(() => (window as any).viewer?.getGSplatManagers?.().size > 0);
+    await pumpFrames(page, 3);
+
+    const result = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const manager = viewer.getGSplatManagers().values().next().value;
+        const world = manager.world;
+        const camera = manager.cameraNode;
+        const params = world._scene.gsplat;
+        const instances = [...world._octreeInstances.values()];
+        const maxDistance = world.computeGlobalMaxDistance(camera);
+
+        for (const inst of instances) inst.evaluateOptimalLods(camera, params, 1, maxDistance);
+        const natural = instances.flatMap((inst: any) => inst.nodeInfos.map((info: any) => info.optimalLod));
+
+        const balancer = world._budgetBalancer;
+        const originalBalance = balancer.balance;
+        let balanceCalls = 0;
+        balancer.balance = (...args: any[]) => {
+            balanceCalls++;
+            return originalBalance.apply(balancer, args);
+        };
+
+        world._budgetScale = 42;
+        world._enforceBudget(Number.MAX_SAFE_INTEGER, camera);
+        const belowCeiling = instances.flatMap((inst: any) => inst.nodeInfos.map((info: any) => info.optimalLod));
+        const callsBelowCeiling = balanceCalls;
+        const scaleBelowCeiling = world._budgetScale;
+
+        world._enforceBudget(1, camera);
+        const aboveCeiling = instances.flatMap((inst: any) => inst.nodeInfos.map((info: any) => info.optimalLod));
+        const callsAboveCeiling = balanceCalls - callsBelowCeiling;
+        balancer.balance = originalBalance;
+
+        return { natural, belowCeiling, aboveCeiling, callsBelowCeiling, callsAboveCeiling, scaleBelowCeiling };
+    });
+
+    expect(result.belowCeiling).toEqual(result.natural);
+    expect(result.callsBelowCeiling).toBe(0);
+    expect(result.scaleBelowCeiling).toBe(1);
+    expect(result.callsAboveCeiling).toBe(1);
+    expect(result.aboveCeiling.every((lod, index) => lod < 0 || lod >= result.natural[index])).toBe(true);
+});
