@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { lodColorRgb } from '../src/lod-palette';
+
 const JUMA = 'models/JUMA_55000-lod/tiles/lod-meta.json';
 
 test.describe.configure({ timeout: 180000 });
@@ -123,4 +125,24 @@ test('GSplat material debug buttons switch off on a second click', async ({ page
         await button.click();
         await expect.poll(() => page.evaluate(({ path }) => (window as any).viewer.observer.get(path), item)).toBe(false);
     }
+});
+
+test('GSplat LOD colors run from coarse red to fine like 3D Tiles', async ({ page }) => {
+    test.skip(!(await page.request.get(JUMA)).ok(), 'Локальный JUMA spatial LOD отсутствует');
+
+    await page.goto(`/?load=${JUMA}`);
+    await page.waitForFunction(() => (window as any).viewer?.getGSplatManagers?.().size > 0);
+    await page.evaluate(() => (window as any).viewer.observer.set('debug.gsplatLodColor', true));
+    await pumpFrames(page, 3);
+
+    const palette = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const world = viewer.getGSplatManagers().values().next().value.world;
+        const maxLod = Math.max(...[...world._octreeInstances.values()]
+        .map((inst: any) => inst.octree.lodLevels - 1));
+        return { maxLod, colors: world.getDebugColors() };
+    });
+
+    expect(palette.colors[palette.maxLod]).toEqual(lodColorRgb(0));
+    expect(palette.colors[0]).toEqual(lodColorRgb(palette.maxLod));
 });

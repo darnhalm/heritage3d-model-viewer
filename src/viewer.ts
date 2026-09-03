@@ -172,6 +172,7 @@ const loadMeshoptDecoder = (): Promise<MeshoptDecoderModule> => {
 
 /** Обёрнутый на время freeze метод `GSplatWorld.update` — сигнатуру движок не раскрывает. */
 type GSplatWorldUpdate = (...args: any[]) => any;
+type GSplatDebugColorGetter = () => number[][] | undefined;
 
 type SurfaceNavigationEvent = {
     type: 'orbit' | 'pan' | 'zoom';
@@ -282,6 +283,8 @@ type GSplatDebugStats = {
     budget: number;
     awaitingLodUpdate: boolean;
     lodCounts: number[];
+    /** Наибольший raw LOD в spatial-наборе; у GSplat он самый грубый. */
+    maxLod: number;
 };
 
 type GSplatFrozenLodCamera = {
@@ -958,6 +961,11 @@ class Viewer {
 
     /** Оригинальные методы GSplatWorld.update, временно обёрнутые при freeze. */
     private readonly gsplatWorldUpdates = new WeakMap<object, GSplatWorldUpdate>();
+
+    /** Штатные getter-ы палитры; мы меняем только направление шкалы LOD-отладки. */
+    private readonly gsplatWorldDebugColorGetters = new WeakMap<object, GSplatDebugColorGetter>();
+
+    private readonly gsplatDebugColorsByMaxLod = new Map<number, number[][]>();
 
     /** Штатный лимит каждого загрузчика, восстанавливаемый после pause. */
     private readonly gsplatLoaderConcurrency = new WeakMap<object, number>();
@@ -2803,6 +2811,9 @@ class Viewer {
             },
             'debug.renderMode': this.setRenderMode.bind(this),
             'debug.gsplatLodColor': (enabled: boolean) => {
+                // Движок нумерует GSplat от тонкого L0 к грубому Lmax, а 3D Tiles —
+                // наоборот. Патчим getter до того, как dirty-флаг перекрасит work buffer.
+                this.syncGSplatLodDebugPalette();
                 this.app.scene.gsplat.colorizeLod = enabled;
                 this.renderNextFrame();
             },
@@ -8316,6 +8327,10 @@ class Viewer {
     }
 
     update(deltaTime: number) {
+        // Менеджер spatial-сцены может появиться уже после нажатия кнопки. Патчим его
+        // до `framerender`, где PlayCanvas переносит цвета в work buffer.
+        if (this.observer.get('debug.gsplatLodColor')) this.syncGSplatLodDebugPalette();
+
         // Шаг проигрывания истории — здесь, а не в обновлении оверлея: запрос кадра изнутри
         // самого кадра следующего не даёт, и проигрывание вставало после первого шага.
         if (this.tileReplayPlaying) {
@@ -9306,7 +9321,7 @@ class Viewer {
             // раскраска самих сплатов, либо режим `lod` у границ узлов. В режиме `state`
             // границы окрашены по состоянию загрузки, и палитра уровней там ни при чём.
             const lodColored = !!this.observer.get('debug.gsplatLodColor') || mode === 'lod';
-            this.renderLodLegend(s.lodCounts, lodColored);
+            this.renderLodLegend(s.lodCounts, lodColored, lod => s.maxLod - lod);
             this.setHudText(
                 `GSPLAT SPATIAL LOD   mode: ${mode}${flags ? `   ${flags}` : ''}${s.awaitingLodUpdate ? '   UPDATING' : ''}\n` +
                 `nodes ${s.nodes}   visible ${s.visibleNodes}   transitioning ${s.transitioningNodes}\n` +
@@ -9681,7 +9696,7 @@ class Viewer {
         });
     }
 
-    private renderLodLegend(counts: number[], visible: boolean) {
+    private renderLodLegend(counts: number[], visible: boolean, colorIndex = (lod: number) => lod) {
         const legend = this.tileHudLegend;
         if (!legend) return;
         const bar = this.tileHudBar;
@@ -9699,9 +9714,9 @@ class Viewer {
         }
 
         const levels = counts
-        .map((count, lod) => ({ lod, count: Number(count) || 0 }))
+        .map((count, lod) => ({ lod, colorLod: colorIndex(lod), count: Number(count) || 0 }))
         .filter(entry => entry.count > 0);
-        const key = levels.map(entry => `${entry.lod}:${entry.count}`).join(',');
+        const key = levels.map(entry => `${entry.lod}:${entry.colorLod}:${entry.count}`).join(',');
         legend.style.display = 'flex';
         if (bar) bar.style.display = 'flex';
         // HUD обновляется каждый кадр — пересобираем DOM только при изменении состава.
@@ -9715,7 +9730,7 @@ class Viewer {
         const totalCount = levels.reduce((sum, entry) => sum + entry.count, 0);
         if (bar && totalCount > 0) {
             for (let i = 0; i < levels.length; i++) {
-                const { lod, count } = levels[i];
+                const { colorLod, count } = levels[i];
                 const part = document.createElement('div');
                 // Волосяной разделитель между отрезками. В палитре восемь цветов, дальше она
                 // идёт по кругу: на глубоком дереве L0 и L8 одного цвета, и без разделителя
@@ -9723,7 +9738,7 @@ class Viewer {
                 // а в полоске номеров нет.
                 const divider = i > 0 ? 'box-shadow:inset 1px 0 0 rgba(0,0,0,0.55);' : '';
                 part.style.cssText = `height:100%;width:${(count / totalCount) * 100}%;` +
-                    `background:${lodColorCss(lod)};${divider}`;
+                    `background:${lodColorCss(colorLod)};${divider}`;
                 bar.appendChild(part);
             }
         }
@@ -9736,15 +9751,15 @@ class Viewer {
             return;
         }
 
-        levels.forEach(({ lod, count }) => {
+        levels.forEach(({ lod, colorLod, count }) => {
             const item = document.createElement('span');
             item.style.cssText = 'display:inline-flex;align-items:center;gap:3px;';
 
             const swatch = document.createElement('span');
-            const color = lodColorCss(lod);
+            const color = lodColorCss(colorLod);
             // Подпись внутри квадрата: на жёлтом и голубом белый текст не читается,
             // поэтому цвет цифры выбираем по яркости фона.
-            const [r, g, b] = lodColorRgb(lod);
+            const [r, g, b] = lodColorRgb(colorLod);
             const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
             swatch.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;' +
                 'width:15px;height:15px;border-radius:3px;font-size:10px;line-height:1;font-weight:700;' +
@@ -9782,7 +9797,8 @@ class Viewer {
             activeSplats: 0,
             budget: Number(this.app.scene.gsplat.splatBudget ?? 0),
             awaitingLodUpdate: false,
-            lodCounts: []
+            lodCounts: [],
+            maxLod: 0
         };
         const managers = this.getGSplatManagers();
 
@@ -9805,7 +9821,13 @@ class Viewer {
             stats.pendingFiles += Number(world?.pendingLoadCount ?? 0);
             stats.activeSplats += Number(world?.currentState?.totalActiveSplats ?? 0);
             stats.awaitingLodUpdate ||= !!world?.awaitingLodUpdate;
-            for (const inst of world?._octreeInstances?.values?.() ?? []) {
+            const instances = [...(world?._octreeInstances?.values?.() ?? [])];
+            const worldMaxLod = instances.reduce(
+                (max: number, inst: any) => Math.max(max, Number(inst.octree?.lodLevels ?? 1) - 1),
+                0
+            );
+            stats.maxLod = Math.max(stats.maxLod, worldMaxLod);
+            for (const inst of instances) {
                 stats.loadedFiles += Number(inst.octree?.fileResources?.size ?? 0);
                 stats.queuedFiles += Number(inst.octree?.assetLoader?._loadQueue?.length ?? 0);
                 stats.runningFiles += Number(inst.octree?.assetLoader?._currentlyLoading?.size ?? 0);
@@ -9842,7 +9864,7 @@ class Viewer {
                     const ay = worldMat.transformVector(new Vec3(0, half.y, 0), new Vec3());
                     const az = worldMat.transformVector(new Vec3(0, 0, half.z), new Vec3());
                     const mode = this.observer.get('debug.gsplatDebugMode') ?? 'lod';
-                    let color = lodColorAbgr(current);
+                    let color = lodColorAbgr(worldMaxLod - current);
                     if (mode === 'state') {
                         const pending = inst.pendingVisibleAdds?.has?.(i) ||
                             (current >= 0 && inst.pendingDecrements?.has?.(i));
@@ -9868,6 +9890,40 @@ class Viewer {
             }
         }
         return stats;
+    }
+
+    /**
+     * Разворачивает только диагностическую палитру GSplat, не меняя raw LOD и его выбор.
+     *
+     * У PlayCanvas L0 самый подробный, у 3D Tiles depth 0 самый грубый. Поэтому штатный
+     * массив цветов движка нужно читать с конца конкретного spatial-набора: Lmax становится
+     * красным, следующий зелёным и так далее. `getDebugColors` пока не имеет публичной
+     * настройки палитры, поэтому вся зависимость от внутреннего API изолирована здесь — так же,
+     * как чтение `nodeInfos` для диагностического HUD ниже.
+     */
+    private syncGSplatLodDebugPalette() {
+        for (const manager of this.getGSplatManagers()) {
+            const world = manager.world;
+            if (!world || this.gsplatWorldDebugColorGetters.has(world) ||
+                typeof world.getDebugColors !== 'function') continue;
+
+            const original = world.getDebugColors as () => number[][] | undefined;
+            this.gsplatWorldDebugColorGetters.set(world, original);
+            world.getDebugColors = () => {
+                if (!this.observer.get('debug.gsplatLodColor')) return original.call(world);
+
+                let maxLod = 0;
+                for (const inst of world?._octreeInstances?.values?.() ?? []) {
+                    maxLod = Math.max(maxLod, Number(inst.octree?.lodLevels ?? 1) - 1);
+                }
+                let colors = this.gsplatDebugColorsByMaxLod.get(maxLod);
+                if (!colors) {
+                    colors = Array.from({ length: maxLod + 1 }, (_unused, lod) => lodColorRgb(maxLod - lod));
+                    this.gsplatDebugColorsByMaxLod.set(maxLod, colors);
+                }
+                return colors;
+            };
+        }
     }
 
     /** @returns Активные GSplat-менеджеры основной камеры без дубликатов слоёв. */
