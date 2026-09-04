@@ -94,6 +94,9 @@ import {
     Vec4,
     ViewCube,
     CameraComponent,
+    CameraFrame,
+    SSAOTYPE_COMBINE,
+    SSAOTYPE_NONE,
     platform,
     isCompressedPixelFormat,
     pixelFormatInfo
@@ -1111,6 +1114,21 @@ class Viewer {
     multiframe: Multiframe | null;
 
     multiframeBusy = false;
+
+    /** CameraFrame exists only while at least one of TAA, SSAO or Color LUT is active. */
+    private postProcessingFrame: CameraFrame | null = null;
+
+    private postProcessingCamera: CameraComponent | null = null;
+
+    private postProcessingTarget: RenderTarget | null = null;
+
+    private postProcessingOriginalClearColor: Color | null = null;
+
+    private colorLutAsset: Asset | null = null;
+
+    private colorLutTexture: Texture | null = null;
+
+    private colorLutObjectUrl: string | null = null;
 
     /** Lazily created SPZ codec (see getSpzCodec). */
     private static spzCodec: Promise<SpzModule> | null = null;
@@ -2448,6 +2466,74 @@ class Viewer {
         }
     }
 
+    /**
+     * True only when CameraFrame needs to exist; the legacy path stays allocation-free.
+     *
+     * @returns Whether an effect backed by CameraFrame is active.
+     */
+    private isPostProcessingRequested(): boolean {
+        return this.observer.get('camera.taa') === true ||
+            this.observer.get('camera.ssao') === true ||
+            this.colorLutTexture !== null;
+    }
+
+    private destroyPostProcessingFrame(): void {
+        if (this.postProcessingCamera && this.postProcessingOriginalClearColor) {
+            this.postProcessingCamera.clearColor = this.postProcessingOriginalClearColor;
+        }
+        this.postProcessingFrame?.destroy();
+        this.postProcessingFrame = null;
+        this.postProcessingCamera = null;
+        this.postProcessingTarget = null;
+        this.postProcessingOriginalClearColor = null;
+    }
+
+    /**
+     * Keep the optional PlayCanvas CameraFrame attached to the camera that actually renders.
+     * CameraFrame captures the destination render target while it is constructed, so a camera
+     * switch or target resize requires a fresh instance. Property-only changes use update().
+     */
+    private syncPostProcessingFrame(): void {
+        if (!this.isPostProcessingRequested()) {
+            this.destroyPostProcessingFrame();
+            return;
+        }
+
+        const camera = this.getRenderingCamera();
+        const target = camera.renderTarget;
+        if (!target) return;
+
+        if (!this.postProcessingFrame || this.postProcessingCamera !== camera || this.postProcessingTarget !== target) {
+            this.destroyPostProcessingFrame();
+            this.postProcessingOriginalClearColor = camera.clearColor.clone();
+            this.postProcessingFrame = new CameraFrame(this.app, camera);
+            this.postProcessingCamera = camera;
+            this.postProcessingTarget = target;
+        }
+
+        const frame = this.postProcessingFrame;
+        // CameraFrame's compose pass writes an opaque result. Our normal path leaves the canvas
+        // transparent and shows the solid background through CSS, so feed that color into the
+        // scene clear while CameraFrame is active instead of allowing an opaque black background.
+        if (this.observer.get('skybox.background') === 'Solid Color') {
+            const background = Viewer.sanitizeRgb(this.observer.get('skybox.backgroundColor'), { r: 0.5, g: 0.5, b: 0.5 });
+            camera.clearColor = new Color(background.r, background.g, background.b, 1);
+        }
+        const taa = this.observer.get('camera.taa') === true;
+        const maxSamples = Number((this.app.graphicsDevice as GraphicsDevice & { maxSamples?: number }).maxSamples ?? 1);
+        frame.rendering.samples = !taa && this.observer.get('camera.multisample') ? maxSamples : 1;
+        frame.rendering.toneMapping = camera.toneMapping;
+        // RCAS remains our final, existing sharpening pass. Running both sharpeners would create halos.
+        frame.rendering.sharpness = 0;
+        frame.taa.enabled = taa;
+        frame.ssao.type = this.observer.get('camera.ssao') === true ? SSAOTYPE_COMBINE : SSAOTYPE_NONE;
+        frame.ssao.intensity = Math.max(0, Math.min(1, Number(this.observer.get('camera.ssaoIntensity')) || 0));
+        frame.ssao.radius = Math.max(1, Math.min(100, Number(this.observer.get('camera.ssaoRadius')) || 30));
+        frame.colorLUT.texture = this.colorLutTexture;
+        frame.colorLUT.intensity = Math.max(0, Math.min(1, Number(this.observer.get('camera.colorLutIntensity')) || 0));
+        frame.update();
+    }
+
     removePoi(id: string) {
         this.poiController?.removePoi(id);
     }
@@ -2651,7 +2737,41 @@ class Viewer {
                 this.multiframe.sharpness = Math.max(0, Number(value) || 0);
                 this.renderNextFrame();
             },
-            'camera.multisample': () => {
+            'camera.taa': (enabled: boolean) => {
+                // TAA and MSAA are alternative AA paths here. Keeping both only pays twice.
+                if (enabled && this.observer.get('camera.multisample')) {
+                    this.observer.set('camera.multisample', false);
+                }
+                this.multiframe.enabled = this.observer.get('camera.hq') && !enabled;
+                this.destroyRenderTargets();
+                this.renderNextFrame();
+            },
+            'camera.ssao': () => {
+                this.destroyRenderTargets();
+                this.renderNextFrame();
+            },
+            'camera.ssaoIntensity': () => {
+                this.renderNextFrame();
+            },
+            'camera.ssaoRadius': () => {
+                this.renderNextFrame();
+            },
+            'camera.colorLutIntensity': () => {
+                this.renderNextFrame();
+            },
+            'camera.colorLutName': (name: string) => {
+                // Settings files cannot embed a local image. Clearing/resetting the name releases
+                // the current texture; a non-empty imported name alone never pretends to load one.
+                if (!name && this.colorLutTexture) {
+                    this.releaseColorLut();
+                    this.destroyRenderTargets();
+                }
+                this.renderNextFrame();
+            },
+            'camera.multisample': (enabled: boolean) => {
+                if (enabled && this.observer.get('camera.taa')) {
+                    this.observer.set('camera.taa', false);
+                }
                 this.destroyRenderTargets();
                 this.renderNextFrame();
             },
@@ -2670,7 +2790,7 @@ class Viewer {
                 this.renderNextFrame();
             },
             'camera.hq': (enabled: boolean) => {
-                this.multiframe.enabled = enabled;
+                this.multiframe.enabled = enabled && this.observer.get('camera.taa') !== true;
                 // SD — это не только выключенное накопление. Мультифрейм работает лишь на
                 // неподвижной камере, поэтому сам по себе он не влияет на плавность
                 // вращения; кадры на телефоне даёт именно половинное разрешение сцены.
@@ -3250,6 +3370,8 @@ class Viewer {
     }
 
     destroyRenderTargets() {
+        // CameraFrame owns passes that point at the current target. Release them before the target.
+        this.destroyPostProcessingFrame();
         // Придержанная цель другого размера живёт ровно до этого момента: её зовут при смене
         // мультисэмплинга и при сбросе, после которых запас всё равно не подошёл бы.
         if (this.spareRenderTarget) {
@@ -3443,7 +3565,10 @@ class Viewer {
         }
 
         const maxSamplesEarly = Number((device as GraphicsDevice & { maxSamples?: number }).maxSamples ?? 1);
-        const wantSamples = this.observer.get('camera.multisample') ? maxSamplesEarly : 1;
+        // CameraFrame performs MSAA in its internal scene target. Its outer destination must stay
+        // single-sampled; multisampling a fullscreen compose pass adds cost without improving edges.
+        const wantSamples = this.isPostProcessingRequested() ? 1 :
+            (this.observer.get('camera.multisample') ? maxSamplesEarly : 1);
 
         // Понижение на время движения — это переключение между двумя размерами, туда и обратно
         // по нескольку раз в секунду. Прошлую цель поэтому не уничтожаем, а придерживаем:
@@ -3506,7 +3631,8 @@ class Viewer {
             colorBuffer: colorBuffer,
             depthBuffer: depthBuffer,
             flipY: false,
-            samples: this.observer.get('camera.multisample') ? maxSamples : 1,
+            samples: this.isPostProcessingRequested() ? 1 :
+                (this.observer.get('camera.multisample') ? maxSamples : 1),
             autoResolve: false
         });
         this.assignRenderTarget(renderTarget);
@@ -4819,6 +4945,72 @@ class Viewer {
         this.renderNextFrame();
     }
 
+
+    /**
+     * Load a horizontal strip LUT (for example 256×16) selected in the settings panel.
+     *
+     * @param file - Browser image file containing the LUT strip.
+     */
+    async loadColorLut(file: Blob & { name: string }): Promise<void> {
+        const objectUrl = URL.createObjectURL(file);
+        const asset = new Asset(file.name || 'Color LUT', 'texture', {
+            url: objectUrl,
+            filename: file.name || 'color-lut.png'
+        }, {
+            mipmaps: false,
+            srgb: true
+        });
+
+        try {
+            const texture = await new Promise<Texture>((resolveTexture, rejectTexture) => {
+                asset.once('load', () => resolveTexture(asset.resource as Texture));
+                asset.once('error', (err: unknown) => rejectTexture(err instanceof Error ? err : new Error(String(err))));
+                this.app.assets.add(asset);
+                this.app.assets.load(asset);
+            });
+
+            // CameraFrame expects the common horizontal LUT strip: N slices, each N×N.
+            if (texture.height < 2 || texture.width !== texture.height * texture.height) {
+                throw new Error(t('Color LUT must be a horizontal strip, for example 256 x 16 pixels.', this.observer.get('ui.language')));
+            }
+
+            texture.minFilter = FILTER_LINEAR;
+            texture.magFilter = FILTER_LINEAR;
+            texture.addressU = ADDRESS_CLAMP_TO_EDGE;
+            texture.addressV = ADDRESS_CLAMP_TO_EDGE;
+
+            this.releaseColorLut();
+            this.colorLutAsset = asset;
+            this.colorLutTexture = texture;
+            this.colorLutObjectUrl = objectUrl;
+            this.observer.set('camera.colorLutName', file.name || 'Color LUT');
+            this.destroyRenderTargets();
+            this.renderNextFrame();
+        } catch (err) {
+            asset.unload();
+            this.app.assets.remove(asset);
+            URL.revokeObjectURL(objectUrl);
+            throw err;
+        }
+    }
+
+    private releaseColorLut(): void {
+        if (this.colorLutAsset) {
+            this.colorLutAsset.unload();
+            this.app.assets.remove(this.colorLutAsset);
+        }
+        if (this.colorLutObjectUrl) URL.revokeObjectURL(this.colorLutObjectUrl);
+        this.colorLutAsset = null;
+        this.colorLutTexture = null;
+        this.colorLutObjectUrl = null;
+    }
+
+    clearColorLut(): void {
+        this.releaseColorLut();
+        this.observer.set('camera.colorLutName', '');
+        this.destroyRenderTargets();
+        this.renderNextFrame();
+    }
 
     /** Export current viewer settings (camera, skybox, light, etc.) to a JSON file. */
     exportViewerSettings() {
@@ -7867,6 +8059,8 @@ class Viewer {
     }
 
     setSelectedCamera(cameraPath: string) {
+        // CameraFrame is bound to one concrete CameraComponent.
+        this.destroyPostProcessingFrame();
         // disable any previously active scene camera
         if (this.activeSceneCamera) {
             this.activeSceneCamera.enabled = false;
@@ -9074,6 +9268,8 @@ class Viewer {
 
         // rebuild render targets
         this.rebuildRenderTargets();
+        // Optional post-processing is attached only after the final destination target exists.
+        this.syncPostProcessingFrame();
 
         if (this.perfEnabled) {
             this.perfOnFrameRenderTotalMs += performance.now() - perfStart;

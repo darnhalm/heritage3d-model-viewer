@@ -79,6 +79,18 @@ export interface ObserverData {
         sharpness?: number,
         /** Растягивать кадр через EASU; выключение возвращает билинейную выборку. */
         easu?: boolean,
+        /** Temporal anti-aliasing из CameraFrame. */
+        taa?: boolean,
+        /** Screen-space ambient occlusion из CameraFrame. */
+        ssao?: boolean,
+        /** Сила SSAO. */
+        ssaoIntensity?: number,
+        /** Радиус выборки SSAO в экранном пространстве. */
+        ssaoRadius?: number,
+        /** Имя загруженной LUT; сама локальная текстура в settings JSON не сохраняется. */
+        colorLutName?: string,
+        /** Сила применения LUT. */
+        colorLutIntensity?: number,
         /** Понижать разрешение сцены, пока камера движется. */
         dynamicScale?: boolean,
         /** Что грузить первым при обходе тайлов. */

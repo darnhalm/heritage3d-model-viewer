@@ -3824,6 +3824,7 @@ body.timeline-open #popup > #popup-buttons-parent {
 #sky-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #light-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #settings-panel > .pcui-panel-content > .panel-option:nth-child(even),
+#postprocessing-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #device-panel > .pcui-panel-content > .panel-option:nth-child(even),
 #materials-panel > .panel-option:nth-child(even) {
     background-color: rgba(0, 0, 0, 0.1);
@@ -3846,6 +3847,24 @@ body.timeline-open #popup > #popup-buttons-parent {
     margin: 2px !important;
     display: flex;
     width: 100%;
+}
+
+.postprocessing-lut-actions {
+    display: flex;
+    min-width: 0;
+    gap: 4px;
+}
+
+.postprocessing-lut-button {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.postprocessing-lut-clear {
+    flex: 0 0 28px;
+    min-width: 28px;
 }
 
 .panel-value-select {

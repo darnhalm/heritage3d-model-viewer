@@ -54,7 +54,9 @@ class SettingsService {
         // a model-specific settings sidecar is applied.
         'camera.surfacePivot',
         'camera.mouseButtonsInverted',
-        'camera.pointerDevice'
+        'camera.pointerDevice',
+        // A local LUT file cannot be reconstructed from a settings sidecar by filename alone.
+        'camera.colorLutName'
     ];
 
     private static readonly SETTINGS_CANDIDATE_VERSIONS = 20;
@@ -313,6 +315,7 @@ class SettingsService {
         if (camera && typeof camera === 'object') {
             delete (camera as Record<string, unknown>).ortho;
             delete (camera as Record<string, unknown>).viewCube;
+            delete (camera as Record<string, unknown>).colorLutName;
         }
         const data: Record<string, unknown> = {
             modelViewerSettingsVersion: 1,
@@ -426,6 +429,12 @@ class SettingsService {
         // экране не вмешиваемся — там уже SD, и он грубее.
         o.set('camera.pixelScale', hq ? (this.splatScene ? SPLAT_PIXEL_SCALE : 1) : SD_PIXEL_SCALE);
         o.set('camera.multisample', hq);
+        o.set('camera.taa', false);
+        o.set('camera.ssao', false);
+        o.set('camera.ssaoIntensity', 0.5);
+        o.set('camera.ssaoRadius', 30);
+        o.set('camera.colorLutName', '');
+        o.set('camera.colorLutIntensity', 1);
         o.set('camera.hq', hq);
         o.set('camera.mode', 'orbit');
         o.set('camera.flySpeed', 1);

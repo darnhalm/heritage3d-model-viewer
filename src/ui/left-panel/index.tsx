@@ -92,6 +92,8 @@ type ViewerApi = {
     updatePoiDescription?: (id: string, value: string) => void;
     capturePoiCameraView?: (id: string) => void;
     clearPoiCameraView?: (id: string) => void;
+    loadColorLut?: (file: File) => Promise<void>;
+    clearColorLut?: () => void;
     updatePoiDuration?: (id: string, value: number) => void;
     updatePoiHoldTime?: (id: string, value: number) => void;
     updatePoiTrigger?: (id: string, value: boolean) => void;
@@ -310,14 +312,10 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                a.camera?.fov !== b.camera?.fov ||
                a.camera?.tonemapping !== b.camera?.tonemapping ||
                a.camera?.pixelScale !== b.camera?.pixelScale ||
-               a.camera?.easu !== b.camera?.easu ||
-               a.camera?.sharpness !== b.camera?.sharpness ||
                a.camera?.dynamicScale !== b.camera?.dynamicScale ||
                a.camera?.distanceLimitsManual !== b.camera?.distanceLimitsManual ||
                a.camera?.distanceMin !== b.camera?.distanceMin ||
                a.camera?.distanceMax !== b.camera?.distanceMax ||
-               a.camera?.multisampleSupported !== b.camera?.multisampleSupported ||
-               a.camera?.multisample !== b.camera?.multisample ||
                a.camera?.hq !== b.camera?.hq ||
                a.runtime?.cameraDistance !== b.runtime?.cameraDistance ||
                a.runtime?.viewportWidth !== b.runtime?.viewportWidth ||
@@ -364,25 +362,6 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                     type='string'
                     options={PIXEL_SCALES}
                     setProperty={(value: string) => props.setProperty('camera.pixelScale', Number(value))} />
-                {/* В подписи — только имя технологии: переводить EASU и RCAS не на что, своих
-                    русских названий у них нет. Что они делают, объясняет подсказка. */}
-                <span title={t('EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.', lang)} style={{ display: 'contents' }}>
-                    <Toggle
-                        label='EASU'
-                        value={props.observerData.camera.easu !== false}
-                        setProperty={(value: boolean) => props.setProperty('camera.easu', value)}
-                    />
-                </span>
-                <span title={t('RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.', lang)} style={{ display: 'contents' }}>
-                    <Slider
-                        label='RCAS'
-                        precision={2}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        value={props.observerData.camera.sharpness ?? 1}
-                        setProperty={(value: number) => props.setProperty('camera.sharpness', value)} />
-                </span>
                 <Toggle
                     label={t('Lower while moving', lang)}
                     value={props.observerData.camera.dynamicScale !== false}
@@ -390,16 +369,120 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                 />
                 <Detail label={t('Viewport', lang)} value={`${props.observerData.runtime?.viewportWidth ?? 0} x ${props.observerData.runtime?.viewportHeight ?? 0}`} />
                 <Toggle
-                    label={t('Multisample', lang)}
-                    value={props.observerData.camera.multisample}
-                    enabled={props.observerData.camera.multisampleSupported}
-                    setProperty={(value: boolean) => props.setProperty('camera.multisample', value)}
-                />
-                <Toggle
                     label={t('HD', lang)}
                     value={props.observerData.camera.hq}
                     setProperty={(value: boolean) => props.setProperty('camera.hq', value)}
                 />
+            </Panel>
+        );
+    }
+}
+
+const ColorLutControl = (props: {
+    name: string;
+    loadText: string;
+    onLoad: () => void;
+    onClear: () => void;
+}) => (
+    <Container class={['panel-option', 'postprocessing-lut-row']}>
+        <Label class='panel-label' text='Color LUT' />
+        <Container class={['panel-value', 'postprocessing-lut-actions']}>
+            <Button
+                class={['secondary', 'postprocessing-lut-button']}
+                text={props.name || props.loadText}
+                onClick={props.onLoad} />
+            <Button
+                class={['secondary', 'postprocessing-lut-clear']}
+                text='×'
+                enabled={!!props.name}
+                onClick={props.onClear} />
+        </Container>
+    </Container>
+);
+
+class PostProcessingPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
+    private chooseLut = () => {
+        // A native input nested inside a pcui Container is interpreted as a pcui component.
+        // Keep the short-lived picker outside that tree and discard it after one selection.
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.png,.jpg,.jpeg,.webp';
+        input.addEventListener('change', async () => {
+            const file = input.files?.[0];
+            if (!file) return;
+            try {
+                await getViewer()?.loadColorLut?.(file);
+            } catch (err) {
+                getViewer()?.observer?.set?.('ui.error', err instanceof Error ? err.message : String(err));
+            }
+        }, { once: true });
+        input.click();
+    };
+
+    render() {
+        const { observerData, setProperty } = this.props;
+        const camera = observerData.camera;
+        const lang = observerData?.ui?.language;
+        const lutName = camera.colorLutName || '';
+        return (
+            <Panel headerText={t('Post-processing', lang)} id='postprocessing-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
+                <Toggle
+                    label='TAA'
+                    value={camera.taa === true}
+                    setProperty={(value: boolean) => setProperty('camera.taa', value)} />
+                <Toggle
+                    label='EASU'
+                    value={camera.easu !== false}
+                    setProperty={(value: boolean) => setProperty('camera.easu', value)} />
+                <Slider
+                    label={t('Sharpness (RCAS)', lang)}
+                    precision={2}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={camera.sharpness ?? 1}
+                    setProperty={(value: number) => setProperty('camera.sharpness', value)} />
+                <ColorLutControl
+                    name={lutName}
+                    loadText={t('Load LUT', lang)}
+                    onLoad={this.chooseLut}
+                    onClear={() => getViewer()?.clearColorLut?.()} />
+                <Slider
+                    label={t('LUT intensity', lang)}
+                    precision={2}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    enabled={!!lutName}
+                    value={camera.colorLutIntensity ?? 1}
+                    setProperty={(value: number) => setProperty('camera.colorLutIntensity', value)} />
+                <Toggle
+                    label='SSAO'
+                    value={camera.ssao === true}
+                    setProperty={(value: boolean) => setProperty('camera.ssao', value)} />
+                <Slider
+                    label={t('SSAO intensity', lang)}
+                    precision={2}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    enabled={camera.ssao === true}
+                    value={camera.ssaoIntensity ?? 0.5}
+                    setProperty={(value: number) => setProperty('camera.ssaoIntensity', value)} />
+                <Slider
+                    label={t('SSAO radius', lang)}
+                    precision={0}
+                    min={1}
+                    max={100}
+                    step={1}
+                    enabled={camera.ssao === true}
+                    value={camera.ssaoRadius ?? 30}
+                    setProperty={(value: number) => setProperty('camera.ssaoRadius', value)} />
+                <Toggle
+                    label='MSAA'
+                    value={camera.multisample}
+                    enabled={camera.multisampleSupported}
+                    setProperty={(value: boolean) => setProperty('camera.multisample', value)} />
             </Panel>
         );
     }
@@ -1290,6 +1373,9 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                             )}
                             {(!embedEnabled || embedPreset === 'full') && (
                                 <SettingsPanel observerData={observerData} setProperty={setProperty} />
+                            )}
+                            {(!embedEnabled || embedPreset === 'full') && (
+                                <PostProcessingPanel observerData={observerData} setProperty={setProperty} />
                             )}
                             {!embedEnabled && (
                                 <div id='export-settings-row'>
