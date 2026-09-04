@@ -381,11 +381,14 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
 const ColorLutControl = (props: {
     name: string;
     loadText: string;
+    tooltip: string;
     onLoad: () => void;
     onClear: () => void;
 }) => (
     <Container class={['panel-option', 'postprocessing-lut-row']}>
-        <Label class='panel-label' text='Color LUT' />
+        <span title={props.tooltip} style={{ display: 'contents' }}>
+            <Label class='panel-label' text='Color LUT' />
+        </span>
         <Container class={['panel-value', 'postprocessing-lut-actions']}>
             <Button
                 class={['secondary', 'postprocessing-lut-button']}
@@ -426,25 +429,32 @@ class PostProcessingPanel extends React.Component <{ observerData: ObserverData,
         const lutName = camera.colorLutName || '';
         return (
             <Panel headerText={t('Post-processing', lang)} id='postprocessing-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
-                <Toggle
-                    label='TAA'
-                    value={camera.taa === true}
-                    setProperty={(value: boolean) => setProperty('camera.taa', value)} />
-                <Toggle
-                    label='EASU'
-                    value={camera.easu !== false}
-                    setProperty={(value: boolean) => setProperty('camera.easu', value)} />
-                <Slider
-                    label={t('Sharpness (RCAS)', lang)}
-                    precision={2}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={camera.sharpness ?? 1}
-                    setProperty={(value: number) => setProperty('camera.sharpness', value)} />
+                <span title={t('TAA combines current and previous frames to reduce jagged edges and shimmer. It can leave trails on moving objects.', lang)} style={{ display: 'contents' }}>
+                    <Toggle
+                        label='TAA'
+                        value={camera.taa === true}
+                        setProperty={(value: boolean) => setProperty('camera.taa', value)} />
+                </span>
+                <span title={t('EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.', lang)} style={{ display: 'contents' }}>
+                    <Toggle
+                        label='EASU'
+                        value={camera.easu !== false}
+                        setProperty={(value: boolean) => setProperty('camera.easu', value)} />
+                </span>
+                <span title={t('RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.', lang)} style={{ display: 'contents' }}>
+                    <Slider
+                        label={t('Sharpness (RCAS)', lang)}
+                        precision={2}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={camera.sharpness ?? 1}
+                        setProperty={(value: number) => setProperty('camera.sharpness', value)} />
+                </span>
                 <ColorLutControl
                     name={lutName}
                     loadText={t('Load LUT', lang)}
+                    tooltip={t('Color LUT remaps the image colors using a lookup texture for consistent color grading.', lang)}
                     onLoad={this.chooseLut}
                     onClear={() => getViewer()?.clearColorLut?.()} />
                 <Slider
@@ -456,10 +466,12 @@ class PostProcessingPanel extends React.Component <{ observerData: ObserverData,
                     enabled={!!lutName}
                     value={camera.colorLutIntensity ?? 1}
                     setProperty={(value: number) => setProperty('camera.colorLutIntensity', value)} />
-                <Toggle
-                    label='SSAO'
-                    value={camera.ssao === true}
-                    setProperty={(value: boolean) => setProperty('camera.ssao', value)} />
+                <span title={t('SSAO adds soft contact shadows in creases and where surfaces meet.', lang)} style={{ display: 'contents' }}>
+                    <Toggle
+                        label='SSAO'
+                        value={camera.ssao === true}
+                        setProperty={(value: boolean) => setProperty('camera.ssao', value)} />
+                </span>
                 <Slider
                     label={t('SSAO intensity', lang)}
                     precision={2}
@@ -478,11 +490,13 @@ class PostProcessingPanel extends React.Component <{ observerData: ObserverData,
                     enabled={camera.ssao === true}
                     value={camera.ssaoRadius ?? 30}
                     setProperty={(value: number) => setProperty('camera.ssaoRadius', value)} />
-                <Toggle
-                    label='MSAA'
-                    value={camera.multisample}
-                    enabled={camera.multisampleSupported}
-                    setProperty={(value: boolean) => setProperty('camera.multisample', value)} />
+                <span title={t('MSAA smooths polygon edges within one frame. It is automatically disabled when TAA is enabled.', lang)} style={{ display: 'contents' }}>
+                    <Toggle
+                        label='MSAA'
+                        value={camera.multisample}
+                        enabled={camera.multisampleSupported}
+                        setProperty={(value: boolean) => setProperty('camera.multisample', value)} />
+                </span>
             </Panel>
         );
     }

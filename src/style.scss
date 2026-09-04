@@ -400,7 +400,8 @@ body:not(.ui-ready) #panel-left {
 #camera-panel > .pcui-panel-content,
 #sky-panel > .pcui-panel-content,
 #light-panel > .pcui-panel-content,
-#settings-panel > .pcui-panel-content {
+#settings-panel > .pcui-panel-content,
+#postprocessing-panel > .pcui-panel-content {
     margin-right: 6px;
 }
 
@@ -418,7 +419,8 @@ body:not(.ui-ready) #panel-left {
 #limits-panel > .pcui-panel-header,
 #sky-panel > .pcui-panel-header,
 #light-panel > .pcui-panel-header,
-#settings-panel > .pcui-panel-header {
+#settings-panel > .pcui-panel-header,
+#postprocessing-panel > .pcui-panel-header {
     padding-left: 36px;
     position: relative;
 
@@ -463,6 +465,11 @@ body:not(.ui-ready) #panel-left {
 #settings-panel > .pcui-panel-header::before {
     -webkit-mask-image: url(./static/icons/settings-camera-icon.svg?v=1);
     mask-image: url(./static/icons/settings-camera-icon.svg?v=1);
+}
+
+#postprocessing-panel > .pcui-panel-header::before {
+    -webkit-mask-image: url(./static/icons/postprocessing-icon.svg?v=1);
+    mask-image: url(./static/icons/postprocessing-icon.svg?v=1);
 }
 
 .materials-layer-list {
@@ -3851,20 +3858,32 @@ body.timeline-open #popup > #popup-buttons-parent {
 
 .postprocessing-lut-actions {
     display: flex;
+    width: auto !important;
+    flex: 1 1 0;
     min-width: 0;
     gap: 4px;
 }
 
 .postprocessing-lut-button {
-    min-width: 0;
-    flex: 1;
+    width: 0;
+    min-width: 0 !important;
+    flex: 1 1 0;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
+.postprocessing-lut-button > span {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .postprocessing-lut-clear {
+    width: 28px;
     flex: 0 0 28px;
-    min-width: 28px;
+    min-width: 28px !important;
 }
 
 .panel-value-select {

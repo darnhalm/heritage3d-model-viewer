@@ -34,6 +34,14 @@ export const translations: Record<Lang, Record<string, string>> = {
             'RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.',
         'EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.':
             'EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.',
+        'TAA combines current and previous frames to reduce jagged edges and shimmer. It can leave trails on moving objects.':
+            'TAA combines current and previous frames to reduce jagged edges and shimmer. It can leave trails on moving objects.',
+        'Color LUT remaps the image colors using a lookup texture for consistent color grading.':
+            'Color LUT remaps the image colors using a lookup texture for consistent color grading.',
+        'SSAO adds soft contact shadows in creases and where surfaces meet.':
+            'SSAO adds soft contact shadows in creases and where surfaces meet.',
+        'MSAA smooths polygon edges within one frame. It is automatically disabled when TAA is enabled.':
+            'MSAA smooths polygon edges within one frame. It is automatically disabled when TAA is enabled.',
         'Manual distance limits': 'Manual distance limits',
         'Camera limits': 'Camera limits',
         'Tile loading order': 'Tile loading order',
@@ -491,6 +499,14 @@ export const translations: Record<Lang, Record<string, string>> = {
             'RCAS: контрастно-адаптивная резкость из AMD FidelityFX FSR 1.0. Усиливает кромки и не трогает ровные участки.',
         'EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.':
             'EASU: повышение разрешения с восстановлением кромок из AMD FidelityFX FSR 1.0. Работает только при масштабе пикселя больше единицы.',
+        'TAA combines current and previous frames to reduce jagged edges and shimmer. It can leave trails on moving objects.':
+            'TAA объединяет текущий и предыдущие кадры, уменьшая ступеньки и мерцание. На движущихся объектах возможны шлейфы.',
+        'Color LUT remaps the image colors using a lookup texture for consistent color grading.':
+            'Color LUT переназначает цвета изображения по таблице для единой цветокоррекции.',
+        'SSAO adds soft contact shadows in creases and where surfaces meet.':
+            'SSAO добавляет мягкие контактные тени в углублениях и местах соприкосновения поверхностей.',
+        'MSAA smooths polygon edges within one frame. It is automatically disabled when TAA is enabled.':
+            'MSAA сглаживает края полигонов внутри одного кадра. При включении TAA отключается автоматически.',
         'Manual distance limits': 'Пределы расстояния вручную',
         'Camera limits': 'Ограничители камеры',
         'Tile loading order': 'Порядок загрузки тайлов',
@@ -948,6 +964,14 @@ export const translations: Record<Lang, Record<string, string>> = {
             'RCAS：来自 AMD FidelityFX FSR 1.0 的对比度自适应锐化。只增强边缘，不影响平坦区域。',
         'EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.':
             'EASU：来自 AMD FidelityFX FSR 1.0 的边缘保持放大。仅在像素比例大于 1 时生效。',
+        'TAA combines current and previous frames to reduce jagged edges and shimmer. It can leave trails on moving objects.':
+            'TAA 合并当前帧与历史帧，以减少锯齿和闪烁；移动物体可能出现拖影。',
+        'Color LUT remaps the image colors using a lookup texture for consistent color grading.':
+            'Color LUT 使用查找纹理重新映射画面颜色，以实现统一调色。',
+        'SSAO adds soft contact shadows in creases and where surfaces meet.':
+            'SSAO 在凹槽和表面接触处增加柔和的接触阴影。',
+        'MSAA smooths polygon edges within one frame. It is automatically disabled when TAA is enabled.':
+            'MSAA 在单帧内平滑多边形边缘；启用 TAA 时会自动关闭。',
         'Manual distance limits': '手动距离限制',
         'Camera limits': '相机限制',
         'Tile loading order': '瓦片加载顺序',
