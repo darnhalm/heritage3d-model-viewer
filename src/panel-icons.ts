@@ -19,7 +19,7 @@ const PANEL_ICONS = [
     'fragment-scale-icon.svg', 'share-icon.svg', 'fullscreen-icon.svg',
     'fullscreen-exit-icon.svg', 'fit-screen-icon.svg', 'reset-camera-icon.svg',
     'file-json-icon.svg', 'hd-icon.svg', 'sd-icon.svg',
-    'orbit-mode.svg', 'fly-mode.svg', 'mouse-icon.svg',
+    'orbit-mode.svg', 'fly-mode.svg', 'walk-mode.svg', 'mouse-icon.svg',
     'trackpad-1-icon.svg', 'trackpad-2-icon.svg', 'swipe-left-icon.svg',
     'swipe-right-icon.svg'
 ];

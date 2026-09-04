@@ -184,6 +184,43 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
     });
 });
 
+test('camera mode button cycles orbit, fly and grounded walk', async ({ page }) => {
+    test.setTimeout(120000);
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.observer?.get('ui.spinner') === false);
+
+    const button = page.locator('#camera-mode-button');
+    await expect(button).toHaveClass(/orbit/);
+    await button.click();
+    await expect(button).toHaveClass(/fly/);
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.cameraControls.mode)).toBe('fly');
+    await button.click();
+    await expect(button).toHaveClass(/walk/);
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.cameraControls.mode)).toBe('walk');
+    await button.click();
+    await expect(button).toHaveClass(/orbit/);
+
+    const grounded = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const Vec3 = viewer.cameraControls.getPosition().constructor;
+        const bounds = viewer.dynamicSceneBounds;
+        const center = bounds.center.clone();
+        const top = bounds.getMax().y;
+        viewer.cameraControls.reset(center, new Vec3(center.x, top + 3, center.z));
+        viewer.observer.set('camera.mode', 'walk');
+        viewer.cameraControls.update(1 / 60);
+        return {
+            mode: viewer.cameraControls.mode,
+            y: viewer.cameraControls.getPosition().y,
+            expectedY: top + viewer.cameraControls.walkEyeHeight
+        };
+    });
+
+    expect(grounded.mode).toBe('walk');
+    expect(Math.abs(grounded.y - grounded.expectedY)).toBeLessThan(0.02);
+});
+
 test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and cleans up', async ({ page }) => {
     test.setTimeout(180000);
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');

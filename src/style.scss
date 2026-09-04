@@ -2925,6 +2925,10 @@ body.timeline-open #popup > #popup-buttons-parent {
     &.fly {
         background-image: url(./static/icons/fly-mode.svg);
     }
+
+    &.walk {
+        background-image: url(./static/icons/walk-mode.svg);
+    }
 }
 
 #github-button {

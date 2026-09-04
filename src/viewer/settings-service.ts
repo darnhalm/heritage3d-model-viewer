@@ -10,7 +10,7 @@ type Rgb = { r: number; g: number; b: number };
 type ModelFile = { url: string; filename?: string; sizeBytes?: number };
 
 type CameraControlsLike = {
-    mode: 'orbit' | 'fly';
+    mode: 'orbit' | 'fly' | 'walk';
     getPosition: () => Vec3;
     getFocus: () => Vec3;
 };

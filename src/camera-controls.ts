@@ -110,13 +110,24 @@ const TRACKPAD_WHEEL_STICKY_MS = 400;
 
 /** Что считать источником `wheel`: определять самим или взять указанное пользователем. */
 type PointerDevice = 'auto' | 'mouse' | 'trackpad';
+type CameraMode = 'orbit' | 'fly' | 'walk';
+type WalkSurfaceHit = { point: Vec3; normal: Vec3; distance: number };
+type WalkSurfaceProbe = (origin: Vec3, direction: Vec3, maxDistance: number) => WalkSurfaceHit | null;
 
 /** Keyboard fly speed: normal WASD is precise, Shift restores the former cruising speed. */
 const FLY_KEYBOARD_SPEED = 1 / 3;
 const FLY_KEYBOARD_BOOST_SPEED = 1;
 const FLY_KEYBOARD_PRECISE_SPEED = FLY_KEYBOARD_SPEED * 0.5;
+const WALK_KEYBOARD_SPEED = 1;
+const WALK_KEYBOARD_BOOST_SPEED = 2;
+const WALK_KEYBOARD_PRECISE_SPEED = 0.4;
 
 const pose = new Pose();
+const walkPreviousPosition = new Vec3();
+const walkMove = new Vec3();
+const walkDirection = new Vec3();
+const walkProbeOrigin = new Vec3();
+const walkDown = new Vec3(0, -1, 0);
 
 const frame = new InputFrame({
     move: [0, 0, 0],
@@ -197,13 +208,25 @@ class CameraControls {
 
     private _flyController: FlyController = new FlyController();
 
+    /** Separate fly-style look controller; translation is constrained to the walking surface. */
+    private _walkController: FlyController = new FlyController();
+
     private _orbitController: OrbitController = new OrbitController();
 
     private _controller: InputController;
 
     private _pose: Pose = new Pose();
 
-    private _mode: 'orbit' | 'fly';
+    private _mode: CameraMode;
+
+    private _walkSurfaceProbe: WalkSurfaceProbe | null;
+
+    private _walkGrounded = false;
+
+    /** Becomes true after the first floor hit; before that, absent geometry must not start a fall. */
+    private _walkPlaced = false;
+
+    private _walkVerticalVelocity = 0;
 
     private _surfaceOrbit: { phase: 'pending' | 'active' | 'coasting'; pivot: Vec3 | null } | null = null;
 
@@ -260,6 +283,20 @@ class CameraControls {
     // User-adjustable multiplier for movement while the fly controller is active.
     flySpeed = 1;
 
+    /** Walking dimensions are in scene units and updated from the viewer's unit calibration. */
+    walkEyeHeight = 1.7;
+
+    walkStepHeight = 0.45;
+
+    walkRadius = 0.3;
+
+    walkSpeed = 1.8;
+
+    walkGravity = 9.81;
+
+    /** Initial floor search needs to reach the scene even when walk starts from an orbit view. */
+    walkProbeDistance = 1000;
+
     orbitSpeed = 18;
 
     /** Degrees per CSS pixel for the event-driven off-axis surface orbit. */
@@ -271,10 +308,11 @@ class CameraControls {
 
     gamepadDeadZone: Vec2 = new Vec2(0.3, 0.6);
 
-    constructor(app: AppBase, camera: CameraComponent, observer: Observer) {
+    constructor(app: AppBase, camera: CameraComponent, observer: Observer, walkSurfaceProbe: WalkSurfaceProbe | null = null) {
         this._app = app;
         this._camera = camera;
         this._observer = observer;
+        this._walkSurfaceProbe = walkSurfaceProbe;
         this._mouseButtonsInverted = observer.get('camera.mouseButtonsInverted') === true;
 
         // set orbit controller defaults
@@ -288,6 +326,9 @@ class CameraControls {
         this._flyController.pitchRange = new Vec2(-90, 90);
         this._flyController.rotateDamping = 0.97;
         this._flyController.moveDamping = 0.97;
+        this._walkController.pitchRange = new Vec2(-85, 85);
+        this._walkController.rotateDamping = 0.97;
+        this._walkController.moveDamping = 0;
 
         // attach input
         this._desktopInput.attach(this._app.graphicsDevice.canvas);
@@ -328,13 +369,17 @@ class CameraControls {
         return this._mouseButtonsInverted;
     }
 
-    set mode(mode: 'orbit' | 'fly') {
+    set mode(mode: CameraMode) {
+        if (mode !== 'orbit' && mode !== 'fly' && mode !== 'walk') mode = 'orbit';
         // check if mode is the same
         if (this._mode === mode) {
             return;
         }
         if (mode !== 'orbit') this.endSurfaceNavigation();
         this._mode = mode;
+        this._walkGrounded = false;
+        this._walkPlaced = false;
+        this._walkVerticalVelocity = 0;
 
         // detach old controller
         if (this._controller) {
@@ -349,6 +394,10 @@ class CameraControls {
             }
             case 'fly': {
                 this._controller = this._flyController;
+                break;
+            }
+            case 'walk': {
+                this._controller = this._walkController;
                 break;
             }
         }
@@ -629,6 +678,82 @@ class CameraControls {
         this._pose.position.add(surfacePanMove);
     }
 
+    /**
+     * Keep the camera capsule above walkable geometry and stop it before near-vertical faces.
+     *
+     * @param previous - Camera position before the controller applied this frame's movement.
+     * @param dt - Frame duration in seconds.
+     */
+    private constrainWalk(previous: Vec3, dt: number) {
+        if (!this._walkSurfaceProbe) {
+            this._pose.position.y = previous.y;
+            return;
+        }
+
+        // FlyController supplies first-person looking, but walking translation itself is horizontal.
+        this._pose.position.y = previous.y;
+        walkMove.sub2(this._pose.position, previous);
+        const distance = walkMove.length();
+        if (distance > 1e-6) {
+            walkDirection.copy(walkMove).mulScalar(1 / distance);
+            walkProbeOrigin.copy(previous);
+            walkProbeOrigin.y -= this.walkEyeHeight * 0.5;
+            const obstacle = this._walkSurfaceProbe(walkProbeOrigin, walkDirection, distance + this.walkRadius);
+            if (obstacle && Math.abs(obstacle.normal.y) < 0.55 && obstacle.distance <= distance + this.walkRadius) {
+                this._pose.position.x = previous.x;
+                this._pose.position.z = previous.z;
+            }
+        }
+
+        // Looking around while standing does not require another triangle scan. This matters for
+        // architectural GLBs whose entire building can be one large mesh.
+        if (distance <= 1e-6 && this._walkGrounded) return;
+
+        // Probe from just above the previous eye level so a stair up to walkStepHeight is reachable.
+        walkProbeOrigin.set(this._pose.position.x, previous.y + this.walkStepHeight, this._pose.position.z);
+        const maxDistance = this._walkGrounded ?
+            this.walkEyeHeight + this.walkStepHeight + Math.max(this.walkEyeHeight, 2) :
+            this.walkProbeDistance;
+        const floor = this._walkSurfaceProbe(walkProbeOrigin, walkDown, maxDistance);
+        const walkable = floor && Math.abs(floor.normal.y) >= 0.35;
+        const floorEyeY = walkable ? floor.point.y + this.walkEyeHeight : -Infinity;
+        const canStepUp = walkable && floorEyeY <= previous.y + this.walkStepHeight + 1e-5;
+
+        // The orbit camera can start below the calibrated eye height (common for centimetre-scale
+        // assets). First entry therefore snaps to any walkable floor below; step limits only apply
+        // after the character has been placed on the surface. If streamed geometry is not here yet,
+        // hold the current altitude instead of falling through an empty scene.
+        if (!this._walkPlaced) {
+            if (walkable) {
+                this._pose.position.y = floorEyeY;
+                this._walkGrounded = true;
+                this._walkPlaced = true;
+                this._walkVerticalVelocity = 0;
+            } else {
+                this._pose.position.y = previous.y;
+            }
+            this._walkController.attach(this._pose, false);
+            return;
+        }
+
+        if (canStepUp && floorEyeY >= previous.y - this.walkStepHeight) {
+            this._pose.position.y = floorEyeY;
+            this._walkGrounded = true;
+            this._walkVerticalVelocity = 0;
+        } else {
+            this._walkGrounded = false;
+            this._walkVerticalVelocity -= this.walkGravity * dt;
+            this._pose.position.y = previous.y + this._walkVerticalVelocity * dt;
+            if (canStepUp && this._pose.position.y <= floorEyeY) {
+                this._pose.position.y = floorEyeY;
+                this._walkGrounded = true;
+                this._walkVerticalVelocity = 0;
+            }
+        }
+
+        this._walkController.attach(this._pose, false);
+    }
+
     update(dt: number) {
         // read inputs (to clear their state) even when disabled
         const { key, button, mouse, wheel } = this._desktopInput.read();
@@ -671,13 +796,14 @@ class CameraControls {
         }
         this._state.touches += count[0];
 
-        if (this._mode !== 'fly' && this._state.axis.length() > 0) {
+        if (this._mode === 'orbit' && this._state.axis.length() > 0) {
             // if we have any axis input, switch to fly mode
             this.mode = 'fly';
         }
 
         const orbit = +(this._mode === 'orbit');
         const fly = +(this._mode === 'fly');
+        const walk = +(this._mode === 'walk');
         const double = +(this._state.touches > 1);
         const desktopPan = this._state.mouse[2] || +(button[2] === -1);
         const touchPan = this._mouseButtonsInverted ? +(this._state.touches === 1) : double;
@@ -692,8 +818,13 @@ class CameraControls {
             FLY_KEYBOARD_BOOST_SPEED :
             (this._state.ctrl ? FLY_KEYBOARD_PRECISE_SPEED : FLY_KEYBOARD_SPEED);
         v.add(keyMove.mulScalar(fly * this.moveSpeed * this.flySpeed * keyboardSpeed * dt));
+        const walkKeyboardSpeed = this._state.shift ?
+            WALK_KEYBOARD_BOOST_SPEED :
+            (this._state.ctrl ? WALK_KEYBOARD_PRECISE_SPEED : WALK_KEYBOARD_SPEED);
+        walkMove.set(this._state.axis.x, 0, this._state.axis.z).normalize();
+        v.add(walkMove.mulScalar(walk * this.walkSpeed * this.flySpeed * walkKeyboardSpeed * dt));
         const panMove = screenToWorld(this._camera, mouse[0], mouse[1], distance);
-        v.add(panMove.mulScalar(desktopPan));
+        v.add(panMove.mulScalar(desktopPan * (1 - walk)));
         // Колесо: если контроллер поверхностной навигации подсказал точку под курсором,
         // тянем камеру к ней и гасим обычный шаг — иначе зум сработал бы дважды.
         // Свайп по трекпаду уже разобран в `_onWheel` и пойдёт в поворот — значит этот же
@@ -740,7 +871,7 @@ class CameraControls {
         const orbitMove = screenToWorld(this._camera, touch[0], touch[1], distance);
         v.add(orbitMove.mulScalar(orbit * touchPan));
         const flyMove = new Vec3(leftInput[0], 0, -leftInput[1]);
-        v.add(flyMove.mulScalar(fly * this.moveSpeed * this.flySpeed * dt));
+        v.add(flyMove.mulScalar((fly * this.moveSpeed + walk * this.walkSpeed) * this.flySpeed * dt));
         const pinchMove = new Vec3(0, 0, pinch[0]);
         v.add(pinchMove.mulScalar(orbit * double * this.pinchSpeed * dt));
         deltas.move.append([v.x, v.y, v.z]);
@@ -756,7 +887,7 @@ class CameraControls {
         // gamepad move
         v.set(0, 0, 0);
         const stickMove = new Vec3(leftStick[0], 0, -leftStick[1]);
-        v.add(stickMove.mulScalar(this.moveSpeed * (fly ? this.flySpeed : 1) * dt));
+        v.add(stickMove.mulScalar((walk ? this.walkSpeed : this.moveSpeed) * ((fly || walk) ? this.flySpeed : 1) * dt));
         deltas.move.append([v.x, v.y, v.z]);
 
         // gamepad rotate
@@ -784,7 +915,9 @@ class CameraControls {
                 this.finishSurfaceOrbit();
             }
         } else {
+            walkPreviousPosition.copy(this._pose.position);
             this._pose.copy(this._controller.update(frame, dt));
+            if (walk) this.constrainWalk(walkPreviousPosition, dt);
         }
         this._camera.entity.setPosition(this._pose.position);
         this._camera.entity.setEulerAngles(this._pose.angles);
@@ -807,8 +940,10 @@ class CameraControls {
         this._gamepadInput.destroy();
 
         this._flyController.destroy();
+        this._walkController.destroy();
         this._orbitController.destroy();
     }
 }
 
 export { CameraControls };
+export type { CameraMode, WalkSurfaceHit, WalkSurfaceProbe };

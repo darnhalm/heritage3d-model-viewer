@@ -90,7 +90,7 @@ export interface ObserverData {
         /** Дальний предел расстояния до точки вращения. */
         distanceMax?: number,
         hq: boolean,
-        mode: 'orbit' | 'fly',
+        mode: 'orbit' | 'fly' | 'walk',
         flySpeed: number,
         /** Orbit around the model surface under the initial drag point. */
         surfacePivot?: boolean,

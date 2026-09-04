@@ -188,14 +188,20 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         onClick={() => window.viewer?.frameScene?.()}
                     />
                 ))}
-                {showCameraModeButton && wrap(this.props.observerData.camera.mode === 'orbit' ? t('Orbit mode', lang) : t('Fly mode', lang), (
+                {showCameraModeButton && wrap(t({
+                    orbit: 'Orbit mode',
+                    fly: 'Fly mode',
+                    walk: 'Walk mode'
+                }[this.props.observerData.camera.mode] ?? 'Orbit mode', lang), (
                     <Button
                         class={['popup-button', 'camera-mode-button', ...(this.props.observerData.camera.mode ? [this.props.observerData.camera.mode] : [])]}
                         id='camera-mode-button'
                         width={40}
                         height={40}
                         onClick={() => {
-                            const mode = this.props.observerData.camera.mode === 'orbit' ? 'fly' : 'orbit';
+                            const modes = ['orbit', 'fly', 'walk'] as const;
+                            const current = modes.indexOf(this.props.observerData.camera.mode);
+                            const mode = modes[(current + 1) % modes.length];
                             this.props.setProperty('camera.mode', mode);
                         }}
                     />

@@ -101,7 +101,7 @@ import {
 import { serializeCompressedPly } from 'spz-js';
 
 import { App } from './app';
-import { CameraControls } from './camera-controls';
+import { CameraControls, type CameraMode, type WalkSurfaceHit } from './camera-controls';
 import { ClipBoxMaterials } from './clip-box';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
@@ -121,7 +121,7 @@ import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from 
 import type { TileReplayTimeline, TimelineState as TileReplayTimelineState } from './ui/tile-replay-timeline';
 import type { TimelineUnit } from './ui/timeline-units';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, SurfacePivotController, type SceneHelperEntry } from './viewer/controllers';
-import { CachedMeshGeometry, getCachedMeshGeometry, intersectMeshTriangles } from './viewer/controllers/mesh-raycast';
+import { CachedMeshGeometry, getCachedMeshGeometry, intersectMeshTriangles, intersectMeshTrianglesDetailed } from './viewer/controllers/mesh-raycast';
 import { SettingsService } from './viewer/settings-service';
 /**
  * Во сколько раз мельче рисуется сцена, пока камера движется.
@@ -1387,7 +1387,12 @@ class Viewer {
             frustumCulling: true,
             clearColor: new Color(0, 0, 0, 0)
         });
-        this.cameraControls = new CameraControls(app, camera.camera, observer);
+        this.cameraControls = new CameraControls(
+            app,
+            camera.camera,
+            observer,
+            (origin, direction, maxDistance) => this.probeWalkSurface(origin, direction, maxDistance)
+        );
         this.cameraControls.zoomRange = new Vec2(ZOOM_SCALE_MIN, Infinity);
 
         camera.camera.requestSceneColorMap(true);
@@ -2678,7 +2683,7 @@ class Viewer {
                 }
                 this.renderNextFrame();
             },
-            'camera.mode': (mode: 'orbit' | 'fly') => {
+            'camera.mode': (mode: CameraMode) => {
                 this.cameraControls.mode = mode;
             },
             'camera.flySpeed': (speed: number) => {
@@ -2981,6 +2986,7 @@ class Viewer {
                 this.renderNextFrame();
             },
             'measure.unitScale': () => {
+                this.configureWalkScale();
                 this.updateTexelDensityStats();
                 this.renderNextFrame();
             },
@@ -3207,6 +3213,7 @@ class Viewer {
         // calculate scene size
         const sceneSize = bbox.halfExtents.length();
         this.cameraControls.moveSpeed = sceneSize * 2.5;
+        this.configureWalkScale(sceneSize);
         this.applyDistanceLimits(sceneSize);
 
         // calculate the camera focal point
@@ -7198,6 +7205,75 @@ class Viewer {
             return this.meshInstances;
         }
         return this.meshInstances.concat(tileMeshInstances);
+    }
+
+    /**
+     * Configure human-scale walking from the same meters-per-scene-unit calibration as measurements.
+     *
+     * @param sceneSize - Radius-like scene extent used for the initial downward floor search.
+     */
+    private configureWalkScale(sceneSize = this.dynamicSceneBounds.halfExtents.length()) {
+        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
+        const metersPerSceneUnit = Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
+        this.cameraControls.walkEyeHeight = 1.7 / metersPerSceneUnit;
+        this.cameraControls.walkStepHeight = 0.45 / metersPerSceneUnit;
+        this.cameraControls.walkRadius = 0.3 / metersPerSceneUnit;
+        this.cameraControls.walkSpeed = 1.8 / metersPerSceneUnit;
+        this.cameraControls.walkGravity = 9.81 / metersPerSceneUnit;
+        this.cameraControls.walkProbeDistance = Math.max(sceneSize * 4, this.cameraControls.walkEyeHeight * 4);
+    }
+
+    /**
+     * Closest exact triangle hit for walking. The cheap AABB slab test keeps the per-frame ground
+     * ray practical even for a streamed tileset: only visible meshes crossed by the short probe
+     * reach the triangle loop.
+     *
+     * @param origin - World-space start of the ray.
+     * @param direction - Normalized world-space direction.
+     * @param maxDistance - Furthest accepted hit in scene units.
+     * @returns Closest visible triangle hit, or null when the ray crosses no geometry.
+     */
+    private probeWalkSurface(origin: Vec3, direction: Vec3, maxDistance: number): WalkSurfaceHit | null {
+        let bestDistance = maxDistance;
+        let bestHit: WalkSurfaceHit | null = null;
+
+        for (const meshInstance of this.getPickableMeshInstances()) {
+            if (!meshInstance.visible || meshInstance.node?.enabled === false) continue;
+            const aabb = meshInstance.aabb;
+            if (!aabb) continue;
+            const min = aabb.getMin();
+            const max = aabb.getMax();
+            let near = 0;
+            let far = bestDistance;
+            let intersects = true;
+
+            for (const axis of ['x', 'y', 'z'] as const) {
+                const d = direction[axis];
+                if (Math.abs(d) < 1e-8) {
+                    if (origin[axis] < min[axis] || origin[axis] > max[axis]) intersects = false;
+                    continue;
+                }
+                const t0 = (min[axis] - origin[axis]) / d;
+                const t1 = (max[axis] - origin[axis]) / d;
+                near = Math.max(near, Math.min(t0, t1));
+                far = Math.min(far, Math.max(t0, t1));
+                if (far < near) intersects = false;
+            }
+            if (!intersects || near > bestDistance) continue;
+
+            const hit = intersectMeshTrianglesDetailed(
+                meshInstance,
+                origin,
+                direction,
+                bestDistance,
+                this.meshGeometryCache
+            );
+            if (!hit || hit.t >= bestDistance) continue;
+            bestDistance = hit.t;
+            bestHit = { point: hit.point.clone(), normal: hit.normal.clone(), distance: hit.t };
+        }
+
+        return bestHit;
     }
 
     /**
