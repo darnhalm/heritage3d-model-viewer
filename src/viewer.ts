@@ -235,6 +235,10 @@ const doubleTapDelay = 400;
 /** Границы толщины подсветки контура сечения (пиксели): тоньше — теряется, толще — «жирнит». */
 const FRAGMENT_OUTLINE_WIDTH_MIN_PX = 0.5;
 const FRAGMENT_OUTLINE_WIDTH_MAX_PX = 8;
+// LUTs are tiny colour tables, not photographs. Keep both the compressed source and
+// the decoded GPU texture bounded: 64³ is already 262,144 colour entries (4096×64 strip).
+const COLOR_LUT_MAX_FILE_BYTES = 8 * 1024 * 1024;
+const COLOR_LUT_MAX_EDGE = 64;
 const doubleTapRadius = 45;
 const DOUBLE_CLICK_ZOOM_DURATION_SECONDS = 0.25;
 const DOUBLE_CLICK_ZOOM_FACTOR = 2;
@@ -4952,6 +4956,9 @@ class Viewer {
      * @param file - Browser image file containing the LUT strip.
      */
     async loadColorLut(file: Blob & { name: string }): Promise<void> {
+        if (file.size > COLOR_LUT_MAX_FILE_BYTES) {
+            throw new Error(t('Color LUT file must be 8 MB or smaller.', this.observer.get('ui.language')));
+        }
         const objectUrl = URL.createObjectURL(file);
         const asset = new Asset(file.name || 'Color LUT', 'texture', {
             url: objectUrl,
@@ -4972,6 +4979,9 @@ class Viewer {
             // CameraFrame expects the common horizontal LUT strip: N slices, each N×N.
             if (texture.height < 2 || texture.width !== texture.height * texture.height) {
                 throw new Error(t('Color LUT must be a horizontal strip, for example 256 x 16 pixels.', this.observer.get('ui.language')));
+            }
+            if (texture.height > COLOR_LUT_MAX_EDGE || texture.width > COLOR_LUT_MAX_EDGE ** 2) {
+                throw new Error(t('Color LUT must be no larger than 4096 x 64 pixels (64³ colors).', this.observer.get('ui.language')));
             }
 
             texture.minFilter = FILTER_LINEAR;

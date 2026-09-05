@@ -64,6 +64,17 @@ test('post-processing defaults stay lazy and TAA and MSAA remain mutually exclus
 
     await page.evaluate(() => (window as any).viewer.observer.set('camera.ssao', false));
     expect(await page.evaluate(() => (window as any).viewer.observer.get('camera.ssao'))).toBe(false);
+
+    const oversizedLutError = await page.evaluate(async () => {
+        const file = new File([new Uint8Array(8 * 1024 * 1024 + 1)], 'oversized-lut.png', { type: 'image/png' });
+        try {
+            await (window as any).viewer.loadColorLut(file);
+            return '';
+        } catch (error) {
+            return error instanceof Error ? error.message : String(error);
+        }
+    });
+    expect(oversizedLutError).toContain('8 MB');
 });
 
 test('space toggles model animation playback and ignores focused fields', async ({ page }) => {
