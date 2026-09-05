@@ -30,6 +30,42 @@ test('boots the viewer shell', async ({ page }) => {
     expect(state.mouseButtonsInverted).toBe(false);
 });
 
+test('post-processing defaults stay lazy and TAA and MSAA remain mutually exclusive', async ({ page }) => {
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.observer?.get('scene.filenames')?.length > 0);
+
+    expect(await page.evaluate(() => (window as any).viewer.postProcessingFrame === null)).toBe(true);
+
+    await page.evaluate(() => (window as any).viewer.observer.set('camera.taa', true));
+    await expect.poll(() => page.evaluate(() => {
+        const observer = (window as any).viewer.observer;
+        return observer.get('camera.taa') === true && observer.get('camera.multisample') === false;
+    })).toBe(true);
+
+    // Enabling MSAA turns TAA off; only one anti-aliasing path may be active.
+    await page.evaluate(() => (window as any).viewer.observer.set('camera.multisample', true));
+    await expect.poll(() => page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        return viewer.observer.get('camera.taa') === false && viewer.observer.get('camera.multisample') === true;
+    })).toBe(true);
+
+    await page.evaluate(() => {
+        const observer = (window as any).viewer.observer;
+        observer.set('camera.ssaoIntensity', 2);
+        observer.set('camera.ssaoRadius', 200);
+        observer.set('camera.ssao', true);
+    });
+    expect(await page.evaluate(() => {
+        const observer = (window as any).viewer.observer;
+        return observer.get('camera.ssao') === true && observer.get('camera.ssaoIntensity') === 2 &&
+            observer.get('camera.ssaoRadius') === 200;
+    })).toBe(true);
+
+    await page.evaluate(() => (window as any).viewer.observer.set('camera.ssao', false));
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('camera.ssao'))).toBe(false);
+});
+
 test('space toggles model animation playback and ignores focused fields', async ({ page }) => {
     await page.goto('/');
     await waitForViewer(page);
