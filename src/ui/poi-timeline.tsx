@@ -79,7 +79,14 @@ const PoiTimeline = ({ observerData, setProperty, onTogglePlay, onStop, onPrevio
     }, [poiList]);
     const duration = segments.length > 0 ? segments[segments.length - 1].end : 0;
     const pixelsPerSecond = PIXELS_PER_SECOND * zoom;
-    const contentWidth = Math.max(560, duration * pixelsPerSecond + TRACK_PADDING * 2);
+    // Zoom must still enlarge a short tour that already fits in a wide timeline.
+    // The CSS min-width keeps the initial track as wide as its viewport, so use that
+    // viewport as the baseline once the ref is available as well.
+    const contentWidth = Math.max(
+        560,
+        duration * pixelsPerSecond + TRACK_PADDING * 2,
+        (trackRef.current?.clientWidth ?? 0) * zoom
+    );
     const activeId = observerData.poi?.activeId ?? '';
     const playing = !!observerData.poi?.playing;
     const canObserve = segments.some(({ poi }) => (

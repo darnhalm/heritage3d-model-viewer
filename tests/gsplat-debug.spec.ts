@@ -122,7 +122,10 @@ test('GSplat material debug buttons switch off on a second click', async ({ page
         const button = page.getByRole('button', { name: item.label, exact: true });
         await button.click();
         await expect.poll(() => page.evaluate(({ path }) => (window as any).viewer.observer.get(path), item)).toBe(true);
-        await button.click();
+        // Pause becomes Resume while active, unlike the three state-only controls above.
+        const activeButton = item.path === 'debug.gsplatPaused' ?
+            page.getByRole('button', { name: 'Resume Loading', exact: true }) : button;
+        await activeButton.click();
         await expect.poll(() => page.evaluate(({ path }) => (window as any).viewer.observer.get(path), item)).toBe(false);
     }
 });

@@ -1360,24 +1360,24 @@ export const FragmentPanel = (props: { observerData: ObserverData, setProperty: 
                 )}
                 {/* Форму выбирают до выделения: она определяет, что именно появится по клику. */}
                 {!data.enabled && (
-                    <div className='tile-playback-toolbar'>
+                    <Container class='fragment-shape-toolbar'>
                         {([
-                            ['box', 'deployed_code', 'Box shape'],
-                            ['sphere', 'circle', 'Sphere shape']
+                            ['box', 'fragment-shape-box', 'Box shape'],
+                            ['sphere', 'fragment-shape-sphere', 'Sphere shape']
                         ] as const).map(([shape, glyph, title]) => (
-                            <button
-                                key={shape}
-                                type='button'
-                                className={`tile-playback-button${(data.shape ?? 'box') === shape ? ' active' : ''}`}
-                                title={t(title, lang)}
-                                aria-label={t(title, lang)}
-                                aria-pressed={(data.shape ?? 'box') === shape}
-                                onClick={() => props.setProperty('fragment.shape', shape)}
-                            >
-                                <span className='material-symbols-outlined'>{glyph}</span>
-                            </button>
+                            <span key={shape} title={t(title, lang)} style={{ display: 'contents' }}>
+                                <Button
+                                    class={[
+                                        'secondary', 'fragment-tool-button', glyph,
+                                        ...((data.shape ?? 'box') === shape ? ['active'] : [])
+                                    ]}
+                                    aria-label={t(title, lang)}
+                                    aria-pressed={(data.shape ?? 'box') === shape}
+                                    onClick={() => props.setProperty('fragment.shape', shape)}
+                                />
+                            </span>
                         ))}
-                    </div>
+                    </Container>
                 )}
                 {data.initialized && (
                     <Container class='fragment-mode-toolbar'>

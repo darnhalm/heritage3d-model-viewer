@@ -2758,6 +2758,18 @@ body.timeline-open #popup > #popup-buttons-parent {
         mask: url('static/icons/fragment-scale-icon.svg') no-repeat center / contain;
     }
 
+    .fragment-shape-box::before {
+        -webkit-mask: url('static/icons/fragment-frame-icon.svg') no-repeat center / contain;
+        mask: url('static/icons/fragment-frame-icon.svg') no-repeat center / contain;
+    }
+
+    .fragment-shape-sphere::before {
+        box-sizing: border-box;
+        border: 2px solid currentColor;
+        border-radius: 50%;
+        background: transparent;
+    }
+
     .fragment-tool-button:hover,
     .fragment-tool-button.pcui-focus {
         outline: none;
@@ -3867,6 +3879,8 @@ body.timeline-open #popup > #popup-buttons-parent {
 .postprocessing-lut-button {
     width: 0;
     min-width: 0 !important;
+    min-height: 26px !important;
+    height: 26px !important;
     flex: 1 1 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -3884,6 +3898,8 @@ body.timeline-open #popup > #popup-buttons-parent {
     width: 28px;
     flex: 0 0 28px;
     min-width: 28px !important;
+    min-height: 26px !important;
+    height: 26px !important;
 }
 
 .panel-value-select {

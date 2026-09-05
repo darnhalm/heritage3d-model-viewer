@@ -584,7 +584,7 @@ test('measurement JSON export is a compact icon in the panel footer', async ({ p
     await expect(exportButton.locator('xpath=..')).toHaveClass(/measure-panel-footer/);
 });
 
-test('loads a model and auto-applies nearby settings safely', async ({ page }) => {
+test('loads a model and auto-applies nearby scene settings without restoring developer tools', async ({ page }) => {
     const dialogs: string[] = [];
     page.on('dialog', async (dialog) => {
         dialogs.push(dialog.message());
@@ -657,7 +657,8 @@ test('loads a model and auto-applies nearby settings safely', async ({ page }) =
     expect(state.knownDistance).toBe(1.25);
     expect(state.graphicsBackend).toBe('auto');
     expect(dialogs).toEqual([]);
-    expect(state.grid).toBe(true);
+    // Grid is a developer helper: settings files must not turn it on for visitors.
+    expect(state.grid).toBe(false);
     expect(state.firstMaterial).not.toBeNull();
     expect(state.firstMaterial.metalness).toBeCloseTo(0.2, 3);
     expect(state.firstMaterial.roughness).toBeCloseTo(0.7, 3);
