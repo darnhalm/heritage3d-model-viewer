@@ -454,7 +454,7 @@ class SettingsService {
         o.set('light.intensity', 1);
         o.set('light.follow', false);
         o.set('light.shadow', true);
-        o.set('shadowCatcher.enabled', false);
+        o.set('shadowCatcher.enabled', true);
         o.set('shadowCatcher.intensity', 0.4);
         o.set('shadowCatcher.heightOffset', 0);
         o.set('debug.renderMode', 'default');
