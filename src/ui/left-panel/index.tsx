@@ -1328,7 +1328,19 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         // статического `meshInstances`, которого у потоковых тайлов нет.
         .filter(cat => !(observerData?.scene?.isTileset && cat.title === 'UV'))
         // У «запечённого» (unlit) контента каналы материала бессмысленны.
-        .filter(cat => !(observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false && cat.title === 'MATERIAL CHANNELS'));
+        .filter(cat => !(observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false && cat.title === 'MATERIAL CHANNELS'))
+        // Light Material — это обычный PBR forward-проход. Unlit-тайлы стримятся уже с
+        // запечённым шейдером, поэтому подменить их материал без ложного ощущения работы
+        // нельзя. Оставляем Final Render, но не предлагаем неработающий режим.
+        .map((cat) => {
+            if (observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false && cat.title === 'RENDER') {
+                return {
+                    ...cat,
+                    items: cat.items.filter(item => item.value !== 'clay')
+                };
+            }
+            return cat;
+        });
 
         return (
             <Container id='scene-container' flex class='left-panel-tabs-container'>
