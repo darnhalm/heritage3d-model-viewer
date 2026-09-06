@@ -746,6 +746,13 @@ class Viewer {
 
     uvCheckerOriginalVisibility = new Map<number, boolean>();
 
+    // Temporary material substitutions used by the material editor's clay view.
+    // Keep the originals per mesh instance rather than mutating imported glTF materials:
+    // switching the mode off must be a lossless operation.
+    clayOriginalMaterials = new Map<MeshInstance, StandardMaterial>();
+
+    clayMaterials = new Set<StandardMaterial>();
+
     meshGeometryCache = new WeakMap<object, CachedMeshGeometry | null>();
 
     materialFactorOverrides: Record<string, {
@@ -3669,6 +3676,8 @@ class Viewer {
         this.sceneCameras = [];
 
         this.destroyTileManager();
+
+        this.setClayMaterialMode(false);
 
         this.entities.forEach((entity) => {
             this.sceneContentRoot.removeChild(entity);
@@ -8441,6 +8450,8 @@ class Viewer {
 
     setRenderMode(renderMode: string) {
         const nextUvDebugMode = (renderMode === 'uv_checker' || renderMode === 'uv0') ? renderMode : null;
+        const clayMode = renderMode === 'clay';
+        this.setClayMaterialMode(clayMode);
         if (this.uvDebugMode !== nextUvDebugMode) {
             this.resetUvCheckerMeshes();
             this.resetUvColorMeshes();
@@ -8473,8 +8484,66 @@ class Viewer {
             });
         }
 
-        this.camera.camera.setShaderPass((renderMode !== 'default' && !nextUvDebugMode) ? `debug_${renderMode}` : 'forward');
+        // Clay is deliberately a normal forward pass: its neutral material still receives
+        // direct/environment light and casts/receives shadows. The remaining modes are
+        // PlayCanvas diagnostic shader passes.
+        this.camera.camera.setShaderPass((renderMode !== 'default' && !nextUvDebugMode && !clayMode) ? `debug_${renderMode}` : 'forward');
         this.renderNextFrame();
+    }
+
+    /**
+     * Replace imported materials with neutral, lit copies for the clay inspection view.
+     *
+     * @param enabled - Whether the neutral material substitutions should be active.
+     */
+    private setClayMaterialMode(enabled: boolean) {
+        if (!enabled) {
+            this.clayOriginalMaterials.forEach((original, meshInstance) => {
+                meshInstance.material = original;
+            });
+            this.clayOriginalMaterials.clear();
+            this.clayMaterials.forEach(material => material.destroy());
+            this.clayMaterials.clear();
+            return;
+        }
+
+        if (this.clayOriginalMaterials.size > 0) return;
+
+        const copies = new Map<StandardMaterial, StandardMaterial>();
+        this.meshInstances.forEach((meshInstance) => {
+            const original = meshInstance.material as StandardMaterial | undefined;
+            if (!original || typeof original.clone !== 'function' || typeof original.update !== 'function') return;
+
+            let clay = copies.get(original);
+            if (!clay) {
+                clay = original.clone();
+                clay.name = `${original.name || 'Material'} (clay)`;
+
+                // A plain, high-roughness surface makes lighting and post effects easy to
+                // evaluate without any of the model's albedo, normal or packed PBR maps.
+                const neutral = clay as StandardMaterial & Record<string, unknown>;
+                [
+                    'diffuseMap', 'normalMap', 'metalnessMap', 'glossMap', 'emissiveMap',
+                    'opacityMap', 'occludeMap', 'heightMap', 'clearCoatMap',
+                    'clearCoatGlossMap', 'clearCoatNormalMap', 'sheenMap', 'sheenGlossMap'
+                ].forEach((property) => {
+                    neutral[property] = null;
+                });
+                clay.diffuse.set(0.82, 0.82, 0.82);
+                clay.specular.set(0.18, 0.18, 0.18);
+                clay.emissive.set(0, 0, 0);
+                clay.useMetalness = true;
+                clay.metalness = 0;
+                clay.gloss = 0.35;
+                clay.opacity = 1;
+                clay.update();
+                copies.set(original, clay);
+                this.clayMaterials.add(clay);
+            }
+
+            this.clayOriginalMaterials.set(meshInstance, original);
+            meshInstance.material = clay;
+        });
     }
 
     setLightEnabled(value: boolean) {

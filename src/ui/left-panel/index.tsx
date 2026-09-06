@@ -748,7 +748,13 @@ const renderModeCategories = (
         format: channelsWithTextures.has(item.value) ? channelFormats[item.value] : undefined
     }));
     return [
-        { title: 'RENDER', items: [{ label: 'Final Render', value: 'default' }] },
+        {
+            title: 'RENDER',
+            items: [
+                { label: 'Final Render', value: 'default' },
+                { label: 'Light Material', value: 'clay' }
+            ]
+        },
         { title: 'MATERIAL CHANNELS', items: materialItems },
         { title: 'UV', items: [{ label: 'UV Colored', value: 'uv0' }, { label: 'UV Checker', value: 'uv_checker' }] }
     ];

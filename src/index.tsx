@@ -226,7 +226,10 @@ const observerData: ObserverData = {
         shadow: true
     },
     shadowCatcher: {
-        enabled: true,
+        // A large transparent shadow plane reads as an unexplained background stain on
+        // ordinary models. It remains available in Light settings when a presentation
+        // explicitly needs a grounded shadow.
+        enabled: false,
         intensity: 0.4,
         heightOffset: 0
     },
