@@ -95,7 +95,7 @@ import {
     ViewCube,
     CameraComponent,
     CameraFrame,
-    SSAOTYPE_COMBINE,
+    SSAOTYPE_LIGHTING,
     SSAOTYPE_NONE,
     platform,
     isCompressedPixelFormat,
@@ -2537,7 +2537,11 @@ class Viewer {
         // RCAS remains our final, existing sharpening pass. Running both sharpeners would create halos.
         frame.rendering.sharpness = 0;
         frame.taa.enabled = taa;
-        frame.ssao.type = this.observer.get('camera.ssao') === true ? SSAOTYPE_COMBINE : SSAOTYPE_NONE;
+        // `combine` multiplies the SSAO texture over the whole composed frame. For a solid
+        // background this also darkens the pixels with no scene geometry, producing the large
+        // cloudy pattern visible around some models. The lighting path applies AO only while
+        // shading lit meshes, leaving the background untouched.
+        frame.ssao.type = this.observer.get('camera.ssao') === true ? SSAOTYPE_LIGHTING : SSAOTYPE_NONE;
         frame.ssao.intensity = Math.max(0, Math.min(1, Number(this.observer.get('camera.ssaoIntensity')) || 0));
         frame.ssao.radius = Math.max(1, Math.min(100, Number(this.observer.get('camera.ssaoRadius')) || 30));
         frame.colorLUT.texture = this.colorLutTexture;
