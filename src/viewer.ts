@@ -95,6 +95,7 @@ import {
     ViewCube,
     CameraComponent,
     CameraFrame,
+    SSAOTYPE_COMBINE,
     SSAOTYPE_LIGHTING,
     SSAOTYPE_NONE,
     platform,
@@ -2537,11 +2538,18 @@ class Viewer {
         // RCAS remains our final, existing sharpening pass. Running both sharpeners would create halos.
         frame.rendering.sharpness = 0;
         frame.taa.enabled = taa;
-        // `combine` multiplies the SSAO texture over the whole composed frame. For a solid
-        // background this also darkens the pixels with no scene geometry, producing the large
-        // cloudy pattern visible around some models. The lighting path applies AO only while
-        // shading lit meshes, leaving the background untouched.
-        frame.ssao.type = this.observer.get('camera.ssao') === true ? SSAOTYPE_LIGHTING : SSAOTYPE_NONE;
+        if (this.observer.get('camera.ssao') !== true) {
+            frame.ssao.type = SSAOTYPE_NONE;
+        } else if (this.observer.get('scene.isTileset') === true) {
+            // Streaming tile materials bypass the camera's lighting-SSAO shader parameter.
+            // They must keep the composition path; otherwise enabling SSAO has no visual
+            // effect on a tileset at all.
+            frame.ssao.type = SSAOTYPE_COMBINE;
+        } else {
+            // For regular models `combine` multiplies AO over the entire composed frame,
+            // including a solid background. Lighting keeps the AO on geometry only.
+            frame.ssao.type = SSAOTYPE_LIGHTING;
+        }
         frame.ssao.intensity = Math.max(0, Math.min(1, Number(this.observer.get('camera.ssaoIntensity')) || 0));
         frame.ssao.radius = Math.max(1, Math.min(100, Number(this.observer.get('camera.ssaoRadius')) || 30));
         frame.colorLUT.texture = this.colorLutTexture;
