@@ -5,7 +5,7 @@ Offline Blender extension exporting selected meshes with embedded UASTC HDR 4×4
 ## Install and use
 
 1. Install the platform ZIP via Blender Preferences → Get Extensions → Install from Disk.
-2. Use a linear Rec.709 EXR directly connected to Principled BSDF Base Color (Lit), or Image Color directly connected to Material Output Surface (Unlit). A Background node with strength 1 is also accepted. Complex node graphs require baking before this preview can export them.
+2. Use a linear Rec.709 EXR directly connected to Principled BSDF Base Color for Lit. For Unlit, use Blender's official glTF shadeless graph: Image Color → Emission Color; Transparent and Emission → Mix Shader inputs 1 and 2; Light Path `Is Camera Ray` → Mix factor; Mix Shader → Material Output Surface. This exports as Base Color with `KHR_materials_unlit` and prevents the surface from lighting the scene in Cycles. Legacy direct Image → Output and Background strength 1 graphs remain accepted. Other complex node graphs require baking before this preview can export them.
 3. Select the objects, switch to Object Mode, then File → Export → HERITAGE3D HDR (.glb).
 4. In the export window enable **Embed HDR textures** and select the materials in the **Material → Base Color texture** list. Eligible maps start checked; unsupported materials show a reason and remain ordinary materials. No material-panel checkbox or persistent material changes are needed.
 5. Choose 2K / 4K / Original and Balanced / High quality. Disable **Embed HDR textures** for an ordinary GLB export without HDR attachments or encoder execution. Esc cancels between preparation stages and during encoding. Large image preparation and Blender's own GLB export are synchronous.
