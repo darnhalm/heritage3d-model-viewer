@@ -94,6 +94,8 @@ type ViewerApi = {
     clearPoiCameraView?: (id: string) => void;
     loadColorLut?: (file: File) => Promise<void>;
     clearColorLut?: () => void;
+    loadHdrSurfaceFiles?: (files: File[]) => Promise<void>;
+    clearHdrSurface?: () => void;
     updatePoiDuration?: (id: string, value: number) => void;
     updatePoiHoldTime?: (id: string, value: number) => void;
     updatePoiTrigger?: (id: string, value: boolean) => void;
@@ -353,8 +355,9 @@ class CameraPanel extends React.Component <{ observerData: ObserverData, setProp
                 <Select
                     label={t('Tonemap', lang)}
                     type='string'
-                    options={['None', 'Linear', 'Neutral', 'Filmic', 'Hejl', 'ACES', 'ACES2'].map(v => ({ v, t: v }))}
-                    value={props.observerData.camera.tonemapping}
+                    options={(props.observerData.runtime.hdrSource ? ['Linear'] : ['None', 'Linear', 'Neutral', 'Filmic', 'Hejl', 'ACES', 'ACES2']).map(v => ({ v, t: v }))}
+                    enabled={!props.observerData.runtime.hdrSource}
+                    value={props.observerData.runtime.hdrSource ? 'Linear' : props.observerData.camera.tonemapping}
                     setProperty={(value: string) => props.setProperty('camera.tonemapping', value)} />
                 <Select
                     label={t('Pixel Scale', lang)}
@@ -429,74 +432,82 @@ class PostProcessingPanel extends React.Component <{ observerData: ObserverData,
         const lutName = camera.colorLutName || '';
         return (
             <Panel headerText={t('Post-processing', lang)} id='postprocessing-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
-                <span title={t('TAA combines current and previous frames to reduce jagged edges and shimmer. It can leave trails on moving objects.', lang)} style={{ display: 'contents' }}>
-                    <Toggle
-                        label='TAA'
-                        value={camera.taa === true}
-                        setProperty={(value: boolean) => setProperty('camera.taa', value)} />
-                </span>
-                <span title={t('EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.', lang)} style={{ display: 'contents' }}>
-                    <Toggle
-                        label='EASU'
-                        value={camera.easu !== false}
-                        setProperty={(value: boolean) => setProperty('camera.easu', value)} />
-                </span>
-                <span title={t('RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.', lang)} style={{ display: 'contents' }}>
+                {observerData.runtime.hdrSource && <>
+                    <Slider label={t('Exposure (EV)', lang)} min={-16} max={16} precision={2} step={0.25}
+                        value={camera.hdrExposure ?? 0} setProperty={(value: number) => setProperty('camera.hdrExposure', value)} />
+                    <div className='materials-layer-inline-hint'>{t('SDR LUT is applied in SDR preview only. Disable HDR output to see it.', lang)}</div>
+                </>}
+                <>
+
+                    <span title={t('TAA combines current and previous frames to reduce jagged edges and shimmer. It can leave trails on moving objects.', lang)} style={{ display: 'contents' }}>
+                        <Toggle
+                            label='TAA'
+                            value={camera.taa === true}
+                            setProperty={(value: boolean) => setProperty('camera.taa', value)} />
+                    </span>
+                    <span title={t('EASU: edge-preserving upscaling from AMD FidelityFX FSR 1.0. Works only when pixel scale is above one.', lang)} style={{ display: 'contents' }}>
+                        <Toggle
+                            label='EASU'
+                            value={camera.easu !== false}
+                            setProperty={(value: boolean) => setProperty('camera.easu', value)} />
+                    </span>
+                    <span title={t('RCAS: contrast-adaptive sharpening from AMD FidelityFX FSR 1.0. Boosts edges and leaves flat areas untouched.', lang)} style={{ display: 'contents' }}>
+                        <Slider
+                            label={t('Sharpness (RCAS)', lang)}
+                            precision={2}
+                            min={0}
+                            max={1}
+                            step={0.05}
+                            value={camera.sharpness ?? 1}
+                            setProperty={(value: number) => setProperty('camera.sharpness', value)} />
+                    </span>
+                    <ColorLutControl
+                        name={lutName}
+                        loadText={t('Load LUT', lang)}
+                        tooltip={t('Color LUT remaps the image colors using a lookup texture for consistent color grading.', lang)}
+                        onLoad={this.chooseLut}
+                        onClear={() => getViewer()?.clearColorLut?.()} />
                     <Slider
-                        label={t('Sharpness (RCAS)', lang)}
+                        label={t('LUT intensity', lang)}
                         precision={2}
                         min={0}
                         max={1}
                         step={0.05}
-                        value={camera.sharpness ?? 1}
-                        setProperty={(value: number) => setProperty('camera.sharpness', value)} />
-                </span>
-                <ColorLutControl
-                    name={lutName}
-                    loadText={t('Load LUT', lang)}
-                    tooltip={t('Color LUT remaps the image colors using a lookup texture for consistent color grading.', lang)}
-                    onLoad={this.chooseLut}
-                    onClear={() => getViewer()?.clearColorLut?.()} />
-                <Slider
-                    label={t('LUT intensity', lang)}
-                    precision={2}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    enabled={!!lutName}
-                    value={camera.colorLutIntensity ?? 1}
-                    setProperty={(value: number) => setProperty('camera.colorLutIntensity', value)} />
-                <span title={t('SSAO adds soft contact shadows in creases and where surfaces meet.', lang)} style={{ display: 'contents' }}>
-                    <Toggle
-                        label='SSAO'
-                        value={camera.ssao === true}
-                        setProperty={(value: boolean) => setProperty('camera.ssao', value)} />
-                </span>
-                <Slider
-                    label={t('SSAO intensity', lang)}
-                    precision={2}
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    enabled={camera.ssao === true}
-                    value={camera.ssaoIntensity ?? 0.5}
-                    setProperty={(value: number) => setProperty('camera.ssaoIntensity', value)} />
-                <Slider
-                    label={t('SSAO radius', lang)}
-                    precision={0}
-                    min={1}
-                    max={100}
-                    step={1}
-                    enabled={camera.ssao === true}
-                    value={camera.ssaoRadius ?? 30}
-                    setProperty={(value: number) => setProperty('camera.ssaoRadius', value)} />
-                <span title={t('MSAA smooths polygon edges within one frame. It is automatically disabled when TAA is enabled.', lang)} style={{ display: 'contents' }}>
-                    <Toggle
-                        label='MSAA'
-                        value={camera.multisample}
-                        enabled={camera.multisampleSupported}
-                        setProperty={(value: boolean) => setProperty('camera.multisample', value)} />
-                </span>
+                        enabled={!!lutName}
+                        value={camera.colorLutIntensity ?? 1}
+                        setProperty={(value: number) => setProperty('camera.colorLutIntensity', value)} />
+                    <span title={t('SSAO adds soft contact shadows in creases and where surfaces meet.', lang)} style={{ display: 'contents' }}>
+                        <Toggle
+                            label='SSAO'
+                            value={camera.ssao === true}
+                            setProperty={(value: boolean) => setProperty('camera.ssao', value)} />
+                    </span>
+                    <Slider
+                        label={t('SSAO intensity', lang)}
+                        precision={2}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        enabled={camera.ssao === true}
+                        value={camera.ssaoIntensity ?? 0.5}
+                        setProperty={(value: number) => setProperty('camera.ssaoIntensity', value)} />
+                    <Slider
+                        label={t('SSAO radius', lang)}
+                        precision={0}
+                        min={1}
+                        max={100}
+                        step={1}
+                        enabled={camera.ssao === true}
+                        value={camera.ssaoRadius ?? 30}
+                        setProperty={(value: number) => setProperty('camera.ssaoRadius', value)} />
+                    <span title={t('MSAA smooths polygon edges within one frame. It is automatically disabled when TAA is enabled.', lang)} style={{ display: 'contents' }}>
+                        <Toggle
+                            label='MSAA'
+                            value={camera.multisample}
+                            enabled={camera.multisampleSupported}
+                            setProperty={(value: boolean) => setProperty('camera.multisample', value)} />
+                    </span>
+                </>
             </Panel>
         );
     }
@@ -579,7 +590,7 @@ class SkyboxPanel extends React.Component <{ observerData: ObserverData, setProp
                     value={skybox?.value}
                     setProperty={(value: string) => props.setProperty('skybox.value', value)} />
                 <Slider
-                    label={t('Exposure', lang)}
+                    label={t('Environment brightness (EV)', lang)}
                     value={skybox?.exposure ?? 0}
                     setProperty={(value: number) => props.setProperty('skybox.exposure', value)}
                     precision={2}
@@ -716,7 +727,7 @@ const MATERIAL_CHANNEL_ITEMS: Array<{ label: string; value: string }> = [
 ];
 
 /** Формат текстуры канала, как его отдаёт вьюер. */
-type ChannelFormat = { container: string; gpu: string; compressed: boolean; width: number; height: number };
+type ChannelFormat = { hdr?: boolean; container: string; gpu: string; compressed: boolean; width: number; height: number };
 
 /**
  * Разобрать карту форматов каналов из observer.
@@ -1302,6 +1313,8 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                 {label}
             </button>
         );
+        const materialVariantNames = parseStringArray(observerData?.scene?.variants?.list);
+        const selectedMaterialVariant = observerData?.scene?.variant?.selected ?? '';
         // Debug buttons are intentionally native: streaming tile/GSplat state can
         // update between clicks, while PCUI Button retains its mount-time callback.
         // Always read the live Observer value so a second click reliably switches
@@ -1426,6 +1439,35 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     {showMaterialsTab && tab === 'materials' && (
                         <Container id='materials-panel' class='tab-panel'>
                             <div className='materials-layer-list'>
+                                {materialVariantNames.length > 0 && (
+                                    <div className='materials-layer-category materials-variant-category'>
+                                        <div className='materials-layer-category-title'>
+                                            {t('Texture Layers', lang)} ({materialVariantNames.length + 1})
+                                        </div>
+                                        {['', ...materialVariantNames].map((variant) => {
+                                            const selected = selectedMaterialVariant === variant;
+                                            const label = variant || t('Original material', lang);
+                                            return (
+                                                <button
+                                                    key={variant || '__original__'}
+                                                    type='button'
+                                                    className={`materials-layer-item materials-layer-item-variant${selected ? ' selected' : ''}`}
+                                                    onClick={() => setProperty('scene.variant.selected', variant)}
+                                                >
+                                                    <span className='materials-layer-item-label'>{label}</span>
+                                                    {selected && (
+                                                        <span className='materials-layer-variant-type'>
+                                                            {observerData?.scene?.unlit ? 'Unlit' : 'Lit (PBR)'}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                        <div className='materials-layer-inline-hint'>
+                                            {t('Embedded glTF material variants; geometry stays unchanged.', lang)}
+                                        </div>
+                                    </div>
+                                )}
                                 {observerData?.scene?.hasGsplat && (
                                     <div className='materials-layer-category'>
                                         <div className='materials-layer-category-title'>{t('Spatial LOD Debug', lang)} (4)</div>
@@ -1517,11 +1559,12 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                                         {item.value === 'default' && observerData?.scene?.isTileset ?
                                                             `${item.label} — ${observerData?.scene?.tilesetLit === true ? 'Lit (PBR)' :
                                                                 (observerData?.scene?.tilesetLit === false ? 'Unlit' : 'Detecting…')}` :
-                                                            item.label}
+                                                            (item.value === 'default' && !observerData.scene.hasGsplat ? `${item.label} — ${observerData.scene.unlit ? 'Unlit' : 'Lit (PBR)'}` : item.label)}
                                                         {observerData?.debug?.withTextureOnly && item.filename ? <span className='materials-layer-item-filename' title={item.filename}> {item.filename}</span> : null}
                                                     </span>
                                                     {item.format ? (
                                                         <span className='materials-layer-item-texinfo'>
+                                                            {item.format.hdr && <span className='materials-layer-item-format' title={t('HDR source texture', lang)}>HDR</span>}
                                                             <span
                                                                 className='materials-layer-item-size'
                                                                 title={t('Texture resolution in pixels', lang)}

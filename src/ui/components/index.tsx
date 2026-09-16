@@ -63,13 +63,22 @@ export const Toggle = (props: {
     setProperty: (value: boolean) => void,
     value: boolean }) => {
 
+    const input = React.useRef<BooleanInput>(null);
+    const onChange = React.useRef(props.setProperty);
+    onChange.current = props.setProperty;
+
     return <Container class='panel-option' enabled={props.enabled ?? true}>
         <PanelLabel text={props.label} />
-        <BooleanInput
+        <BooleanInput ref={input}
             class='panel-value-boolean'
             type='toggle'
             value={props.value}
-            onChange={(value: boolean) => props.setProperty(value)} />
+            onChange={(value: boolean) => {
+                // PCUI 5.5 marks React value writes, but BooleanInput still emits change.
+                // Do not send a stale React snapshot back into the live observer.
+                const element = input.current?.element as unknown as { _suppressChange?: boolean };
+                if (!element?._suppressChange) onChange.current(value);
+            }} />
     </Container>;
 };
 

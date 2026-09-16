@@ -12,6 +12,8 @@ import {
     EVENT_KEYUP,
     FILTER_LINEAR,
     FILTER_NEAREST,
+    GAMMA_NONE,
+    PIXELFORMAT_RGBA16F,
     KEY_CONTROL,
     KEY_ESCAPE,
     KEY_F,
@@ -68,6 +70,7 @@ import {
     GSplatResourceBase,
     Keyboard,
     Mat4,
+    Material,
     Mesh,
     MeshInstance,
     MorphInstance,
@@ -110,6 +113,10 @@ import { ClipBoxMaterials } from './clip-box';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
+import { HdrDisplay } from './hdr/display';
+import { EmbeddedHdrDocument, EmbeddedHdrSurface, readEmbeddedHdr } from './hdr/embedded';
+import { HdrOutput } from './hdr/output';
+import { HdrSurface } from './hdr/surface';
 import { SD_PIXEL_SCALE } from './helpers';
 import { t } from './i18n/translations';
 import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
@@ -308,11 +315,12 @@ type GSplatFrozenLodCamera = {
 };
 type TextureAssetFile = { filename?: string };
 /** Формат текстуры канала: имя, сжатость для GPU и размер в пикселях. */
-type ChannelFormat = { container: string; gpu: string; compressed: boolean; width: number; height: number } | undefined;
+type ChannelFormat = { hdr?: boolean; container: string; gpu: string; compressed: boolean; width: number; height: number } | undefined;
 type TextureLike = {
     name?: string;
 };
 type MaterialLike = {
+    useLighting?: boolean;
     name?: string;
     diffuseMap?: TextureLike | null;
     metalnessMap?: TextureLike | null;
@@ -1126,6 +1134,30 @@ class Viewer {
     multiframe: Multiframe | null;
 
     multiframeBusy = false;
+
+    private hdrTaaFrames = 0;
+
+    private hdrSurface: HdrSurface | null = null;
+
+    private hdrOutput: HdrOutput | null = null;
+
+    private hdrAbort: AbortController | null = null;
+
+    private embeddedHdr = new WeakMap<Asset, EmbeddedHdrSurface>();
+
+    /** Исходная привязка материала каждого примитива до применения KHR_materials_variants. */
+    private variantBaseMaterials = new Map<MeshInstance, Material>();
+
+    private hdrCameraState = new Map<CameraComponent, { gamma: number; tone: number }>();
+
+    private hdrDisplay = new HdrDisplay();
+
+    private hdrMedia = window.matchMedia('(dynamic-range: high)');
+
+    private onHdrDisplayChange = () => {
+        this.updateHdrDisplay();
+        this.renderNextFrame();
+    };
 
     /** CameraFrame exists only while at least one of TAA, SSAO or Color LUT is active. */
     private postProcessingFrame: CameraFrame | null = null;
@@ -2014,6 +2046,9 @@ class Viewer {
 
         this.app.scene.layers.getLayerByName('World').transparentSortMode = SORTMODE_BACK2FRONT;
 
+        this.hdrMedia.addEventListener('change', this.onHdrDisplayChange);
+        window.addEventListener('focus', this.onHdrDisplayChange);
+
         // start the application
         app.start();
     }
@@ -2435,6 +2470,9 @@ class Viewer {
 
     destroy() {
         if (this.destroyed) return;
+        this.hdrMedia.removeEventListener('change', this.onHdrDisplayChange);
+        window.removeEventListener('focus', this.onHdrDisplayChange);
+        this.clearHdrSurface();
         this.destroyed = true;
         this.tileReplayTimeline?.destroy();
         this.tileReplayTimeline = null;
@@ -2484,6 +2522,10 @@ class Viewer {
      * @returns Whether an effect backed by CameraFrame is active.
      */
     private isPostProcessingRequested(): boolean {
+        if (this.hdrSurface) {
+            return this.observer.get('camera.taa') === true ||
+            this.observer.get('camera.ssao') === true || this.observer.get('camera.multisample') === true;
+        }
         return this.observer.get('camera.taa') === true ||
             this.observer.get('camera.ssao') === true ||
             this.colorLutTexture !== null;
@@ -2527,12 +2569,13 @@ class Viewer {
         // CameraFrame's compose pass writes an opaque result. Our normal path leaves the canvas
         // transparent and shows the solid background through CSS, so feed that color into the
         // scene clear while CameraFrame is active instead of allowing an opaque black background.
-        if (this.observer.get('skybox.background') === 'Solid Color') {
+        if (!this.hdrSurface && this.observer.get('skybox.background') === 'Solid Color') {
             const background = Viewer.sanitizeRgb(this.observer.get('skybox.backgroundColor'), { r: 0.5, g: 0.5, b: 0.5 });
             camera.clearColor = new Color(background.r, background.g, background.b, 1);
         }
         const taa = this.observer.get('camera.taa') === true;
         const maxSamples = Number((this.app.graphicsDevice as GraphicsDevice & { maxSamples?: number }).maxSamples ?? 1);
+        if (this.hdrSurface) frame.rendering.renderFormats = [PIXELFORMAT_RGBA16F];
         frame.rendering.samples = !taa && this.observer.get('camera.multisample') ? maxSamples : 1;
         frame.rendering.toneMapping = camera.toneMapping;
         // RCAS remains our final, existing sharpening pass. Running both sharpeners would create halos.
@@ -2540,7 +2583,7 @@ class Viewer {
         frame.taa.enabled = taa;
         if (this.observer.get('camera.ssao') !== true) {
             frame.ssao.type = SSAOTYPE_NONE;
-        } else if (this.observer.get('scene.isTileset') === true) {
+        } else if (this.hdrSurface || this.observer.get('scene.isTileset') === true) {
             // Streaming tile materials bypass the camera's lighting-SSAO shader parameter.
             // They must keep the composition path; otherwise enabling SSAO has no visual
             // effect on a tileset at all.
@@ -2552,9 +2595,90 @@ class Viewer {
         }
         frame.ssao.intensity = Math.max(0, Math.min(1, Number(this.observer.get('camera.ssaoIntensity')) || 0));
         frame.ssao.radius = Math.max(1, Math.min(100, Number(this.observer.get('camera.ssaoRadius')) || 30));
-        frame.colorLUT.texture = this.colorLutTexture;
+        frame.colorLUT.texture = this.hdrSurface ? null : this.colorLutTexture;
         frame.colorLUT.intensity = Math.max(0, Math.min(1, Number(this.observer.get('camera.colorLutIntensity')) || 0));
         frame.update();
+    }
+
+    private updateHdrDisplay() {
+        this.hdrDisplay.update(this.app.graphicsDevice, !!this.hdrSurface && this.hdrMedia.matches);
+        const available = this.app.graphicsDevice.isHdr && this.hdrMedia.matches;
+        this.observer.set('runtime.hdrAvailable', available);
+        this.observer.set('runtime.hdrActive', !!this.hdrSurface && available && this.observer.get('runtime.hdrRequested') !== false);
+    }
+
+    async loadHdrSurface(url: string, resolveUri?: (uri: string) => string, embedded?: EmbeddedHdrSurface): Promise<void> {
+        this.clearHdrSurface();
+        if (this.entityAssets.length !== 1 || this.observer.get('scene.isTileset')) {
+            throw new Error('HDR: first load one GLB model.');
+        }
+        const abort = new AbortController();
+        this.hdrAbort = abort;
+        this.observer.set('runtime.hdrLoading', true);
+        const resource = this.entityAssets[0].asset.resource as ContainerResource;
+        try {
+            const materials = (resource as ContainerResource & { materials: Asset[] }).materials.map(asset => asset.resource as StandardMaterial);
+            const surface = embedded ?
+                await HdrSurface.loadData(this.app.graphicsDevice, embedded.manifest, materials, this.meshInstances, abort.signal, embedded.read) :
+                await HdrSurface.load(this.app.graphicsDevice, url, materials, this.meshInstances, abort.signal, resolveUri);
+            this.hdrSurface = surface;
+            this.hdrOutput = new HdrOutput(this.app.graphicsDevice);
+            this.observer.set('runtime.hdrSource', true);
+            this.observer.set('runtime.hdrTextureBytes', surface.bytes);
+            this.updateHdrDisplay();
+            this.destroyRenderTargets();
+            this.updateMaterialChannelInfo();
+            this.renderNextFrame();
+        } catch (error) {
+            if (!abort.signal.aborted) this.clearHdrSurface();
+            throw error;
+        } finally {
+            if (this.hdrAbort === abort) this.observer.set('runtime.hdrLoading', false);
+        }
+    }
+
+    async loadHdrSurfaceFiles(files: globalThis.File[]): Promise<void> {
+        const manifest = files.find(file => file.name.endsWith('.surface.json'));
+        if (!manifest) throw new Error('HDR: select a .surface.json file together with its .bin or .ktx2 textures.');
+        if (new Set(files.map(file => file.name)).size !== files.length) throw new Error('HDR: selected files must have unique names.');
+        const urls = new Map(files.map(file => [file.name, URL.createObjectURL(file)]));
+        try {
+            await this.loadHdrSurface(urls.get(manifest.name), (uri) => {
+                const name = uri.replace(/^\.\//, '');
+                const found = urls.get(name);
+                if (!found) throw new Error(`HDR: missing local texture ${name}`);
+                return found;
+            });
+        } finally {
+            urls.forEach(url => URL.revokeObjectURL(url));
+        }
+    }
+
+    clearHdrSurface() {
+        this.hdrAbort?.abort();
+        this.hdrAbort = null;
+        const wasActive = !!this.hdrSurface;
+        this.hdrSurface?.destroy();
+        this.hdrSurface = null;
+        this.hdrDisplay.update(this.app.graphicsDevice, false);
+        this.hdrOutput?.destroy();
+        this.hdrOutput = null;
+        for (const [camera, state] of this.hdrCameraState) {
+            camera.gammaCorrection = state.gamma;
+            camera.toneMapping = state.tone;
+        }
+        this.hdrCameraState.clear();
+        this.observer.set('runtime.hdrSource', false);
+        this.observer.set('runtime.hdrActive', false);
+        this.observer.set('runtime.hdrLoading', false);
+        this.observer.set('runtime.hdrTextureBytes', 0);
+        if (wasActive) {
+            this.multiframe.enabled = !!this.observer.get('camera.hq') && !this.observer.get('camera.taa');
+            this.setTonemapping(this.observer.get('camera.tonemapping'));
+            this.destroyRenderTargets();
+            this.updateMaterialChannelInfo();
+            this.renderNextFrame();
+        }
     }
 
     removePoi(id: string) {
@@ -2742,6 +2866,10 @@ class Viewer {
                 this.updateFragmentGizmo();
                 // Куб и переключатель проекции живут вместе с панелью изолированного просмотра.
                 this.updateViewCubeVisibility();
+            },
+            'camera.hdrExposure': () => this.renderNextFrame(),
+            'runtime.hdrRequested': () => {
+                this.updateHdrDisplay(); this.renderNextFrame();
             },
             // camera
             'camera.fov': this.setFov.bind(this),
@@ -3590,7 +3718,7 @@ class Viewer {
         const maxSamplesEarly = Number((device as GraphicsDevice & { maxSamples?: number }).maxSamples ?? 1);
         // CameraFrame performs MSAA in its internal scene target. Its outer destination must stay
         // single-sampled; multisampling a fullscreen compose pass adds cost without improving edges.
-        const wantSamples = this.isPostProcessingRequested() ? 1 :
+        const wantSamples = (this.hdrSurface || this.isPostProcessingRequested()) ? 1 :
             (this.observer.get('camera.multisample') ? maxSamplesEarly : 1);
 
         // Понижение на время движения — это переключение между двумя размерами, туда и обратно
@@ -3647,14 +3775,14 @@ class Viewer {
         const maxSamples = Number((device as GraphicsDevice & { maxSamples?: number }).maxSamples ?? 1);
 
         // in with the new
-        const colorBuffer = createTexture(widthPixels, heightPixels, PIXELFORMAT_RGBA8, FILTER_LINEAR);
+        const colorBuffer = createTexture(widthPixels, heightPixels, this.hdrSurface ? PIXELFORMAT_RGBA16F : PIXELFORMAT_RGBA8, FILTER_LINEAR);
         const depthBuffer = createTexture(widthPixels, heightPixels, PIXELFORMAT_DEPTH, FILTER_NEAREST);
         const renderTarget = new RenderTarget({
             name: 'viewer-rt',
             colorBuffer: colorBuffer,
             depthBuffer: depthBuffer,
             flipY: false,
-            samples: this.isPostProcessingRequested() ? 1 :
+            samples: (this.hdrSurface || this.isPostProcessingRequested()) ? 1 :
                 (this.observer.get('camera.multisample') ? maxSamples : 1),
             autoResolve: false
         });
@@ -3664,6 +3792,7 @@ class Viewer {
 
     // reset the viewer, unloading resources
     resetScene() {
+        this.clearHdrSurface();
         const app = this.app;
 
         this.surfacePivotController?.reset();
@@ -3705,6 +3834,8 @@ class Viewer {
         this.assets = [];
 
         this.meshInstances = [];
+        this.entityAssets = [];
+        this.variantBaseMaterials.clear();
         // A selected GraphNode belongs to the model being destroyed. Clear both the
         // runtime reference and observer state so a subsequently loaded model with the
         // same node path can still emit a fresh selection change.
@@ -3773,6 +3904,7 @@ class Viewer {
 
         const getTextureFilename = (tex: TextureLike | null | undefined): string | undefined => {
             if (!tex) return undefined;
+            if (tex.name?.startsWith('HDR:')) return tex.name.slice(4);
             const texAssets = this.app.assets.filter((a: Asset) => a.type === 'texture');
             const texAsset = texAssets.find((a: Asset) => a.resource === tex);
             const file = texAsset?.file as TextureAssetFile | undefined;
@@ -3792,7 +3924,8 @@ class Viewer {
             const ext = (getTextureFilename(tex) ?? '').split('.').pop()?.toLowerCase() ?? '';
             const container = ({ ktx2: 'KTX2', ktx: 'KTX', basis: 'BASIS', dds: 'DDS', png: 'PNG', jpg: 'JPEG', jpeg: 'JPEG', webp: 'WEBP' })[ext];
             return {
-                container: container ?? '—',
+                container: tex?.name?.startsWith('HDR:') ? (tex.name.endsWith('.ktx2') ? 'KTX2' : 'FP16') : (container ?? '—'),
+                hdr: tex?.name?.startsWith('HDR:') === true,
                 gpu: pixelFormatInfo.get(texture.format)?.name ?? `формат ${texture.format}`,
                 compressed: isCompressedPixelFormat(texture.format),
                 width: texture.width ?? 0,
@@ -3805,10 +3938,11 @@ class Viewer {
             if (typeof mat.name === 'string' && mat.name.trim()) {
                 materialNames.add(mat.name.trim());
             }
-            if (mat.diffuseMap) {
+            const baseColorMap = mat.useLighting === false ? mat.emissiveMap : mat.diffuseMap;
+            if (baseColorMap) {
                 channelsWithTextures.add('albedo');
-                if (!channelFilenames.albedo) channelFilenames.albedo = getTextureFilename(mat.diffuseMap) ?? '';
-                if (!channelFormats.albedo) channelFormats.albedo = getTextureFormat(mat.diffuseMap);
+                if (!channelFilenames.albedo) channelFilenames.albedo = getTextureFilename(baseColorMap) ?? '';
+                if (!channelFormats.albedo) channelFormats.albedo = getTextureFormat(baseColorMap);
             }
             if (mat.metalnessMap) {
                 channelsWithTextures.add('metalness');
@@ -3830,7 +3964,7 @@ class Viewer {
                 if (!channelFilenames.specularity) channelFilenames.specularity = getTextureFilename(mat.specularMap) ?? '';
                 if (!channelFormats.specularity) channelFormats.specularity = getTextureFormat(mat.specularMap);
             }
-            if (mat.emissiveMap) {
+            if (mat.useLighting !== false && mat.emissiveMap) {
                 channelsWithTextures.add('emission');
                 if (!channelFilenames.emission) channelFilenames.emission = getTextureFilename(mat.emissiveMap) ?? '';
                 if (!channelFormats.emission) channelFormats.emission = getTextureFormat(mat.emissiveMap);
@@ -3854,11 +3988,8 @@ class Viewer {
                 meshes.forEach((mi: MeshInstance) => collectFromMaterial(mi.material));
             });
         } else {
-            this.assets.forEach((asset) => {
-                if (asset.type === 'gsplat') return;
-                const resource = asset.resource as ContainerResourceLike | null;
-                (resource?.materials ?? []).forEach((matAsset: Asset) => collectFromMaterial(matAsset?.resource as MaterialLike | null | undefined));
-            });
+            const materials = new Set(this.meshInstances.map(mi => mi.material));
+            materials.forEach(material => collectFromMaterial(material));
         }
 
         this.observer.set('scene.materialChannelsWithTextures', JSON.stringify([...channelsWithTextures]));
@@ -4567,9 +4698,12 @@ class Viewer {
         this.observer.set('scene.unlit', materialCount > 0 && litMaterialCount === 0);
         this.applyUnlitShadowCatcherDefault();
 
-        // variant stats
+        // KHR_materials_variants: сохраняем исходные привязки отдельно, потому что
+        // ContainerResource.applyMaterialVariant(entity, null) заменяет их общим default material.
+        this.variantBaseMaterials = new Map(this.meshInstances.map(instance => [instance, instance.material]));
+        variants = [...new Set(variants)];
         this.observer.set('scene.variants.list', JSON.stringify(variants));
-        this.observer.set('scene.variant.selected', variants[0]);
+        this.observer.set('scene.variant.selected', '');
 
         // detect cameras in the loaded scene
         const cameras: Array<SceneCamera> = [];
@@ -4586,6 +4720,45 @@ class Viewer {
 
         this.observer.set('scene.cameras', JSON.stringify(cameras));
         this.observer.set('scene.selectedCamera', '');
+    }
+
+    private async readDisplayPixels(texture: Texture): Promise<Uint32Array> {
+        if (!this.hdrSurface || !this.hdrOutput) {
+            return texture.read(0, 0, texture.width, texture.height) as Promise<Uint32Array>;
+        }
+        const colorBuffer = new Texture(this.app.graphicsDevice, {
+            name: 'hdr-sdr-export',
+            width: texture.width,
+            height: texture.height,
+            format: PIXELFORMAT_RGBA8,
+            mipmaps: false
+        });
+        const target = new RenderTarget({ colorBuffer, depth: false });
+        try {
+            // PNGs and publication covers are SDR derivatives, never raw float buffers.
+            this.hdrOutput.render(texture, this.observer.get('camera.hdrExposure'), false, target,
+                this.postProcessingTarget?.colorBuffer === texture && !!this.postProcessingFrame,
+                this.colorLutTexture, this.observer.get('camera.colorLutIntensity'),
+                { easu: this.observer.get('camera.easu') !== false, sharpness: Number(this.observer.get('camera.sharpness') ?? 1) });
+            const pixels = await colorBuffer.read(0, 0, texture.width, texture.height, { renderTarget: target, immediate: true });
+            const result = new Uint32Array(pixels.buffer.slice(pixels.byteOffset, pixels.byteOffset + pixels.byteLength));
+            // WebGL reads the intermediate SDR target bottom-up. PNG encoding expects
+            // top-down rows; WebGPU's readback already has that orientation.
+            if (!this.app.graphicsDevice.isWebGPU) {
+                const row = new Uint32Array(texture.width);
+                for (let y = 0; y < Math.floor(texture.height / 2); y++) {
+                    const top = y * texture.width;
+                    const bottom = (texture.height - 1 - y) * texture.width;
+                    row.set(result.subarray(top, top + texture.width));
+                    result.copyWithin(top, bottom, bottom + texture.width);
+                    result.set(row, bottom);
+                }
+            }
+            return result;
+        } finally {
+            target.destroy();
+            colorBuffer.destroy();
+        }
     }
 
     downloadPngScreenshot() {
@@ -4611,7 +4784,7 @@ class Viewer {
         this.renderNextFrame();
         this.app.once('postrender', () => {
             const texture = this.camera.camera.renderTarget.colorBuffer;
-            texture.read(0, 0, texture.width, texture.height).then((typedArray: Uint32Array) => {
+            this.readDisplayPixels(texture).then((typedArray: Uint32Array) => {
                 this.pngExporter.export(
                     `${filename}.png`,
                     new Uint32Array(typedArray.buffer.slice(0)),
@@ -4662,7 +4835,7 @@ class Viewer {
                         done(null);
                         return;
                     }
-                    texture.read(0, 0, texture.width, texture.height).then((typedArray: Uint32Array) => {
+                    this.readDisplayPixels(texture).then((typedArray: Uint32Array) => {
                         return this.pngExporter.encode(
                             new Uint32Array(typedArray.buffer.slice(0)),
                             texture.width,
@@ -4711,7 +4884,7 @@ class Viewer {
                 name: 'cover-rt-texture',
                 width: w,
                 height: h,
-                format: PIXELFORMAT_RGBA8,
+                format: this.hdrSurface ? PIXELFORMAT_RGBA16F : PIXELFORMAT_RGBA8,
                 mipmaps: false,
                 minFilter: FILTER_NEAREST,
                 magFilter: FILTER_NEAREST,
@@ -4754,7 +4927,7 @@ class Viewer {
                     resolve(null);
                     return;
                 }
-                texture.read(0, 0, COVER_SIZE, COVER_SIZE).then((typedArray: Uint32Array) => {
+                this.readDisplayPixels(texture).then((typedArray: Uint32Array) => {
                     return this.pngExporter.encode(
                         new Uint32Array(typedArray.buffer.slice(0)),
                         COVER_SIZE,
@@ -4859,7 +5032,7 @@ class Viewer {
                 name: 'topdown-rt-texture',
                 width: w,
                 height: h,
-                format: PIXELFORMAT_RGBA8,
+                format: this.hdrSurface ? PIXELFORMAT_RGBA16F : PIXELFORMAT_RGBA8,
                 mipmaps: false,
                 minFilter: FILTER_NEAREST,
                 magFilter: FILTER_NEAREST,
@@ -4913,7 +5086,7 @@ class Viewer {
                     resolve(null);
                     return;
                 }
-                texture.read(0, 0, SIZE, SIZE).then((typedArray: Uint32Array) => {
+                this.readDisplayPixels(texture).then((typedArray: Uint32Array) => {
                     return this.pngExporter.encode(
                         new Uint32Array(typedArray.buffer.slice(0)),
                         SIZE,
@@ -6273,8 +6446,17 @@ class Viewer {
                 }
             };
 
+            const hdrViews = new Map<object, Uint8Array>();
+            let embeddedSurface: EmbeddedHdrSurface | undefined;
             const containerAssetOptions: AssetLoadProcessOptions = {
+                global: {
+                    postprocess: (gltf: EmbeddedHdrDocument) => {
+                        embeddedSurface = readEmbeddedHdr(gltf, hdrViews);
+                        hdrViews.clear();
+                    }
+                },
                 bufferView: {
+                    postprocess: (view: object, bytes: Uint8Array) => hdrViews.set(view, bytes),
                     processAsync: processBufferView
                 },
                 image: {
@@ -6316,6 +6498,7 @@ class Viewer {
             };
 
             containerAsset.on('load', () => {
+                if (embeddedSurface) this.embeddedHdr.set(containerAsset, embeddedSurface);
                 stopCountingTextures();
                 resolve(containerAsset);
             });
@@ -6737,6 +6920,7 @@ class Viewer {
         );
 
         if (hasModelFilename) {
+            this.clearHdrSurface();
             if (resetScene) {
                 this.resetScene();
             }
@@ -6938,6 +7122,9 @@ class Viewer {
                             this.applyUnlitShadowCatcherDefault();
                         }
                         this.renderNextFrame();
+                        if (this.observer.get('scene.urls')[0] === firstModelUrl) {
+                            this.loadEmbeddedHdrForActiveVariant();
+                        }
                     })
                     .catch(err => console.warn('[model-viewer] Background settings apply failed:', err));
                 })
@@ -8049,6 +8236,13 @@ class Viewer {
     }
 
     setSelectedVariant(variant: string) {
+        if (this.hdrSurface || this.hdrAbort) this.clearHdrSurface();
+
+        // Всегда начинаем с исходной привязки. Вариант может описывать лишь часть
+        // примитивов; без сброса остальные сохранили бы материал предыдущего варианта.
+        for (const [instance, material] of this.variantBaseMaterials) {
+            instance.material = material;
+        }
         if (variant) {
             this.entityAssets.forEach((entityAsset) => {
                 const resource = entityAsset.asset.resource as ContainerResource;
@@ -8056,17 +8250,46 @@ class Viewer {
                     resource.applyMaterialVariant(entityAsset.entity, variant);
                 }
             });
-            if (Object.keys(this.materialFactorOverrides).length > 0) {
-                this.applyMaterialOverrides(this.materialFactorOverrides);
+            // Варианты glTF имеют право описывать только часть примитивов. Текущий
+            // PlayCanvas оставляет material undefined, если у примитива есть другие
+            // mappings, но нет выбранного; для него должен остаться исходный материал.
+            for (const [instance, material] of this.variantBaseMaterials) {
+                if (!instance.material) instance.material = material;
             }
-            this.updateMaterialChannelInfo();
-            this.updateSelectedMaterialFactors();
-            this.updateSelectedMaterialColor();
-            this.updateSelectedSpecularColor();
-            this.updateSelectedUvSets();
-            this.updateTexelDensityStats();
-            this.dirtyTexelDensityHeatmap = true;
-            this.renderNextFrame();
+        }
+        if (Object.keys(this.materialFactorOverrides).length > 0) {
+            this.applyMaterialOverrides(this.materialFactorOverrides);
+        }
+        const activeMaterials = [...new Set(this.meshInstances.map(instance => instance.material as StandardMaterial))];
+        this.observer.set('scene.unlit', activeMaterials.length > 0 && activeMaterials.every(material => material.useLighting === false));
+        this.applyUnlitShadowCatcherDefault();
+        this.updateMaterialChannelInfo();
+        this.updateSelectedMaterialFactors();
+        this.updateSelectedMaterialColor();
+        this.updateSelectedSpecularColor();
+        this.updateSelectedUvSets();
+        this.updateTexelDensityStats();
+        this.dirtyTexelDensityHeatmap = true;
+        this.renderNextFrame();
+        this.loadEmbeddedHdrForActiveVariant();
+    }
+
+    /** Подключает только ту встроенную HDR-карту, чей материал активен в выбранном варианте. */
+    private async loadEmbeddedHdrForActiveVariant() {
+        const asset = this.entityAssets.length === 1 ? this.entityAssets[0].asset : undefined;
+        const embedded = asset && this.embeddedHdr.get(asset);
+        if (!asset || !embedded || this.observer.get('scene.isTileset')) return;
+        const resource = asset.resource as ContainerResource & { materials: Asset[] };
+        const materials = resource.materials.map(materialAsset => materialAsset.resource as StandardMaterial);
+        const active = new Set(this.meshInstances.map(instance => instance.material));
+        const hasActiveHdrBinding = embedded.manifest.textures.some(entry => active.has(materials[entry.material]));
+        if (!hasActiveHdrBinding) return;
+        try {
+            await this.loadHdrSurface('', undefined, embedded);
+        } catch (error) {
+            if (!(error instanceof DOMException && error.name === 'AbortError')) {
+                this.observer.set('ui.error', String(error));
+            }
         }
     }
 
@@ -8499,7 +8722,8 @@ class Viewer {
         // Clay is deliberately a normal forward pass: its neutral material still receives
         // direct/environment light and casts/receives shadows. The remaining modes are
         // PlayCanvas diagnostic shader passes.
-        this.camera.camera.setShaderPass((renderMode !== 'default' && !nextUvDebugMode && !clayMode) ? `debug_${renderMode}` : 'forward');
+        const channelMode = renderMode === 'albedo' && this.observer.get('scene.unlit') ? 'emission' : renderMode;
+        this.camera.camera.setShaderPass((renderMode !== 'default' && !nextUvDebugMode && !clayMode) ? `debug_${channelMode}` : 'forward');
         this.renderNextFrame();
     }
 
@@ -8776,6 +9000,7 @@ class Viewer {
 
     renderNextFrame() {
         this.app.renderNextFrame = true;
+        if (this.hdrSurface && this.observer.get('camera.taa')) this.hdrTaaFrames = 16;
         if (this.multiframe) {
             this.multiframe.moved();
         }
@@ -9357,6 +9582,15 @@ class Viewer {
         this.updateCameraMotion();
         this.updateTileFocus();
 
+        if (this.hdrSurface) {
+            const camera = this.getRenderingCamera();
+            if (!this.hdrCameraState.has(camera)) {
+                this.hdrCameraState.set(camera, { gamma: camera.gammaCorrection, tone: camera.toneMapping });
+            }
+            camera.gammaCorrection = GAMMA_NONE;
+            camera.toneMapping = TONEMAP_NONE;
+            this.multiframe.enabled = false;
+        }
         // rebuild render targets
         this.rebuildRenderTargets();
         // Optional post-processing is attached only after the final destination target exists.
@@ -10561,7 +10795,14 @@ class Viewer {
 
         // perform multiframe update. returned flag indicates whether more frames
         // are needed.
-        this.multiframeBusy = this.multiframe.update();
+        if (this.hdrSurface && rt?.colorBuffer && this.hdrOutput) {
+            this.hdrOutput.render(rt.colorBuffer, this.observer.get('camera.hdrExposure'), this.observer.get('runtime.hdrActive'), null,
+                !!this.postProcessingFrame, this.colorLutTexture, this.observer.get('camera.colorLutIntensity'),
+                { easu: this.observer.get('camera.easu') !== false, sharpness: Number(this.observer.get('camera.sharpness') ?? 1) });
+            this.multiframeBusy = this.observer.get('camera.taa') && --this.hdrTaaFrames > 0;
+        } else {
+            this.multiframeBusy = this.multiframe.update();
+        }
 
         if (this.perfEnabled) {
             this.perfOnPostrenderTotalMs += performance.now() - perfStart;

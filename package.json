@@ -57,6 +57,7 @@
     "scripts": {
         "build": "rollup -c",
     "benchmark:navigation": "npm run build && node scripts/benchmark-navigation.mjs",
+    "benchmark:hdr": "npm run build && node scripts/benchmark-hdr.mjs",
     "benchmark:postprocessing": "npm run build && node scripts/benchmark-postprocessing.mjs",
     "benchmark:render-scale": "npm run build && node scripts/benchmark-render-scale.mjs",
         "benchmark:tiles": "npm run build && node scripts/benchmark-tiles.mjs",

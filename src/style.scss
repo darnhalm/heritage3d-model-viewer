@@ -632,6 +632,18 @@ body:not(.ui-ready) #panel-left {
     cursor: default;
 }
 
+.materials-layer-variant-type {
+    flex: 0 0 auto;
+    margin-left: 8px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #aaa;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
 .materials-layer-item-inline-icon {
     width: 18px;
     height: 18px;
@@ -4776,4 +4788,19 @@ $panel-focus-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
 .tile-playback-glyph-stack .tile-recording-badge {
     color: #ef4444;
     font-variation-settings: 'FILL' 1;
+}
+
+.hdr-button {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 0;
+    &.hdr-active {
+        background-color: rgba(var(--theme-primary-rgb), 0.2);
+        border-color: var(--theme-primary);
+    }
+}
+
+.hdr-button.hdr-inactive {
+    text-decoration: line-through;
+    text-decoration-thickness: 2px;
 }

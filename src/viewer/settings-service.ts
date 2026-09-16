@@ -415,6 +415,7 @@ class SettingsService {
         const o = this.observer;
         o.set('camera.fov', 40);
         o.set('camera.tonemapping', 'Linear');
+        o.set('camera.hdrExposure', 0);
         // Все три величины задаём явно, а не через обработчик `camera.hq`. Наблюдатель не
         // рассылает событие на присвоение прежнего значения, а на телефоне `hq` и так уже
         // `false` — обработчик не срабатывал, и сброс оставлял устройству полное разрешение.
@@ -541,7 +542,7 @@ class SettingsService {
             SettingsService.SETTINGS_FILTER_PATHS;
         const blockedKeys = new Set(['__proto__', 'constructor', 'prototype']);
         const colorPaths = ['skybox.backgroundColor', 'light.color', 'theme.primaryColor', 'debug.wireframeColor'];
-        const numericPaths = new Set(['measure.unitScale', 'measure.knownDistance', 'camera.fov', 'camera.flySpeed', 'skybox.exposure', 'debug.selectedUvSet']);
+        const numericPaths = new Set(['measure.unitScale', 'measure.knownDistance', 'camera.fov', 'camera.flySpeed', 'skybox.exposure', 'camera.hdrExposure', 'debug.selectedUvSet']);
         const clampFinite = (value: unknown, min: number, max: number): number | null => {
             const n = Number(value);
             if (!Number.isFinite(n)) return null;
@@ -557,6 +558,8 @@ class SettingsService {
                     return clampFinite(value, 35, 150);
                 case 'camera.flySpeed':
                     return clampFinite(value, 0.1, 5);
+                case 'camera.hdrExposure':
+                    return clampFinite(value, -16, 16);
                 case 'skybox.exposure':
                     return clampFinite(value, -6, 6);
                 case 'debug.selectedUvSet':

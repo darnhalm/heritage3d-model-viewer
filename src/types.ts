@@ -70,6 +70,7 @@ export interface ObserverData {
         }
     },
     camera: {
+        hdrExposure?: number,
         fov: number,
         tonemapping: string,
         pixelScale: number,
@@ -286,7 +287,8 @@ export interface ObserverData {
         texelDensitySummary?: string,
         texelDensityReport?: string,
         variant: {
-            selected: number
+            /** Пустая строка означает исходные материалы glTF. */
+            selected: string
         },
         variants: {
             list: string
@@ -308,6 +310,12 @@ export interface ObserverData {
         targets: Record<string, MorphTargetData>
     }>,
     runtime: {
+        hdrSource?: boolean,
+        hdrLoading?: boolean,
+        hdrAvailable?: boolean,
+        hdrActive?: boolean,
+        hdrRequested?: boolean,
+        hdrTextureBytes?: number,
         activeDeviceType: string,
         // User-requested graphics backend: 'auto' | 'webgpu' | 'webgl'. Device-local, never stored in model settings.
         requestedBackend: 'auto' | 'webgpu' | 'webgl',

@@ -1,0 +1,12 @@
+schema_version = "1.0.0"
+id = "heritage3d_hdr"
+version = "0.2.0"
+name = "HERITAGE3D HDR Export"
+tagline = "Export embedded HDR Base Color textures in GLB"
+maintainer = "HERITAGE3D"
+type = "add-on"
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+tags = ["Import-Export"]
+[permissions]
+files = "Read textures, run bundled KTX encoder and write GLB files"

@@ -160,6 +160,7 @@ const observerData: ObserverData = {
         }
     },
     camera: {
+        hdrExposure: 0,
         fov: 40,
         tonemapping: 'Linear',
         // Узкий экран стартует в SD: половинное разрешение и без накопления. Это единственная
@@ -331,7 +332,7 @@ const observerData: ObserverData = {
         texelDensitySummary: '',
         texelDensityReport: '[]',
         variant: {
-            selected: 0
+            selected: ''
         },
         variants: {
             list: '[]'
@@ -510,6 +511,8 @@ const saveOptions = (observer: Observer, name: string) => {
         delete camera.distanceLimitsManual;
         delete camera.distanceMin;
         delete camera.distanceMax;
+        // Image exposure belongs to a model, not the browser-wide preferences.
+        delete camera.hdrExposure;
     }
     window.localStorage.setItem(`model-viewer-${name}`, JSON.stringify({
         camera,
@@ -536,6 +539,7 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
         // могло сохраниться, поэтому отбрасываем и на загрузке.
         'camera.ortho', 'camera.viewCube',
         'camera.tilePriority',
+        'camera.hdrExposure',
         // Пределы расстояния привязаны к габаритам конкретной сцены. Сохранённые от прошлой
         // модели значения удерживали бы камеру там, где для новой модели нет никакого смысла.
         'camera.distanceLimitsManual', 'camera.distanceMin', 'camera.distanceMax',
@@ -699,6 +703,7 @@ const main = () => {
         reset: parseBool('reset', embedDefaults[embedPreset].reset)
     };
     const reservedQueryParams = new Set([
+        'surface',
         'embed',
         'ui',
         'panel',

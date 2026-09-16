@@ -456,7 +456,10 @@ class InfoPanel extends React.Component <{
         let variantListOptions: Array<{ v: string, t: string }> = [];
         try {
             const parsed = JSON.parse(scene?.variants?.list || '[]');
-            variantListOptions = Array.isArray(parsed) ? parsed.map((v: string) => ({ v: String(v), t: String(v) })) : [];
+            variantListOptions = Array.isArray(parsed) && parsed.length > 0 ? [
+                { v: '', t: t('Original material', lang) },
+                ...parsed.map((v: string) => ({ v: String(v), t: String(v) }))
+            ] : [];
         } catch {
             variantListOptions = [];
         }

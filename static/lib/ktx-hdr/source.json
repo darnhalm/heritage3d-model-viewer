@@ -1,0 +1,9 @@
+{
+  "project": "KhronosGroup/KTX-Software",
+  "version": "v5.0.0-rc2",
+  "asset": "https://github.com/KhronosGroup/KTX-Software/releases/download/v5.0.0-rc2/KTX-Software-5.0.0-rc2-Web-libktx_read.zip",
+  "sha256": {
+    "libktx_read.js": "477dc9e7db8e7f02cdfcf2599054b681b44a5d5caa371dd60f31579ac6755d38",
+    "libktx_read.wasm": "38e0055c9c6ad66b0b92481becb76ad4daa08580f16d7ba04daf44cda3ba7922"
+  }
+}

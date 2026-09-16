@@ -25,7 +25,7 @@ import {
 
 const gamma = 2.2;
 
-const vertexGLSL = `
+export const vertexGLSL = `
     attribute vec2 vertex_position;
     varying vec2 texcoord;
     uniform vec4 texcoordMod;
@@ -35,11 +35,12 @@ const vertexGLSL = `
     }
 `;
 
-const fragmentGLSL = `
+export const fragmentGLSL = `
     varying vec2 texcoord;
     uniform sampler2D multiframeTex;
     uniform float power;
     uniform float sharpness;
+    uniform float hdrRange;
     uniform float easuEnabled;
     uniform vec2 srcSize;
     uniform vec2 outputTexel;
@@ -180,7 +181,8 @@ const fragmentGLSL = `
         vec3 mn4 = min(min(b, d), min(f, h));
         vec3 mx4 = max(max(b, d), max(f, h));
         vec3 hitMin = mn4 / (4.0 * mx4 + 1e-5);
-        vec3 hitMax = (1.0 - mx4) / (4.0 * mn4 - 4.0 - 1e-5);
+        float peak = mix(1.0, max(1.0, max(max(mx4.r, mx4.g), max(mx4.b, max(e.r, max(e.g, e.b))))), hdrRange);
+        vec3 hitMax = (peak - mx4) / (4.0 * mn4 - 4.0 * peak - 1e-5);
         vec3 lobeRGB = max(-hitMin, hitMax);
         float lobe = max(-0.1875, min(max(lobeRGB.r, max(lobeRGB.g, lobeRGB.b)), 0.0)) * sharpness;
 
@@ -207,7 +209,7 @@ const fragmentGLSL = `
 // Это и есть RCAS из AMD FidelityFX FSR 1.0 (MIT): та же форма ядра и тот же предел доли
 // -0.1875. Отличие одно — силу мы задаём множителем напрямую, а не через exp2(-sharpness)
 // эталона, потому что ползунок в настройках линейный.
-const vertexWGSL = /* wgsl */`
+export const vertexWGSL = /* wgsl */`
     attribute vertex_position: vec2f;
 
     varying texcoord: vec2f;
@@ -225,7 +227,7 @@ const vertexWGSL = /* wgsl */`
     }
 `;
 
-const fragmentWGSL = /* wgsl */`
+export const fragmentWGSL = /* wgsl */`
     varying texcoord: vec2f;
 
     var multiframeTex: texture_2d<f32>;
@@ -233,6 +235,7 @@ const fragmentWGSL = /* wgsl */`
 
     uniform power: f32;
     uniform sharpness: f32;
+    uniform hdrRange: f32;
     uniform easuEnabled: f32;
     uniform srcSize: vec2f;
     uniform outputTexel: vec2f;
@@ -368,7 +371,8 @@ const fragmentWGSL = /* wgsl */`
         let mn4: vec3f = min(min(b, d), min(f, h));
         let mx4: vec3f = max(max(b, d), max(f, h));
         let hitMin: vec3f = mn4 / (4.0 * mx4 + 1e-5);
-        let hitMax: vec3f = (vec3f(1.0) - mx4) / (4.0 * mn4 - 4.0 - 1e-5);
+        let peak = mix(1.0, max(1.0, max(max(mx4.r, mx4.g), max(mx4.b, max(e.r, max(e.g, e.b))))), uniform.hdrRange);
+        let hitMax: vec3f = (vec3f(peak) - mx4) / (4.0 * mn4 - 4.0 * peak - 1e-5);
         let lobeRGB: vec3f = max(-hitMin, hitMax);
         let lobe: f32 = max(-0.1875, min(max(lobeRGB.r, max(lobeRGB.g, lobeRGB.b)), 0.0)) * uniform.sharpness;
 
@@ -632,6 +636,7 @@ class Multiframe {
                 texcoordMod: [1, 1, 0, 0],
                 multiframeTex: src,
                 power: blending ? (1.0 / gamma) : 1.0,
+                hdrRange: 0,
                 sharpness: 0,
                 easuEnabled: 1,
                 srcSize: [src.width, src.height],
@@ -674,6 +679,7 @@ class Multiframe {
                     texcoordMod: (device.isWebGPU && blending) ? [1, -1, 0, 1] : [1, 1, 0, 0],
                     multiframeTex: this.easuTexture,
                     power: 1.0,
+                    hdrRange: 0,
                     sharpness: this.sharpness,
                     easuEnabled: 0,
                     srcSize: [device.width, device.height],
@@ -686,6 +692,7 @@ class Multiframe {
                 texcoordMod: !blending && device.isWebGPU ? [1, -1, 0, 1] : [1, 1, 0, 0],
                 multiframeTex: source,
                 power: blending ? (1.0 / gamma) : 1.0,
+                hdrRange: 0,
                 sharpness: this.sharpness,
                 // EASU включаем только когда источник и правда мельче экрана: при совпадении
                 // размеров растягивать нечего, а двенадцать отсчётов стоили бы впустую.

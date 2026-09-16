@@ -4,22 +4,39 @@
 // headless rAF is throttled and is not representative for this viewer.
 
 import { chromium } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
 
 const baseUrl = process.env.BENCH_URL ?? 'http://127.0.0.1:4173/';
 const model = process.env.BENCH_MODEL ?? 'static/test-assets/BoxTextured.glb';
 const settleMs = Number(process.env.BENCH_SETTLE ?? 2500);
 const steps = Number(process.env.BENCH_STEPS ?? 120);
+const backend = process.env.BENCH_BACKEND ?? 'webgl';
+if (!['webgl', 'webgpu'].includes(backend)) throw new Error('BENCH_BACKEND must be webgl or webgpu');
 
 const median = (values) => {
     const sorted = [...values].sort((a, b) => a - b);
     return sorted[Math.floor(sorted.length / 2)] ?? 0;
 };
 
-const browser = await chromium.launch({ headless: false });
+const browser = await chromium.launch({ headless: false, channel: process.env.BENCH_CHANNEL || undefined });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-await page.goto(`${baseUrl}?webgl&load=${encodeURIComponent(model)}`);
+await page.goto(`${baseUrl}?${backend}&load=${encodeURIComponent(model)}`);
 await page.waitForFunction(() => window.viewer?.entities?.length > 0, null, { timeout: 120000 });
 await page.waitForTimeout(settleMs);
+const environment = await page.evaluate(() => {
+    const viewer = window.viewer;
+    const device = viewer.app.graphicsDevice;
+    return {
+        userAgent: navigator.userAgent,
+        backend: device.deviceType,
+        hdrCapable: matchMedia('(dynamic-range: high)').matches,
+        hdrConfigured: device.isHdr === true,
+        backbuffer: [device.width, device.height],
+        devicePixelRatio,
+        hq: viewer.observer.get('camera.hq'),
+        pixelScale: viewer.observer.get('camera.pixelScale')
+    };
+});
 
 const canvas = page.locator('#application-canvas');
 const box = await canvas.boundingBox();
@@ -64,13 +81,26 @@ for (const effect of cases) {
         return samples.intervals.slice(5);
     });
     const medianMs = median(intervals);
+    const meanMs = intervals.length ? intervals.reduce((sum, value) => sum + value, 0) / intervals.length : 0;
+    const sorted = [...intervals].sort((a, b) => a - b);
+    const p95Ms = sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)] ?? 0;
     results.push({
         effect: effect.name,
         frames: intervals.length,
         medianMs: Number(medianMs.toFixed(2)),
-        fps: medianMs ? Number((1000 / medianMs).toFixed(1)) : 0
+        meanMs: Number(meanMs.toFixed(2)),
+        p95Ms: Number(p95Ms.toFixed(2)),
+        fps: meanMs ? Number((1000 / meanMs).toFixed(1)) : 0
     });
 }
 
-console.table(results);
 await browser.close();
+console.log(environment);
+console.table(results);
+if (process.env.BENCH_OUTPUT) {
+    await writeFile(process.env.BENCH_OUTPUT, `${JSON.stringify({
+        measuredAt: new Date().toISOString(), model, requestedBackend: backend, steps,
+        note: 'Wall-clock framerender intervals during scripted orbit; includes scheduling and vsync, not GPU duration. Existing SDR pipeline only; this does not measure the planned HDR surface renderer.',
+        environment, results
+    }, null, 2)}\n`);
+}

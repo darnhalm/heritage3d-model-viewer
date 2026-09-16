@@ -142,6 +142,15 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                         }}
                     />
                 ))}
+                {showHdButton && this.props.observerData.runtime.hdrSource && wrap(t(
+                    this.props.observerData.runtime.hdrAvailable ?
+                        (this.props.observerData.runtime.hdrActive ? 'HDR output: on. Click for SDR preview.' : 'SDR preview: click for HDR output.') :
+                        'HDR output is unavailable in this session. The HDR texture is shown in SDR.', lang), (
+                    <Button text='HDR' id='hdr-button' width={40} height={40}
+                        class={['popup-button', 'hdr-button', this.props.observerData.runtime.hdrActive ? 'hdr-active' : 'hdr-inactive']}
+                        enabled={this.props.observerData.runtime.hdrAvailable === true}
+                        onClick={() => this.props.setProperty('runtime.hdrRequested', !this.props.observerData.runtime.hdrActive)} />
+                ))}
                 {showMeasureButton && wrap(t('Measurement', lang), (
                     <Button
                         class={buildClass('measurement')
