@@ -16,6 +16,11 @@ export type SpectralMaterialVariant = {
     color: string;
 };
 
+export type PositionedSpectralVariant = {
+    key: string;
+    position: number;
+};
+
 export const ORIGINAL_VARIANT_COLOR_KEY = '__original__';
 
 const DEFINITIONS: SpectralDefinition[] = [
@@ -88,6 +93,36 @@ export const classifySpectralMaterialVariant = (name: string): SpectralMaterialV
         zone: definition.zone,
         color: definition.color
     };
+};
+
+/**
+ * Choose the next material marker in a spectrum zone, matching the 2D viewer's
+ * bracket navigation. Markers cycle from left to right; an empty zone selects
+ * the marker nearest to the centre of that zone.
+ *
+ * @param variants - Material variants with their rendered scale positions.
+ * @param selectedKey - Currently selected material variant.
+ * @param start - Inclusive start of the clicked zone on the normalized scale.
+ * @param end - Inclusive end of the clicked zone on the normalized scale.
+ * @returns The next variant key, or null when the scale has no markers.
+ */
+export const nextSpectralVariantKey = (
+    variants: PositionedSpectralVariant[],
+    selectedKey: string,
+    start: number,
+    end: number
+): string | null => {
+    if (variants.length === 0) return null;
+    const candidates = variants.filter(variant => variant.position >= start && variant.position <= end)
+    .sort((a, b) => a.position - b.position || a.key.localeCompare(b.key));
+    if (candidates.length === 0) {
+        const centre = (start + end) / 2;
+        return variants.reduce((nearest, candidate) => (
+            Math.abs(candidate.position - centre) < Math.abs(nearest.position - centre) ? candidate : nearest
+        )).key;
+    }
+    const selectedIndex = candidates.findIndex(variant => variant.key === selectedKey);
+    return candidates[selectedIndex >= 0 ? (selectedIndex + 1) % candidates.length : 0].key;
 };
 
 export const parseVariantColorMap = (value: unknown): Record<string, string> => {

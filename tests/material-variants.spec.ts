@@ -13,10 +13,14 @@ test('KHR_materials_variants switches layers and restores the original material'
         return {
             selected: viewer.observer.get('scene.variant.selected'),
             name: viewer.meshInstances[0].material.name,
-            unlit: viewer.observer.get('scene.unlit')
+            unlit: viewer.observer.get('scene.unlit'),
+            formats: JSON.parse(viewer.observer.get('scene.materialChannelFormats'))
         };
     });
-    expect(initial).toEqual({ selected: '', name: 'Texture', unlit: false });
+    expect(initial.selected).toBe('');
+    expect(initial.name).toBe('Texture');
+    expect(initial.unlit).toBe(false);
+    expect(initial.formats.albedo.container).toBe('PNG');
 
     await page.locator('.left-panel-tab-materials').dispatchEvent('click');
     await expect(page.getByText('Texture Layers', { exact: false })).toHaveCount(1);
@@ -100,6 +104,10 @@ test('spectral and manually colored variants appear in the viewport quick switch
 
     const spectralDot = page.locator('.spectral-variant-dot[title="Study @IRR"]');
     await expect(spectralDot).toBeVisible();
+    const irBracket = page.locator('.spectral-variant-zone', { hasText: 'IR' });
+    await expect(irBracket).toBeVisible();
+    await irBracket.click();
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.observer.get('scene.variant.selected'))).toBe('Study @IRR');
     await spectralDot.hover();
     await expect(page.getByRole('tooltip')).toHaveText('Study @IRR');
     await spectralDot.click();

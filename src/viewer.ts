@@ -319,6 +319,7 @@ type GSplatFrozenLodCamera = {
     getPosition: () => Vec3;
 };
 type TextureAssetFile = { filename?: string };
+type TextureAssetData = { sourceContainer?: string };
 /** Формат текстуры канала: имя, сжатость для GPU и размер в пикселях. */
 type ChannelFormat = { hdr?: boolean; container: string; gpu: string; compressed: boolean; width: number; height: number } | undefined;
 type TextureLike = {
@@ -363,9 +364,14 @@ type GltfBufferLike = {
     };
 };
 type GltfImageLike = {
+    mimeType?: string;
+    name?: string;
     uri?: string;
 };
-type GltfTextureLike = object;
+type GltfTextureLike = {
+    source?: number;
+    extensions?: Record<string, { source?: number }>;
+};
 type AssetProcessContinuation = (err: string | null, result: unknown) => void;
 type AssetLoadProcessOptions = Record<string, unknown>;
 
@@ -390,6 +396,31 @@ const lazyTextureExtension = (mimeType?: string) => {
         case 'image/avif': return 'avif';
         default: return 'png';
     }
+};
+
+const sourceTextureContainer = (image?: GltfImageLike): string | undefined => {
+    const mime = image?.mimeType?.toLowerCase();
+    const byMime: Record<string, string> = {
+        'image/ktx2': 'KTX2',
+        'image/ktx': 'KTX',
+        'image/basis': 'BASIS',
+        'image/vnd-ms.dds': 'DDS',
+        'image/png': 'PNG',
+        'image/jpeg': 'JPEG',
+        'image/webp': 'WEBP',
+        'image/avif': 'AVIF'
+    };
+    if (mime && byMime[mime]) return byMime[mime];
+    const ext = image?.uri?.split(/[?#]/, 1)[0].split('.').pop()?.toLowerCase() ?? '';
+    return ({ ktx2: 'KTX2', ktx: 'KTX', basis: 'BASIS', dds: 'DDS', png: 'PNG', jpg: 'JPEG', jpeg: 'JPEG', webp: 'WEBP', avif: 'AVIF' })[ext];
+};
+
+const gltfTextureSource = (texture: GltfTextureLike): number | undefined => {
+    const extensions = texture.extensions ?? {};
+    return extensions.KHR_texture_basisu?.source ??
+        extensions.EXT_texture_webp?.source ??
+        extensions.EXT_texture_avif?.source ??
+        texture.source;
 };
 
 const copyTextureSampling = (source: Texture, target: Texture) => {
@@ -4014,11 +4045,15 @@ class Viewer {
         const channelFormats: Record<string, ChannelFormat> = {};
         const materialNames = new Set<string>();
 
+        const texAssets = this.app.assets.filter((asset: Asset) => asset.type === 'texture');
+        const getTextureAsset = (tex: TextureLike | null | undefined): Asset | undefined => {
+            return tex ? texAssets.find((asset: Asset) => asset.resource === tex) : undefined;
+        };
+
         const getTextureFilename = (tex: TextureLike | null | undefined): string | undefined => {
             if (!tex) return undefined;
             if (tex.name?.startsWith('HDR:')) return tex.name.slice(4);
-            const texAssets = this.app.assets.filter((a: Asset) => a.type === 'texture');
-            const texAsset = texAssets.find((a: Asset) => a.resource === tex);
+            const texAsset = getTextureAsset(tex);
             const file = texAsset?.file as TextureAssetFile | undefined;
             return file?.filename;
         };
@@ -4032,9 +4067,12 @@ class Viewer {
             if (typeof texture?.format !== 'number') return undefined;
             // Показываем формат ФАЙЛА, а не формат в видеопамяти: вопрос, на который отвечает
             // значок, — «применилась ли конвертация», а это про то, что лежит в glTF. Разбор
-            // glTF даёт картинке имя с расширением по её mime, отсюда и берём.
+            // Для внешнего файла расширения достаточно. У встроенной картинки имени может
+            // не быть вовсе, поэтому её исходный MIME сохраняется на texture asset при
+            // разборе glTF и остаётся доступен после декодирования в GPU-формат.
             const ext = (getTextureFilename(tex) ?? '').split('.').pop()?.toLowerCase() ?? '';
-            const container = ({ ktx2: 'KTX2', ktx: 'KTX', basis: 'BASIS', dds: 'DDS', png: 'PNG', jpg: 'JPEG', jpeg: 'JPEG', webp: 'WEBP' })[ext];
+            const assetContainer = (getTextureAsset(tex)?.data as TextureAssetData | undefined)?.sourceContainer;
+            const container = assetContainer ?? ({ ktx2: 'KTX2', ktx: 'KTX', basis: 'BASIS', dds: 'DDS', png: 'PNG', jpg: 'JPEG', jpeg: 'JPEG', webp: 'WEBP', avif: 'AVIF' })[ext];
             return {
                 container: tex?.name?.startsWith('HDR:') ? (tex.name.endsWith('.ktx2') ? 'KTX2' : 'FP16') : (container ?? '—'),
                 hdr: tex?.name?.startsWith('HDR:') === true,
@@ -6517,6 +6555,7 @@ class Viewer {
             };
 
             let lazyPlan: LazyMaterialVariantPlan | null | undefined;
+            let gltfDocument: LazyVariantRuntimeDocument | undefined;
             let nextImageIndex = 0;
             const imageIndices = new WeakMap<object, number>();
             const pendingImages: Array<{ image: GltfImageLike; continuation: AssetProcessContinuation }> = [];
@@ -6534,8 +6573,15 @@ class Viewer {
             };
 
             const postProcessTexture = (gltfTexture: GltfTextureLike, textureAsset: Asset) => {
-            // Set max anisotropy only for textures that use linear filtering, as anisotropic
-            // filtering only makes sense with linear filtering modes
+                const sourceIndex = gltfTextureSource(gltfTexture);
+                const container = sourceIndex === undefined ? undefined : sourceTextureContainer(gltfDocument?.images?.[sourceIndex]);
+                if (container) {
+                    const data = (textureAsset.data ?? {}) as TextureAssetData;
+                    data.sourceContainer = container;
+                    textureAsset.data = data;
+                }
+                // Set max anisotropy only for textures that use linear filtering, as anisotropic
+                // filtering only makes sense with linear filtering modes
                 const texture = textureAsset.resource as Texture;
                 if (texture.minFilter !== FILTER_NEAREST && texture.magFilter !== FILTER_NEAREST) {
                     texture.anisotropy = this.app.graphicsDevice.maxAnisotropy;
@@ -6581,6 +6627,7 @@ class Viewer {
             const containerAssetOptions: AssetLoadProcessOptions = {
                 global: {
                     preprocess: (gltf: LazyVariantRuntimeDocument) => {
+                        gltfDocument = gltf;
                         lazyPlan = createLazyMaterialVariantPlan(gltf);
                         pendingImages.splice(0).forEach(({ image, continuation }) => dispatchImage(image, continuation));
                     },

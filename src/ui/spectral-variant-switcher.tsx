@@ -3,6 +3,7 @@ import React from 'react';
 import { t } from '../i18n/translations';
 import {
     classifySpectralMaterialVariant,
+    nextSpectralVariantKey,
     ORIGINAL_VARIANT_COLOR_KEY,
     parseVariantColorMap,
     SpectralMaterialVariant
@@ -14,6 +15,13 @@ type VariantDot = {
     key: string;
     spectral: SpectralMaterialVariant;
 };
+
+const SPECTRAL_ZONES = [
+    { label: 'X-ray', start: 0, end: 0.22 },
+    { label: 'UV', start: 0.22, end: 0.40 },
+    { label: 'VIS', start: 0.40, end: 0.67 },
+    { label: 'IR', start: 0.67, end: 1 }
+] as const;
 
 const parseNames = (value?: string): string[] => {
     try {
@@ -64,6 +72,14 @@ const SpectralVariantSwitcher = (props: { observerData: ObserverData; setPropert
         return spectral ? [{ name, key: name, spectral }] : [];
     });
     const positions = spreadPositions(known);
+    const positioned = known.map(variant => ({
+        key: variant.key,
+        position: positions.get(variant.key) ?? variant.spectral.position
+    }));
+    const selectZone = (start: number, end: number) => {
+        const next = nextSpectralVariantKey(positioned, selected, start, end);
+        if (next !== null) props.setProperty('scene.variant.selected', next);
+    };
     const custom = [
         ...(colors[ORIGINAL_VARIANT_COLOR_KEY] ? [{ name: t('Original material', lang), key: '', color: colors[ORIGINAL_VARIANT_COLOR_KEY] }] : []),
         ...names.filter(name => !classifySpectralMaterialVariant(name) && colors[name])
@@ -99,11 +115,24 @@ const SpectralVariantSwitcher = (props: { observerData: ObserverData; setPropert
             )}
             {known.length > 0 && (
                 <div className='spectral-variant-scale'>
-                    <div className='spectral-variant-zones' aria-hidden='true'>
-                        <span style={{ width: '22%' }}>X-ray</span>
-                        <span style={{ width: '18%' }}>UV</span>
-                        <span style={{ width: '27%' }}>VIS</span>
-                        <span style={{ width: '33%' }}>IR</span>
+                    <div className='spectral-variant-zones' role='group' aria-label='Spectrum zones'>
+                        {SPECTRAL_ZONES.map((zone) => {
+                            const count = positioned.filter(variant => variant.position >= zone.start && variant.position <= zone.end).length;
+                            const active = positioned.some(variant => variant.key === selected && variant.position >= zone.start && variant.position <= zone.end);
+                            return (
+                                <button
+                                    key={zone.label}
+                                    type='button'
+                                    className={`spectral-variant-zone${active ? ' active' : ''}`}
+                                    style={{ width: `${(zone.end - zone.start) * 100}%` }}
+                                    title={`${zone.label} · ${count}`}
+                                    aria-label={`${zone.label}: ${count} material layers`}
+                                    onClick={() => selectZone(zone.start, zone.end)}
+                                >
+                                    {zone.label}
+                                </button>
+                            );
+                        })}
                     </div>
                     <div className='spectral-variant-bar'>
                         {known.map(variant => (
