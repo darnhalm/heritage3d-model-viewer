@@ -3,6 +3,7 @@ import { Vec3 } from 'playcanvas';
 
 import { isMobileLayout, SD_PIXEL_SCALE, SPLAT_PIXEL_SCALE } from '../helpers';
 import { t } from '../i18n/translations';
+import { parseVariantColorMap } from '../spectral-material-variants';
 import { DEFAULT_THEME_COLOR } from '../theme';
 
 type Rgb = { r: number; g: number; b: number };
@@ -385,6 +386,14 @@ class SettingsService {
         if (Object.keys(materialOverrides).length > 0) {
             data.materialOverrides = materialOverrides;
         }
+        const scene = options.scene;
+        if (scene && typeof scene === 'object' && !Array.isArray(scene)) {
+            const variants = (scene as Record<string, unknown>).variants;
+            if (variants && typeof variants === 'object' && !Array.isArray(variants)) {
+                const colors = parseVariantColorMap((variants as Record<string, unknown>).colors);
+                if (Object.keys(colors).length > 0) data.materialVariantColors = colors;
+            }
+        }
         data.sceneTransform = this.getSceneTransform();
         if (this.cameraControls.mode === 'orbit') {
             const p = this.cameraControls.getPosition();
@@ -423,6 +432,7 @@ class SettingsService {
         // и ручные значения от предыдущей держали бы камеру не там. Из файла настроек модели
         // они приедут снова, если для этой сцены заданы.
         o.set('camera.distanceLimitsManual', false);
+        o.set('scene.variants.colors', {});
 
         const hq = !isMobileLayout();
         // Сплаты открываются чуть мягче полного разрешения: ступень в полтора пиксела новые
@@ -661,6 +671,7 @@ class SettingsService {
             if (materialOverrides && typeof materialOverrides === 'object' && !Array.isArray(materialOverrides)) {
                 this.applyMaterialOverrides(materialOverrides as Record<string, unknown>);
             }
+            this.observer.set('scene.variants.colors', parseVariantColorMap(data.materialVariantColors));
             const sceneTransform = data.sceneTransform;
             if (sceneTransform && typeof sceneTransform === 'object' && !Array.isArray(sceneTransform)) {
                 this.applySceneTransform(sceneTransform as Record<string, unknown>);

@@ -13,6 +13,7 @@ import LeftPanel from './left-panel';
 import LoadControls from './load-controls';
 import PopupPanel from './popup-panel';
 import SelectedNode from './selected-node';
+import SpectralVariantSwitcher from './spectral-variant-switcher';
 import { isMobileLayout } from '../helpers';
 
 // The editor timeline is not part of the player startup. React requests this chunk only when
@@ -643,6 +644,7 @@ class App extends React.Component<{ observer: Observer }> {
                 )}
                 {showLoadControls && <LoadControls observerData={this.state} setProperty={this._setStateProperty}/>}
                 {showSelectedNode && <SelectedNode observerData={this.state} setProperty={this._setStateProperty} />}
+                <SpectralVariantSwitcher observerData={this.state} setProperty={this._setStateProperty} />
                 {showPoiPlayer && currentPoi && (
                     <div id='poi-player-overlay'>
                         <div className='poi-player-progress' aria-hidden='true'>

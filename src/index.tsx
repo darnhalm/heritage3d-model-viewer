@@ -335,7 +335,9 @@ const observerData: ObserverData = {
             selected: ''
         },
         variants: {
-            list: '[]'
+            list: '[]',
+            loading: '',
+            colors: {}
         },
         loadTime: null,
         cameras: '[]',

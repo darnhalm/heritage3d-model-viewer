@@ -291,7 +291,11 @@ export interface ObserverData {
             selected: string
         },
         variants: {
-            list: string
+            list: string,
+            /** Variant name currently decoding its deferred embedded textures. */
+            loading?: string,
+            /** Manual colors that expose otherwise unclassified variants in the public quick switcher. */
+            colors?: Record<string, string>
         },
         loadTime?: number,
         cameras: string,

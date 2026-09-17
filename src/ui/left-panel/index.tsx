@@ -1,4 +1,4 @@
-import { Panel, Container, Button, Label, NumericInput, SelectInput, TextAreaInput, TextInput } from '@playcanvas/pcui/react';
+import { Panel, Container, Button, ColorPicker, Label, NumericInput, SelectInput, TextAreaInput, TextInput } from '@playcanvas/pcui/react';
 import React from 'react';
 
 import { postToViewerParent } from '../../embed-messaging';
@@ -6,6 +6,13 @@ import { persistRequestedBackend, GraphicsBackend } from '../../graphics-backend
 import { extract, isMobileLayout } from '../../helpers';
 import { t } from '../../i18n/translations';
 import { DEFAULT_POI_DURATION_SECONDS, DEFAULT_POI_HOLD_TIME_SECONDS } from '../../poi-defaults';
+import {
+    classifySpectralMaterialVariant,
+    colorArrayToHex,
+    hexToColorArray,
+    ORIGINAL_VARIANT_COLOR_KEY,
+    parseVariantColorMap
+} from '../../spectral-material-variants';
 import { DEFAULT_THEME_COLOR } from '../../theme';
 import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
@@ -555,13 +562,13 @@ class LimitsPanel extends React.Component <{ observerData: ObserverData, setProp
                     <span title={t('Use the current camera distance as the near limit', lang)} style={{ display: 'contents' }}>
                         <Button
                             text={t('Near from view', lang)}
-                            class='secondary'
+                            class={['secondary', 'distance-from-view-button']}
                             onClick={() => takeDistanceFromView('camera.distanceMin')} />
                     </span>
                     <span title={t('Use the current camera distance as the far limit', lang)} style={{ display: 'contents' }}>
                         <Button
                             text={t('Far from view', lang)}
-                            class='secondary'
+                            class={['secondary', 'distance-from-view-button']}
                             onClick={() => takeDistanceFromView('camera.distanceMax')} />
                     </span>
                 </Container>
@@ -1315,6 +1322,13 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         );
         const materialVariantNames = parseStringArray(observerData?.scene?.variants?.list);
         const selectedMaterialVariant = observerData?.scene?.variant?.selected ?? '';
+        const materialVariantColors = parseVariantColorMap(observerData?.scene?.variants?.colors);
+        const setMaterialVariantColor = (key: string, color?: string) => {
+            const liveColors = parseVariantColorMap(getViewer()?.observer?.get?.('scene.variants.colors'));
+            if (color) liveColors[key] = color;
+            else delete liveColors[key];
+            setProperty('scene.variants.colors', liveColors);
+        };
         // Debug buttons are intentionally native: streaming tile/GSplat state can
         // update between clicks, while PCUI Button retains its mount-time callback.
         // Always read the live Observer value so a second click reliably switches
@@ -1447,25 +1461,59 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                         {['', ...materialVariantNames].map((variant) => {
                                             const selected = selectedMaterialVariant === variant;
                                             const label = variant || t('Original material', lang);
+                                            const colorKey = variant || ORIGINAL_VARIANT_COLOR_KEY;
+                                            const spectral = variant ? classifySpectralMaterialVariant(variant) : null;
+                                            const manualColor = materialVariantColors[colorKey];
                                             return (
-                                                <button
+                                                <div
                                                     key={variant || '__original__'}
-                                                    type='button'
                                                     className={`materials-layer-item materials-layer-item-variant${selected ? ' selected' : ''}`}
                                                     onClick={() => setProperty('scene.variant.selected', variant)}
                                                 >
-                                                    <span className='materials-layer-item-label'>{label}</span>
-                                                    {selected && (
-                                                        <span className='materials-layer-variant-type'>
-                                                            {observerData?.scene?.unlit ? 'Unlit' : 'Lit (PBR)'}
+                                                    <button
+                                                        type='button'
+                                                        className='materials-layer-variant-select'
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setProperty('scene.variant.selected', variant);
+                                                        }}
+                                                    >
+                                                        <span className='materials-layer-item-label'>{label}</span>
+                                                        {selected && (
+                                                            <span className='materials-layer-variant-type'>
+                                                                {observerData?.scene?.unlit ? 'Unlit' : 'Lit (PBR)'}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                    {spectral ? (
+                                                        <span
+                                                            className='spectral-variant-color-control spectral-variant-color-fixed'
+                                                            style={{ '--spectral-chip-color': spectral.color } as React.CSSProperties}
+                                                            title={`${spectral.code} · ${t('Fixed', lang)}`}
+                                                            aria-label={`${spectral.code} · ${t('Fixed', lang)}`}
+                                                        >
+                                                            <span className='spectral-variant-fixed-dot' aria-hidden='true' />
+                                                        </span>
+                                                    ) : (
+                                                        <span
+                                                            className={`spectral-variant-color-control${manualColor ? ' active' : ' inactive'}`}
+                                                            title={manualColor ? t('Quick layer color', lang) : t('Add layer to quick switcher', lang)}
+                                                            onClick={event => event.stopPropagation()}
+                                                        >
+                                                            <ColorPicker
+                                                                class='spectral-variant-color-picker'
+                                                                value={hexToColorArray(manualColor)}
+                                                                onChange={(value: unknown) => {
+                                                                    const color = colorArrayToHex(value as number[]);
+                                                                    setMaterialVariantColor(colorKey, color === '#000000' ? undefined : color);
+                                                                }}
+                                                            />
+                                                            {!manualColor && <span className='spectral-variant-color-cross' aria-hidden='true' />}
                                                         </span>
                                                     )}
-                                                </button>
+                                                </div>
                                             );
                                         })}
-                                        <div className='materials-layer-inline-hint'>
-                                            {t('Embedded glTF material variants; geometry stays unchanged.', lang)}
-                                        </div>
                                     </div>
                                 )}
                                 {observerData?.scene?.hasGsplat && (

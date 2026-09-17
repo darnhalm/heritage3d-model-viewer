@@ -119,6 +119,11 @@ import { HdrOutput } from './hdr/output';
 import { HdrSurface } from './hdr/surface';
 import { SD_PIXEL_SCALE } from './helpers';
 import { t } from './i18n/translations';
+import {
+    createLazyMaterialVariantPlan,
+    type LazyMaterialVariantPlan,
+    type LazyVariantGltfDocument
+} from './lazy-material-variants';
 import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
 import { Picker } from './picker';
@@ -363,6 +368,108 @@ type GltfImageLike = {
 type GltfTextureLike = object;
 type AssetProcessContinuation = (err: string | null, result: unknown) => void;
 type AssetLoadProcessOptions = Record<string, unknown>;
+
+type LazyMaterialVariantController = {
+    loadVariant: (name: string) => Promise<void>;
+};
+
+type LazyVariantParseResult = {
+    materials: StandardMaterial[];
+    textures: Asset[];
+};
+
+type LazyVariantRuntimeDocument = LazyVariantGltfDocument & {
+    bufferViews?: object[];
+};
+
+const lazyTextureExtension = (mimeType?: string) => {
+    switch (mimeType) {
+        case 'image/ktx2': return 'ktx2';
+        case 'image/webp': return 'webp';
+        case 'image/jpeg': return 'jpg';
+        case 'image/avif': return 'avif';
+        default: return 'png';
+    }
+};
+
+const copyTextureSampling = (source: Texture, target: Texture) => {
+    target.minFilter = source.minFilter;
+    target.magFilter = source.magFilter;
+    target.addressU = source.addressU;
+    target.addressV = source.addressV;
+    target.addressW = source.addressW;
+    target.anisotropy = source.anisotropy;
+    target.compareOnRead = source.compareOnRead;
+    target.compareFunc = source.compareFunc;
+};
+
+const createLazyVariantController = (
+    app: App,
+    plan: LazyMaterialVariantPlan,
+    gltf: LazyVariantRuntimeDocument,
+    result: LazyVariantParseResult,
+    imageBytes: Map<number, Uint8Array>
+): LazyMaterialVariantController => {
+    const loadedTextures = new Set<number>();
+    const pendingTextures = new Map<number, Promise<void>>();
+
+    const loadTexture = (textureIndex: number): Promise<void> => {
+        if (loadedTextures.has(textureIndex)) return Promise.resolve();
+        const pending = pendingTextures.get(textureIndex);
+        if (pending) return pending;
+        const imageIndex = plan.textureImages[textureIndex];
+        const bytes = imageBytes.get(imageIndex);
+        const image = gltf.images?.[imageIndex];
+        const placeholderAsset = result.textures[textureIndex];
+        const placeholder = placeholderAsset?.resource as Texture | undefined;
+        if (!bytes || !image || !placeholderAsset || !placeholder) return Promise.resolve();
+
+        const extension = lazyTextureExtension(image.mimeType);
+        const name = image.name || `variant-texture-${textureIndex}`;
+        const copy = bytes.slice();
+        const asset = new Asset(name, 'texture', {
+            url: `${name}.${extension}`,
+            filename: `${name}.${extension}`,
+            contents: copy.buffer
+        }, { srgb: plan.srgbTextures.has(textureIndex) });
+        const promise = new Promise<void>((resolve, reject) => {
+            asset.once('load', () => {
+                const texture = asset.resource as Texture;
+                copyTextureSampling(placeholder, texture);
+                result.materials.forEach((material) => {
+                    StandardMaterial.TEXTURE_PARAMETERS.forEach((property) => {
+                        if ((material as unknown as Record<string, unknown>)[property] === placeholder) {
+                            (material as unknown as Record<string, unknown>)[property] = texture;
+                        }
+                    });
+                    material.update();
+                });
+                placeholderAsset.resource = texture;
+                asset.resource = null;
+                app.assets.remove(asset);
+                placeholder.destroy();
+                loadedTextures.add(textureIndex);
+                pendingTextures.delete(textureIndex);
+                resolve();
+            });
+            asset.once('error', (error: unknown) => {
+                pendingTextures.delete(textureIndex);
+                app.assets.remove(asset);
+                reject(error);
+            });
+            app.assets.add(asset);
+            app.assets.load(asset);
+        });
+        pendingTextures.set(textureIndex, promise);
+        return promise;
+    };
+
+    return {
+        loadVariant: async (name: string) => {
+            await Promise.all([...plan.variantTextures.get(name) ?? []].map(loadTexture));
+        }
+    };
+};
 
 /** Engine input devices keep their DOM move handler private; the viewer wraps it (see constructor). */
 type MoveHandlerHost<E extends Event> = { _moveHandler: (event: E) => void };
@@ -1144,6 +1251,11 @@ class Viewer {
     private hdrAbort: AbortController | null = null;
 
     private embeddedHdr = new WeakMap<Asset, EmbeddedHdrSurface>();
+
+    /** Deferred decoders for images referenced only by non-default material variants. */
+    private lazyMaterialVariants = new WeakMap<Asset, LazyMaterialVariantController>();
+
+    private variantSelectionGeneration = 0;
 
     /** Исходная привязка материала каждого примитива до применения KHR_materials_variants. */
     private variantBaseMaterials = new Map<MeshInstance, Material>();
@@ -6351,19 +6463,19 @@ class Viewer {
                 }
             };
 
-            const createPlaceholderTexture = (name: string) => {
-            // Create a small placeholder texture (magenta to indicate missing texture)
+            const createPlaceholderTexture = (name: string, lazy = false) => {
+            // Missing resources stay magenta. Lazy resources are neutral because they are
+            // deliberately invisible until their material variant is selected.
                 const texture = new Texture(this.app.graphicsDevice, {
-                    name: `placeholder-${name}`,
+                    name: `${lazy ? 'lazy' : 'placeholder'}-${name}`,
                     width: 2,
                     height: 2,
                     format: PIXELFORMAT_RGBA8
                 });
-                // Fill with magenta color to indicate missing texture
                 const pixels = texture.lock();
                 for (let i = 0; i < 4; i++) {
                     pixels[i * 4 + 0] = 255; // R
-                    pixels[i * 4 + 1] = 0;   // G
+                    pixels[i * 4 + 1] = lazy ? 255 : 0;   // G
                     pixels[i * 4 + 2] = 255; // B
                     pixels[i * 4 + 3] = 255; // A
                 }
@@ -6376,7 +6488,7 @@ class Viewer {
                 return asset;
             };
 
-            const processImage = (gltfImage: GltfImageLike, continuation: AssetProcessContinuation) => {
+            const processImageEager = (gltfImage: GltfImageLike, continuation: AssetProcessContinuation) => {
                 const u: File = externalUrls.find((url) => {
                     return url.filename === decodeURIComponent(path.normalize(gltfImage.uri || ''));
                 });
@@ -6402,6 +6514,23 @@ class Viewer {
                 } else {
                     continuation(null, null);
                 }
+            };
+
+            let lazyPlan: LazyMaterialVariantPlan | null | undefined;
+            let nextImageIndex = 0;
+            const imageIndices = new WeakMap<object, number>();
+            const pendingImages: Array<{ image: GltfImageLike; continuation: AssetProcessContinuation }> = [];
+            const dispatchImage = (gltfImage: GltfImageLike, continuation: AssetProcessContinuation) => {
+                const imageIndex = imageIndices.get(gltfImage as object);
+                if (imageIndex !== undefined && lazyPlan?.lazyImages.has(imageIndex)) {
+                    continuation(null, createPlaceholderTexture(`variant-image-${imageIndex}`, true));
+                } else {
+                    processImageEager(gltfImage, continuation);
+                }
+            };
+            const processImage = (gltfImage: GltfImageLike, continuation: AssetProcessContinuation) => {
+                if (lazyPlan === undefined) pendingImages.push({ image: gltfImage, continuation });
+                else dispatchImage(gltfImage, continuation);
             };
 
             const postProcessTexture = (gltfTexture: GltfTextureLike, textureAsset: Asset) => {
@@ -6448,10 +6577,25 @@ class Viewer {
 
             const hdrViews = new Map<object, Uint8Array>();
             let embeddedSurface: EmbeddedHdrSurface | undefined;
+            let lazyController: LazyMaterialVariantController | undefined;
             const containerAssetOptions: AssetLoadProcessOptions = {
                 global: {
-                    postprocess: (gltf: EmbeddedHdrDocument) => {
+                    preprocess: (gltf: LazyVariantRuntimeDocument) => {
+                        lazyPlan = createLazyMaterialVariantPlan(gltf);
+                        pendingImages.splice(0).forEach(({ image, continuation }) => dispatchImage(image, continuation));
+                    },
+                    postprocess: (gltf: EmbeddedHdrDocument & LazyVariantRuntimeDocument, result: LazyVariantParseResult) => {
                         embeddedSurface = readEmbeddedHdr(gltf, hdrViews);
+                        if (lazyPlan) {
+                            const imageBytes = new Map<number, Uint8Array>();
+                            lazyPlan.lazyImages.forEach((imageIndex) => {
+                                const bufferViewIndex = gltf.images?.[imageIndex]?.bufferView;
+                                const view = bufferViewIndex === undefined ? undefined : gltf.bufferViews?.[bufferViewIndex];
+                                const bytes = view && hdrViews.get(view);
+                                if (bytes) imageBytes.set(imageIndex, bytes.slice());
+                            });
+                            lazyController = createLazyVariantController(this.app, lazyPlan, gltf, result, imageBytes);
+                        }
                         hdrViews.clear();
                     }
                 },
@@ -6460,6 +6604,7 @@ class Viewer {
                     processAsync: processBufferView
                 },
                 image: {
+                    preprocess: (image: object) => imageIndices.set(image, nextImageIndex++),
                     processAsync: processImage
                 },
                 texture: {
@@ -6499,6 +6644,7 @@ class Viewer {
 
             containerAsset.on('load', () => {
                 if (embeddedSurface) this.embeddedHdr.set(containerAsset, embeddedSurface);
+                if (lazyController) this.lazyMaterialVariants.set(containerAsset, lazyController);
                 stopCountingTextures();
                 resolve(containerAsset);
             });
@@ -8236,7 +8382,37 @@ class Viewer {
     }
 
     setSelectedVariant(variant: string) {
+        this.applySelectedVariant(variant).catch(error => this.observer.set('ui.error', String(error)));
+    }
+
+    private async applySelectedVariant(variant: string) {
+        const generation = ++this.variantSelectionGeneration;
         if (this.hdrSurface || this.hdrAbort) this.clearHdrSurface();
+
+        if (variant) {
+            const loads = this.entityAssets.flatMap((entityAsset) => {
+                const resource = entityAsset.asset.resource as ContainerResource;
+                const controller = this.lazyMaterialVariants.get(entityAsset.asset);
+                return controller && resource.getMaterialVariants().includes(variant) ? [controller.loadVariant(variant)] : [];
+            });
+            if (loads.length) {
+                this.observer.set('scene.variants.loading', variant);
+                try {
+                    await Promise.all(loads);
+                } catch (error) {
+                    if (generation === this.variantSelectionGeneration) {
+                        this.observer.set('scene.variants.loading', '');
+                        this.observer.set('ui.error', `Не удалось загрузить слой «${variant}»: ${String(error)}`);
+                        this.observer.set('scene.variant.selected', '');
+                    }
+                    return;
+                }
+                if (generation !== this.variantSelectionGeneration) return;
+                this.observer.set('scene.variants.loading', '');
+            }
+        } else {
+            this.observer.set('scene.variants.loading', '');
+        }
 
         // Всегда начинаем с исходной привязки. Вариант может описывать лишь часть
         // примитивов; без сброса остальные сохранили бы материал предыдущего варианта.

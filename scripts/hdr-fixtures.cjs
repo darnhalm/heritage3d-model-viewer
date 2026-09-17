@@ -1,7 +1,7 @@
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 
-const variantDocument = (embeddedHdr = false) => {
+const variantDocument = (embeddedHdr = false, variantName = 'Infrared', separateVariantTexture = false) => {
     const source = readFileSync(path.join(__dirname, '../static/test-assets/BoxTextured.glb'));
     const jsonLength = source.readUInt32LE(12);
     const gltf = JSON.parse(source.subarray(20, 20 + jsonLength).toString());
@@ -11,11 +11,25 @@ const variantDocument = (embeddedHdr = false) => {
     gltf.extensionsUsed = [...new Set([...(gltf.extensionsUsed ?? []), 'KHR_materials_variants', 'KHR_materials_unlit'])];
     gltf.extensions = {
         ...gltf.extensions,
-        KHR_materials_variants: { variants: [{ name: 'Infrared' }] }
+        KHR_materials_variants: { variants: [{ name: variantName }] }
     };
+    let variantTexture = gltf.materials[0].pbrMetallicRoughness.baseColorTexture.index;
+    if (separateVariantTexture) {
+        const sourceImage = gltf.images[gltf.textures[variantTexture].source];
+        const bufferView = gltf.bufferViews.length;
+        gltf.bufferViews.push({ ...gltf.bufferViews[sourceImage.bufferView] });
+        const image = gltf.images.length;
+        gltf.images.push({ ...sourceImage, bufferView });
+        variantTexture = gltf.textures.length;
+        gltf.textures.push({ ...gltf.textures[0], source: image });
+    }
     gltf.materials.push({
         ...gltf.materials[0],
         name: 'Infrared Unlit',
+        pbrMetallicRoughness: {
+            ...gltf.materials[0].pbrMetallicRoughness,
+            baseColorTexture: { index: variantTexture }
+        },
         extensions: { ...gltf.materials[0].extensions, KHR_materials_unlit: {} }
     });
     for (const mesh of gltf.meshes) {

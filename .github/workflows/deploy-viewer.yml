@@ -5,6 +5,12 @@ name: Deploy viewer
 
 on:
   workflow_dispatch:
+    inputs:
+      include_harpocrates:
+        description: 'Добавить демонстрационную мультиспектральную модель Harpocrates в models/'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-viewer
@@ -26,6 +32,19 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Download Harpocrates sample model
+        if: ${{ inputs.include_harpocrates }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist/models
+          gh release download sample-models-2026-09 \
+            --pattern 'harpocrates-multispectral-tagged.glb' \
+            --pattern 'harpocrates-multispectral-ATTRIBUTION.md' \
+            --dir dist/models
+          echo '9fac54aebc3c287359ee006f0090f132ad7a9db46116eababdde15b475615bd3  dist/models/harpocrates-multispectral-tagged.glb' | sha256sum -c -
+          echo '419c842b138fa5c9758a13112f139f6089575810c53dfd07408ed3a51adb321b  dist/models/harpocrates-multispectral-ATTRIBUTION.md' | sha256sum -c -
 
       - name: Upload to Object Storage
         env:

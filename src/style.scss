@@ -628,6 +628,86 @@ body:not(.ui-ready) #panel-left {
     }
 }
 
+.materials-layer-item-variant {
+    padding: 0;
+    cursor: default;
+}
+
+.materials-layer-variant-select {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 34px;
+    padding: 8px 10px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.spectral-variant-color-control {
+    position: relative;
+    display: flex;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 34px;
+    margin-right: 5px;
+}
+
+.spectral-variant-color-picker.pcui-color-input {
+    width: 22px;
+    height: 22px;
+    margin: 0;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+
+    > div {
+        border-radius: 50%;
+    }
+
+    &::after {
+        display: none;
+    }
+}
+
+.spectral-variant-color-control.inactive .spectral-variant-color-picker.pcui-color-input {
+    background: #050505;
+}
+
+.spectral-variant-color-fixed {
+    cursor: default;
+}
+
+.spectral-variant-fixed-dot {
+    width: 22px;
+    height: 22px;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 50%;
+    background: var(--spectral-chip-color, #9a9a9a);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
+    pointer-events: none;
+}
+
+.spectral-variant-color-cross {
+    position: absolute;
+    left: 7px;
+    top: 16px;
+    width: 19px;
+    height: 2px;
+    border-radius: 1px;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+    transform: rotate(-45deg);
+    pointer-events: none;
+}
+
 .materials-layer-item-static {
     cursor: default;
 }
@@ -656,6 +736,184 @@ body:not(.ui-ready) #panel-left {
     color: #888;
     font-size: 13px;
     padding: 8px 10px 2px 10px;
+}
+
+.distance-from-view {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    width: calc(100% - 8px);
+    margin: 6px 0 4px 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.distance-from-view-button.pcui-button {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 0 6px;
+    font-size: 11px;
+}
+
+.spectral-variant-switcher {
+    position: absolute;
+    right: 20px;
+    bottom: 20px;
+    z-index: 24;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 7px;
+    width: min(300px, calc(100vw - 40px));
+    min-height: 52px;
+    padding: 7px;
+    box-sizing: border-box;
+    border-radius: 9px;
+    background: rgba(32, 32, 32, 0.4);
+}
+
+.spectral-variant-switcher.custom-only {
+    width: auto;
+    max-width: min(300px, calc(100vw - 40px));
+}
+
+.spectral-variant-tooltip {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    z-index: 2;
+    max-width: min(360px, calc(100vw - 32px));
+    padding: 6px 9px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    background: rgba(20, 20, 20, 0.94);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.38);
+}
+
+.spectral-variant-custom-dots {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    max-width: 100%;
+}
+
+.spectral-variant-custom-dot,
+.spectral-variant-dot {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 2px solid rgba(0, 0, 0, 0.55);
+    border-radius: 50%;
+    background: var(--spectral-chip-color, #9a9a9a);
+    cursor: pointer;
+    transition: width 150ms ease, height 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+
+    &:hover,
+    &:focus-visible {
+        border-color: rgba(255, 255, 255, 0.9);
+        outline: none;
+        box-shadow: 0 0 8px var(--spectral-chip-color, rgba(255, 255, 255, 0.7));
+    }
+
+    &.active {
+        width: 23px;
+        height: 23px;
+        border-color: #fff;
+        box-shadow: 0 0 11px var(--spectral-chip-color, rgba(255, 255, 255, 0.9));
+    }
+
+    &.loading {
+        animation: spectral-variant-loading 700ms ease-in-out infinite alternate;
+    }
+}
+
+@keyframes spectral-variant-loading {
+    from { opacity: 0.4; transform: translate(-50%, -50%) scale(0.82); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+.spectral-variant-custom-dot.loading {
+    transform-origin: center;
+    animation-name: spectral-custom-variant-loading;
+}
+
+@keyframes spectral-custom-variant-loading {
+    from { opacity: 0.4; transform: scale(0.82); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.spectral-variant-scale {
+    width: 100%;
+}
+
+.spectral-variant-zones {
+    display: flex;
+    height: 16px;
+    margin-bottom: 3px;
+
+    span {
+        box-sizing: border-box;
+        border-top: 1px solid rgba(255, 255, 255, 0.24);
+        border-left: 1px solid rgba(255, 255, 255, 0.24);
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 8px;
+        font-weight: 600;
+        line-height: 14px;
+        text-align: center;
+        letter-spacing: 0.05em;
+
+        &:last-child {
+            border-right: 1px solid rgba(255, 255, 255, 0.24);
+        }
+    }
+}
+
+.spectral-variant-bar {
+    position: relative;
+    width: 100%;
+    height: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 6px;
+    background: linear-gradient(to right,
+        #0d0d0d 0%, #1a0028 8%, #2a0050 15%, #440088 22%,
+        #5500aa 28%, #6600bb 34%, #7700cc 38%, #9400d3 40%,
+        #4400ff 44%, #0066ff 48%, #00eeff 52%, #00ff66 55%,
+        #ffff00 59%, #ff8800 63%, #dd0000 67%, #aa0000 74%,
+        #660000 82%, #220000 91%, #070707 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 0 10px rgba(0, 0, 0, 0.45);
+}
+
+.spectral-variant-dot {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.spectral-variant-dot-visible {
+    background: var(--spectral-chip-color, #9a9a9a);
+}
+
+body.timeline-open .spectral-variant-switcher {
+    bottom: 84px;
+}
+
+body.poi-timeline-open:not(.timeline-open) .spectral-variant-switcher {
+    bottom: 108px;
+}
+
+body.poi-timeline-open.timeline-open .spectral-variant-switcher {
+    bottom: 172px;
 }
 
 .poi-overlay {
@@ -3982,6 +4240,12 @@ body.timeline-open #popup > #popup-buttons-parent {
 }
 
 @media only screen and (max-width: 950px) {
+
+    // На мобильной раскладке нижний спектральный переключатель пересекается с
+    // центральной панелью. Слои остаются доступны в редакторе материалов.
+    .spectral-variant-switcher {
+        display: none;
+    }
 
     #panel-left:not(.expanded) {
         overflow: visible !important;
