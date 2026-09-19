@@ -2,6 +2,7 @@ import { Observer } from '@playcanvas/observer';
 import { MeshInstance, Vec3 } from 'playcanvas';
 
 import { CachedMeshGeometry, intersectMeshTrianglesDetailed } from './mesh-raycast';
+import { t } from '../../i18n/translations';
 import { Picker } from '../../picker';
 
 const MEASURE_CLICK_DRAG_THRESHOLD = 5;
@@ -69,6 +70,23 @@ class MeasurementController {
     private measureEdgeLabels: HTMLDivElement[] = [];
 
     private completedMeasureLabels: HTMLDivElement[] = [];
+
+    /**
+     * Поле ввода реальной длины прямо на подписи отрезка.
+     *
+     * Живёт отдельно от подписей: те пересоздаются каждый кадр, и поле вместе с набранным
+     * текстом и кареткой исчезало бы от любого поворота камеры.
+     */
+    private calibrationEditor: { root: HTMLDivElement; input: HTMLInputElement; unit: HTMLSelectElement } | null = null;
+
+    /** Отрезок, на подписи которого сейчас вводят длину. */
+    private editingMeasurementId: number | null = null;
+
+    /** У площади вписывать нечего: на её подписи меняют только единицу. */
+    private editingUnitOnly = false;
+
+    /** Отрезок, задавший масштаб сцены: на его подписи стоит метка. */
+    private referenceMeasurementId: number | null = null;
 
     private completedMeasurements: StoredMeasurement[] = [];
 
@@ -388,6 +406,9 @@ class MeasurementController {
         }
         this.measureOverlay?.remove();
         this.measureOverlay = null;
+        this.calibrationEditor = null;
+        this.editingMeasurementId = null;
+        this.referenceMeasurementId = null;
         this.measureSvgEl = null;
         this.completedMeasureGroupEl = null;
         this.measureCrosses = [];
@@ -698,6 +719,7 @@ class MeasurementController {
     }
 
     private hideOverlay() {
+        if (this.editingMeasurementId !== null) this.endCalibrationEdit();
         if (this.measureSvgEl) this.measureSvgEl.style.display = 'none';
         if (this.measureLabelEl) this.measureLabelEl.style.display = 'none';
         for (const el of this.measureEdgeLabels) el.style.display = 'none';
@@ -706,6 +728,7 @@ class MeasurementController {
 
     clearMeasurement() {
         this.cancelDraft();
+        this.referenceMeasurementId = null;
         this.completedMeasurements = [];
         this.completedMeasureGroupEl?.replaceChildren();
         for (const el of this.completedMeasureLabels) el.remove();
@@ -727,6 +750,7 @@ class MeasurementController {
 
     reset() {
         this.points = [];
+        this.referenceMeasurementId = null;
         this.completedMeasurements = [];
         this.completedMeasureGroupEl?.replaceChildren();
         for (const el of this.completedMeasureLabels) el.remove();
@@ -819,6 +843,8 @@ class MeasurementController {
                 metersPerSceneUnit,
                 displayUnit: unit
             },
+            // Масштаб задан одним измерением; без этой ссылки в файле не видно, каким именно.
+            scaleReferenceMeasurement: this.referenceMeasurementId,
             measurements: this.completedMeasurements.map(serializeMeasurement),
             draft: this.points.length > 0 ? {
                 type: this.getMode(),
@@ -1020,7 +1046,179 @@ class MeasurementController {
             label.style.left = `${center.x}px`;
             label.style.top = `${center.y}px`;
             label.style.display = 'block';
+
+            // Длину вписывают в саму подпись: так опорный отрезок — тот, на котором набрали, а
+            // не молчаливо «последний». У угла и площади вписывать нечего.
+            const lang = this.observer.get('ui.language');
+            if (measurement.mode === 'distance' && measurement.points.length >= 2) {
+                const id = measurement.id;
+                label.classList.add('measure-label-editable');
+                label.title = t('Click and enter the real length', lang);
+                if (id === this.referenceMeasurementId) label.classList.add('measure-label-reference');
+                label.addEventListener('click', () => this.beginCalibrationEdit(id));
+                if (id === this.editingMeasurementId) {
+                    label.style.display = 'none';
+                    this.placeCalibrationEditor(center.x, center.y);
+                }
+            } else if (measurement.mode === 'area') {
+                // Единицу больше нигде не выбрать — панель от этой строки освобождена, а на
+                // подписи площади есть что переключать.
+                const id = measurement.id;
+                label.classList.add('measure-label-editable');
+                label.title = t('Click to change units', lang);
+                label.addEventListener('click', () => this.beginCalibrationEdit(id));
+                if (id === this.editingMeasurementId) {
+                    label.style.display = 'none';
+                    this.placeCalibrationEditor(center.x, center.y);
+                }
+            }
         }
+        if (this.editingMeasurementId !== null &&
+            !this.completedMeasurements.some(entry => entry.id === this.editingMeasurementId)) {
+            this.endCalibrationEdit();
+        }
+    }
+
+    /**
+     * Открыть ввод реальной длины на подписи отрезка.
+     *
+     * @param id - Отрезок, длину которого вводят.
+     */
+    private beginCalibrationEdit(id: number) {
+        const measurement = this.completedMeasurements.find(entry => entry.id === id);
+        if (!measurement || measurement.points.length < 2) return;
+        const unitOnly = measurement.mode !== 'distance';
+        if (unitOnly && measurement.mode !== 'area') return;
+
+        const editor = this.ensureCalibrationEditor();
+        const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
+        const factor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
+        editor.unit.value = unit;
+        this.editingUnitOnly = unitOnly;
+        editor.input.style.display = unitOnly ? 'none' : '';
+        if (!unitOnly) {
+            const shown = this.toMeters(measurement.points[0].distance(measurement.points[1])) * factor;
+            editor.input.value = shown.toFixed(unit === 'mm' ? 0 : 2);
+        }
+        this.editingMeasurementId = id;
+        editor.root.style.display = 'flex';
+        this.renderNextFrame();
+        // Фокус — после кадра: до него поле ещё стоит не на месте, и браузер прокрутил бы к нему.
+        requestAnimationFrame(() => {
+            if (unitOnly) {
+                editor.unit.focus();
+                return;
+            }
+            editor.input.focus();
+            editor.input.select();
+        });
+    }
+
+    /**
+     * Пересчитать масштаб сцены по набранной длине.
+     *
+     * Масштаб — это метры на одну единицу сцены, поэтому делим введённое на длину отрезка в
+     * исходных единицах модели, а не на показанную (та уже умножена на прежний масштаб).
+     */
+    private commitCalibrationEdit() {
+        const editor = this.calibrationEditor;
+        const measurement = this.completedMeasurements.find(entry => entry.id === this.editingMeasurementId);
+        if (this.editingUnitOnly || !editor || !measurement || measurement.points.length < 2) {
+            this.endCalibrationEdit();
+            return;
+        }
+        const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
+        const factor = unit === 'mm' ? 0.001 : (unit === 'cm' ? 0.01 : 1);
+        const typed = Number(editor.input.value.replace(',', '.'));
+        const rawDistance = measurement.points[0].distance(measurement.points[1]);
+        const newUnitScale = (typed * factor) / rawDistance;
+        if (!Number.isFinite(typed) || typed <= 0 || rawDistance <= 0 ||
+            !Number.isFinite(newUnitScale) || newUnitScale <= 0) {
+            this.endCalibrationEdit();
+            return;
+        }
+        this.referenceMeasurementId = measurement.id;
+        this.observer.set('measure.unitScale', newUnitScale);
+        this.observer.set('measure.lastDistance', typed * factor);
+        this.endCalibrationEdit();
+    }
+
+    private endCalibrationEdit() {
+        this.editingMeasurementId = null;
+        this.editingUnitOnly = false;
+        if (this.calibrationEditor) this.calibrationEditor.root.style.display = 'none';
+        this.renderNextFrame();
+    }
+
+    private ensureCalibrationEditor() {
+        if (this.calibrationEditor) return this.calibrationEditor;
+        const root = document.createElement('div');
+        root.className = 'measure-label measure-label-edit';
+        root.style.display = 'none';
+        const input = document.createElement('input');
+        input.className = 'measure-label-input';
+        input.type = 'text';
+        input.inputMode = 'decimal';
+        // Единицу выбирают здесь же: набранное число без неё двусмысленно, а тянуться за ней
+        // в панель посреди ввода — терять фокус и место, на котором остановился.
+        const unit = document.createElement('select');
+        unit.className = 'measure-label-unit';
+        for (const value of ['mm', 'cm', 'm']) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            unit.appendChild(option);
+        }
+        unit.addEventListener('change', () => {
+            // Единица общая для всей сцены: подписи, панель и полоса масштаба должны
+            // говорить об одном. Набранные цифры не пересчитываем — их смысл задаёт как раз
+            // выбранная единица.
+            this.observer.set('measure.unit', unit.value);
+            // В режиме «только единица» поля ввода нет: фокус оставляем на списке, иначе
+            // сторож ухода фокуса тут же закроет подпись.
+            if (!this.editingUnitOnly) input.focus();
+        });
+        root.appendChild(input);
+        root.appendChild(unit);
+        input.addEventListener('keydown', (event: KeyboardEvent) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                this.commitCalibrationEdit();
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                this.endCalibrationEdit();
+            }
+        });
+        // Уход фокуса отменяет, а не применяет: молча переписать масштаб всей сцены — худшее,
+        // что может сделать случайный клик мимо. Но переход к выбору единицы — это тот же
+        // ввод, поэтому смотрим, куда фокус ушёл, и ждём тик: на момент самого `blur`
+        // активным ещё числится прежний элемент.
+        const cancelOnFocusLeave = () => {
+            setTimeout(() => {
+                const root = this.calibrationEditor?.root;
+                if (root && document.activeElement && root.contains(document.activeElement)) return;
+                this.endCalibrationEdit();
+            });
+        };
+        input.addEventListener('blur', cancelOnFocusLeave);
+        unit.addEventListener('blur', cancelOnFocusLeave);
+        unit.addEventListener('keydown', (event: KeyboardEvent) => {
+            if (event.key === 'Enter' || event.key === 'Escape') {
+                event.preventDefault();
+                this.endCalibrationEdit();
+            }
+        });
+        this.measureOverlay?.appendChild(root);
+        this.calibrationEditor = { root, input, unit };
+        return this.calibrationEditor;
+    }
+
+    private placeCalibrationEditor(x: number, y: number) {
+        const editor = this.calibrationEditor;
+        if (!editor) return;
+        editor.root.style.left = `${x}px`;
+        editor.root.style.top = `${y}px`;
+        editor.root.style.display = 'flex';
     }
 
     private renderStoredEdgeLabels(measurement: StoredMeasurement, screen: ScreenPoint[], visible: boolean[]) {

@@ -129,6 +129,7 @@ import { Multiframe } from './multiframe';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
 import { RESOLUTION_LOG_RANGE, resolutionColorCss, resolutionColorRgb } from './resolution-palette';
+import { ScaleBar, type ScaleBarUnit } from './scale-bar';
 import { ShadowCatcher } from './shadow-catcher';
 import { normalizeThemeColor } from './theme';
 import { TileResolutionTint } from './tile-resolution-tint';
@@ -1341,6 +1342,19 @@ class Viewer {
 
     private tmpRulerV1 = new Vec3();
 
+    private scaleBar: ScaleBar | null = null;
+
+    /** Хелперы были скрыты до входа в режим измерения — вернуть их при выходе. */
+    private helpersHiddenBeforeMeasure = false;
+
+    private tmpScaleBarV0 = new Vec3();
+
+    private tmpScaleBarV1 = new Vec3();
+
+    private tmpScaleBarS0 = new Vec3();
+
+    private tmpScaleBarS1 = new Vec3();
+
     captureFlashEl: HTMLDivElement | null = null;
 
     lastTapTime = 0;
@@ -2115,6 +2129,7 @@ class Viewer {
             applyCameraView: (view, duration) => this.applyPoiCameraView(view, duration),
             renderNextFrame: this.renderNextFrame.bind(this)
         });
+        this.scaleBar = new ScaleBar(this.canvas.parentElement ?? document.body);
         this.microphoneController = new MicrophoneController({
             canvas: this.canvas,
             observer: this.observer,
@@ -2633,6 +2648,8 @@ class Viewer {
         document.removeEventListener('pointermove', this.onFragmentHandlePointerMove);
         document.removeEventListener('pointerup', this.onFragmentHandlePointerUp);
         document.removeEventListener('pointercancel', this.onFragmentHandlePointerUp);
+        this.scaleBar?.destroy();
+        this.scaleBar = null;
         this.measurementController?.dispose?.();
         this.poiController?.dispose?.();
         this.selectionController?.dispose?.();
@@ -3005,6 +3022,25 @@ class Viewer {
             'ui.active': (active: string | null) => {
                 if (active !== 'fragment' && this.observer.get('fragment.selecting')) {
                     this.observer.set('fragment.selecting', false);
+                }
+                // Панель измерений открыта — инструмент включён. Отдельный переключатель
+                // «включить измерение» означал ровно одно состояние: панель открыта, а клики
+                // не работают и никто не понимает почему. В двумерном плеере сделано так же.
+                const measuring = active === 'measurement';
+                if (this.observer.get('measure.enabled') !== measuring) {
+                    this.observer.set('measure.enabled', measuring);
+                }
+                // Измерения цепляются за хелперы сцены, поэтому на время работы инструмента
+                // показываем их сами, а по выходе возвращаем как было. Отдельный переключатель
+                // в панели означал бы «инструмент включён, а половина целей не видна».
+                if (measuring) {
+                    if (!this.observer.get('helpers.visible')) {
+                        this.helpersHiddenBeforeMeasure = true;
+                        this.observer.set('helpers.visible', true);
+                    }
+                } else if (this.helpersHiddenBeforeMeasure) {
+                    this.helpersHiddenBeforeMeasure = false;
+                    this.observer.set('helpers.visible', false);
                 }
                 this.updateFragmentGizmo();
                 // Куб и переключатель проекции живут вместе с панелью изолированного просмотра.
@@ -3380,6 +3416,9 @@ class Viewer {
             'measure.mode': () => {
                 // Switching tools resets only the in-progress draft; completed measurements stay visible.
                 this.measurementController?.cancelDraft();
+            },
+            'measure.scaleBar': () => {
+                this.renderNextFrame();
             },
             'poi.enabled': (enabled: boolean) => {
                 if (enabled) {
@@ -10081,6 +10120,7 @@ class Viewer {
         this.measurementController.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
         this.poiController.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
         this.microphoneController?.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
+        this.updateScaleBar();
 
         // fit camera planes to the scene
         this.fitCameraClipPlanes();
@@ -10882,6 +10922,49 @@ class Viewer {
                 }
             }
         }
+    }
+
+    /**
+     * Пересчитать экранную полосу масштаба.
+     *
+     * Масштаб берётся на глубине точки орбиты: в перспективе «пикселей на метр» — величина не
+     * кадра, а плоскости, и любая другая опорная глубина соврала бы ровно так же, только молча.
+     * Поэтому глубина выбрана та, вокруг которой зритель и крутит сцену, а оговорка уходит в
+     * подсказку. В ортографии проекция не зависит от глубины, и оговорка не нужна.
+     *
+     * Считаем через `worldToScreen`, а не через `fov`: одна формула на обе проекции, и та же,
+     * которой пользуются остальные оверлеи.
+     */
+    private updateScaleBar() {
+        const bar = this.scaleBar;
+        if (!bar) return;
+        if (!this.observer.get('measure.scaleBar')) {
+            bar.hide();
+            return;
+        }
+
+        const camera = this.getRenderingCamera();
+        const entity = camera.entity as Entity;
+        const position = entity.getPosition();
+        const forward = this.tmpScaleBarV0.copy(entity.forward);
+        const focus = this.cameraControls.getFocus(this.tmpScaleBarV1);
+
+        // Точка орбиты может оказаться за камерой — при пролёте сквозь модель. Глубину тогда
+        // прижимаем к ближней плоскости: полоса останется осмысленной, а не исчезнет рывком.
+        const depth = Math.max(camera.nearClip * 2, focus.sub(position).dot(forward));
+        const reference = this.tmpScaleBarV1.copy(forward).mulScalar(depth).add(position);
+        // Меряем вдоль вертикали камеры: полоса вертикальная, и показывать она должна ровно
+        // ту величину, которую собой изображает.
+        const origin = camera.worldToScreen(reference, this.tmpScaleBarS0);
+        const offset = camera.worldToScreen(reference.add(entity.up), this.tmpScaleBarS1);
+        const pixelsPerSceneUnit = Math.hypot(offset.x - origin.x, offset.y - origin.y);
+
+        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
+        const metersPerSceneUnit = Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
+        const unit = (this.observer.get('measure.unit') ?? 'm') as ScaleBarUnit;
+        const lang = this.observer.get('ui.language') as string | undefined;
+        const note = this.isOrthographic() ? '' : t('scale at the orbit point depth', lang);
+        bar.update(pixelsPerSceneUnit / metersPerSceneUnit, unit, t('Step', lang), note);
     }
 
     private drawReferenceRuler() {

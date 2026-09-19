@@ -78,6 +78,14 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                 if (document.querySelector('.fragment-panel.fragment-selecting') && target instanceof HTMLCanvasElement) {
                     return;
                 }
+                // Точки измерения ставят кликом по модели. Для этой панели клик по канвасу —
+                // её собственный рабочий жест, а не «мимо»: закрыв её, мы бы вместе с ней
+                // выключили инструмент и стёрли из виду результат.
+                if (this.props.observerData.ui.active === 'measurement' &&
+                    (target instanceof HTMLCanvasElement ||
+                     (target instanceof Element && target.closest('.measure-overlay')))) {
+                    return;
+                }
                 this.props.setProperty('ui.active', null);
                 this.removeDeselectEvents?.();
                 this.removeDeselectEvents = null;

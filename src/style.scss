@@ -2214,6 +2214,52 @@ body.poi-timeline-open.timeline-open #popup > #popup-buttons-parent {
     }
 }
 
+/* Полоса масштаба в углу вьюпорта — перенос оформления `openseadragon-scalebar`
+   из двумерного плеера. Вертикальная, а не горизонтальная: поперёк кадра она спорит
+   с самой моделью. Длину и число делений задаёт `scale-bar.ts`; засечки рисуются
+   градиентом, поэтому их количество меняется без единого лишнего узла. */
+.viewer-scale-bar {
+    position: absolute;
+    /* Левый нижний угол — привычное место масштабной линейки (карты, микроскопия), и
+       единственный угол вьюпорта, свободный во всех пресетах: сверху слева кнопка панели,
+       справа навигационный куб, внизу по центру тулбар. Низ полосы стоит на общей базовой
+       линии с кнопками тулбара (те отбиты от низа на 34 пикселя), иначе она выглядит
+       сползшей. Вертикальная полоса узкая, около 46 пикселей, и до отцентрованных элементов
+       управления анимацией не дотягивается ни при какой ширине окна. */
+    bottom: 34px;
+    left: 12px;
+    z-index: 22;
+    box-sizing: content-box;
+    display: flex;
+    align-items: center;
+    padding: 0 6px 0 10px;
+    border-left: 2px solid rgba(255, 255, 255, 0.95);
+    color: #f5f7fa;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 15px;
+    text-shadow: 0 1px 2px #000;
+    white-space: nowrap;
+    cursor: default;
+    user-select: none;
+}
+
+/* Засечки идут по вертикали вдоль линии; нижняя грань закрывает последнее деление. */
+.viewer-scale-bar::after {
+    content: '';
+    position: absolute;
+    left: -2px;
+    top: 0;
+    bottom: 0;
+    width: 6px;
+    box-sizing: border-box;
+    border-bottom: 1px solid currentColor;
+    background-image: linear-gradient(to bottom, currentColor 0 1px, transparent 1px);
+    background-repeat: repeat-y;
+    background-size: 100% calc(100% / var(--scale-bar-divisions, 4));
+    pointer-events: none;
+}
+
 .measure-overlay {
     position: absolute;
     inset: 0;
@@ -2319,6 +2365,78 @@ body.poi-timeline-open.timeline-open #popup > #popup-buttons-parent {
     opacity: 0.82;
 }
 
+/* В подпись отрезка вписывают его настоящую длину — отсюда и калибруется сцена. */
+.measure-label-editable {
+    pointer-events: auto;
+    cursor: text;
+}
+
+.measure-label-editable:hover {
+    background: rgba(0, 0, 0, 0.85);
+    outline: 1px solid rgba(var(--theme-bright-rgb), 0.7);
+}
+
+/* Опорное измерение: белая окантовка самой плашки — «вот этот образец задаёт масштаб».
+   Правило стоит после :hover, иначе подсветка наведения снимала бы окантовку. */
+.measure-label-reference {
+    outline: 1.5px solid rgba(255, 255, 255, 0.95);
+}
+
+.measure-label-reference::before {
+    content: '';
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    margin-right: 5px;
+    vertical-align: -2px;
+    background: currentColor;
+    -webkit-mask: url(./static/icons/anchor-icon.svg) center / contain no-repeat;
+    mask: url(./static/icons/anchor-icon.svg) center / contain no-repeat;
+}
+
+.measure-label-edit {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    pointer-events: auto;
+    outline: 1px solid var(--theme-bright);
+}
+
+.measure-label-input {
+    width: 72px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    text-align: right;
+    outline: none;
+}
+
+/* Выбор единицы прямо в поле ввода: вид как у текста подписи, а не как у формы. */
+.measure-label-unit {
+    padding: 0 2px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: #f5f7fa;
+    font: inherit;
+    opacity: 0.75;
+    cursor: pointer;
+    appearance: none;
+}
+
+.measure-label-unit:hover,
+.measure-label-unit:focus {
+    background: rgba(255, 255, 255, 0.12);
+    opacity: 1;
+    outline: none;
+}
+
+.measure-label-unit option {
+    color: #111;
+}
+
 .measure-mode-toolbar {
     display: flex;
     flex-direction: row;
@@ -2328,12 +2446,51 @@ body.poi-timeline-open.timeline-open #popup > #popup-buttons-parent {
     padding: 6px 4px 10px;
 }
 
+/* Подвал панели: очистка и экспорт — две иконки, подписи им не нужны. */
 .measure-panel-footer {
     display: flex;
     align-items: center;
     justify-content: flex-end;
+    gap: 4px;
     min-height: 24px;
     padding-top: 2px;
+}
+
+.measure-clear-button {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.58;
+}
+
+.measure-clear-button:hover,
+.measure-clear-button:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    opacity: 1;
+}
+
+.measure-clear-icon {
+    width: 16px;
+    height: 16px;
+    background: currentColor;
+    -webkit-mask: url(./static/icons/poi-delete.svg) center / contain no-repeat;
+    mask: url(./static/icons/poi-delete.svg) center / contain no-repeat;
+}
+
+/* Шапка свёрнутого блока калибровки: подпись слева, итог и стрелка — в тексте кнопки. */
+.measure-section-toggle {
+    justify-content: flex-start;
+    font-size: 12px;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 0.85;
 }
 
 .measure-export-button {

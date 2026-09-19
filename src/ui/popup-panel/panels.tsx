@@ -776,6 +776,7 @@ class MeasurementsPanel extends React.Component <{
                a.measure?.enabled !== b.measure?.enabled ||
                a.measure?.unit !== b.measure?.unit ||
                a.measure?.referenceRuler !== b.measure?.referenceRuler ||
+               a.measure?.scaleBar !== b.measure?.scaleBar ||
                a.measure?.unitScale !== b.measure?.unitScale ||
                a.measure?.knownDistance !== b.measure?.knownDistance ||
                a.measure?.knownDistanceWarning !== b.measure?.knownDistanceWarning ||
@@ -783,9 +784,7 @@ class MeasurementsPanel extends React.Component <{
                a.measure?.lastAngle !== b.measure?.lastAngle ||
                a.measure?.lastArea !== b.measure?.lastArea ||
                a.measure?.areaPlanarity !== b.measure?.areaPlanarity ||
-               a.measure?.mode !== b.measure?.mode ||
-               a.measure?.pointCount !== b.measure?.pointCount ||
-               a.helpers?.visible !== b.helpers?.visible;
+               a.measure?.mode !== b.measure?.mode;
     }
 
     render() {
@@ -795,41 +794,15 @@ class MeasurementsPanel extends React.Component <{
         const mode = measureData.mode || 'distance';
         const factor = measureData.unit === 'mm' ? 1000 : (measureData.unit === 'cm' ? 100 : 1);
         const precision = measureData.unit === 'mm' ? 0 : 2;
-        const areaPrecision = measureData.unit === 'mm' ? 0 : 3;
-
-        const meters = measureData.lastDistance;
-        const measuredDistance = meters === null ? '-' : `${(meters * factor).toFixed(precision)} ${measureData.unit}`;
-
-        const angleDeg = measureData.lastAngle;
-        const measuredAngle = angleDeg === null ? '-' : `${angleDeg.toFixed(2)}°`;
-
+        // Расстояние, угол и площадь подписаны у самих измерений во вьюпорте, поэтому здесь
+        // остаётся только отклонение от плоскости: его на экране не нарисовать.
         const areaSqM = measureData.lastArea;
-        const measuredArea = areaSqM === null ?
-            '-' :
-            `${(areaSqM * factor * factor).toFixed(areaPrecision)} ${measureData.unit}²`;
-
         const planarity = measureData.areaPlanarity;
         const planarityValue = planarity === null ?
             '-' :
             `${(planarity * factor).toFixed(precision)} ${measureData.unit}`;
         const planarityWarn = planarity !== null && areaSqM !== null && areaSqM > 0 &&
             (planarity / Math.sqrt(areaSqM)) > 0.05;
-
-        const pointsHintKey = (() => {
-            const pc = measureData.pointCount || 0;
-            if (mode === 'area') {
-                if (pc === 0) return 'Pick first point';
-                if (pc === 1) return 'Pick second point';
-                if (pc === 2) return 'Pick third point';
-                return 'Pick next point or close polygon';
-            }
-            const needed = mode === 'distance' ? 2 : 3;
-            if (pc >= needed) return 'Pick first point';
-            if (pc === 0) return 'Pick first point';
-            if (pc === 1) return 'Pick second point';
-            if (pc === 2) return 'Pick third point';
-            return 'Pick fourth point';
-        })();
 
         return (
             <div className='popup-panel-parent'>
@@ -863,86 +836,32 @@ class MeasurementsPanel extends React.Component <{
                         </button>
                     </div>
 
+
+                    {mode === 'area' ? (
+                        <Detail
+                            label={`${t('Planarity deviation', lang)}${planarityWarn ? ' \u26a0' : ''}`}
+                            value={planarityValue}
+                        />
+                    ) : null}
+
                     <Toggle
-                        label={t('Enable measuring', lang)}
-                        value={measureData.enabled}
-                        setProperty={(value: boolean) => props.setProperty('measure.enabled', value)}
-                    />
-                    {/* Часть измерений будет привязана к хелперам сцены, поэтому их показ
-                        включается прямо здесь. Пока это только видимость во вьюпорте. */}
-                    <Toggle
-                        label={t('Show helpers', lang)}
-                        value={!!props.observerData?.helpers?.visible}
-                        setProperty={(value: boolean) => props.setProperty('helpers.visible', value)}
-                    />
-                    <Button
-                        class='secondary'
-                        text={t('CLEAR MEASUREMENTS', lang)}
-                        onClick={() => {
-                            if (window.viewer) window.viewer.clearMeasurement();
-                        }}
-                    />
-                    <Select
-                        label={t('Units', lang)}
-                        type='string'
-                        options={[
-                            { t: t('millimeters (mm)', lang), v: 'mm' },
-                            { t: t('centimeters (cm)', lang), v: 'cm' },
-                            { t: t('meters (m)', lang), v: 'm' }
-                        ]}
-                        value={measureData.unit}
-                        setProperty={(value: 'mm' | 'cm' | 'm') => props.setProperty('measure.unit', value)}
-                    />
-                    <Numeric
-                        label={t('1 Unit = (m)', lang)}
-                        value={measureData.unitScale}
-                        min={0.000001}
-                        max={1000000}
-                        setProperty={(value: number) => props.setProperty('measure.unitScale', Math.max(0.000001, value))}
+                        label={t('Scale bar', lang)}
+                        value={!!measureData.scaleBar}
+                        setProperty={(value: boolean) => props.setProperty('measure.scaleBar', value)}
                     />
 
-                    {mode === 'distance' && (
-                        <>
-                            <Numeric
-                                label={`${t('Known distance', lang)} (${measureData.unit})`}
-                                value={measureData.knownDistance ?? 0}
-                                min={0}
-                                max={1e9}
-                                setProperty={(value: number) => props.setProperty('measure.knownDistance', Math.max(0, value))}
-                            />
-                            {measureData.knownDistanceWarning && (
-                                <div className='measure-warning'>
-                                    {t('Only one known segment can be used for scene scale. A new distance replaces the previous one.', lang)}
-                                </div>
-                            )}
-                            <Button
-                                class='secondary'
-                                text={t('RECALCULATE SCENE SIZE', lang)}
-                                onClick={() => {
-                                    if (window.viewer) window.viewer.recalculateSceneSize();
-                                }}
-                                enabled={measureData.lastDistance != null && measureData.lastDistance > 0 && (measureData.knownDistance ?? 0) > 0}
-                            />
-                            <Detail label={t('Last Distance', lang)} value={measuredDistance} />
-                        </>
-                    )}
-
-                    {mode === 'angle' && (
-                        <Detail label={t('Last Angle', lang)} value={measuredAngle} />
-                    )}
-
-                    {mode === 'area' && (
-                        <>
-                            <Detail label={t('Last Area', lang)} value={measuredArea} />
-                            <Detail
-                                label={`${t('Planarity deviation', lang)}${planarityWarn ? ' ⚠' : ''}`}
-                                value={planarityValue}
-                            />
-                        </>
-                    )}
-
-                    <Detail label={t('Points', lang)} value={t(pointsHintKey, lang)} />
                     <div className='measure-panel-footer'>
+                        <button
+                            type='button'
+                            className='measure-clear-button'
+                            title={t('Clear measurements', lang)}
+                            aria-label={t('Clear measurements', lang)}
+                            onClick={() => {
+                                if (window.viewer) window.viewer.clearMeasurement();
+                            }}
+                        >
+                            <span className='measure-clear-icon' aria-hidden='true' />
+                        </button>
                         <button
                             type='button'
                             className='measure-export-button'

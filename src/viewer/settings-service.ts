@@ -343,12 +343,14 @@ class SettingsService {
                 const m = options.measure;
                 if (!m || typeof m !== 'object' || Array.isArray(m)) return m;
                 // Сохраняем только калибровку: единицу, масштаб и известное расстояние. Она
-                // привязана к объекту, без неё измерения соврут. Всё прочее — режим, число
-                // точек, последние расстояние, угол и площадь — результаты чужого сеанса; они
-                // уезжали вместе с моделью и всплывали у следующего зрителя.
+                // привязана к объекту, без неё измерения соврут. Вместе с ней — полосу
+                // масштаба: это способ показа самой модели, и куратор включает её один раз, а
+                // не каждый зритель. Всё прочее — режим, число точек, последние расстояние,
+                // угол и площадь — результаты чужого сеанса; они уезжали вместе с моделью и
+                // всплывали у следующего зрителя.
                 const src = m as Record<string, unknown>;
                 const kept: Record<string, unknown> = { enabled: false };
-                (['unit', 'unitScale', 'knownDistance'] as const).forEach((key) => {
+                (['unit', 'unitScale', 'knownDistance', 'scaleBar'] as const).forEach((key) => {
                     if (src[key] !== undefined) kept[key] = src[key];
                 });
                 return kept;
@@ -510,6 +512,7 @@ class SettingsService {
         o.set('measure.enabled', false);
         o.set('measure.unit', 'm');
         o.set('measure.referenceRuler', false);
+        o.set('measure.scaleBar', false);
         o.set('measure.unitScale', 1);
         o.set('measure.mode', 'distance');
         o.set('measure.lastDistance', null);
@@ -611,13 +614,14 @@ class SettingsService {
             // модели в сцене, то есть именно её свойство.
             const debugPath = path.startsWith('debug.');
             const alignment = path.startsWith('debug.alignment');
-            // Из измерений принимаем только калибровку — по той же причине, по какой её только
-            // и сохраняем. Старые файлы иначе продолжали бы приносить чужие результаты.
+            // Из измерений принимаем только калибровку и полосу масштаба — по той же причине,
+            // по какой их только и сохраняем. Старые файлы иначе продолжали бы приносить чужие
+            // результаты.
             const measurePath = path.startsWith('measure.');
-            const calibration = path === 'measure.unit' || path === 'measure.unitScale' ||
-                path === 'measure.knownDistance';
+            const measureKept = path === 'measure.unit' || path === 'measure.unitScale' ||
+                path === 'measure.knownDistance' || path === 'measure.scaleBar';
             if (filter.indexOf(path) !== -1 || (debugPath && !alignment) ||
-                (measurePath && !calibration)) return;
+                (measurePath && !measureKept)) return;
             // Бокс размеров — сессионный инструмент: НЕ восстанавливаем его включённым
             // из сохранённых настроек, иначе он «висит» поверх модели после загрузки.
             if (path === 'dimensionBox.enabled') {

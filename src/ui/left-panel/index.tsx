@@ -150,16 +150,6 @@ const parseJsonArray = <T, >(raw: string | undefined, mapItem?: (value: unknown)
 
 const parseStringArray = (raw: string | undefined): string[] => parseJsonArray<string>(raw, value => (typeof value === 'string' ? value : null));
 
-const parseStringArrayLoose = (raw: unknown): string[] => {
-    if (Array.isArray(raw)) {
-        return raw.filter((value): value is string => typeof value === 'string');
-    }
-    if (typeof raw === 'string') {
-        return parseStringArray(raw);
-    }
-    return [];
-};
-
 const parseSceneCameras = (raw: string | undefined): SceneCameraOption[] => parseJsonArray<SceneCameraOption>(raw, (value) => {
     if (!value || typeof value !== 'object') return null;
     const candidate = value as { name?: unknown; path?: unknown };
@@ -245,38 +235,17 @@ const texelDensityAreaValue = (areaM2: number, unit?: string) => {
     return `${(areaM2 * factor).toFixed(precision)} ${suffix}`;
 };
 
-const exportViewerSettings = (observerData: ObserverData) => {
-    const viewer = getViewer();
-    if (viewer?.exportViewerSettings) {
-        viewer.exportViewerSettings();
-        return;
-    }
-    const camera: Record<string, unknown> = observerData.camera ? { ...observerData.camera } : {};
-    if (viewer?.cameraControls?.mode === 'orbit') {
-        const p = viewer.cameraControls.getPosition();
-        const f = viewer.cameraControls.getFocus();
-        camera.position = [p.x, p.y, p.z];
-        camera.focus = [f.x, f.y, f.z];
-    }
-    const settings = {
-        camera,
-        skybox: observerData.skybox,
-        light: observerData.light,
-        debug: observerData.debug,
-        shadowCatcher: observerData.shadowCatcher,
-        measure: observerData.measure,
-        metadata: observerData.metadata ?? {}
-    };
-    const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const filenames = parseStringArrayLoose(viewer?.observer?.get?.('scene.filenames'));
-    const firstFilename = Array.isArray(filenames) && filenames.length > 0 ? filenames[0] : null;
-    const baseName = firstFilename ? firstFilename.replace(/\.[^/.]+$/, '') || null : null;
-    a.download = baseName ? `${baseName}.model-viewer-settings.json` : 'model-viewer-settings.json';
-    a.click();
-    URL.revokeObjectURL(url);
+/**
+ * Выгрузить настройки вьюера в файл рядом с моделью.
+ *
+ * Состав файла определяет только `SettingsService.getSettingsData`: он отбирает из измерений
+ * одну калибровку, а результаты сеанса — режим, последние расстояние, угол и площадь —
+ * оставляет за бортом, чтобы они не уезжали вместе с моделью к следующему зрителю. Прежняя
+ * запасная ветка собирала объект здесь же и клала `measure` целиком; она не вызывалась, но
+ * держала второе определение того, что считать настройками.
+ */
+const exportViewerSettings = () => {
+    getViewer()?.exportViewerSettings?.();
 };
 
 type LeftPanelTab = 'scene' | 'alignment' | 'materials' | 'poi';
@@ -1441,7 +1410,7 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                                     <Button
                                         class={['secondary', 'export-settings-button']}
                                         text={t('Export viewer settings', lang)}
-                                        onClick={() => exportViewerSettings(observerData)}
+                                        onClick={() => exportViewerSettings()}
                                     />
                                 </div>
                             )}
