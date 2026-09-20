@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { budget } from './budget';
+
 // Палитра берётся из того же модуля, что и у приложения. Раньше здесь лежал её список
 // копией, и когда вьюер перешёл на палитру движка (её задаёт PlayCanvas по `colorizeLod`
 // и из приложения не поменять), копия осталась со старой пастельной гаммой — тест ждал
@@ -380,7 +382,7 @@ test('переключает уровни детализации по экран
 });
 
 test('держит последний доступный LOD и не заменяет его пустой веткой при приближении', async ({ page }) => {
-    test.setTimeout(300000);
+    test.setTimeout(budget(300000));
     const box = (centerX: number, halfSize: number) => [
         centerX, 0, 0,
         halfSize, 0, 0,
@@ -560,7 +562,7 @@ test('разворачивает неявное дерево (implicit tiling, C
     test.skip(!await samplesAvailable(page, HRAM),
         'Нет тайлсета: распакуйте архив из ion в dist/models/3d-tiles/hram');
     // Набор тяжелее сэмплов: 552 тайла и десятки мегабайт на подъезде к модели.
-    test.setTimeout(300000);
+    test.setTimeout(budget(300000));
 
     const pageErrors: string[] = [];
     page.on('pageerror', error => pageErrors.push(error.message));

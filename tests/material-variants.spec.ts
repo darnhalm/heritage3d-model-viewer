@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+
+import { budget } from './budget';
 import { materialVariantsFixture } from '../scripts/hdr-fixtures.cjs';
 
 test('KHR_materials_variants switches layers and restores the original material', async ({ page }) => {
@@ -96,7 +98,7 @@ test('variant-only embedded texture is decoded on first selection and then cache
 });
 
 test('spectral and manually colored variants appear in the viewport quick switcher', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     await page.route('**/spectral-variants.glb', route => route.fulfill({ body: materialVariantsFixture(false, 'Study @IRR') }));
     await page.goto('/?webgl&load=spectral-variants.glb');
     await page.waitForFunction(() => (window as any).viewer?.observer?.get('scene.variants.list') === '["Study @IRR"]' &&

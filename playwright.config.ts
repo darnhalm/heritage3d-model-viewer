@@ -44,7 +44,11 @@ export default defineConfig({
                 '--use-gl=angle',
                 '--use-angle=swiftshader',
                 '--enable-unsafe-swiftshader',
-                '--ignore-gpu-blocklist'
+                '--ignore-gpu-blocklist',
+                // На раннере крошечный `/dev/shm`, и Chromium, положив туда разделяемую
+                // память, умирает целиком: в прогоне это десять `Failed to find browser`
+                // и тридцать тестов, прошедших только со второй попытки.
+                '--disable-dev-shm-usage'
             ]
         }
     },

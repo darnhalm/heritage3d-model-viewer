@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { budget } from './budget';
+
 const waitForViewer = async (page: import('@playwright/test').Page) => {
     await page.waitForFunction(() => typeof (window as any).viewer !== 'undefined' && !!(window as any).viewer?.observer);
 };
@@ -121,7 +123,7 @@ test('legacy Material Icons font loads only for a helper with a custom ligature 
 });
 
 test('poi timeline uses the tile-style draggable cursor and hatched transitions', async ({ page }) => {
-    test.setTimeout(90000);
+    test.setTimeout(budget(90000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.evaluate(() => {
@@ -168,7 +170,7 @@ test('poi timeline uses the tile-style draggable cursor and hatched transitions'
 });
 
 test('fly movement speed is configurable from the Controls menu and saved', async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(budget(120000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.observer?.get('ui.spinner') === false);
@@ -232,7 +234,7 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
 });
 
 test('camera mode button cycles orbit, fly and grounded walk', async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(budget(120000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.observer?.get('ui.spinner') === false);
@@ -269,7 +271,7 @@ test('camera mode button cycles orbit, fly and grounded walk', async ({ page }) 
 });
 
 test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and cleans up', async ({ page }) => {
-    test.setTimeout(180000);
+    test.setTimeout(budget(180000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
@@ -334,7 +336,7 @@ test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and
 });
 
 test('surface pan keeps the picked point under the moving cursor', async ({ page }) => {
-    test.setTimeout(180000);
+    test.setTimeout(budget(180000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
@@ -394,7 +396,7 @@ test('surface pan keeps the picked point under the moving cursor', async ({ page
 });
 
 test('mouse button inversion swaps orbit and pan and restores from the navigation cookie', async ({ page }) => {
-    test.setTimeout(300000);
+    test.setTimeout(budget(300000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
@@ -448,7 +450,7 @@ test('mouse button inversion swaps orbit and pan and restores from the navigatio
 });
 
 test('double click performs a direct two-times dolly with two lightweight feedback rings', async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(budget(120000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
@@ -508,7 +510,7 @@ test('double click performs a direct two-times dolly with two lightweight feedba
 });
 
 test('double click respects the same closest zoom limit as wheel navigation', async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(budget(120000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     const clamped = await page.evaluate(async () => {
@@ -613,7 +615,7 @@ test('theme color drives accents, active tools, progress colors and settings exp
 });
 
 test('measurement JSON export is a compact icon in the panel footer', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => {
@@ -714,6 +716,9 @@ test('loads a model and auto-applies nearby scene settings without restoring dev
 });
 
 test('looks for nearby settings by climbing versions, not by spraying requests', async ({ page }) => {
+    // Две полные загрузки страницы с моделью: в общий бюджет в тридцать секунд они упираются
+    // даже на ноутбуке, стоит машине заняться чем-то ещё.
+    test.setTimeout(budget(90000));
     const requested: string[] = [];
     page.on('request', (request) => {
         if (request.url().includes('model-viewer-settings')) requested.push(request.url());
@@ -747,7 +752,7 @@ test('looks for nearby settings by climbing versions, not by spraying requests',
 });
 
 test('приглашение «перетащите модель» не мигает, когда модель названа в адресе', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => {
@@ -765,7 +770,7 @@ test('приглашение «перетащите модель» не мига
 });
 
 test('encodes model URLs in the embed generator', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
 
@@ -813,7 +818,7 @@ test('encodes model URLs in the embed generator', async ({ page }) => {
 });
 
 test('embed poster candidates are probed at once and never hold up the model', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     // Однопиксельный PNG: единственный кандидат, который «существует».
     const onePixelPng = Buffer.from(
         'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -855,7 +860,7 @@ test('embed poster candidates are probed at once and never hold up the model', a
 });
 
 test('none embed preset hides every configurable interface element', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     await page.goto('/?webgl&embed=1&ui=none');
     await waitForViewer(page);
     await expect(page.locator('#panel-left')).toHaveCount(0);
@@ -868,7 +873,7 @@ test('none embed preset hides every configurable interface element', async ({ pa
 });
 
 test('embed messaging accepts only the configured or referrer parent origin', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     // Use a passive same-origin document as the host so the parent itself does not
     // initialize the viewer or perform backend-recovery navigation.
     await page.goto('/static/icons/info-icon.svg');
@@ -963,7 +968,7 @@ test('raycast helpers hit secondary mesh primitives for selection and measuremen
 });
 
 test('completed measurements stay editable, area closes on double click, and JSON keeps control points', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FMultiPrimitive.gltf');
     await waitForViewer(page);
     await page.waitForFunction(() => {
@@ -1041,7 +1046,7 @@ test('completed measurements stay editable, area closes on double click, and JSO
 });
 
 test('poi tab stays stable and edits persist to observer state', async ({ page }) => {
-    test.setTimeout(120000);
+    test.setTimeout(budget(120000));
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => {
         pageErrors.push(error.message);
@@ -1307,7 +1312,7 @@ test('poi tab stays stable and edits persist to observer state', async ({ page }
 });
 
 test('poi tour pauses immediately, resumes, stops, and ignores stale advances', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     // WebGL keeps this timing-sensitive state-machine test deterministic on software CI GPUs.
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
@@ -1459,7 +1464,7 @@ test('poi tour pauses immediately, resumes, stops, and ignores stale advances', 
 });
 
 test('полоса прогресса просыпается от команды извне, а не только от клика', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => {
@@ -1496,7 +1501,7 @@ test('полоса прогресса просыпается от команды
 });
 
 test('alignment tab toggles alignment mode safely without runtime errors', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => {
         pageErrors.push(error.message);
@@ -1600,7 +1605,7 @@ test('alignment tab toggles alignment mode safely without runtime errors', async
 });
 
 test('materials by objects mode selects a real node and clears its scope when disabled', async ({ page }) => {
-    test.setTimeout(60000);
+    test.setTimeout(budget(60000));
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => {
         pageErrors.push(error.message);
@@ -1676,7 +1681,7 @@ test('materials debug buttons toggle off on a second click', async ({ page }) =>
     // Каждое переключение отладочного режима перестраивает материалы и ждёт кадра, а кадр
     // на софтверном ANGLE/SwiftShader идёт неспешно. Четыре переключения подряд не влезают
     // в общие 30 секунд: прогон занимает около минуты, оставаясь при этом зелёным.
-    test.setTimeout(90000);
+    test.setTimeout(budget(90000));
     await page.goto('/?load=static%2Ftest-assets%2FBoxTextured.glb');
     await waitForViewer(page);
     await page.waitForFunction(() => {
