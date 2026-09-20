@@ -1,6 +1,23 @@
 import { expect, test } from '@playwright/test';
 import { hdrFixture } from '../scripts/hdr-fixtures.cjs';
 
+// Половина случаев здесь — под WebGPU, а на машине без видеокарты адаптера нет вовсе: вьюер
+// перезагружается на `auto` и рисует через WebGL, после чего проверки про WebGPU падают не по
+// делу. Спрашиваем адаптер до перехода на страницу и пропускаем такие случаи честно.
+test.beforeEach(async ({ page }, testInfo) => {
+    if (!testInfo.title.includes('webgpu')) return;
+    const available = await page.evaluate(async () => {
+        const gpu = (navigator as unknown as { gpu?: { requestAdapter: () => Promise<unknown> } }).gpu;
+        if (!gpu) return false;
+        try {
+            return !!(await gpu.requestAdapter());
+        } catch {
+            return false;
+        }
+    });
+    test.skip(!available, 'на этой машине нет адаптера WebGPU');
+});
+
 for (const backend of ['webgl', 'webgpu']) {
     test(`HDR surface keeps radiance until output and restores GLB (${backend})`, async ({ page }) => {
         const fixture = hdrFixture();
