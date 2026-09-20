@@ -13,6 +13,8 @@ import path from 'node:path';
 
 import { chromium } from '@playwright/test';
 
+import { collectMachineProfile, installFrameProbe, readFrameProbe } from './bench-machine.mjs';
+
 const root = process.cwd();
 const config = JSON.parse(await readFile(path.join(root, 'benchmarks/tiles.config.json'), 'utf8'));
 const baseUrl = new URL(process.env.BENCH_URL ?? 'http://127.0.0.1:4173/');
@@ -101,6 +103,8 @@ const browser = await chromium.launch({
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']
 });
 const results = [];
+/** Паспорт машины: снимается на первой странице прогона и кладётся в отчёт. */
+let machine = null;
 const skipped = [];
 
 const modelUrl = scene => new URL(scene.path, baseUrl);
@@ -321,6 +325,9 @@ const runPass = async ({ context, scene, variant, pass, run }) => {
     viewerUrl.searchParams.set('webgl', '');
     await page.goto(viewerUrl.href, { waitUntil: 'domcontentloaded', timeout: startupMs });
     await page.waitForFunction(() => window.viewer?.observer, null, { timeout: startupMs });
+    // Паспорт машины один на прогон: без него отчёты с разных машин несопоставимы.
+    machine ??= await collectMachineProfile(page);
+    await installFrameProbe(page);
     await page.evaluate(({ priority, url, filename }) => {
         const viewer = window.viewer;
         viewer.observer.set('camera.tilePriority', priority ?? 'default');
@@ -381,11 +388,12 @@ const runPass = async ({ context, scene, variant, pass, run }) => {
         sample.focusSource.startsWith('surface-'))) {
         throw new Error('Surface priority never resolved its scripted point on the model');
     }
+    const frameProbe = await readFrameProbe(page);
     await page.close();
-    return { samples, responses, resources, pageErrors };
+    return { samples, responses, resources, pageErrors, frameProbe };
 };
 
-const summarize = ({ scene, variant, pass, run, samples, responses, resources, pageErrors }) => {
+const summarize = ({ scene, variant, pass, run, samples, responses, resources, pageErrors, frameProbe }) => {
     const ready = samples.filter(sample => isReady(sample, scene.kind));
     const signatures = ready.filter(sample => sample.signature);
     let stateChanges = 0;
@@ -458,6 +466,11 @@ const summarize = ({ scene, variant, pass, run, samples, responses, resources, p
         }).length / Math.max(1, samples.filter(sample => sample.stage !== 'startup').length) * 100),
         tickP50Ms: round(quantile(samples.map(sample => sample.tickMs), 0.5)),
         tickP95Ms: round(quantile(samples.map(sample => sample.tickMs), 0.95)),
+        gpuFrameP50Ms: frameProbe?.gpuFrameP50Ms ?? null,
+        gpuFrameP95Ms: frameProbe?.gpuFrameP95Ms ?? null,
+        cpuFrameP50Ms: frameProbe?.cpuFrameP50Ms ?? null,
+        vramTotalMb: frameProbe?.vramMb?.total ?? null,
+        vramTexturesMb: frameProbe?.vramMb?.textures ?? null,
         tickP99Ms: round(quantile(samples.map(sample => sample.tickMs), 0.99)),
         pageErrors,
         samples
@@ -572,6 +585,10 @@ const comparisons = [...comparisonGroups.values()].filter(group => group.length 
         variants: group
     };
 });
+const machineLine = machine ?
+    `${machine.gpuRenderer ?? 'GPU неизвестен'} · ${machine.backend ?? '—'} · ${machine.host?.cpu ?? ''} · ${machine.canvasDevicePx?.join('×') ?? ''} px` :
+    'машина не определена';
+
 const comparisonLines = comparisons.flatMap(comparison => [
     `- **${comparison.scene} (${comparison.pass})**: first visible — ${comparison.firstVisible.variant} (${comparison.firstVisible.timeToFirstVisibleMs} ms); settled — ${comparison.settled.variant} (${comparison.settled.timeToSettledMs} ms); least transfer — ${comparison.transfer.variant} (${formatBytes(comparison.transfer.transferredBytes)}); fewest fallbacks — ${comparison.fallbacks.variant} (${comparison.fallbacks.fallbackCount}).`
 ]);
@@ -581,6 +598,8 @@ const markdown = [
     `Generated: ${new Date().toISOString()}`,
     '',
     `Target: \`${publicBase}\` · suite: \`${suite}\` · network: \`${networkName}\` · route step: ${stepMs} ms`,
+    '',
+    `Machine: ${machineLine}`,
     '',
     '> The harness is external and passive: tile recording is disabled, cache entries are not pinned, and no benchmark code is shipped in the viewer.',
     '',
@@ -615,6 +634,7 @@ const chart = (result, field, color) => {
 const html = `<!doctype html><html><head><meta charset="utf-8"><title>Tile benchmark</title><style>
 body{margin:24px;background:#111;color:#eee;font:14px/1.45 system-ui,sans-serif}h1,h2{font-weight:600}.meta{color:#aaa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(620px,1fr));gap:18px}.card{background:#1b1b1b;border:1px solid #333;border-radius:10px;padding:16px}.metrics{display:flex;flex-wrap:wrap;gap:12px}.metric{background:#242424;padding:7px 10px;border-radius:6px}.charts{display:grid;grid-template-columns:1fr 1fr;gap:8px}svg{width:100%;height:120px;background:#151515;border-radius:6px}table{border-collapse:collapse;width:100%}th,td{padding:7px;border-bottom:1px solid #333;text-align:right}th:first-child,td:first-child{text-align:left}.warn{color:#ffd84a}</style></head><body>
 <h1>Tile streaming benchmark</h1><p class="meta">${escapeHtml(publicBase)} · ${escapeHtml(suite)} · ${escapeHtml(networkName)} · ${new Date().toISOString()}</p>
+<p class="meta">${escapeHtml(machineLine)}</p>
 <p>The harness is external and passive. Compare variants of the same source scene directly; cross-format rows are diagnostic only.</p>
 ${comparisonLines.length ? `<section class="card"><h2>Same-scene findings</h2><ul>${comparisonLines.map(line => `<li>${escapeHtml(line.replace(/^- |\*\*/g, ''))}</li>`).join('')}</ul></section><br>` : ''}
 <div class="grid">${results.map(result => `<section class="card"><h2>${escapeHtml(result.scene)} — ${escapeHtml(result.variant)} (${result.pass})</h2><div class="metrics">
@@ -625,6 +645,7 @@ ${skipped.length ? `<h2>Skipped</h2><ul class="warn">${skipped.map(item => `<li>
 
 const payload = {
     generatedAt: new Date().toISOString(),
+    machine,
     target: { origin: publicBase, suite, network: networkName, passes, runs, stepMs, sampleMs },
     git: { sha: process.env.GITHUB_SHA ?? null },
     aggregates,

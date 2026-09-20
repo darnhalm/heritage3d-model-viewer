@@ -3,6 +3,8 @@ import { spawn } from 'node:child_process';
 
 import { chromium } from '@playwright/test';
 
+import { collectMachineProfile, installFrameProbe, readFrameProbe } from './bench-machine.mjs';
+
 const baseUrl = process.env.BENCH_URL ?? 'http://127.0.0.1:4173/';
 const runs = Math.max(1, Number(process.env.BENCH_RUNS ?? 3));
 const backends = (process.env.BENCH_BACKENDS ?? 'webgpu,webgl')
@@ -46,6 +48,7 @@ if (!await canReachViewer()) {
 
 const browser = await chromium.launch({ headless: false });
 const results = [];
+let machine = null;
 
 try {
     for (const backend of backends) {
@@ -60,6 +63,11 @@ try {
                 { timeout: 60000 }
             );
             await page.waitForTimeout(1000);
+
+            // Паспорт машины снимаем один раз: он один на весь прогон, а вот кадровые
+            // метрики собираем в каждом заходе — бэкенды считают по-разному.
+            machine ??= await collectMachineProfile(page);
+            await installFrameProbe(page);
 
             await page.evaluate(() => {
                 const viewer = window.viewer;
@@ -130,6 +138,7 @@ try {
             await page.mouse.up({ button: mouseButton });
             await page.waitForTimeout(750);
 
+            const frameProbe = await readFrameProbe(page);
             const sample = await page.evaluate(({ backend, run }) => {
                 const data = window.__navigationBenchmark;
                 return {
@@ -143,7 +152,7 @@ try {
                     pickLatencyMs: data.pickLatencyMs
                 };
             }, { backend, run });
-            results.push(sample);
+            results.push({ ...sample, frameProbe });
             await page.close();
         }
     }
@@ -175,8 +184,12 @@ const summary = backends.map((backend) => {
         pickLatencyP50Ms: round(quantile(pickLatencies, 0.5)),
         pickLatencyP95Ms: round(quantile(pickLatencies, 0.95)),
         longTaskCount: longTasks.length,
-        longestTaskMs: round(Math.max(0, ...longTasks))
+        longestTaskMs: round(Math.max(0, ...longTasks)),
+        gpuFrameP50Ms: round(quantile(samples.map(sample => sample.frameProbe?.gpuFrameP50Ms ?? 0).filter(Boolean), 0.5)),
+        gpuFrameP95Ms: round(quantile(samples.map(sample => sample.frameProbe?.gpuFrameP95Ms ?? 0).filter(Boolean), 0.5)),
+        cpuFrameP50Ms: round(quantile(samples.map(sample => sample.frameProbe?.cpuFrameP50Ms ?? 0).filter(Boolean), 0.5)),
+        vramMb: samples[samples.length - 1]?.frameProbe?.vramMb ?? null
     };
 });
 
-console.log(JSON.stringify({ runs, mouseButton, summary }, null, 2));
+console.log(JSON.stringify({ runs, mouseButton, machine, summary }, null, 2));
