@@ -8,6 +8,16 @@ import { Picker } from '../../picker';
 const MEASURE_CLICK_DRAG_THRESHOLD = 5;
 const AREA_CLOSE_HIT_RADIUS = 16;
 type MeasureMode = 'distance' | 'angle' | 'area';
+type CompletedEntry = {
+    group: SVGGElement;
+    shape: SVGPolylineElement | SVGPolygonElement;
+    polygon: boolean;
+    points: Array<{ hx: SVGLineElement; vy: SVGLineElement; handle: SVGCircleElement }>;
+    label: HTMLDivElement;
+    edgeLabels: HTMLDivElement[];
+    /** Последний записанный текст подписи — чтобы не трогать DOM, когда он не изменился. */
+    labelText: string;
+};
 type ScreenPoint = { x: number; y: number; z: number };
 type StoredMeasurement = {
     id: number;
@@ -70,6 +80,15 @@ class MeasurementController {
     private measureEdgeLabels: HTMLDivElement[] = [];
 
     private completedMeasureLabels: HTMLDivElement[] = [];
+
+    /**
+     * Разметка одного завершённого измерения, живущая между кадрами.
+     *
+     * Раньше подписи и фигуры пересоздавались каждый кадр: на трёх отрезках это стоило 0.22 мс,
+     * и росло линейно — на трёх десятках вышло бы около двух миллисекунд, восьмая часть кадра.
+     * Теперь узлы создаются один раз на измерение, а в кадре обновляются только координаты.
+     */
+    private completedEntries = new Map<number, CompletedEntry>();
 
     /**
      * Поле ввода реальной длины прямо на подписи отрезка.
@@ -418,6 +437,7 @@ class MeasurementController {
         this.measureLabelEl = null;
         this.measureEdgeLabels = [];
         this.completedMeasureLabels = [];
+        this.completedEntries.clear();
         this.completedMeasurements = [];
     }
 
@@ -770,6 +790,7 @@ class MeasurementController {
         this.completedMeasureGroupEl?.replaceChildren();
         for (const el of this.completedMeasureLabels) el.remove();
         this.completedMeasureLabels = [];
+        this.completedEntries.clear();
         this.hideOverlay();
         this.renderNextFrame();
     }
@@ -792,6 +813,7 @@ class MeasurementController {
         this.completedMeasureGroupEl?.replaceChildren();
         for (const el of this.completedMeasureLabels) el.remove();
         this.completedMeasureLabels = [];
+        this.completedEntries.clear();
         this.hideOverlay();
     }
 
@@ -1015,106 +1037,155 @@ class MeasurementController {
     private renderCompletedMeasurements(worldToScreen: (point: Vec3) => Vec3) {
         if (!this.completedMeasureGroupEl || !this.measureOverlay) return;
 
-        this.completedMeasureGroupEl.replaceChildren();
-        for (const el of this.completedMeasureLabels) el.remove();
-        this.completedMeasureLabels = [];
+        const crossSize = 6;
+        const lang = this.observer.get('ui.language') as string | undefined;
+        const alive = new Set<number>();
 
         for (const measurement of this.completedMeasurements) {
+            if (measurement.points.length < 2) continue;
+            alive.add(measurement.id);
+            const entry = this.ensureCompletedEntry(measurement, lang);
+
             const screen = measurement.points.map(p => worldToScreen(p));
             const visible = screen.map(s => s.z > 0);
-            const allVis = visible.every(Boolean);
-            if (!allVis || screen.length < 2) continue;
-
-            if (measurement.mode === 'area' && screen.length >= 3) {
-                const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-                polygon.setAttribute('class', 'measure-polygon measure-completed');
-                polygon.setAttribute('points', this.screenPointsToSvg(screen));
-                this.completedMeasureGroupEl.appendChild(polygon);
-            } else {
-                const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-                polyline.setAttribute('class', 'measure-line measure-completed');
-                polyline.setAttribute('fill', 'none');
-                polyline.setAttribute('points', this.screenPointsToSvg(screen));
-                this.completedMeasureGroupEl.appendChild(polyline);
+            if (!visible.every(Boolean)) {
+                this.hideCompletedEntry(entry);
+                continue;
             }
 
-            const crossSize = 6;
-            for (let pointIndex = 0; pointIndex < screen.length; pointIndex++) {
-                const point = screen[pointIndex];
-                const hx = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                hx.setAttribute('class', 'measure-cross measure-completed-cross');
+            entry.group.style.display = '';
+            entry.shape.setAttribute('points', this.screenPointsToSvg(screen));
+
+            for (let i = 0; i < entry.points.length; i++) {
+                const { hx, vy, handle } = entry.points[i];
+                const point = screen[i];
                 hx.setAttribute('x1', `${point.x - crossSize}`);
                 hx.setAttribute('y1', `${point.y}`);
                 hx.setAttribute('x2', `${point.x + crossSize}`);
                 hx.setAttribute('y2', `${point.y}`);
-                this.completedMeasureGroupEl.appendChild(hx);
-
-                const vy = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                vy.setAttribute('class', 'measure-cross measure-completed-cross');
                 vy.setAttribute('x1', `${point.x}`);
                 vy.setAttribute('y1', `${point.y - crossSize}`);
                 vy.setAttribute('x2', `${point.x}`);
                 vy.setAttribute('y2', `${point.y + crossSize}`);
-                this.completedMeasureGroupEl.appendChild(vy);
-
-                const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                handle.setAttribute('class', 'measure-handle measure-completed-handle');
                 handle.setAttribute('cx', `${point.x}`);
                 handle.setAttribute('cy', `${point.y}`);
-                handle.setAttribute('r', '12');
-                handle.addEventListener('pointerdown', (event: PointerEvent) => {
-                    this.beginStoredHandleDrag(event, measurement.id, pointIndex);
-                });
-                this.completedMeasureGroupEl.appendChild(handle);
             }
 
             if (measurement.mode === 'area') {
-                this.renderStoredEdgeLabels(measurement, screen, visible);
+                this.updateStoredEdgeLabels(entry, measurement, screen, visible);
             }
 
-            const label = this.createCompletedMeasureLabel();
             const text = this.buildStoredLabel(measurement);
+            const label = entry.label;
             if (!text) {
                 label.style.display = 'none';
                 continue;
             }
+            if (text !== entry.labelText) {
+                entry.labelText = text;
+                label.textContent = text;
+            }
             const center = this.getScreenCentroid(screen);
-            label.textContent = text;
             label.style.left = `${center.x}px`;
             label.style.top = `${center.y}px`;
-            label.style.display = 'block';
+            label.classList.toggle('measure-label-reference', measurement.id === this.referenceMeasurementId);
 
-            // Длину вписывают в саму подпись: так опорный отрезок — тот, на котором набрали, а
-            // не молчаливо «последний». У угла и площади вписывать нечего.
-            const lang = this.observer.get('ui.language');
-            if (measurement.mode === 'distance' && measurement.points.length >= 2) {
-                const id = measurement.id;
-                label.classList.add('measure-label-editable');
-                label.title = t('Click and enter the real length', lang);
-                if (id === this.referenceMeasurementId) label.classList.add('measure-label-reference');
-                label.addEventListener('click', () => this.beginCalibrationEdit(id));
-                if (id === this.editingMeasurementId) {
-                    label.style.display = 'none';
-                    this.placeCalibrationEditor(center.x, center.y);
-                }
-            } else if (measurement.mode === 'area') {
-                // Единицу больше нигде не выбрать — панель от этой строки освобождена, а на
-                // подписи площади есть что переключать.
-                const id = measurement.id;
-                label.classList.add('measure-label-editable');
-                label.title = t('Click to change units', lang);
-                label.addEventListener('click', () => this.beginCalibrationEdit(id));
-                if (id === this.editingMeasurementId) {
-                    label.style.display = 'none';
-                    this.placeCalibrationEditor(center.x, center.y);
-                }
+            if (measurement.id === this.editingMeasurementId) {
+                label.style.display = 'none';
+                this.placeCalibrationEditor(center.x, center.y);
+            } else {
+                label.style.display = 'block';
             }
         }
+
+        for (const [id, entry] of this.completedEntries) {
+            if (alive.has(id)) continue;
+            this.disposeCompletedEntry(entry);
+            this.completedEntries.delete(id);
+        }
+
         if (this.editingMeasurementId !== null &&
             !this.completedMeasurements.some(entry => entry.id === this.editingMeasurementId)) {
             this.endCalibrationEdit();
         }
     }
+
+    /**
+     * Создать разметку измерения, если её ещё нет.
+     *
+     * Обработчики вешаются здесь же, один раз на узел: при пересоздании каждый кадр они
+     * навешивались заново, и браузер держал их столько же раз.
+     *
+     * @param measurement - Завершённое измерение.
+     * @param lang - Язык подсказок.
+     * @returns Разметка этого измерения.
+     */
+    private ensureCompletedEntry(measurement: StoredMeasurement, lang: string | undefined): CompletedEntry {
+        const existing = this.completedEntries.get(measurement.id);
+        if (existing) return existing;
+
+        const svgNs = 'http://www.w3.org/2000/svg';
+        const group = document.createElementNS(svgNs, 'g');
+        const polygon = measurement.mode === 'area' && measurement.points.length >= 3;
+        const shape = document.createElementNS(svgNs, polygon ? 'polygon' : 'polyline') as
+            SVGPolylineElement | SVGPolygonElement;
+        shape.setAttribute('class', polygon ? 'measure-polygon measure-completed' : 'measure-line measure-completed');
+        if (!polygon) shape.setAttribute('fill', 'none');
+        group.appendChild(shape);
+
+        const points: CompletedEntry['points'] = [];
+        for (let i = 0; i < measurement.points.length; i++) {
+            const hx = document.createElementNS(svgNs, 'line');
+            hx.setAttribute('class', 'measure-cross measure-completed-cross');
+            const vy = document.createElementNS(svgNs, 'line');
+            vy.setAttribute('class', 'measure-cross measure-completed-cross');
+            const handle = document.createElementNS(svgNs, 'circle');
+            handle.setAttribute('class', 'measure-handle measure-completed-handle');
+            handle.setAttribute('r', '12');
+            const pointIndex = i;
+            handle.addEventListener('pointerdown', (event: PointerEvent) => {
+                this.beginStoredHandleDrag(event, measurement.id, pointIndex);
+            });
+            group.append(hx, vy, handle);
+            points.push({ hx, vy, handle });
+        }
+        this.completedMeasureGroupEl?.appendChild(group);
+
+        const label = this.createCompletedMeasureLabel();
+        label.style.display = 'none';
+        // Длину вписывают в саму подпись: так опорный отрезок — тот, на котором набрали, а не
+        // молчаливо «последний». У угла вписывать нечего, у площади — только единица.
+        if (measurement.mode === 'distance') {
+            label.classList.add('measure-label-editable');
+            label.title = t('Click and enter the real length', lang);
+            label.addEventListener('click', () => this.beginCalibrationEdit(measurement.id));
+        } else if (measurement.mode === 'area') {
+            label.classList.add('measure-label-editable');
+            label.title = t('Click to change units', lang);
+            label.addEventListener('click', () => this.beginCalibrationEdit(measurement.id));
+        }
+
+        const entry: CompletedEntry = { group, shape, polygon, points, label, edgeLabels: [], labelText: '' };
+        this.completedEntries.set(measurement.id, entry);
+        return entry;
+    }
+
+    private hideCompletedEntry(entry: CompletedEntry) {
+        entry.group.style.display = 'none';
+        entry.label.style.display = 'none';
+        for (const el of entry.edgeLabels) el.style.display = 'none';
+    }
+
+    private disposeCompletedEntry(entry: CompletedEntry) {
+        entry.group.remove();
+        entry.label.remove();
+        for (const el of entry.edgeLabels) el.remove();
+        // Общий список подписей нужен только для быстрого сокрытия оверлея; оставлять в нём
+        // ссылки на уже удалённые узлы — держать их в памяти без всякой пользы.
+        const gone = new Set<HTMLDivElement>([entry.label, ...entry.edgeLabels]);
+        this.completedMeasureLabels = this.completedMeasureLabels.filter(el => !gone.has(el));
+    }
+
 
     /**
      * Открыть ввод реальной длины на подписи отрезка.
@@ -1258,20 +1329,41 @@ class MeasurementController {
         editor.root.style.display = 'flex';
     }
 
-    private renderStoredEdgeLabels(measurement: StoredMeasurement, screen: ScreenPoint[], visible: boolean[]) {
+    /**
+     * Обновить подписи сторон многоугольника, переиспользуя уже созданные узлы.
+     *
+     * @param entry - Разметка измерения.
+     * @param measurement - Само измерение.
+     * @param screen - Экранные координаты его точек.
+     * @param visible - Какие точки перед камерой.
+     */
+    private updateStoredEdgeLabels(
+        entry: CompletedEntry,
+        measurement: StoredMeasurement,
+        screen: ScreenPoint[],
+        visible: boolean[]
+    ) {
         if (!this.measureOverlay || measurement.points.length < 2) return;
         const unit = this.observer.get('measure.unit') as 'mm' | 'cm' | 'm';
         const factor = unit === 'mm' ? 1000 : (unit === 'cm' ? 100 : 1);
         const precision = unit === 'mm' ? 0 : 2;
         const n = measurement.points.length;
+        while (entry.edgeLabels.length < n) {
+            entry.edgeLabels.push(this.createCompletedMeasureLabel('measure-edge-label measure-completed-edge-label'));
+        }
         for (let i = 0; i < n; i++) {
+            const label = entry.edgeLabels[i];
+            const next = (i + 1) % n;
+            if (!visible[i] || !visible[next]) {
+                label.style.display = 'none';
+                continue;
+            }
             const a = measurement.points[i];
-            const b = measurement.points[(i + 1) % n];
+            const b = measurement.points[next];
             const sa = screen[i];
-            const sb = screen[(i + 1) % n];
-            if (!visible[i] || !visible[(i + 1) % n]) continue;
-            const label = this.createCompletedMeasureLabel('measure-edge-label measure-completed-edge-label');
-            label.textContent = `${(this.toMeters(a.distance(b)) * factor).toFixed(precision)} ${unit}`;
+            const sb = screen[next];
+            const text = `${(this.toMeters(a.distance(b)) * factor).toFixed(precision)} ${unit}`;
+            if (label.textContent !== text) label.textContent = text;
             label.style.left = `${(sa.x + sb.x) / 2}px`;
             label.style.top = `${(sa.y + sb.y) / 2}px`;
             label.style.display = 'block';

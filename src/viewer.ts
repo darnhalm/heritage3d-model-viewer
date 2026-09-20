@@ -1377,6 +1377,9 @@ class Viewer {
     private tmpScaleBarS1 = new Vec3();
 
     /** Последняя проба поверхности под центром кадра для полосы масштаба. */
+    /** Пикер прогрет — повторять незачем. */
+    private pickerWarmed = false;
+
     private scaleBarSample: {
         point: Vec3 | null,
         sampledAt: number,
@@ -10987,6 +10990,29 @@ class Viewer {
     }
 
     /**
+     * Прогреть пикер по буферу глубины.
+     *
+     * Цель пикинга и конвейеры создаются при первом же `pick`, и это около 140 миллисекунд —
+     * девять кадров. Раньше их оплачивал первый клик по модели: выделение выглядело подвисшим
+     * ровно один раз за сеанс, зато всегда. Делаем ту же работу сразу после загрузки, в
+     * простое, когда рывок никому не виден.
+     */
+    private warmPicker() {
+        if (this.pickerWarmed || !this.picker) return;
+        this.pickerWarmed = true;
+        const warm = () => {
+            this.picker?.pick(1, 1).catch(() => {
+                // Прогрев — не операция пользователя: молча пропускаем неудачу.
+            });
+        };
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(warm, { timeout: 2000 });
+        } else {
+            setTimeout(warm, 0);
+        }
+    }
+
+    /**
      * Пересчитать экранную полосу масштаба.
      *
      * Масштаб берётся на глубине точки орбиты: в перспективе «пикселей на метр» — величина не
@@ -11310,6 +11336,7 @@ class Viewer {
         if (this.loadTimestamp !== null) {
             this.observer.set('scene.loadTime', `${Date.now() - this.loadTimestamp}ms`);
             this.loadTimestamp = null;
+            this.warmPicker();
         }
 
         if (this.multiframeBusy) {
