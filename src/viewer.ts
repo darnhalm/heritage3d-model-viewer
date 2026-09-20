@@ -7887,10 +7887,28 @@ class Viewer {
      */
     private getPickableMeshInstances(): MeshInstance[] {
         const tileMeshInstances = this.tileManager?.getVisibleMeshInstances();
+        const base = this.renderedMeshInstances(this.meshInstances);
         if (!tileMeshInstances?.length) {
-            return this.meshInstances;
+            return base;
         }
-        return this.meshInstances.concat(tileMeshInstances);
+        return base.concat(tileMeshInstances);
+    }
+
+    /**
+     * Оставить то, что попало в последний нарисованный кадр.
+     *
+     * Ткнуть можно только в видимое, поэтому отсечённое камерой в переборе луча не нужно —
+     * так же поступает `Globe.pick` в Cesium, разбирая лишь тайлы этого кадра. Тайлы у нас
+     * отсеивает свой менеджер, здесь речь о самой модели.
+     *
+     * @param list - Исходный список мешей.
+     * @returns Нарисованные в последнем кадре либо весь список, если флаги ещё не проставлены.
+     */
+    private renderedMeshInstances(list: MeshInstance[]): MeshInstance[] {
+        const visible = list.filter(mi => mi.visibleThisFrame);
+        // Флаг ставит отсечение при отрисовке. До первого кадра он пуст у всех — тогда честнее
+        // перебрать весь список, чем не найти ничего.
+        return visible.length > 0 ? visible : list;
     }
 
     /**

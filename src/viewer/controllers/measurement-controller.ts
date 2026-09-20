@@ -687,10 +687,22 @@ class MeasurementController {
      * @param y - Экранная координата, CSS-пиксели канваса.
      * @returns Точка пересечения либо `null`, если луч не встретил геометрии.
      */
+    /**
+     * Ближайшая точка поверхности под экранной координатой.
+     *
+     * Перебор устроен так же, как `Globe.pick` в Cesium: сначала дешёвый отсев по габаритным
+     * боксам с запоминанием расстояния входа, затем кандидаты в порядке приближения, и выход,
+     * как только очередной бокс начинается дальше уже найденного треугольника. Без сортировки
+     * цикл доходил до конца списка даже тогда, когда ближний объект уже дал попадание,
+     * — на тайловой сцене это сотни лишних обходов геометрии.
+     *
+     * @param x - Координата в пикселях канваса.
+     * @param y - Координата в пикселях канваса.
+     * @returns Точка в координатах сцены либо `null`.
+     */
     pickSurfacePoint(x: number, y: number) {
         const { origin, direction } = this.getPickRay(x, y);
-        let bestT = Number.POSITIVE_INFINITY;
-        let bestPoint: Vec3 | null = null;
+        const candidates: Array<{ mi: MeshInstance, tEnter: number }> = [];
 
         this.getMeshInstances().forEach((mi) => {
             const aabb = mi.aabb;
@@ -724,11 +736,21 @@ class MeasurementController {
                 return;
             }
 
-            const hit = intersectMeshTrianglesDetailed(mi, origin, direction, bestT, this.meshGeometryCache);
-            if (!hit || hit.t >= bestT) return;
+            // Луч может начинаться внутри бокса: тогда вход позади начала, и ближе него ничего нет.
+            candidates.push({ mi, tEnter: Math.max(0, tMin) });
+        });
+
+        candidates.sort((a, b) => a.tEnter - b.tEnter);
+
+        let bestT = Number.POSITIVE_INFINITY;
+        let bestPoint: Vec3 | null = null;
+        for (const candidate of candidates) {
+            if (candidate.tEnter >= bestT) break;
+            const hit = intersectMeshTrianglesDetailed(candidate.mi, origin, direction, bestT, this.meshGeometryCache);
+            if (!hit || hit.t >= bestT) continue;
             bestT = hit.t;
             bestPoint = hit.point.clone();
-        });
+        }
 
         return bestPoint;
     }
