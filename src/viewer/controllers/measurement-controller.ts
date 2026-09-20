@@ -421,6 +421,21 @@ class MeasurementController {
         this.completedMeasurements = [];
     }
 
+    /**
+     * Последняя поставленная точка измерения.
+     *
+     * Полоса масштаба берёт её за опору: когда на экране есть измеренный отрезок, полоса и его
+     * подпись обязаны говорить об одной глубине, иначе на одном кадре получаются два разных
+     * ответа про одну и ту же величину.
+     *
+     * @returns Точка в координатах сцены либо `null`, если измерений нет.
+     */
+    getLastPoint(): Vec3 | null {
+        if (this.points.length > 0) return this.points[this.points.length - 1];
+        const last = this.completedMeasurements[this.completedMeasurements.length - 1];
+        return last?.points[last.points.length - 1] ?? null;
+    }
+
     private getMode(): MeasureMode {
         const raw = this.observer.get('measure.mode');
         if (raw === 'angle' || raw === 'area') return raw;

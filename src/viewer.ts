@@ -711,6 +711,27 @@ class FormattedLoadError extends Error {}
 /** Цвет обводки выделенного объекта — тот же зелёный, что был у прежнего каркаса. */
 const SELECTION_OUTLINE_COLOR = new Color(0.224, 1.0, 0.078);
 
+/**
+ * Сколько камера должна простоять, прежде чем полоса масштаба заново ищет поверхность.
+ *
+ * Рейкаст по треугольникам стоит около четырёх миллисекунд на модели в 166 тысяч
+ * треугольников и растёт линейно с их числом — это четверть кадра, и во время движения такую
+ * работу делать нельзя. Во время движения полоса держит прежнюю точку поверхности: это то же
+ * самое место модели, и глубина до него пересчитывается из него даром.
+ */
+const SCALE_BAR_SETTLE_MS = 120;
+
+/** И в любом случае не чаще, чем раз в этот срок. */
+const SCALE_BAR_SAMPLE_INTERVAL_MS = 250;
+
+/**
+ * Насколько далеко от середины кадра опора остаётся годной, в долях меньшей стороны.
+ *
+ * Пока найденная точка поверхности держится около середины, она описывает ровно то, на что
+ * смотрят, и повторять рейкаст незачем. Уехала к краю — ищем заново.
+ */
+const SCALE_BAR_ANCHOR_RADIUS = 0.35;
+
 class Viewer {
     private static readonly MODEL_FILE_SIZE_LIMIT_BYTES = 1024 * 1024 * 1024; // 1 GB
 
@@ -1354,6 +1375,25 @@ class Viewer {
     private tmpScaleBarS0 = new Vec3();
 
     private tmpScaleBarS1 = new Vec3();
+
+    /** Последняя проба поверхности под центром кадра для полосы масштаба. */
+    private scaleBarSample: {
+        point: Vec3 | null,
+        sampledAt: number,
+        movedAt: number,
+        position: Vec3,
+        forward: Vec3,
+        sampledPosition: Vec3,
+        sampledForward: Vec3
+    } = {
+            point: null,
+            sampledAt: 0,
+            movedAt: 0,
+            position: new Vec3(),
+            forward: new Vec3(),
+            sampledPosition: new Vec3(),
+            sampledForward: new Vec3()
+        };
 
     captureFlashEl: HTMLDivElement | null = null;
 
@@ -2526,6 +2566,10 @@ class Viewer {
      * @param point - Resolved world-space point on the visible surface.
      */
     private recordSurfaceNavigationEvent(type: SurfaceNavigationEvent['type'], point: Vec3) {
+        // Навигация по поверхности уже нашла точку под курсором — полоса масштаба берёт её
+        // даром вместо собственного рейкаста. На тяжёлой сцене это разница между «после
+        // каждой остановки камеры считаем треугольники» и «не считаем вовсе».
+        this.adoptScaleBarSample(point);
         const manager = this.tileManager;
         if (!manager || !this.observer.get('debug.tileRecording')) return;
         const time = manager.getRecordingDuration();
@@ -10947,11 +10991,25 @@ class Viewer {
         const entity = camera.entity as Entity;
         const position = entity.getPosition();
         const forward = this.tmpScaleBarV0.copy(entity.forward);
-        const focus = this.cameraControls.getFocus(this.tmpScaleBarV1);
 
-        // Точка орбиты может оказаться за камерой — при пролёте сквозь модель. Глубину тогда
-        // прижимаем к ближней плоскости: полоса останется осмысленной, а не исчезнет рывком.
-        const depth = Math.max(camera.nearClip * 2, focus.sub(position).dot(forward));
+        // Опора — то, что видно, а не точка орбиты. Она остаётся в центре модели, и стоит
+        // подойти к поверхности вплотную, как полоса начинает врать в разы: на одном кадре
+        // рядом оказываются измеренный отрезок и полоса, говорящие о разной глубине. Так же
+        // устроен `DistanceLegend` в Cesium — он роняет луч на поверхность прямо там, где
+        // нарисован, и прячет шкалу, если попадать не во что.
+        const measured = this.measurementController?.getLastPoint() ?? null;
+        const anchor = measured ?? this.sampleScaleBarSurface(position, forward);
+        if (!anchor) {
+            bar.hide();
+            return;
+        }
+
+        const depth = this.tmpScaleBarV1.sub2(anchor, position).dot(forward);
+        if (!(depth > camera.nearClip)) {
+            bar.hide();
+            return;
+        }
+
         const reference = this.tmpScaleBarV1.copy(forward).mulScalar(depth).add(position);
         // Меряем вдоль вертикали камеры: полоса вертикальная, и показывать она должна ровно
         // ту величину, которую собой изображает.
@@ -10963,8 +11021,95 @@ class Viewer {
         const metersPerSceneUnit = Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
         const unit = (this.observer.get('measure.unit') ?? 'm') as ScaleBarUnit;
         const lang = this.observer.get('ui.language') as string | undefined;
-        const note = this.isOrthographic() ? '' : t('scale at the orbit point depth', lang);
+        // В ортографии масштаб от глубины не зависит, и оговаривать нечего.
+        const note = this.isOrthographic() ?
+            '' :
+            t(measured ? 'scale at the measured segment' : 'scale at the surface in the centre of the frame', lang);
         bar.update(pixelsPerSceneUnit / metersPerSceneUnit, unit, t('Step', lang), note);
+    }
+
+    /**
+     * Точка поверхности в центре кадра — опора полосы масштаба, когда измерений нет.
+     *
+     * Рейкаст по треугольникам стоит заметно дороже кадра оверлея, поэтому бьём не чаще раза
+     * в четверть секунды и только когда камера сдвинулась. Между попаданиями держим саму
+     * точку, а не готовую глубину: при облёте она остаётся тем же местом поверхности, и
+     * глубина пересчитывается из неё даром.
+     *
+     * @param position - Положение камеры.
+     * @param forward - Направление взгляда.
+     * @returns Точка поверхности либо `null`, если луч ушёл мимо модели.
+     */
+    /**
+     * Принять чужую пробу поверхности как опору полосы масштаба.
+     *
+     * @param point - Точка поверхности, найденная навигацией.
+     */
+    private adoptScaleBarSample(point: Vec3) {
+        const sample = this.scaleBarSample;
+        sample.point = (sample.point ?? new Vec3()).copy(point);
+        sample.sampledAt = performance.now();
+        const entity = this.getRenderingCamera().entity as Entity;
+        sample.sampledPosition.copy(entity.getPosition());
+        sample.sampledForward.copy(entity.forward);
+    }
+
+    /**
+     * Годится ли прежняя опора: видна ли она и близко ли к середине кадра.
+     *
+     * @param point - Точка поверхности.
+     * @returns `true`, если пробу можно не повторять.
+     */
+    private scaleBarAnchorInView(point: Vec3): boolean {
+        const camera = this.getRenderingCamera();
+        const screen = camera.worldToScreen(point, this.tmpScaleBarS0);
+        if (!(screen.z > 0)) return false;
+        const width = this.canvas.clientWidth;
+        const height = this.canvas.clientHeight;
+        const dx = screen.x - width / 2;
+        const dy = screen.y - height / 2;
+        return Math.hypot(dx, dy) < Math.min(width, height) * SCALE_BAR_ANCHOR_RADIUS;
+    }
+
+    private sampleScaleBarSurface(position: Vec3, forward: Vec3): Vec3 | null {
+        const sample = this.scaleBarSample;
+        const now = performance.now();
+
+        if (!sample.position.equals(position) || !sample.forward.equals(forward)) {
+            sample.position.copy(position);
+            sample.forward.copy(forward);
+            sample.movedAt = now;
+        }
+
+        // Камера стоит там же, где её застала прошлая проба, — искать нечего.
+        if (sample.point &&
+            sample.sampledPosition.equals(position) && sample.sampledForward.equals(forward)) {
+            return sample.point;
+        }
+        // Прежняя опора всё ещё в кадре и близко к его середине — она по-прежнему описывает
+        // то, на что смотрят, и новый рейкаст ничего не уточнит. Облёт вокруг точки вообще
+        // обходится без проб: глубина пересчитывается из неё каждый кадр даром.
+        if (sample.point && this.scaleBarAnchorInView(sample.point)) {
+            return sample.point;
+        }
+        // Ещё летим — держим прежнюю точку поверхности.
+        if (sample.point && now - sample.movedAt < SCALE_BAR_SETTLE_MS) {
+            return sample.point;
+        }
+        // Ни точки, ни попадания в прошлый раз: не долбим сцену каждый кадр.
+        if (now - sample.sampledAt < SCALE_BAR_SAMPLE_INTERVAL_MS && sample.sampledAt !== 0) {
+            return sample.point;
+        }
+
+        sample.sampledAt = now;
+        sample.sampledPosition.copy(position);
+        sample.sampledForward.copy(forward);
+        const hit = this.measurementController?.pickSurfacePoint(
+            this.canvas.clientWidth / 2,
+            this.canvas.clientHeight / 2
+        ) ?? null;
+        sample.point = hit ? (sample.point ?? new Vec3()).copy(hit) : null;
+        return sample.point;
     }
 
     private drawReferenceRuler() {
