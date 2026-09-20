@@ -256,6 +256,18 @@ for (const backend of ['webgl', 'webgpu']) {
             const raw = await rt.colorBuffer.read(0, 0, rt.width, rt.height, { renderTarget: rt, immediate: true });
             const converted = await v.readDisplayPixels(rt.colorBuffer);
             const display = new Uint8Array(converted.buffer);
+            // `readDisplayPixels` отдаёт строки сверху вниз: под WebGL промежуточная SDR-цель
+            // читается снизу вверх, и вьюер переворачивает её ради ориентации PNG. Сырой буфер
+            // мы читаем сами и не переворачиваем, поэтому под WebGL индексы расходятся на
+            // зеркальную строку. Раньше тест сравнивал разные пиксели и получал ошибку 118.
+            const flipped = !v.app.graphicsDevice.isWebGPU;
+            const displayIndex = (index: number) => {
+                if (!flipped) return index;
+                const pixel = index / 4;
+                const x = pixel % rt.width;
+                const y = Math.floor(pixel / rt.width);
+                return ((rt.height - 1 - y) * rt.width + x) * 4;
+            };
             const decode = (word: number) => raw.constructor.name === 'Uint16Array' ?
                 ((word >> 10) & 31 ? 1 + (word & 1023) / 1024 : (word & 1023) / 1024) *
                 2 ** (((word >> 10) & 31 ? (word >> 10) & 31 : 1) - 15) : word;
@@ -266,10 +278,11 @@ for (const backend of ['webgl', 'webgpu']) {
                 const lum = rgb[0] * .2126 + rgb[1] * .7152 + rgb[2] * .0722;
                 const mapped = rgb.map(c => c / (1 + lum));
                 const peak = Math.max(1, ...mapped);
+                const di = displayIndex(i);
                 for (let channel = 0; channel < 3; channel++) {
                     const c = mapped[channel] / peak;
                     const expected = 255 * (c <= .0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - .055);
-                    maxError = Math.max(maxError, Math.abs(display[i + channel] - expected));
+                    maxError = Math.max(maxError, Math.abs(display[di + channel] - expected));
                 }
                 checked++;
             }
