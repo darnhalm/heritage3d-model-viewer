@@ -511,7 +511,6 @@ class SettingsService {
         o.set('debug.gsplatPaused', false);
         o.set('measure.enabled', false);
         o.set('measure.unit', 'm');
-        o.set('measure.referenceRuler', false);
         o.set('measure.scaleBar', false);
         o.set('measure.unitScale', 1);
         o.set('measure.mode', 'distance');

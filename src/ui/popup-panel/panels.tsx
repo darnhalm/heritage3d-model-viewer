@@ -755,12 +755,6 @@ const arrToRgb = (arr: number[]) => {
 class MeasurementsPanel extends React.Component <{
     observerData: ObserverData,
     setProperty: SetProperty }> {
-    private cycleReferenceRuler = () => {
-        const next = !this.props.observerData.measure.referenceRuler;
-        this.props.setProperty('measure.referenceRuler', next);
-        window.viewer?.frameScene?.();
-    };
-
     private setMode = (mode: 'distance' | 'angle' | 'area') => {
         if (this.props.observerData.measure.mode === mode) return;
         this.props.setProperty('measure.mode', mode);
@@ -775,7 +769,6 @@ class MeasurementsPanel extends React.Component <{
                a.ui?.language !== b.ui?.language ||
                a.measure?.enabled !== b.measure?.enabled ||
                a.measure?.unit !== b.measure?.unit ||
-               a.measure?.referenceRuler !== b.measure?.referenceRuler ||
                a.measure?.scaleBar !== b.measure?.scaleBar ||
                a.measure?.unitScale !== b.measure?.unitScale ||
                a.measure?.knownDistance !== b.measure?.knownDistance ||

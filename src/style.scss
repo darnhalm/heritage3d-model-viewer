@@ -5008,39 +5008,6 @@ $panel-focus-shadow: 0 0 7px 1px rgba(var(--theme-glow-rgb), 0.18) !important;
     color: white !important;
 }
 
-.reference-ruler-row {
-    justify-content: flex-end;
-    align-items: center;
-}
-
-.reference-ruler-button {
-    position: relative;
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
-    min-height: 38px;
-    padding: 0 !important;
-    font-size: 0 !important;
-}
-
-.reference-ruler-button::before {
-    content: '';
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    width: 18px;
-    height: 18px;
-    transform: translateY(-50%);
-    background-color: currentColor;
-    -webkit-mask: url('static/icons/reference-ruler-icon.svg') no-repeat center / contain;
-    mask: url('static/icons/reference-ruler-icon.svg') no-repeat center / contain;
-    pointer-events: none;
-}
-
-.reference-ruler-row-bottom {
-    margin-top: 4px;
-}
-
 .pcui-text-input.secondary {
     min-height: 48px;
     border-radius: 0;

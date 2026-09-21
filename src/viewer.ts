@@ -1031,8 +1031,6 @@ class Viewer {
 
     debugMeasure: DebugLines;
 
-    debugRuler: DebugLines;
-
     /** Отладочные OBB тайлов — рёбра (Фаза 1 визуализации тайлового слоя). */
     debugTiles: DebugLines;
 
@@ -1358,10 +1356,6 @@ class Viewer {
     private tmpGridV0 = new Vec3();
 
     private tmpGridV1 = new Vec3();
-
-    private tmpRulerV0 = new Vec3();
-
-    private tmpRulerV1 = new Vec3();
 
     private scaleBar: ScaleBar | null = null;
 
@@ -1873,7 +1867,6 @@ class Viewer {
         this.debugGrid = new DebugLines(app, camera, false);
         this.debugNormals = new DebugLines(app, camera, false);
         this.debugMeasure = new DebugLines(app, camera, false);
-        this.debugRuler = new DebugLines(app, camera, false);
         // Задний слой включён: боксы тайлов за геометрией видны приглушённо.
         this.debugTiles = new DebugLines(app, camera);
         // Заливку регистрируем раньше контуров: в общем прозрачном debug-слое контуры
@@ -10184,7 +10177,6 @@ class Viewer {
         // keep DebugLines buffer empty so measurements are always overlay-only (never depth-tested / occluded by mesh)
         this.debugMeasure.clear();
         this.debugMeasure.update();
-        this.drawReferenceRuler();
         this.measurementController.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
         this.poiController.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
         this.microphoneController?.updateOverlay((point: Vec3) => this.camera.camera.worldToScreen(point));
@@ -11161,90 +11153,6 @@ class Viewer {
         ) ?? null;
         sample.point = hit ? (sample.point ?? new Vec3()).copy(hit) : null;
         return sample.point;
-    }
-
-    private drawReferenceRuler() {
-        this.debugRuler.clear();
-
-        const enabled = !!this.observer.get('measure.referenceRuler');
-        if (!enabled || !this.sceneBounds) {
-            this.debugRuler.update();
-            return;
-        }
-
-        const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
-        const safeUnitScale = Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
-
-        const humanHeightMeters = 1.75;
-        const sceneHeight = humanHeightMeters / safeUnitScale;
-
-        const rulerBounds = this.selectedNode ? bbox : this.dynamicSceneBounds;
-        if (this.selectedNode) {
-            this.calcSceneBounds(rulerBounds, this.selectedNode as Entity);
-        }
-
-        const center = rulerBounds.center.clone();
-        const min = rulerBounds.getMin();
-        const objectRadius = Math.max(rulerBounds.halfExtents.length(), sceneHeight * 0.5);
-        const cameraRight = this.camera.right.clone().normalize();
-        const cameraUp = this.camera.up.clone().normalize();
-        const anchor = center.clone().add(cameraRight.mulScalar(-objectRadius));
-        anchor.y = min.y;
-
-        const width = sceneHeight * 0.28;
-        const shoulderWidth = width * 0.9;
-        const hipWidth = width * 0.55;
-        const headRadius = sceneHeight * 0.085;
-        const neckY = sceneHeight * 0.86;
-        const shoulderY = sceneHeight * 0.78;
-        const hipY = sceneHeight * 0.45;
-        const handY = sceneHeight * 0.48;
-        const kneeY = sceneHeight * 0.22;
-
-        const pointAt = (horizontal: number, vertical: number) => anchor.clone()
-        .add(cameraRight.clone().mulScalar(horizontal))
-        .add(cameraUp.clone().mulScalar(vertical));
-
-        const v0 = this.tmpRulerV0;
-        const v1 = this.tmpRulerV1;
-
-        // torso
-        v0.copy(pointAt(0, neckY));
-        v1.copy(pointAt(0, hipY));
-        this.debugRuler.line(v0, v1, 0xffffffff);
-
-        // shoulders and arms
-        v0.copy(pointAt(-shoulderWidth * 0.5, shoulderY));
-        v1.copy(pointAt(shoulderWidth * 0.5, shoulderY));
-        this.debugRuler.line(v0, v1, 0xffffffff);
-        this.debugRuler.line(pointAt(-shoulderWidth * 0.5, shoulderY), pointAt(-width * 0.72, handY), 0xffffffff);
-        this.debugRuler.line(pointAt(shoulderWidth * 0.5, shoulderY), pointAt(width * 0.72, handY), 0xffffffff);
-
-        // hips and legs
-        v0.copy(pointAt(-hipWidth * 0.5, hipY));
-        v1.copy(pointAt(hipWidth * 0.5, hipY));
-        this.debugRuler.line(v0, v1, 0xffffffff);
-        this.debugRuler.line(pointAt(-hipWidth * 0.25, hipY), pointAt(-width * 0.28, kneeY), 0xffffffff);
-        this.debugRuler.line(pointAt(-width * 0.28, kneeY), pointAt(-width * 0.16, 0), 0xffffffff);
-        this.debugRuler.line(pointAt(hipWidth * 0.25, hipY), pointAt(width * 0.28, kneeY), 0xffffffff);
-        this.debugRuler.line(pointAt(width * 0.28, kneeY), pointAt(width * 0.16, 0), 0xffffffff);
-
-        // head circle approximation
-        const headCenter = pointAt(0, sceneHeight - headRadius * 1.15);
-        const segments = 20;
-        for (let i = 0; i < segments; i++) {
-            const a0 = (Math.PI * 2 * i) / segments;
-            const a1 = (Math.PI * 2 * (i + 1)) / segments;
-            v0.copy(headCenter)
-            .add(cameraRight.clone().mulScalar(Math.cos(a0) * headRadius))
-            .add(cameraUp.clone().mulScalar(Math.sin(a0) * headRadius));
-            v1.copy(headCenter)
-            .add(cameraRight.clone().mulScalar(Math.cos(a1) * headRadius))
-            .add(cameraUp.clone().mulScalar(Math.sin(a1) * headRadius));
-            this.debugRuler.line(v0, v1, 0xffffffff);
-        }
-
-        this.debugRuler.update();
     }
 
     /**

@@ -368,7 +368,6 @@ const observerData: ObserverData = {
     measure: {
         enabled: false,
         unit: 'm',
-        referenceRuler: false,
         scaleBar: false,
         unitScale: 1,
         mode: 'distance',

@@ -343,7 +343,6 @@ export interface ObserverData {
     measure: {
         enabled: boolean,
         unit: 'mm' | 'cm' | 'm',
-        referenceRuler: boolean,
         /** Экранная полоса масштаба в углу вьюпорта. */
         scaleBar: boolean,
         /** Meters represented by 1 scene/model unit. */
