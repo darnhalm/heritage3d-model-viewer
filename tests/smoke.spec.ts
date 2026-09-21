@@ -6,6 +6,28 @@ const waitForViewer = async (page: import('@playwright/test').Page) => {
     await page.waitForFunction(() => typeof (window as any).viewer !== 'undefined' && !!(window as any).viewer?.observer);
 };
 
+/**
+ * Прокрутить заданное число кадров вручную.
+ *
+ * Вьюер рисует по требованию, а в безоконном браузере цикл кадров встаёт: то, что считается в
+ * `prerender`, без этого не случается вовсе.
+ *
+ * @param page - Страница теста.
+ * @param count - Сколько кадров прокрутить.
+ * @returns Обещание, разрешающееся после последнего кадра.
+ */
+const pumpFrames = (page: import('@playwright/test').Page, count: number) => page.evaluate(async (n) => {
+    const app = (window as any).viewer.app;
+    for (let i = 0; i < n; i++) {
+        app.tick(performance.now());
+        // Последовательное ожидание здесь намеренное: тест имитирует отдельные render frames.
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => {
+            setTimeout(resolve, 16);
+        });
+    }
+}, count);
+
 test('boots the viewer shell', async ({ page }) => {
     await page.addInitScript(() => {
         // Values persisted by the previous default rollout must not override the current defaults.
@@ -333,6 +355,98 @@ test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and
     await page.mouse.up({ button: 'left' });
     await expect(page.locator('.surface-pivot-marker')).not.toHaveClass(/visible/);
     expect(await page.evaluate(() => (window as any).viewer.surfacePivotController.getDebugState().state)).toBe('idle');
+});
+
+test('alt + left drag turns the environment map and leaves the surface pivot alone', async ({ page }) => {
+    // Поворот карты окружения старше поверхностной навигации, и та его перехватывала: на
+    // нажатие левой кнопки она вставала всегда, так что небо крутилось вместе с облётом точки
+    // под курсором, да ещё и с кружком опоры на экране.
+    test.setTimeout(budget(180000));
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.observer.set('camera.mouseButtonsInverted', false);
+        viewer.observer.set('skybox.rotation', 0);
+        // Пик отвечает сразу: начнись поверхностный жест — он дошёл бы до активного состояния,
+        // и проверка ниже это поймала бы.
+        viewer.picker.pick = async () => viewer.cameraControls.getFocus().clone();
+    });
+
+    const canvas = page.locator('#application-canvas');
+    const box = await canvas.boundingBox();
+    expect(box).not.toBeNull();
+    const startX = box!.x + box!.width / 2;
+    const startY = box!.y + box!.height / 2;
+    const positionBefore = await page.evaluate(() => (window as any).viewer.cameraControls.getPosition().toArray());
+
+    await page.keyboard.down('Alt');
+    await page.mouse.move(startX, startY);
+    await page.mouse.down({ button: 'left' });
+    await page.mouse.move(startX + 140, startY, { steps: 12 });
+    // Накопленный сдвиг разбирается на кадре, а в безоконном браузере цикл кадров встаёт.
+    await pumpFrames(page, 5);
+
+    const during = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        return {
+            rotation: viewer.observer.get('skybox.rotation'),
+            debug: viewer.surfacePivotController.getDebugState(),
+            position: viewer.cameraControls.getPosition().toArray()
+        };
+    });
+
+    await page.mouse.up({ button: 'left' });
+    await page.keyboard.up('Alt');
+
+    expect(Math.abs(during.rotation)).toBeGreaterThan(1);
+    expect(during.debug.state).toBe('idle');
+    expect(during.debug.pickCount).toBe(0);
+    await expect(page.locator('.surface-pivot-marker')).not.toHaveClass(/visible/);
+    // Камера стоит: жест целиком ушёл небу.
+    expect(Math.hypot(...during.position.map((value: number, index: number) => value - positionBefore[index])))
+        .toBeLessThan(0.01);
+});
+
+test('the scale bar steps over the stats counter and the tile stats window', async ({ page }) => {
+    // Полоса масштаба, окно статистики тайлов и счётчик кадров занимают один и тот же левый
+    // нижний угол, а высота у двух последних меняется на ходу — отступом в стилях их не
+    // развести.
+    test.setTimeout(budget(180000));
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0);
+    await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        viewer.observer.set('measure.scaleBar', true);
+        viewer.observer.set('debug.stats', true);
+    });
+    // Место в углу перемеряется раз в четверть секунды и только на нарисованном кадре.
+    await pumpFrames(page, 40);
+    await expect(page.locator('.viewer-scale-bar')).toBeVisible();
+
+    const corner = await page.evaluate(() => {
+        const rect = (selector: string) => {
+            const el = document.querySelector(selector) as HTMLElement | null;
+            const box = el?.getBoundingClientRect();
+            return box && box.width > 0 && box.height > 0 ?
+                { left: box.left, top: box.top, right: box.right, bottom: box.bottom } :
+                null;
+        };
+        type Box = { left: number; top: number; right: number; bottom: number };
+        const intersects = (a: Box | null, b: Box | null) => !!a && !!b &&
+            a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+        const bar = rect('.viewer-scale-bar');
+        const stats = rect('#mini-stats');
+        return {
+            statsShown: !!stats,
+            barAboveStats: !!bar && !!stats && bar.bottom <= stats.top,
+            overlap: intersects(bar, stats)
+        };
+    });
+
+    expect(corner).toEqual({ statsShown: true, barAboveStats: true, overlap: false });
 });
 
 test('surface pan keeps the picked point under the moving cursor', async ({ page, headless }) => {

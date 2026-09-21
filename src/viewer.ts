@@ -126,6 +126,7 @@ import {
 } from './lazy-material-variants';
 import { lodColorAbgr, lodColorCss, lodColorRgb } from './lod-palette';
 import { Multiframe } from './multiframe';
+import { stackedBottom } from './overlay-stack';
 import { Picker } from './picker';
 import { PngExporter } from './png-exporter';
 import { RESOLUTION_LOG_RANGE, resolutionColorCss, resolutionColorRgb } from './resolution-palette';
@@ -233,6 +234,18 @@ const AUTO_DISTANCE_MAX_RADII = 15;
 
 /** Как часто обновлять показанное расстояние до точки вращения, мс. */
 const DISTANCE_PUBLISH_INTERVAL_MS = 200;
+
+/** Как часто перемерять место в углу вьюпорта, чтобы развести прижатые к низу оверлеи, мс. */
+const OVERLAY_PLACEMENT_INTERVAL_MS = 250;
+
+/** Базовый отступ окна статистики тайлов от низа вьюпорта, пиксели. */
+const TILE_HUD_BOTTOM_PX = 8;
+
+/** Зазор между окном статистики тайлов и тем, над что оно встало. */
+const TILE_HUD_CLEARANCE_PX = 8;
+
+/** Отступ сверху для окна статистики тайлов: выше не поднимаем. */
+const TILE_HUD_TOP_MARGIN_PX = 8;
 
 /**
  * Сколько указатель считается свежим для курсорного приоритета загрузки, мс.
@@ -1373,6 +1386,15 @@ class Viewer {
     /** Последняя проба поверхности под центром кадра для полосы масштаба. */
     /** Пикер прогрет — повторять незачем. */
     private pickerWarmed = false;
+
+    /** Когда в последний раз мерили чужие оверлеи под полосу масштаба, мс. */
+    private scaleBarPlacedAt = 0;
+
+    /** Последний записанный отступ окна статистики тайлов от низа: пишем только при смене. */
+    private tileHudBottom = TILE_HUD_BOTTOM_PX;
+
+    /** Когда в последний раз мерили чужие оверлеи под окно статистики тайлов, мс. */
+    private tileHudPlacedAt = 0;
 
     private scaleBarSample: {
         point: Vec3 | null,
@@ -10236,8 +10258,7 @@ class Viewer {
             this.tileHudLegend = legend;
         }
         this.tileHud.style.display = 'block';
-        // Над временной шкалой, когда она открыта: иначе она накрывает нижние строки статистики.
-        this.tileHud.style.bottom = document.body.classList.contains('timeline-open') ? '76px' : '8px';
+        this.placeTileHud();
 
         if (gsplatEnabled && this.gsplatDebugStats) {
             const s = this.gsplatDebugStats;
@@ -11069,6 +11090,56 @@ class Viewer {
             '' :
             t(measured ? 'scale at the measured segment' : 'scale at the surface in the centre of the frame', lang);
         bar.update(pixelsPerSceneUnit / metersPerSceneUnit, unit, t('Step', lang), note);
+        this.updateScaleBarPlacement();
+    }
+
+    /**
+     * Увести окно статистики тайлов со счётчика кадров и шкал перемотки.
+     *
+     * Счётчик прижат к самому низу канваса, и его высоту переключает зритель кликом; шкалы
+     * перемотки раскрываются на всю ширину. Отсюда замер по живому DOM, а не отступ в стилях.
+     * Замер форсирует пересчёт разметки, поэтому он редкий: окно догоняет чужой оверлей за
+     * четверть секунды, а не в том же кадре.
+     */
+    private placeTileHud() {
+        const hud = this.tileHud;
+        const container = this.canvas.parentElement;
+        if (!hud || !container) return;
+        const now = performance.now();
+        if (now - this.tileHudPlacedAt < OVERLAY_PLACEMENT_INTERVAL_MS) return;
+        this.tileHudPlacedAt = now;
+        const bottom = Math.round(stackedBottom(hud, container, [
+            this.miniStats.enabled ? document.getElementById('mini-stats') : null,
+            document.getElementById('timeline-panel'),
+            document.getElementById('poi-timeline-panel')
+        ], TILE_HUD_BOTTOM_PX, TILE_HUD_CLEARANCE_PX, TILE_HUD_TOP_MARGIN_PX));
+        if (bottom === this.tileHudBottom) return;
+        this.tileHudBottom = bottom;
+        hud.style.bottom = `${bottom}px`;
+    }
+
+    /**
+     * Увести полосу масштаба с чужих оверлеев в левом нижнем углу.
+     *
+     * Замер идёт по живому DOM — высоты у окна тайлов и счётчика кадров меняются на ходу, и
+     * повторить их в стилях нечем. Зато замер форсирует пересчёт разметки, поэтому он редкий:
+     * появление оверлея полоса догоняет за четверть секунды, а не в том же кадре.
+     */
+    private updateScaleBarPlacement() {
+        const now = performance.now();
+        if (now - this.scaleBarPlacedAt < OVERLAY_PLACEMENT_INTERVAL_MS) return;
+        this.scaleBarPlacedAt = now;
+        this.scaleBar?.avoid([
+            // Окно статистики тайлов и счётчик кадров стоят ровно в том же углу.
+            this.tileHud,
+            this.miniStats.enabled ? document.getElementById('mini-stats') : null,
+            // Шкалы перемотки тянутся на всю ширину, значит накрывают угол целиком.
+            document.getElementById('timeline-panel'),
+            document.getElementById('poi-timeline-panel'),
+            // Переключатель спектральных вариантов жмётся к правому краю, но в узком окне
+            // растягивается до левого.
+            document.querySelector<HTMLElement>('.spectral-variant-switcher')
+        ]);
     }
 
     /**

@@ -110,6 +110,10 @@ class SurfacePivotController {
         const gesture: SurfaceGesture = event.pointerType === 'mouse' ?
             (event.button === orbitButton ? 'orbit' : 'pan') :
             (inverted ? 'pan' : 'orbit');
+        // Alt + левая кнопка — это поворот карты окружения, он разбирается в `CameraControls`.
+        // Поверхностная навигация на этот жест не встаёт: иначе камера облетала бы точку под
+        // курсором одновременно с поворотом неба, да ещё и с кружком опоры на экране.
+        if (input === 'mouse' && event.altKey && gesture === 'orbit' && this.cameraControls.canRotateSky) return;
         this.requestId++;
         this.state = {
             state: 'tracking',

@@ -369,6 +369,20 @@ class CameraControls {
         return this._mouseButtonsInverted;
     }
 
+    /**
+     * Годится ли текущая сцена для поворота неба (Alt + левая кнопка).
+     *
+     * Наружу это нужно поверхностной навигации: пока жест принадлежит небу, она не должна
+     * начинать свой — иначе камера облетала бы точку под курсором одновременно с поворотом
+     * карты окружения.
+     *
+     * @returns `true`, если небо есть и его можно вращать.
+     */
+    get canRotateSky() {
+        const skyboxValue = this._observer.get('skybox.value');
+        return !!skyboxValue && skyboxValue !== 'None';
+    }
+
     set mode(mode: CameraMode) {
         if (mode !== 'orbit' && mode !== 'fly' && mode !== 'walk') mode = 'orbit';
         // check if mode is the same
@@ -840,10 +854,8 @@ class CameraControls {
 
         // desktop rotate / sky rotate (Alt + left drag)
         const skyRotate = this._state.alt && this._state.mouse[0] > 0 && !desktopPan && (mouse[0] !== 0 || mouse[1] !== 0);
-        const skyboxValue = this._observer.get('skybox.value');
-        const canSkyRotate = skyboxValue && skyboxValue !== 'None';
 
-        if (skyRotate && canSkyRotate) {
+        if (skyRotate && this.canRotateSky) {
             const current = (this._observer.get('skybox.rotation') as number) ?? 0;
             const delta = -mouse[0] * this.skyRotationSpeed;
             let next = current + delta;

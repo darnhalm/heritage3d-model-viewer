@@ -16,6 +16,8 @@
  * вызывающая сторона её не передаёт.
  */
 
+import { stackedBottom } from './overlay-stack';
+
 type ScaleBarUnit = 'mm' | 'cm' | 'm';
 
 const UNIT_IN_METERS: Record<ScaleBarUnit, number> = { mm: 0.001, cm: 0.01, m: 1 };
@@ -28,6 +30,20 @@ const UNIT_IN_METERS: Record<ScaleBarUnit, number> = { mm: 0.001, cm: 0.01, m: 1
  * растягивается до ближайшего круглого числа, которое не короче этой величины.
  */
 const MIN_LENGTH_PX = 110;
+
+/**
+ * Базовый отступ полосы от низа вьюпорта, пиксели.
+ *
+ * Повторяет `bottom` из `.viewer-scale-bar`: ниже этой отметки полоса не опускается, а выше
+ * её поднимает только то, что уже заняло угол, — смотри `avoid`.
+ */
+const BASE_BOTTOM_PX = 34;
+
+/** Зазор между полосой и тем, над что она встала. */
+const CLEARANCE_PX = 8;
+
+/** Отступ сверху: выше полосу не поднимаем, иначе её срежет край вьюпорта. */
+const TOP_MARGIN_PX = 8;
 
 type ScaleBarProps = {
     /** Длина полосы на экране, пиксели (по вертикали). */
@@ -80,16 +96,37 @@ const computeScaleBar = (pixelsPerUnit: number, unit: ScaleBarUnit): ScaleBarPro
 class ScaleBar {
     private el: HTMLDivElement;
 
+    private container: HTMLElement;
+
     /** Последнее записанное в DOM состояние: пока оно не изменилось, писать нечего. */
     private lastKey = '';
+
+    /** Последний записанный отступ от низа: как и подпись, пишется только при смене. */
+    private lastBottom = BASE_BOTTOM_PX;
 
     private shown = false;
 
     constructor(container: HTMLElement) {
+        this.container = container;
         this.el = document.createElement('div');
         this.el.className = 'viewer-scale-bar';
         this.el.style.display = 'none';
         container.appendChild(this.el);
+    }
+
+    /**
+     * Поднять полосу над тем, что уже стоит в том же углу.
+     *
+     * @param blockers - Прижатые к низу элементы, которые нельзя перекрывать.
+     */
+    avoid(blockers: (HTMLElement | null | undefined)[]) {
+        if (!this.shown) return;
+        const bottom = Math.round(stackedBottom(
+            this.el, this.container, blockers, BASE_BOTTOM_PX, CLEARANCE_PX, TOP_MARGIN_PX
+        ));
+        if (bottom === this.lastBottom) return;
+        this.lastBottom = bottom;
+        this.el.style.bottom = `${bottom}px`;
     }
 
     hide() {
