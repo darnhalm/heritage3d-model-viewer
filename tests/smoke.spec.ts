@@ -7,6 +7,33 @@ const waitForViewer = async (page: import('@playwright/test').Page) => {
 };
 
 /**
+ * Дождаться, пока камера перестанет двигаться.
+ *
+ * После загрузки вьюер сам встаёт по модели, и это не мгновенно. Снимок положения, взятый до
+ * конца кадрирования, отличается от последующего на величину куда большую, чем любой жест, —
+ * проверка «камера не сдвинулась» ловила именно это, а не то, что хотела.
+ *
+ * Между замерами кадры прокручиваются вручную: без них положение не меняется просто потому,
+ * что никто не считал, и покой был бы мнимым.
+ *
+ * @param page - Страница теста.
+ * @returns Положение камеры, когда оно повторилось дважды подряд.
+ */
+const settledCameraPosition = async (page: import('@playwright/test').Page): Promise<number[]> => {
+    const read = () => page.evaluate(() => (window as any).viewer.cameraControls.getPosition().toArray() as number[]);
+    let previous = await read();
+    for (let attempt = 0; attempt < 30; attempt++) {
+        // eslint-disable-next-line no-await-in-loop
+        await pumpFrames(page, 4);
+        // eslint-disable-next-line no-await-in-loop
+        const current = await read();
+        if (current.every((value, index) => Math.abs(value - previous[index]) < 1e-4)) return current;
+        previous = current;
+    }
+    return previous;
+};
+
+/**
  * Прокрутить заданное число кадров вручную.
  *
  * Вьюер рисует по требованию, а в безоконном браузере цикл кадров встаёт: то, что считается в
@@ -379,7 +406,8 @@ test('alt + left drag turns the environment map and leaves the surface pivot alo
     expect(box).not.toBeNull();
     const startX = box!.x + box!.width / 2;
     const startY = box!.y + box!.height / 2;
-    const positionBefore = await page.evaluate(() => (window as any).viewer.cameraControls.getPosition().toArray());
+    // Опорное положение берём после кадрирования, иначе за смещение от жеста примем его.
+    const positionBefore = await settledCameraPosition(page);
 
     await page.keyboard.down('Alt');
     await page.mouse.move(startX, startY);
