@@ -92,6 +92,12 @@ export interface ObserverData {
         colorLutName?: string,
         /** Сила применения LUT. */
         colorLutIntensity?: number,
+    /** `strip` — прежняя восьмибитная полоса PNG, `cube` — проявочная таблица. */
+    colorLutKind?: 'strip' | 'cube',
+    /** Кодирование линейного значения перед обращением к сетке. */
+    colorLutShaper?: 'linear' | 'acescct' | 'slog3' | 'cineon',
+    /** Пространство выхода сетки: экранное заменяет тональное преобразование. */
+    colorLutOutput?: 'display' | 'linear',
         /** Понижать разрешение сцены, пока камера движется. */
         dynamicScale?: boolean,
         /** Что грузить первым при обходе тайлов. */

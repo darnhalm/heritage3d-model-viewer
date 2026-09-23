@@ -388,7 +388,7 @@ class PostProcessingPanel extends React.Component <{ observerData: ObserverData,
         // Keep the short-lived picker outside that tree and discard it after one selection.
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.png,.jpg,.jpeg,.webp';
+        input.accept = '.png,.jpg,.jpeg,.webp,.cube';
         input.addEventListener('change', async () => {
             const file = input.files?.[0];
             if (!file) return;
@@ -452,6 +452,35 @@ class PostProcessingPanel extends React.Component <{ observerData: ObserverData,
                         enabled={!!lutName}
                         value={camera.colorLutIntensity ?? 1}
                         setProperty={(value: number) => setProperty('camera.colorLutIntensity', value)} />
+                    {/* Сам `.cube` не говорит ни как кодирован его вход, ни в каком пространстве
+                        выход. Угадывать нельзя — одна и та же сетка ждёт то линейный вход, то
+                        логарифмический, — поэтому спрашиваем прямо, и только для таких таблиц. */}
+                    {camera.colorLutKind === 'cube' ? <>
+                        <span title={t('How the linear value is encoded before the table is looked up. A development LUT expects a log input; pick the one its author used.', lang)} style={{ display: 'contents' }}>
+                            <Select
+                                label={t('LUT input', lang)}
+                                type='string'
+                                options={[
+                                    { v: 'linear', t: t('Linear (domain)', lang) },
+                                    { v: 'acescct', t: 'ACEScct' },
+                                    { v: 'slog3', t: 'S-Log3' },
+                                    { v: 'cineon', t: 'Cineon' }
+                                ]}
+                                value={camera.colorLutShaper ?? 'linear'}
+                                setProperty={(value: string) => setProperty('camera.colorLutShaper', value)} />
+                        </span>
+                        <span title={t('Display output means the table already tone-maps, so it replaces the viewer tone mapping. Linear output is fed back into it.', lang)} style={{ display: 'contents' }}>
+                            <Select
+                                label={t('LUT output', lang)}
+                                type='string'
+                                options={[
+                                    { v: 'display', t: t('Display-referred', lang) },
+                                    { v: 'linear', t: t('Scene-linear', lang) }
+                                ]}
+                                value={camera.colorLutOutput ?? 'display'}
+                                setProperty={(value: string) => setProperty('camera.colorLutOutput', value)} />
+                        </span>
+                    </> : null}
                     <span title={t('SSAO adds soft contact shadows in creases and where surfaces meet.', lang)} style={{ display: 'contents' }}>
                         <Toggle
                             label='SSAO'

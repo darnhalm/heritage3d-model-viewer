@@ -113,9 +113,10 @@ import { ClipBoxMaterials } from './clip-box';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
+import { cubeLutToStrip, floatsToHalf, parseCubeLut } from './hdr/cube-lut';
 import { HdrDisplay } from './hdr/display';
 import { EmbeddedHdrDocument, EmbeddedHdrSurface, readEmbeddedHdr } from './hdr/embedded';
-import { HdrOutput } from './hdr/output';
+import { HdrOutput, type HdrLut } from './hdr/output';
 import { HdrSurface } from './hdr/surface';
 import { SD_PIXEL_SCALE } from './helpers';
 import { t } from './i18n/translations';
@@ -265,6 +266,9 @@ const FRAGMENT_OUTLINE_WIDTH_MAX_PX = 8;
 // LUTs are tiny colour tables, not photographs. Keep both the compressed source and
 // the decoded GPU texture bounded: 64³ is already 262,144 colour entries (4096×64 strip).
 const COLOR_LUT_MAX_FILE_BYTES = 8 * 1024 * 1024;
+
+/** Текст таблицы 65³ занимает около восьми мегабайт, поэтому предел здесь свой. */
+const CUBE_LUT_MAX_FILE_BYTES = 32 * 1024 * 1024;
 const COLOR_LUT_MAX_EDGE = 64;
 const doubleTapRadius = 45;
 const DOUBLE_CLICK_ZOOM_DURATION_SECONDS = 0.25;
@@ -1350,6 +1354,14 @@ class Viewer {
 
     private colorLutObjectUrl: string | null = null;
 
+    /**
+     * Чего о таблице не говорит наблюдатель: вид и границы входной области.
+     *
+     * Вид и область приходят из самого файла, а не из настроек зрителя, поэтому живут рядом с
+     * текстурой и пропадают вместе с ней.
+     */
+    private colorLutInfo: { kind: 'strip' | 'cube'; domainMin: [number, number, number]; domainMax: [number, number, number] } | null = null;
+
     /** Lazily created SPZ codec (see getSpzCodec). */
     private static spzCodec: Promise<SpzModule> | null = null;
 
@@ -2406,6 +2418,26 @@ class Viewer {
         feedback.setAttribute('aria-hidden', 'true');
         wrapper.appendChild(feedback);
         setTimeout(() => feedback.remove(), DOUBLE_CLICK_FEEDBACK_MS);
+    }
+
+    /**
+     * Собрать описание таблицы цвета для шейдера вывода.
+     *
+     * @returns Описание либо `null`, если таблица не загружена.
+     */
+    private hdrLutOptions(): HdrLut | null {
+        const texture = this.colorLutTexture;
+        if (!texture) return null;
+        const info = this.colorLutInfo;
+        return {
+            texture,
+            intensity: Math.max(0, Math.min(1, Number(this.observer.get('camera.colorLutIntensity')) || 0)),
+            kind: info?.kind ?? 'strip',
+            shaper: (this.observer.get('camera.colorLutShaper') ?? 'linear') as HdrLut['shaper'],
+            output: (this.observer.get('camera.colorLutOutput') ?? 'display') as HdrLut['output'],
+            domainMin: info?.domainMin ?? [0, 0, 0],
+            domainMax: info?.domainMax ?? [1, 1, 1]
+        };
     }
 
     private canUseSurfacePivot() {
@@ -4992,7 +5024,7 @@ class Viewer {
             // PNGs and publication covers are SDR derivatives, never raw float buffers.
             this.hdrOutput.render(texture, this.observer.get('camera.hdrExposure'), false, target,
                 this.postProcessingTarget?.colorBuffer === texture && !!this.postProcessingFrame,
-                this.colorLutTexture, this.observer.get('camera.colorLutIntensity'),
+                this.hdrLutOptions(),
                 { easu: this.observer.get('camera.easu') !== false, sharpness: Number(this.observer.get('camera.sharpness') ?? 1) });
             const pixels = await colorBuffer.read(0, 0, texture.width, texture.height, { renderTarget: target, immediate: true });
             const result = new Uint32Array(pixels.buffer.slice(pixels.byteOffset, pixels.byteOffset + pixels.byteLength));
@@ -5399,11 +5431,66 @@ class Viewer {
 
 
     /**
+     * Загрузить проявочную таблицу `.cube`.
+     *
+     * Отличается от прежней полосы PNG тем, что узлы хранятся с плавающей точкой, а входная
+     * область может выходить за единицу. Восьмибитная полоса ни того, ни другого не даёт, и
+     * потому для проявки не годится.
+     *
+     * @param file - Текстовый файл таблицы.
+     */
+    private async loadCubeLut(file: Blob & { name: string }): Promise<void> {
+        const lang = this.observer.get('ui.language');
+        if (file.size > CUBE_LUT_MAX_FILE_BYTES) {
+            throw new Error(t('Cube LUT file must be 32 MB or smaller.', lang));
+        }
+        const device = this.app.graphicsDevice;
+        if (!device.textureHalfFloatFilterable) {
+            throw new Error(t('This device cannot filter float16 textures, so a cube LUT cannot be used.', lang));
+        }
+        let lut;
+        try {
+            lut = parseCubeLut(await file.text());
+        } catch (err) {
+            throw new Error(`${t('Cube LUT could not be read', lang)}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        if (lut.size * lut.size > device.maxTextureSize) {
+            throw new Error(t('Cube LUT exceeds the device texture size limit.', lang));
+        }
+
+        const texture = new Texture(device, {
+            name: file.name || 'Cube LUT',
+            width: lut.size * lut.size,
+            height: lut.size,
+            format: PIXELFORMAT_RGBA16F,
+            mipmaps: false,
+            minFilter: FILTER_LINEAR,
+            magFilter: FILTER_LINEAR,
+            addressU: ADDRESS_CLAMP_TO_EDGE,
+            addressV: ADDRESS_CLAMP_TO_EDGE
+        });
+        texture.lock().set(floatsToHalf(cubeLutToStrip(lut)));
+        texture.unlock();
+
+        this.releaseColorLut();
+        this.colorLutTexture = texture;
+        this.colorLutInfo = { kind: 'cube', domainMin: lut.domainMin, domainMax: lut.domainMax };
+        this.observer.set('camera.colorLutKind', 'cube');
+        this.observer.set('camera.colorLutName', lut.title || file.name || 'Cube LUT');
+        this.destroyRenderTargets();
+        this.renderNextFrame();
+    }
+
+    /**
      * Load a horizontal strip LUT (for example 256×16) selected in the settings panel.
      *
      * @param file - Browser image file containing the LUT strip.
      */
     async loadColorLut(file: Blob & { name: string }): Promise<void> {
+        if (/\.cube$/i.test(file.name ?? '')) {
+            await this.loadCubeLut(file);
+            return;
+        }
         if (file.size > COLOR_LUT_MAX_FILE_BYTES) {
             throw new Error(t('Color LUT file must be 8 MB or smaller.', this.observer.get('ui.language')));
         }
@@ -5441,6 +5528,8 @@ class Viewer {
             this.colorLutAsset = asset;
             this.colorLutTexture = texture;
             this.colorLutObjectUrl = objectUrl;
+            this.colorLutInfo = { kind: 'strip', domainMin: [0, 0, 0], domainMax: [1, 1, 1] };
+            this.observer.set('camera.colorLutKind', 'strip');
             this.observer.set('camera.colorLutName', file.name || 'Color LUT');
             this.destroyRenderTargets();
             this.renderNextFrame();
@@ -5458,14 +5547,18 @@ class Viewer {
             this.app.assets.remove(this.colorLutAsset);
         }
         if (this.colorLutObjectUrl) URL.revokeObjectURL(this.colorLutObjectUrl);
+        // У таблицы `.cube` нет ассета: текстура собрана вручную, и убрать её больше некому.
+        if (this.colorLutInfo?.kind === 'cube') this.colorLutTexture?.destroy();
         this.colorLutAsset = null;
         this.colorLutTexture = null;
         this.colorLutObjectUrl = null;
+        this.colorLutInfo = null;
     }
 
     clearColorLut(): void {
         this.releaseColorLut();
         this.observer.set('camera.colorLutName', '');
+        this.observer.set('camera.colorLutKind', 'strip');
         this.destroyRenderTargets();
         this.renderNextFrame();
     }
@@ -11278,7 +11371,7 @@ class Viewer {
         // are needed.
         if (this.hdrSurface && rt?.colorBuffer && this.hdrOutput) {
             this.hdrOutput.render(rt.colorBuffer, this.observer.get('camera.hdrExposure'), this.observer.get('runtime.hdrActive'), null,
-                !!this.postProcessingFrame, this.colorLutTexture, this.observer.get('camera.colorLutIntensity'),
+                !!this.postProcessingFrame, this.hdrLutOptions(),
                 { easu: this.observer.get('camera.easu') !== false, sharpness: Number(this.observer.get('camera.sharpness') ?? 1) });
             this.multiframeBusy = this.observer.get('camera.taa') && --this.hdrTaaFrames > 0;
         } else {

@@ -183,6 +183,9 @@ const observerData: ObserverData = {
         ssaoRadius: 30,
         colorLutName: '',
         colorLutIntensity: 1,
+        colorLutKind: 'strip',
+        colorLutShaper: 'linear',
+        colorLutOutput: 'display',
         // Выключено по умолчанию: при смене разрешения кадр вспыхивает — вместе с разрешением
         // меняется и способ вывода, и убрать это без переделки финального прохода не вышло.
         // Выигрыш на сплатах при этом настоящий, поэтому функция оставлена как экспериментальная.
