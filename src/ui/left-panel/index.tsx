@@ -1354,11 +1354,16 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
         .filter(cat => !(observerData?.scene?.isTileset && cat.title === 'UV'))
         // У «запечённого» (unlit) контента каналы материала бессмысленны.
         .filter(cat => !(observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false && cat.title === 'MATERIAL CHANNELS'))
-        // Light Material — это обычный PBR forward-проход. Unlit-тайлы стримятся уже с
-        // запечённым шейдером, поэтому подменить их материал без ложного ощущения работы
-        // нельзя. Оставляем Final Render, но не предлагаем неработающий режим.
+        // Light Material — это обычный PBR forward-проход, и на запечённом (unlit) контенте он
+        // не работает. У тайлсетов такой контент приходит уже с запечённым шейдером; у обычной
+        // модели с материалом `KHR_materials_unlit` выходит хуже — `setClayMaterialMode` клонирует
+        // исходный материал вместе с `useLighting: false`, снимает все карты и обнуляет emissive,
+        // так что на экране остаётся чёрный силуэт: светить нечему, нести цвет нечем.
+        // Оставляем Final Render, но не предлагаем заведомо сломанный режим.
         .map((cat) => {
-            if (observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false && cat.title === 'RENDER') {
+            const bakedUnlit = observerData?.scene?.unlit === true ||
+                (observerData?.scene?.isTileset && observerData?.scene?.tilesetLit === false);
+            if (bakedUnlit && cat.title === 'RENDER') {
                 return {
                     ...cat,
                     items: cat.items.filter(item => item.value !== 'clay')

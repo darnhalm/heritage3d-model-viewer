@@ -158,7 +158,7 @@ export interface ObserverData {
         heightOffset: number
     },
     debug: {
-        renderMode: 'default' | 'albedo' | 'opacity' | 'worldNormal' | 'specularity' | 'gloss' | 'metalness' | 'ao' | 'emission' | 'lighting' | 'uv0' | 'uv_checker',
+        renderMode: 'default' | 'clay' | 'albedo' | 'opacity' | 'worldNormal' | 'specularity' | 'gloss' | 'metalness' | 'ao' | 'emission' | 'lighting' | 'uv0' | 'uv_checker',
         stats: boolean,
         wireframe: boolean,
         wireframeColor: {

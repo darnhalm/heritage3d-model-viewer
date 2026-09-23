@@ -4982,6 +4982,13 @@ class Viewer {
         // Считаем по исходным материалам контейнера, а не по mesh instances: отладочные
         // режимы (UV checker, texel density) подменяют материалы своими, тоже unlit.
         this.observer.set('scene.unlit', materialCount > 0 && litMaterialCount === 0);
+        // На запечённом материале Light Material даёт чёрный силуэт — `setClayMaterialMode`
+        // клонирует исходный материал вместе с `useLighting: false` и снимает у него карты.
+        // Пункт для этого режима в панели скрыт, поэтому выбранным он остаться не может:
+        // вернуться к Final Render было бы нечем, а зритель увидел бы чёрный экран без причины.
+        if (this.observer.get('scene.unlit') && this.observer.get('debug.renderMode') === 'clay') {
+            this.observer.set('debug.renderMode', 'default');
+        }
         this.applyUnlitShadowCatcherDefault();
 
         // KHR_materials_variants: сохраняем исходные привязки отдельно, потому что
