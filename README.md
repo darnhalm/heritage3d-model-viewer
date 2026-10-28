@@ -12,6 +12,10 @@
 >
 > 🧱 **Тяжёлые сцены:** `scripts/make-lod.sh` (и быстрое действие Finder) нарезает сплат на
 > тайлы Streamed SOG и заливает в бакет.
+>
+> 📦 **3D Tiles:** для загрузки и архива используется единый 3TZ, а для production-стриминга
+> сервер публикует распакованный `tileset.json` с отдельными тайлами. Решение и A/B-замер:
+> [`docs/api/3TZ-PUBLICATION-DECISION-RU.md`](docs/api/3TZ-PUBLICATION-DECISION-RU.md).
 
 ---
 

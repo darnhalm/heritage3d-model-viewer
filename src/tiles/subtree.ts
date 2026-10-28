@@ -9,6 +9,8 @@
  * Формат: заголовок (`subt`, версия, длины чанков), JSON-чанк, бинарный чанк.
  */
 
+import { networkTileResourceProvider, type TileResourceProvider } from './tile-resource';
+
 /** Маска доступности: либо константа на всё поддерево, либо битовый поток. */
 export type AvailabilityJson = {
     constant?: 0 | 1;
@@ -142,10 +144,15 @@ function makeAvailability(json: AvailabilityJson | undefined, views: (Uint8Array
  *
  * @param url - Адрес файла.
  * @param signal - Сигнал отмены.
+ * @param provider - Источник ресурсов тайлсета.
  * @returns Разобранные маски доступности.
  */
-export async function fetchSubtree(url: string, signal?: AbortSignal): Promise<Subtree> {
-    const response = await fetch(url, { signal });
+export async function fetchSubtree(
+    url: string,
+    signal?: AbortSignal,
+    provider: TileResourceProvider = networkTileResourceProvider
+): Promise<Subtree> {
+    const response = await provider.fetch(url, { signal });
     if (!response.ok) {
         throw new Error(`Не удалось загрузить поддерево (HTTP ${response.status}): ${url}`);
     }
@@ -180,7 +187,7 @@ export async function fetchSubtree(url: string, signal?: AbortSignal): Promise<S
         if (!b.uri) {
             return new Uint8Array(buffer, binaryStart, binaryLength);
         }
-        const external = await fetch(new URL(b.uri, url).href, { signal });
+        const external = await provider.fetch(provider.resolve(b.uri, url), { signal });
         if (!external.ok) {
             throw new Error(`Не загрузился внешний буфер поддерева (HTTP ${external.status}): ${b.uri}`);
         }

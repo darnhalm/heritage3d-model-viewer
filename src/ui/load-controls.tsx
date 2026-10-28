@@ -34,7 +34,8 @@ const LoadControls = (props: { observerData: ObserverData; setProperty: SetPrope
                 loadList.push({
                     url: URL.createObjectURL(file),
                     filename: file.name,
-                    sizeBytes: file.size
+                    sizeBytes: file.size,
+                    blob: file
                 });
             }
             viewer.loadFiles(loadList);
@@ -73,14 +74,14 @@ const LoadControls = (props: { observerData: ObserverData; setProperty: SetPrope
                         window.open('https://github.com/playcanvas/model-viewer', '_blank').focus();
                     }} icon='E259'/>
                 </div>
-                <input type='file' id='file' accept='.glb,.gltf,.ply,.sog,.spz,.json,.hdr,.env' multiple onChange={onFileSelected} ref={inputFile} style={{ display: 'none' }} />
+                <input type='file' id='file' accept='.glb,.gltf,.ply,.sog,.spz,.json,.3tz,.3dtiles.zip,.hdr,.env' multiple onChange={onFileSelected} ref={inputFile} style={{ display: 'none' }} />
                 <div id="drag-drop" onClick={onLoadButtonClick}>
                     <Button id="drag-drop-search-icon" icon='E129' />
-                    <Label class='desktop' text={t('Drag & drop .glb, .gltf, .ply, .sog or .spz files, or click to open files', lang)} />
+                    <Label class='desktop' text={t('Drag & drop .glb, .gltf, .ply, .sog, .spz or .3tz files, or click to open files', lang)} />
                     <Label class='mobile' text={t('Click to open files', lang)} />
                 </div>
                 <Label id='or-text' text={t('OR', lang)} class="centered-label" />
-                <TextInput class='secondary' id='glb-url-input' placeholder='Enter .glb, .gltf, .ply, .sog or .spz URL' keyChange onValidate={(value: string) => {
+                <TextInput class='secondary' id='glb-url-input' placeholder='Enter model or .3tz URL' keyChange onValidate={(value: string) => {
                     const isValid = validUrl(value);
                     setUrlInputValid(isValid);
                     return isValid;

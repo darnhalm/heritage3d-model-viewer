@@ -1,0 +1,110 @@
+{
+  "date": "2026-10-27",
+  "status": "decision-input",
+  "sourceScene": {
+    "name": "Kronstadt Naval Cathedral",
+    "individualFileCount": 4748,
+    "individualTotalBytes": 254022573,
+    "threeTzEntryCount": 4749,
+    "threeTzTotalBytes": 254675137,
+    "threeTzCompression": "store",
+    "threeTzIndex": "@3dtilesIndex1@"
+  },
+  "environment": {
+    "storage": "Yandex Object Storage",
+    "storageRegion": "ru-central1",
+    "clientRegion": "Costa Rica",
+    "browser": "Google Chrome via Playwright",
+    "backend": "WebGL",
+    "runsPerCase": 3,
+    "cameraWaypoints": 6,
+    "rangeResponse": "206 Partial Content"
+  },
+  "aggregates": [
+    {
+      "representation": "individual-files",
+      "cache": "cold",
+      "firstVisibleMedianMs": 1759.17,
+      "settledMedianMs": 13136.1,
+      "requestCountMedian": 229,
+      "transferBytesMedian": 22622019,
+      "peakQueuedMedian": 215
+    },
+    {
+      "representation": "individual-files",
+      "cache": "warm",
+      "firstVisibleMedianMs": 372.98,
+      "settledMedianMs": 10741.29,
+      "requestCountMedian": 253,
+      "transferBytesMedian": 677134,
+      "cachedResourceEntriesMedian": 234
+    },
+    {
+      "representation": "3tz",
+      "cache": "cold",
+      "firstVisibleMedianMs": 3388.95,
+      "settledMedianMs": 26558.69,
+      "requestCountMedian": 124,
+      "transferBytesMedian": 6162297,
+      "peakQueuedMedian": 38
+    },
+    {
+      "representation": "3tz",
+      "cache": "warm",
+      "firstVisibleMedianMs": 2958.67,
+      "settledMedianMs": 25110.74,
+      "requestCountMedian": 114,
+      "transferBytesMedian": 6703134,
+      "cachedResourceEntriesMedian": 0
+    }
+  ],
+  "optimizedThreeTzLoader": {
+    "implementation": {
+      "indexLookup": "direct @3dtilesIndex1@ binary search",
+      "rangeBlockBytes": 262144,
+      "rangeCacheMaxBytes": 16777216,
+      "legacyFallback": "ZipReader.getEntries()"
+    },
+    "runsPerCase": 3,
+    "indexWithoutBlockCache": {
+      "cold": {
+        "firstVisibleMedianMs": 4000.9,
+        "settledMedianMs": 18848.8,
+        "rangeRequestMedian": 90,
+        "responsesAtFirstMedian": 12,
+        "logicalRangeBytesMedian": 7689845,
+        "cachedRangeEntriesMedian": 0
+      },
+      "warm": {
+        "firstVisibleMedianMs": 2733.03,
+        "settledMedianMs": 19285.79,
+        "rangeRequestMedian": 92,
+        "responsesAtFirstMedian": 11,
+        "logicalRangeBytesMedian": 7871926,
+        "cachedRangeEntriesMedian": 0
+      }
+    },
+    "indexWithBlockCache": {
+      "cold": {
+        "firstVisibleMedianMs": 10371.7,
+        "firstVisibleRangeMs": [1883.7, 10558.5],
+        "settledMedianMs": 26762.4,
+        "rangeRequestMedian": 32,
+        "responsesAtFirstMedian": 3,
+        "logicalRangeBytesMedian": 9308353,
+        "cachedRangeEntriesMedian": 0
+      },
+      "warm": {
+        "firstVisibleMedianMs": 9568.2,
+        "settledMedianMs": 26070,
+        "rangeRequestMedian": 32,
+        "responsesAtFirstMedian": 9,
+        "logicalRangeBytesMedian": 9373910,
+        "cachedRangeEntriesMedian": 31,
+        "cachedRangeEntriesRange": [7, 32]
+      }
+    },
+    "interpretation": "Aligned range caching reduced request count by about 64% and improved, but did not guarantee, warm browser-cache reuse. Absolute latency is not compared because inter-regional network conditions changed materially between sequential runs."
+  },
+  "decision": "Accept 3TZ as the upload and archival format. Publish immutable unpacked tileset.json packages for online streaming. Keep direct 3TZ playback supported but not the production default."
+}

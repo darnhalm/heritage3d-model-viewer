@@ -10,6 +10,7 @@
 import { Mat4 } from 'playcanvas';
 
 import { makeWorldObb, maxScaleOfMat4 } from './tile-math';
+import { networkTileResourceProvider, type TileResourceProvider } from './tile-resource';
 import { TILE_UNLOADED, type Tile, type TileJson, type TilesetJson } from './tile-types';
 
 /**
@@ -17,20 +18,29 @@ import { TILE_UNLOADED, type Tile, type TileJson, type TilesetJson } from './til
  *
  * @param uri - URI из tileset.json.
  * @param baseUrl - URL самого tileset.json.
+ * @param provider - Источник ресурсов тайлсета.
  * @returns Абсолютный URL.
  */
-export function resolveTileUri(uri: string, baseUrl: string): string {
-    return new URL(uri, baseUrl).href;
+export function resolveTileUri(
+    uri: string,
+    baseUrl: string,
+    provider: TileResourceProvider = networkTileResourceProvider
+): string {
+    return provider.resolve(uri, baseUrl);
 }
 
 /**
  * Скачать и минимально проверить tileset.json.
  *
  * @param url - Адрес tileset.json.
+ * @param provider - Источник ресурсов тайлсета.
  * @returns Разобранный JSON.
  */
-export async function fetchTilesetJson(url: string): Promise<TilesetJson> {
-    const response = await fetch(url);
+export async function fetchTilesetJson(
+    url: string,
+    provider: TileResourceProvider = networkTileResourceProvider
+): Promise<TilesetJson> {
+    const response = await provider.fetch(url);
     if (!response.ok) {
         throw new Error(`Не удалось загрузить tileset.json (HTTP ${response.status}): ${url}`);
     }
@@ -86,6 +96,8 @@ export type BuildTreeOptions = {
     parent?: Tile | null;
     /** Предупреждения (неподдержанные части формата) складываются сюда. */
     warnings: string[];
+    /** Reader for network files or entries in an archive container. */
+    provider?: TileResourceProvider;
 };
 
 /**
@@ -109,6 +121,7 @@ let tileIdCounter = 0;
 
 export function buildTileTree(json: TileJson, options: BuildTreeOptions): Tile {
     const { baseUrl, tilesetToWorld, warnings } = options;
+    const provider = options.provider ?? networkTileResourceProvider;
     const parent = options.parent ?? null;
     const parentTransform = options.parentTransform ?? new Mat4();
 
@@ -122,7 +135,7 @@ export function buildTileTree(json: TileJson, options: BuildTreeOptions): Tile {
 
     const refine = (json.refine ?? parent?.refine ?? 'REPLACE').toUpperCase() as 'ADD' | 'REPLACE';
 
-    const uris = contentUrisOf(json).map(uri => resolveTileUri(uri, baseUrl));
+    const uris = contentUrisOf(json).map(uri => resolveTileUri(uri, baseUrl, provider));
     // Контент-«tileset.json» — это внешний тайлсет, а не геометрия: его нельзя отдавать
     // загрузчику GLB, он подставляет вместо себя целое поддерево.
     const externalTilesetUri = uris.find(u => /\.json(?:\?|$)/i.test(u)) ?? null;
@@ -169,7 +182,8 @@ export function buildTileTree(json: TileJson, options: BuildTreeOptions): Tile {
         parentTransform: transform,
         tilesetToWorld,
         parent: tile,
-        warnings
+        warnings,
+        provider
     }));
 
     return tile;

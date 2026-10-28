@@ -74,6 +74,7 @@
     },
     "dependencies": {
         "@adobe/spz": "^0.2.2",
+        "@zip.js/zip.js": "^2.24.0",
         "driver.js": "^1.4.0",
         "flag-icons": "^7.5.0",
         "spz-js": "^1.2.5"

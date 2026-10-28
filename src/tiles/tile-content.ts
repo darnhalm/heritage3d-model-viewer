@@ -9,6 +9,8 @@
 
 import { Asset, Entity, Mat4, Quat, Vec3, type AppBase } from 'playcanvas';
 
+import { networkTileResourceProvider, type TileResourceProvider } from './tile-resource';
+
 /** Результат загрузки контента тайла. */
 export type TileContentResult = {
     /** Корневая entity контента (ещё не привязана к сцене). */
@@ -110,12 +112,14 @@ function loadContainerAsset(app: AppBase, url: string, filename: string): Promis
  * @param app - Приложение.
  * @param uris - Абсолютные URL контента.
  * @param token - Токен отмены.
+ * @param provider - Источник ресурсов тайлсета.
  * @returns Контент или `null`, если загрузку отменили.
  */
 export async function loadTileContent(
     app: AppBase,
     uris: string[],
-    token: LoadToken
+    token: LoadToken,
+    provider: TileResourceProvider = networkTileResourceProvider
 ): Promise<TileContentResult | null> {
     const assets: Asset[] = [];
     const blobUrls: string[] = [];
@@ -130,7 +134,7 @@ export async function loadTileContent(
 
     try {
         const parts = await Promise.all(uris.map(async (uri) => {
-            const response = await fetch(uri, { signal: token.controller?.signal });
+            const response = await provider.fetch(uri, { signal: token.controller?.signal });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status} на ${uri}`);
             }

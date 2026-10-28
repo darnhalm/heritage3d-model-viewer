@@ -166,7 +166,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Checker Scale': 'Checker Scale',
         'With texture': 'With texture',
         Geometry: 'GEOMETRY',
-        'Drag & drop .glb, .gltf, .ply, .sog or .spz files, or click to open files': 'Drag & drop .glb, .gltf, .ply, .sog or .spz files, or click to open files',
+        'Drag & drop .glb, .gltf, .ply, .sog, .spz or .3tz files, or click to open files': 'Drag & drop .glb, .gltf, .ply, .sog, .spz or .3tz files, or click to open files',
         'Click to open files': 'Click to open files',
         OR: 'OR',
         'LOAD MODEL FROM URL': 'LOAD MODEL FROM URL',
@@ -466,6 +466,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'File "{filename}" ({size}) exceeds model limit of 1 GB.': 'File "{filename}" ({size}) exceeds model limit of 1 GB.',
         'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.': 'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.',
         'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'File "{filename}" ({size}) exceeds settings limit of 10 MB.',
+        'File "{filename}" has unsupported type "{extension}". Supported model formats: GLB, glTF, PLY, SOG, SPZ, 3TZ and tileset.json.': 'File "{filename}" has unsupported type "{extension}". Supported model formats: GLB, glTF, PLY, SOG, SPZ, 3TZ and tileset.json.',
 
         // Tour
         'Start tour': 'Start guided tour',
@@ -656,7 +657,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Checker Scale': 'Масштаб шахматки',
         'With texture': 'С текстурами',
         Geometry: 'ГЕОМЕТРИЯ',
-        'Drag & drop .glb, .gltf, .ply, .sog or .spz files, or click to open files': 'Перетащите .glb, .gltf, .ply, .sog или .spz файлы или нажмите для открытия',
+        'Drag & drop .glb, .gltf, .ply, .sog, .spz or .3tz files, or click to open files': 'Перетащите .glb, .gltf, .ply, .sog, .spz или .3tz либо нажмите для открытия',
         'Click to open files': 'Нажмите для открытия файлов',
         OR: 'ИЛИ',
         'LOAD MODEL FROM URL': 'ЗАГРУЗИТЬ МОДЕЛЬ ПО URL',
@@ -956,6 +957,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'File "{filename}" ({size}) exceeds model limit of 1 GB.': 'Файл "{filename}" ({size}) превышает лимит модели 1 ГБ.',
         'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.': 'Файл "{filename}" ({size}) превышает лимит HDRI/Skybox в 50 МБ.',
         'File "{filename}" ({size}) exceeds settings limit of 10 MB.': 'Файл "{filename}" ({size}) превышает лимит файла настроек 10 МБ.',
+        'File "{filename}" has unsupported type "{extension}". Supported model formats: GLB, glTF, PLY, SOG, SPZ, 3TZ and tileset.json.': 'Файл "{filename}" имеет неподдерживаемый тип "{extension}". Поддерживаемые форматы моделей: GLB, glTF, PLY, SOG, SPZ, 3TZ и tileset.json.',
 
         // Tour
         'Start tour': 'Запустить обучение',
@@ -1146,7 +1148,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'Checker Scale': '棋盘缩放',
         'With texture': '仅显示有纹理',
         Geometry: '几何',
-        'Drag & drop .glb, .gltf, .ply, .sog or .spz files, or click to open files': '拖放 .glb、.gltf、.ply、.sog 或 .spz 文件，或点击打开',
+        'Drag & drop .glb, .gltf, .ply, .sog, .spz or .3tz files, or click to open files': '拖放 .glb、.gltf、.ply、.sog、.spz 或 .3tz 文件，或点击打开',
         'Click to open files': '点击打开文件',
         OR: '或',
         'LOAD MODEL FROM URL': '从 URL 加载模型',
@@ -1439,6 +1441,7 @@ export const translations: Record<Lang, Record<string, string>> = {
         'File "{filename}" ({size}) exceeds model limit of 1 GB.': '文件“{filename}”（{size}）超过模型大小上限 1 GB。',
         'File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.': '文件“{filename}”（{size}）超过 HDRI/Skybox 大小上限 50 MB。',
         'File "{filename}" ({size}) exceeds settings limit of 10 MB.': '文件“{filename}”（{size}）超过设置文件大小上限 10 MB。',
+        'File "{filename}" has unsupported type "{extension}". Supported model formats: GLB, glTF, PLY, SOG, SPZ, 3TZ and tileset.json.': '文件“{filename}”的类型“{extension}”不受支持。支持的模型格式：GLB、glTF、PLY、SOG、SPZ、3TZ 和 tileset.json。',
 
         // Tour
         'Start tour': '开始引导教程',

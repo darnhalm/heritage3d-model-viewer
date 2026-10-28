@@ -7,7 +7,9 @@ export interface MorphTargetData {
 export interface File {
     url: string,
     filename?: string,
-    sizeBytes?: number
+    sizeBytes?: number,
+    /** Original local file, retained for seekable archive readers such as 3TZ. */
+    blob?: Blob
 }
 
 export interface Option {

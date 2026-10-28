@@ -1890,3 +1890,36 @@ test('rejects oversized model and settings files by size limits', async ({ page 
     expect(String(result.error)).toContain('exceeds model limit of 1 GB');
     expect(String(result.error)).toContain('exceeds settings limit of 10 MB');
 });
+
+test('reports an unsupported file type instead of an HDRI size error', async ({ page }) => {
+    await page.goto('/');
+    await waitForViewer(page);
+
+    const result = await page.evaluate(() => {
+        const viewer = (window as any).viewer;
+        const accepted = viewer.loadFiles([
+            {
+                url: 'blob:unsupported-obj',
+                filename: 'Yaroslavl_dom_upravlyayushego.obj',
+                sizeBytes: 1536 * 1024 * 1024
+            },
+            {
+                url: 'blob:oversized-hdr',
+                filename: 'environment.hdr',
+                sizeBytes: 51 * 1024 * 1024
+            }
+        ], true);
+        return {
+            accepted,
+            warnings: viewer.observer.get('ui.warnings') || [],
+            error: viewer.observer.get('ui.error')
+        };
+    });
+
+    expect(result.accepted).toBe(false);
+    expect(result.warnings).toHaveLength(2);
+    expect(result.warnings[0]).toContain('unsupported type ".obj"');
+    expect(result.warnings[0]).not.toContain('HDRI/Skybox');
+    expect(result.warnings[1]).toContain('HDRI/Skybox limit of 50 MB');
+    expect(String(result.error)).toContain('Yaroslavl_dom_upravlyayushego.obj');
+});

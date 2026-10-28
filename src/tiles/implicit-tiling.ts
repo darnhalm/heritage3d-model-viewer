@@ -17,6 +17,7 @@ import {
     branchingFactor, fetchSubtree, fillUriTemplate, levelOffset, mortonIndex,
     type SubdivisionScheme, type Subtree
 } from './subtree';
+import { networkTileResourceProvider, type TileResourceProvider } from './tile-resource';
 import type { Tile, TileJson } from './tile-types';
 import { buildTileTree } from './tileset-loader';
 
@@ -126,6 +127,7 @@ export type ExpandOptions = {
     /** База для разрешения URI (шаблоны уже абсолютные, но `buildTileTree` требует базу). */
     baseUrl: string;
     warnings: string[];
+    provider?: TileResourceProvider;
 };
 
 /**
@@ -159,7 +161,8 @@ export function expandSubtree(
     // известно, и тайл-заглушка создавался пустым.
     if (subtree.tile.get(0) && subtree.content.get(0) && rootTile.contentUris.length === 0) {
         const json = makeTileJson(info, rootCoord, true);
-        rootTile.contentUris = (json.contents ?? [json.content]).map(c => new URL(c.uri, options.baseUrl).href);
+        const provider = options.provider ?? networkTileResourceProvider;
+        rootTile.contentUris = (json.contents ?? [json.content]).map(c => provider.resolve(c.uri, options.baseUrl));
     }
 
     for (let local = 1; local < subtreeLevels; ++local) {
@@ -196,7 +199,8 @@ export function expandSubtree(
                     parentTransform: options.parentTransform,
                     tilesetToWorld: options.tilesetToWorld,
                     parent: parentTile,
-                    warnings: options.warnings
+                    warnings: options.warnings,
+                    provider: options.provider
                 });
                 parentTile.children.push(tile);
                 level.set(morton, tile);
@@ -233,7 +237,8 @@ export function expandSubtree(
                 parentTransform: options.parentTransform,
                 tilesetToWorld: options.tilesetToWorld,
                 parent: parentTile,
-                warnings: options.warnings
+                warnings: options.warnings,
+                provider: options.provider
             });
             parentTile.children.push(tile);
             deferred.push({ tile, coord });
@@ -314,9 +319,15 @@ export function readImplicitTiling(json: TileJson, baseUrl: string, refine: 'ADD
  * @param info - Параметры неявного дерева.
  * @param coord - Координаты корня поддерева.
  * @param signal - Сигнал отмены.
+ * @param provider - Источник ресурсов тайлсета.
  * @returns Разобранные маски.
  */
-export function loadSubtreeAt(info: ImplicitTilingInfo, coord: ImplicitCoord, signal?: AbortSignal): Promise<Subtree> {
+export function loadSubtreeAt(
+    info: ImplicitTilingInfo,
+    coord: ImplicitCoord,
+    signal?: AbortSignal,
+    provider: TileResourceProvider = networkTileResourceProvider
+): Promise<Subtree> {
     const uri = fillUriTemplate(info.subtreeTemplate, coord.level, coord.x, coord.y, coord.z);
-    return fetchSubtree(new URL(uri, info.baseUrl).href, signal);
+    return fetchSubtree(provider.resolve(uri, info.baseUrl), signal, provider);
 }

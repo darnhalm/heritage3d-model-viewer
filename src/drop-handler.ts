@@ -94,7 +94,8 @@ const CreateDropHandler = (target: HTMLElement, dropHandler: DropHandlerFunc) =>
                         resolve({
                             url: URL.createObjectURL(entryFile),
                             filename: entry.fullPath.substring(1),
-                            sizeBytes: entryFile.size
+                            sizeBytes: entryFile.size,
+                            blob: entryFile
                         });
                     });
                 });

@@ -30,6 +30,7 @@ import { destroyTileContent, gltfUpAxisTransform, loadTileContent, type TileCont
 import { distanceToObb, makeWorldObb, screenSpaceError } from './tile-math';
 import { resolutionColorAbgr } from '../resolution-palette';
 import { TileRequestQueue, compareTilePriority } from './tile-request-queue';
+import { networkTileResourceProvider, type TileResourceProvider } from './tile-resource';
 import {
     TILE_FAILED, TILE_LOADING, TILE_QUEUED, TILE_READY, TILE_UNLOADED,
     type Tile, type TileStats
@@ -204,6 +205,8 @@ export type TileManagerOptions = {
     maxCachedBytes?: number;
     /** Куда писать предупреждения о неподдержанных частях формата. */
     onWarning?: (message: string) => void;
+    /** Reader for ordinary URLs or entries in a 3TZ container. */
+    resourceProvider?: TileResourceProvider;
 };
 
 const UP_AXIS_ROTATION = -90;
@@ -404,6 +407,8 @@ export class TileManager {
     private onChange: (transformChanged?: boolean) => void;
 
     private onWarning: (message: string) => void;
+
+    private readonly resourceProvider: TileResourceProvider;
 
     /** Корень тайлсета в сцене: несёт поворот осей и рецентровку. */
     readonly root: Entity;
@@ -686,6 +691,7 @@ export class TileManager {
         this.camera = options.camera;
         this.onChange = options.onChange;
         this.onWarning = options.onWarning ?? (() => {});
+        this.resourceProvider = options.resourceProvider ?? networkTileResourceProvider;
         this.options = {
             errorTarget: options.errorTarget ?? 16,
             maxConcurrent: options.maxConcurrent ?? 6,
@@ -705,7 +711,7 @@ export class TileManager {
      * @param url - Адрес tileset.json.
      */
     async load(url: string) {
-        const json = await fetchTilesetJson(url);
+        const json = await fetchTilesetJson(url, this.resourceProvider);
         if (this.disposed) {
             return;
         }
@@ -721,7 +727,8 @@ export class TileManager {
         this.rootTile = buildTileTree(json.root, {
             baseUrl: url,
             tilesetToWorld: this.tilesetToWorld,
-            warnings
+            warnings,
+            provider: this.resourceProvider
         });
 
         // Неявное дерево: тайлов в JSON нет, они разворачиваются из масок `.subtree`.
@@ -1112,7 +1119,7 @@ export class TileManager {
                 }
                 tile.state = TILE_LOADING;
                 try {
-                    const content = await loadTileContent(this.app, tile.contentUris, token);
+                    const content = await loadTileContent(this.app, tile.contentUris, token, this.resourceProvider);
                     this.attachContent(tile, content);
                 } catch (err) {
                     // Отменённая загрузка — не ошибка: тайл просто снова «не загружен» и
@@ -1177,7 +1184,7 @@ export class TileManager {
         implicit.pending = true;
 
         try {
-            const subtree = await loadSubtreeAt(implicit.info, implicit.coord);
+            const subtree = await loadSubtreeAt(implicit.info, implicit.coord, undefined, this.resourceProvider);
             if (this.disposed || this.rootTile === null) {
                 return;
             }
@@ -1187,7 +1194,8 @@ export class TileManager {
                 tilesetToWorld: this.tilesetToWorld,
                 parentTransform: tile.transform,
                 baseUrl: this.baseUrl,
-                warnings
+                warnings,
+                provider: this.resourceProvider
             });
 
             // Заглушки на границе поддерева: их маски загрузятся, когда обход дойдёт.
@@ -1231,7 +1239,7 @@ export class TileManager {
     private requestExternalTileset(tile: Tile) {
         const uri = tile.externalTilesetUri;
         tile.state = TILE_LOADING;
-        fetchTilesetJson(uri)
+        fetchTilesetJson(uri, this.resourceProvider)
         .then((json) => {
             if (this.disposed) {
                 return;
@@ -1242,7 +1250,8 @@ export class TileManager {
                 parentTransform: tile.transform,
                 tilesetToWorld: this.tilesetToWorld,
                 parent: tile,
-                warnings
+                warnings,
+                provider: this.resourceProvider
             });
             tile.state = TILE_READY;
             this.markLoadOrder(tile);
@@ -2153,6 +2162,10 @@ export class TileManager {
         this.lodCounters.clear();
         this.prevSelection = [];
         this.root.destroy();
+        const closing = this.resourceProvider.close?.();
+        if (closing instanceof Promise) {
+            closing.catch(err => console.warn('Не удалось закрыть источник тайлсета', err));
+        }
     }
 }
 

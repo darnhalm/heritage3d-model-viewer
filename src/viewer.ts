@@ -135,6 +135,7 @@ import { ScaleBar, type ScaleBarUnit } from './scale-bar';
 import { ShadowCatcher } from './shadow-catcher';
 import { normalizeThemeColor } from './theme';
 import { TileResolutionTint } from './tile-resolution-tint';
+import { ThreeTzResourceProvider } from './tiles/three-tz';
 import { dimColor, EDGE_WIDTH_UNIT, gridIndex, TileManager, type TileDebugInfo, type TileDebugMode, type TileDebugStyle } from './tiles/tile-manager';
 import { File, HierarchyNode, MorphTargetData, ObserverData, SceneCamera } from './types';
 import type { TileReplayTimeline, TimelineState as TileReplayTimelineState } from './ui/tile-replay-timeline';
@@ -840,6 +841,9 @@ class Viewer {
      * статистика и все инструменты, которые ждут статичного набора мешей.
      */
     tileManager: TileManager | null;
+
+    /** Invalidates an archive that is still opening when the user selects another scene. */
+    private tilesetLoadGeneration = 0;
 
     /** User-adjustable reference bounds used for reliable scene framing. */
     private dimensionBoxEntity: Entity;
@@ -7070,6 +7074,17 @@ class Viewer {
         return name === 'tileset.json' || name.endsWith('-tileset.json');
     }
 
+    /**
+     * 3D Tiles Archive (`.3tz` or its long-form `.3dtiles.zip` extension).
+     *
+     * @param filename - Имя или URL.
+     * @returns true для контейнера 3TZ.
+     */
+    isThreeTzFilename(filename: string): boolean {
+        const name = filename.split('?')[0].split('/').pop()?.toLowerCase() ?? '';
+        return name.endsWith('.3tz') || name.endsWith('.3dtiles.zip');
+    }
+
     // SPZ needs decoding before the engine can read it — see loadSpzAsCompressedPly
     private isSpzFilename(filename: string) {
         return filename.split('?')[0].toLowerCase().endsWith('.spz');
@@ -7078,6 +7093,18 @@ class Viewer {
     private isViewerSettingsFilename(filename: string): boolean {
         const cleanName = filename.split('?')[0].split('/').pop()?.toLowerCase() ?? '';
         return /\.model-viewer-settings(?:\(\d+\))?\.json$/.test(cleanName);
+    }
+
+    /**
+     * Does this file have a texture extension accepted by the skybox loader?
+     *
+     * @param filename - File name or URL.
+     * @returns true for an HDR/environment texture or a supported image face.
+     */
+    private isSkyboxFilename(filename: string): boolean {
+        const cleanName = filename.split('?')[0].split('/').pop()?.toLowerCase() ?? '';
+        const extension = cleanName.split('.').pop() ?? '';
+        return ['hdr', 'env', 'png', 'jpg', 'jpeg', 'webp'].includes(extension);
     }
 
     private formatBytes(bytes: number): string {
@@ -7091,6 +7118,16 @@ class Viewer {
         return t(key, lang)
         .replace('{filename}', filename)
         .replace('{size}', this.formatBytes(sizeBytes));
+    }
+
+    private formatUnsupportedFileMessage(filename: string): string {
+        const lang = this.observer.get('ui.language') as string | undefined;
+        const cleanName = filename.split('?')[0].split('/').pop() ?? filename;
+        const dot = cleanName.lastIndexOf('.');
+        const extension = dot >= 0 ? cleanName.slice(dot).toLowerCase() : '—';
+        return t('File "{filename}" has unsupported type "{extension}". Supported model formats: GLB, glTF, PLY, SOG, SPZ, 3TZ and tileset.json.', lang)
+        .replace('{filename}', filename)
+        .replace('{extension}', extension);
     }
 
     /**
@@ -7265,34 +7302,52 @@ class Viewer {
 
         // 3D Tiles — отдельный конвейер: у тайлсета нет «одного ассета», который можно
         // добавить в сцену, вместо этого сценой управляет TileManager.
-        const tilesetFile = files.find(f => this.isTilesetFilename(f.filename ?? f.url ?? ''));
+        const tilesetFile = files.find((f) => {
+            const name = f.filename ?? f.url ?? '';
+            return this.isTilesetFilename(name) || this.isThreeTzFilename(name);
+        });
         if (tilesetFile) {
             this.loadTileset(tilesetFile, resetScene);
             return true;
         }
 
+        const hasPrimaryModel = files.some((file) => {
+            const filename = file.filename ?? file.url ?? '';
+            return this.isModelFilename(filename) || this.isGSplatFilename(filename);
+        });
         const rejectedFiles: string[] = [];
         const acceptedFiles = files.filter((file) => {
             const filename = file.filename ?? file.url ?? '';
             const sizeBytes = file.sizeBytes;
+            const isModel = this.isModelFilename(filename) || this.isGSplatFilename(filename);
+            const isSettings = this.isViewerSettingsFilename(filename);
+            const isSkybox = this.isSkyboxFilename(filename);
+
+            // A glTF may arrive together with buffers or textures whose extensions are arbitrary.
+            // Keep those companions when a primary model is present. With no primary model, an
+            // unknown file must not silently fall through to the skybox loader.
+            if (!hasPrimaryModel && !isModel && !isSettings && !isSkybox) {
+                rejectedFiles.push(this.formatUnsupportedFileMessage(filename));
+                return false;
+            }
+
             if (typeof sizeBytes !== 'number' || sizeBytes <= 0) {
                 return true;
             }
 
-            if ((this.isModelFilename(filename) || this.isGSplatFilename(filename)) &&
+            if (isModel &&
                 sizeBytes > Viewer.MODEL_FILE_SIZE_LIMIT_BYTES) {
                 rejectedFiles.push(this.formatLimitMessage('File "{filename}" ({size}) exceeds model limit of 1 GB.', filename, sizeBytes));
                 return false;
             }
 
-            if (this.isViewerSettingsFilename(filename) &&
+            if (isSettings &&
                 sizeBytes > Viewer.SETTINGS_FILE_SIZE_LIMIT_BYTES) {
                 rejectedFiles.push(this.formatLimitMessage('File "{filename}" ({size}) exceeds settings limit of 10 MB.', filename, sizeBytes));
                 return false;
             }
 
-            const isKnownType = this.isModelFilename(filename) || this.isGSplatFilename(filename) || this.isViewerSettingsFilename(filename);
-            if (!isKnownType && sizeBytes > Viewer.SKYBOX_FILE_SIZE_LIMIT_BYTES) {
+            if (!hasPrimaryModel && isSkybox && sizeBytes > Viewer.SKYBOX_FILE_SIZE_LIMIT_BYTES) {
                 rejectedFiles.push(this.formatLimitMessage('File "{filename}" ({size}) exceeds HDRI/Skybox limit of 50 MB.', filename, sizeBytes));
                 return false;
             }
@@ -7578,6 +7633,7 @@ class Viewer {
             this.resetScene();
         }
         this.destroyTileManager();
+        const loadGeneration = this.tilesetLoadGeneration;
 
         const url = file.url ?? file.filename;
         const warnings: string[] = [];
@@ -7620,17 +7676,37 @@ class Viewer {
         this.observer.set('scene.tilesetMaxDepth', 0);
         this.observer.set('scene.tilesetLoadCount', 0);
 
+        let archiveProvider: ThreeTzResourceProvider | undefined;
+        try {
+            if (this.isThreeTzFilename(file.filename ?? url)) {
+                archiveProvider = await ThreeTzResourceProvider.open(file);
+            }
+            if (loadGeneration !== this.tilesetLoadGeneration) {
+                await archiveProvider?.close();
+                return;
+            }
+        } catch (err) {
+            console.error(err);
+            this.observer.set('ui.error', err?.toString() ?? String(err));
+            this.observer.set('ui.loadProgress', 100);
+            this.observer.set('ui.spinner', false);
+            this.observer.set('ui.loadingBackgroundReady', false);
+            this.renderNextFrame();
+            return;
+        }
+
         const manager = new TileManager({
             app: this.app,
             camera: this.camera,
             parent: this.sceneContentRoot,
             onChange: transformChanged => this.handleTileChange(transformChanged),
-            onWarning: message => warnings.push(message)
+            onWarning: message => warnings.push(message),
+            resourceProvider: archiveProvider
         });
         this.tileManager = manager;
 
         try {
-            await manager.load(url);
+            await manager.load(archiveProvider?.tilesetUrl ?? url);
 
             // Пока грузился тайлсет, сцену могли сменить.
             if (this.tileManager !== manager) {
@@ -8133,6 +8209,7 @@ class Viewer {
     }
 
     private destroyTileManager() {
+        this.tilesetLoadGeneration++;
         if (this.observer.get('debug.tilePick')) {
             this.observer.set('debug.tilePick', false);
         }

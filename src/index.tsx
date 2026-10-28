@@ -1189,7 +1189,7 @@ const main = () => {
                 for (const fileHandle of launchParams.files) {
                     promises.push(
                         fileHandle.getFile().then((file) => {
-                            files.push({ url: URL.createObjectURL(file), filename: file.name, sizeBytes: file.size });
+                            files.push({ url: URL.createObjectURL(file), filename: file.name, sizeBytes: file.size, blob: file });
                         })
                     );
                 }
