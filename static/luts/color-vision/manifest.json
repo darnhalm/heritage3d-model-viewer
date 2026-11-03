@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "name": {
+    "ru": "Цветовое зрение",
+    "en": "Colour vision",
+    "zh": "色觉"
+  },
+  "format": {
+    "type": "strip",
+    "width": 256,
+    "height": 16,
+    "size": 16,
+    "layout": "unreal",
+    "colorSpace": "srgb",
+    "note": "Horizontal strip, 16 slices of 16x16: x = blue*16 + red, y = green (top row = 0). Load as sRGB texture; the PlayCanvas CameraFrame colorLUT accepts exactly this size."
+  },
+  "profiles": [
+    {
+      "id": "cvd-correction-deuteranomaly",
+      "file": "cvd-correction-deuteranomaly.png",
+      "kind": "correction",
+      "deficiency": "deutan",
+      "severity": 0.6,
+      "title": {
+        "ru": "Дейтераномалия",
+        "en": "Deuteranomaly",
+        "zh": "绿色弱"
+      },
+      "description": {
+        "ru": "Экспериментально переносит часть цветового различия в светлоту; польза для пользователей не подтверждена.",
+        "en": "Experimentally transfers part of the colour difference into lightness; user benefit has not been validated."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-correction-protanomaly",
+      "file": "cvd-correction-protanomaly.png",
+      "kind": "correction",
+      "deficiency": "protan",
+      "severity": 0.6,
+      "title": {
+        "ru": "Протаномалия",
+        "en": "Protanomaly",
+        "zh": "红色弱"
+      },
+      "description": {
+        "ru": "Экспериментально переносит часть цветового различия в светлоту; польза для пользователей не подтверждена.",
+        "en": "Experimentally transfers part of the colour difference into lightness; user benefit has not been validated."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-correction-deuteranopia",
+      "file": "cvd-correction-deuteranopia.png",
+      "kind": "correction",
+      "deficiency": "deutan",
+      "severity": 1.0,
+      "title": {
+        "ru": "Дейтеранопия",
+        "en": "Deuteranopia",
+        "zh": "绿色盲"
+      },
+      "description": {
+        "ru": "Экспериментально переносит часть цветового различия в светлоту; польза для пользователей не подтверждена.",
+        "en": "Experimentally transfers part of the colour difference into lightness; user benefit has not been validated."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-correction-protanopia",
+      "file": "cvd-correction-protanopia.png",
+      "kind": "correction",
+      "deficiency": "protan",
+      "severity": 1.0,
+      "title": {
+        "ru": "Протанопия",
+        "en": "Protanopia",
+        "zh": "红色盲"
+      },
+      "description": {
+        "ru": "Экспериментально переносит часть цветового различия в светлоту; польза для пользователей не подтверждена.",
+        "en": "Experimentally transfers part of the colour difference into lightness; user benefit has not been validated."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-correction-tritanomaly",
+      "file": "cvd-correction-tritanomaly.png",
+      "kind": "correction",
+      "deficiency": "tritan",
+      "severity": 0.6,
+      "title": {
+        "ru": "Тританомалия",
+        "en": "Tritanomaly",
+        "zh": "蓝色弱"
+      },
+      "description": {
+        "ru": "Экспериментально переносит часть цветового различия в светлоту; польза для пользователей не подтверждена.",
+        "en": "Experimentally transfers part of the colour difference into lightness; user benefit has not been validated."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-correction-tritanopia",
+      "file": "cvd-correction-tritanopia.png",
+      "kind": "correction",
+      "deficiency": "tritan",
+      "severity": 1.0,
+      "title": {
+        "ru": "Тританопия",
+        "en": "Tritanopia",
+        "zh": "蓝色盲"
+      },
+      "description": {
+        "ru": "Экспериментально переносит часть цветового различия в светлоту; польза для пользователей не подтверждена.",
+        "en": "Experimentally transfers part of the colour difference into lightness; user benefit has not been validated."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-simulation-deuteranomaly",
+      "file": "cvd-simulation-deuteranomaly.png",
+      "kind": "simulation",
+      "deficiency": "deutan",
+      "severity": 0.6,
+      "title": {
+        "ru": "Дейтераномалия",
+        "en": "Deuteranomaly",
+        "zh": "绿色弱"
+      },
+      "description": {
+        "ru": "Приближённо моделирует дейтераномалию (ослабленное восприятие зелёного). Для проверки цветов автором.",
+        "en": "Approximates deuteranomaly (reduced green sensitivity). For authors checking their colours."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-simulation-protanomaly",
+      "file": "cvd-simulation-protanomaly.png",
+      "kind": "simulation",
+      "deficiency": "protan",
+      "severity": 0.6,
+      "title": {
+        "ru": "Протаномалия",
+        "en": "Protanomaly",
+        "zh": "红色弱"
+      },
+      "description": {
+        "ru": "Приближённо моделирует протаномалию (ослабленное восприятие красного). Для проверки цветов автором.",
+        "en": "Approximates protanomaly (reduced red sensitivity). For authors checking their colours."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-simulation-deuteranopia",
+      "file": "cvd-simulation-deuteranopia.png",
+      "kind": "simulation",
+      "deficiency": "deutan",
+      "severity": 1.0,
+      "title": {
+        "ru": "Дейтеранопия",
+        "en": "Deuteranopia",
+        "zh": "绿色盲"
+      },
+      "description": {
+        "ru": "Приближённо моделирует дейтеранопию (нет восприятия зелёного). Для проверки цветов автором.",
+        "en": "Approximates deuteranopia (no green sensitivity). For authors checking their colours."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-simulation-protanopia",
+      "file": "cvd-simulation-protanopia.png",
+      "kind": "simulation",
+      "deficiency": "protan",
+      "severity": 1.0,
+      "title": {
+        "ru": "Протанопия",
+        "en": "Protanopia",
+        "zh": "红色盲"
+      },
+      "description": {
+        "ru": "Приближённо моделирует протанопию (нет восприятия красного). Для проверки цветов автором.",
+        "en": "Approximates protanopia (no red sensitivity). For authors checking their colours."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-simulation-tritanomaly",
+      "file": "cvd-simulation-tritanomaly.png",
+      "kind": "simulation",
+      "deficiency": "tritan",
+      "severity": 0.6,
+      "title": {
+        "ru": "Тританомалия",
+        "en": "Tritanomaly",
+        "zh": "蓝色弱"
+      },
+      "description": {
+        "ru": "Приближённо моделирует тританомалию (ослабленное восприятие синего). Для проверки цветов автором.",
+        "en": "Approximates tritanomaly (reduced blue sensitivity). For authors checking their colours."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-simulation-tritanopia",
+      "file": "cvd-simulation-tritanopia.png",
+      "kind": "simulation",
+      "deficiency": "tritan",
+      "severity": 1.0,
+      "title": {
+        "ru": "Тританопия",
+        "en": "Tritanopia",
+        "zh": "蓝色盲"
+      },
+      "description": {
+        "ru": "Приближённо моделирует тританопию (нет восприятия синего). Для проверки цветов автором.",
+        "en": "Approximates tritanopia (no blue sensitivity). For authors checking their colours."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-simulation-achromatopsia",
+      "file": "cvd-simulation-achromatopsia.png",
+      "kind": "simulation",
+      "deficiency": "achromat",
+      "severity": 1.0,
+      "title": {
+        "ru": "Ахроматопсия",
+        "en": "Achromatopsia",
+        "zh": "全色盲"
+      },
+      "description": {
+        "ru": "Приближённо моделирует ахроматопсию (нет цветового зрения). Для проверки цветов автором.",
+        "en": "Approximates achromatopsia (no colour vision). For authors checking their colours."
+      },
+      "intensity": 1.0
+    },
+    {
+      "id": "cvd-neutral",
+      "file": "cvd-neutral.png",
+      "kind": "neutral",
+      "deficiency": null,
+      "severity": 0,
+      "title": {
+        "ru": "Без изменений (проверка)",
+        "en": "Neutral (test)",
+        "zh": "中性（测试）"
+      },
+      "description": {
+        "ru": "Нейтральная таблица: изображение не меняется. Для проверки загрузки.",
+        "en": "Identity table: the image does not change. For testing."
+      },
+      "intensity": 1.0
+    }
+  ],
+  "sources": {
+    "file": "SOURCES.md",
+    "code": [
+      {
+        "name": "DaltonLens-Python",
+        "url": "https://github.com/DaltonLens/DaltonLens-Python",
+        "commit": "3cba5e6a7c8f0e8199c8f83f1afb58eb6dab7a3d",
+        "license": "MIT",
+        "licenseFile": "LICENSE-DaltonLens-MIT.txt"
+      }
+    ],
+    "models": [
+      "Machado, Oliveira, Fernandes 2009, IEEE TVCG 15(6):1291-1298",
+      "Viénot, Brettel, Mollon 1999, Color Research and Application 24(4):243-252",
+      "Brettel, Viénot, Mollon 1997, JOSA A 14:2647-2655",
+      "Smith, Pokorny 1975, Vision Research 15:161-171"
+    ],
+    "standards": [
+      "IEC 61966-2-1:1999 (sRGB)",
+      "CIE 15:2004 / ISO/CIE 11664-4 (CIELAB)"
+    ]
+  }
+}

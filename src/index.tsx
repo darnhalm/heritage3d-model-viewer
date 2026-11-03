@@ -518,6 +518,9 @@ const saveOptions = (observer: Observer, name: string) => {
         delete camera.distanceMax;
         // Image exposure belongs to a model, not the browser-wide preferences.
         delete camera.hdrExposure;
+        // The texture is not serializable. Built-in profiles are reselectable from the manifest,
+        // while a persisted filename would only make the UI look active after a reload.
+        delete camera.colorLutName;
     }
     window.localStorage.setItem(`model-viewer-${name}`, JSON.stringify({
         camera,
@@ -545,6 +548,9 @@ const loadOptions = (observer: Observer, name: string, skyboxUrls: Map<string, s
         'camera.ortho', 'camera.viewCube',
         'camera.tilePriority',
         'camera.hdrExposure',
+        // Neither a local LUT nor a built-in preset texture is reconstructed from this generic
+        // preferences object. Ignore legacy filenames that would otherwise show a false selection.
+        'camera.colorLutName',
         // Пределы расстояния привязаны к габаритам конкретной сцены. Сохранённые от прошлой
         // модели значения удерживали бы камеру там, где для новой модели нет никакого смысла.
         'camera.distanceLimitsManual', 'camera.distanceMin', 'camera.distanceMax',

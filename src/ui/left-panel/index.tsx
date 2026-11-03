@@ -17,6 +17,7 @@ import { DEFAULT_THEME_COLOR } from '../../theme';
 import { SetProperty, ObserverData, Option } from '../../types';
 import { Detail, Select, Slider, Toggle, ColorPickerControl, Numeric, NakedSlider } from '../components';
 import { hasSeenTour } from './tour-seen';
+import colorVisionManifest from '../../../static/luts/color-vision/manifest.json';
 
 /**
  * Делители разрешения сцены.
@@ -45,6 +46,19 @@ const PIXEL_SCALES: Option[] = [
     { v: '8', t: '8' },
     { v: '16', t: '16' }
 ];
+
+const COLOR_VISION_PROFILES = colorVisionManifest.profiles.filter(profile => profile.kind === 'correction' || profile.kind === 'simulation');
+const NO_COLOR_VISION_PROFILE_VALUE = '__no_color_vision_profile__';
+
+const colorVisionProfileTitle = (
+    profile: (typeof COLOR_VISION_PROFILES)[number],
+    language: unknown
+) => {
+    const lang = language === 'ru' || language === 'zh' ? language : 'en';
+    const title = profile.title[lang] ?? profile.title.en;
+    const kind = profile.kind === 'correction' ? t('compensation profile suffix', lang) : t('simulation profile suffix', lang);
+    return `${title} — ${kind}`;
+};
 
 type PoiItem = {
     id: string;
@@ -401,11 +415,44 @@ class PostProcessingPanel extends React.Component <{ observerData: ObserverData,
         input.click();
     };
 
+    private chooseColorVisionProfile = async (profileId: string) => {
+        const viewer = getViewer();
+        if (!viewer) return;
+        if (!profileId || profileId === NO_COLOR_VISION_PROFILE_VALUE) {
+            viewer.clearColorLut?.();
+            return;
+        }
+
+        const profile = COLOR_VISION_PROFILES.find(item => item.id === profileId);
+        if (!profile) return;
+
+        try {
+            const url = new URL(`static/luts/color-vision/${profile.file}`, document.baseURI);
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
+            const blob = await response.blob();
+            await viewer.loadColorLut?.(new File([blob], profile.file, { type: blob.type || 'image/png' }));
+            viewer.observer?.set?.('camera.colorLutIntensity', profile.intensity);
+        } catch (err) {
+            const lang = this.props.observerData?.ui?.language;
+            const detail = err instanceof Error ? err.message : String(err);
+            viewer.observer?.set?.('ui.error', `${t('Colour vision profile could not be loaded', lang)}: ${detail}`);
+        }
+    };
+
     render() {
         const { observerData, setProperty } = this.props;
         const camera = observerData.camera;
         const lang = observerData?.ui?.language;
         const lutName = camera.colorLutName || '';
+        const selectedColorVisionProfile = COLOR_VISION_PROFILES.find(profile => profile.file === lutName)?.id ?? NO_COLOR_VISION_PROFILE_VALUE;
+        const colorVisionProfileOptions: Option[] = [
+            { v: NO_COLOR_VISION_PROFILE_VALUE, t: t('No colour vision profile', lang) },
+            ...COLOR_VISION_PROFILES.map(profile => ({
+                v: profile.id,
+                t: colorVisionProfileTitle(profile, lang)
+            }))
+        ];
         return (
             <Panel headerText={t('Post-processing', lang)} id='postprocessing-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
                 {observerData.runtime.hdrSource && <>
@@ -443,6 +490,15 @@ class PostProcessingPanel extends React.Component <{ observerData: ObserverData,
                         tooltip={t('Color LUT remaps the image colors using a lookup texture for consistent color grading.', lang)}
                         onLoad={this.chooseLut}
                         onClear={() => getViewer()?.clearColorLut?.()} />
+                    <span title={t('The list contains author simulations and experimental compensation profiles; the profile purpose is shown after its name.', lang)} style={{ display: 'contents' }}>
+                        <Select
+                            label={t('Colour vision profile', lang)}
+                            type='string'
+                            options={colorVisionProfileOptions}
+                            value={selectedColorVisionProfile}
+                            selectKey={`${String(lang)}:${selectedColorVisionProfile}:${lutName}`}
+                            setProperty={value => this.chooseColorVisionProfile(String(value ?? ''))} />
+                    </span>
                     <Slider
                         label={t('LUT intensity', lang)}
                         precision={2}
