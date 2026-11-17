@@ -1975,18 +1975,16 @@ body.poi-timeline-open.timeline-open .spectral-variant-switcher {
 
 // Панель POI выше тайловой по z-index. Если обе нужны одновременно, тайловую поднимаем
 // целиком, а основные круглые кнопки — над всем стеком.
-body.poi-timeline-open:not(.timeline-open) #popup-buttons-parent,
-body.poi-timeline-open:not(.timeline-open) #popup > #popup-buttons-parent {
-    bottom: 104px;
+body.poi-timeline-open:not(.timeline-open) #popup {
+    --popup-toolbar-bottom: 104px;
 }
 
 body.poi-timeline-open.timeline-open #timeline-panel {
     bottom: 84px;
 }
 
-body.poi-timeline-open.timeline-open #popup-buttons-parent,
-body.poi-timeline-open.timeline-open #popup > #popup-buttons-parent {
-    bottom: 168px;
+body.poi-timeline-open.timeline-open #popup {
+    --popup-toolbar-bottom: 168px;
 }
 
 @media (max-width: 620px) {
@@ -2702,17 +2700,14 @@ input {
 
 // Шкала перемотки прижата к низу и высотой примерно в шестьдесят пикселей: пока она открыта,
 // круглая панель уезжает выше, иначе она перекрывает ряд кнопок перемотки.
-// Второй селектор с двумя идентификаторами намеренно: в мобильной раскладке низ панели задаёт
-// правило `#popup > #popup-buttons-parent`, и по точности оно побеждало одиночный идентификатор.
-body.timeline-open #popup-buttons-parent,
-body.timeline-open #popup > #popup-buttons-parent {
-    bottom: 84px;
+body.timeline-open #popup {
+    --popup-toolbar-bottom: 84px;
 }
 
 #popup-buttons-parent {
     position: absolute;
     left: 50%;
-    bottom: 20px;
+    bottom: var(--popup-toolbar-bottom);
     transform: translateX(-50%);
     display: flex;
     align-items: center;
@@ -2960,6 +2955,107 @@ body.timeline-open #popup > #popup-buttons-parent {
     }
 }
 
+.info-quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 12px 0 4px;
+}
+
+.info-quick-action {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 6px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 7px;
+    background: rgba(40, 40, 40, 0.72);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+        border-color: var(--theme-primary);
+        background: rgba(55, 55, 55, 0.9);
+        outline: none;
+    }
+
+    .material-symbols-outlined {
+        font-size: 19px;
+    }
+
+    kbd {
+        min-width: 18px;
+        padding: 2px 4px;
+        border: 1px solid rgba(255, 255, 255, 0.24);
+        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.25);
+        color: #bbb;
+        font: inherit;
+        font-size: 10px;
+        text-align: center;
+    }
+}
+
+.info-disclosure {
+    margin-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.13);
+
+    > summary {
+        position: relative;
+        display: flex;
+        align-items: center;
+        min-height: 38px;
+        padding: 0 24px 0 4px;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        &::after {
+            content: '';
+            position: absolute;
+            right: 7px;
+            width: 7px;
+            height: 7px;
+            border-right: 1.5px solid #aaa;
+            border-bottom: 1.5px solid #aaa;
+            transform: rotate(45deg) translateY(-2px);
+            transition: transform 150ms ease;
+        }
+
+        &:hover,
+        &:focus-visible {
+            color: var(--theme-primary);
+            outline: none;
+        }
+    }
+
+    &[open] > summary::after {
+        transform: rotate(225deg) translate(-2px, -2px);
+    }
+
+    .info-disclosure-content {
+        padding: 2px 0 10px;
+
+        > .popup-panel-heading {
+            margin-top: 12px;
+        }
+    }
+}
+
 .info-panel-model-combined {
     max-height: 70vh;
     overflow-y: auto;
@@ -2975,6 +3071,10 @@ body.timeline-open #popup > #popup-buttons-parent {
     .scene-morph-panel {
         margin-top: 8px;
     }
+}
+
+.info-about-disclosure {
+    margin-top: 0;
 }
 
 .info-panel-hierarchy {
@@ -3067,6 +3167,40 @@ body.timeline-open #popup > #popup-buttons-parent {
         background: rgba(70, 70, 70, 0.95);
         color: #fff;
         border-color: var(--theme-primary);
+    }
+}
+
+.share-capture-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.share-capture-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 8px;
+    background: rgba(40, 40, 40, 0.82);
+    color: #fff;
+    cursor: pointer;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+
+    &:hover,
+    &:focus-visible {
+        border-color: var(--theme-primary);
+        background: rgba(55, 55, 55, 0.94);
+        color: var(--theme-primary);
+        outline: none;
+    }
+
+    .material-symbols-outlined {
+        font-size: 23px;
     }
 }
 
@@ -4410,6 +4544,7 @@ body.timeline-open #popup > #popup-buttons-parent {
 }
 
 #popup {
+    --popup-toolbar-bottom: 20px;
     z-index: 9999;
 }
 
@@ -4433,10 +4568,27 @@ body.timeline-open #popup > #popup-buttons-parent {
         width: calc(100% - 62px);
     }
 
+    .info-panel-parent {
+        position: absolute;
+        top: 12px;
+        // 8px отступ тулбара, до 52px на ряд кнопок и 12px зазора.
+        bottom: calc(var(--popup-toolbar-bottom) + 8px + 52px + 12px);
+
+        > .info-panel {
+            box-sizing: border-box;
+            max-height: 100%;
+            overscroll-behavior-y: contain;
+        }
+    }
+
+    .info-panel-model-combined {
+        max-height: none;
+        overflow: visible;
+    }
+
     #popup > #popup-buttons-parent {
         left: 50%;
         transform: translateX(-50%);
-        bottom: 20px;
     }
 
     #popup > #popup-buttons-parent > .pcui-button {

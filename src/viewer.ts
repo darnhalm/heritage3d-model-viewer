@@ -11223,7 +11223,10 @@ class Viewer {
     private updateScaleBar() {
         const bar = this.scaleBar;
         if (!bar) return;
-        if (!this.observer.get('measure.scaleBar')) {
+        const embed = this.observer.get('ui.embed') as { enabled?: boolean; scaleBar?: boolean } | undefined;
+        const scaleBarEnabled = embed?.enabled && typeof embed.scaleBar === 'boolean' ?
+            embed.scaleBar : this.observer.get('measure.scaleBar');
+        if (!scaleBarEnabled) {
             bar.hide();
             return;
         }

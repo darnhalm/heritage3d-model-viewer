@@ -12,7 +12,7 @@ const PopupPanelControls = (props: { observerData: ObserverData, setProperty: Se
         <InfoPanel setProperty={props.setProperty} observerData={props.observerData} />
         <MeasurementsPanel setProperty={props.setProperty} observerData={props.observerData} />
         <FragmentPanel setProperty={props.setProperty} observerData={props.observerData} />
-        <ViewPanel setProperty={props.setProperty} sceneData={props.observerData.scene} uiData={props.observerData.ui} runtimeData={props.observerData.runtime}/>
+        <ViewPanel setProperty={props.setProperty} sceneData={props.observerData.scene} uiData={props.observerData.ui} measureData={props.observerData.measure} runtimeData={props.observerData.runtime}/>
     </>);
 };
 

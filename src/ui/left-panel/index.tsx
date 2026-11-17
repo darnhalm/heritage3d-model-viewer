@@ -875,7 +875,7 @@ class SettingsPanel extends React.Component <{ observerData: ObserverData, setPr
         };
 
         return (
-            <Panel headerText={t('Settings', lang)} id='settings-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
+            <Panel headerText={t('Display', lang)} id='settings-panel' flexShrink={'0'} flexGrow={'0'} collapsible={false}>
                 <ColorPickerControl
                     label={t('Theme color', lang)}
                     value={rgbToArr(props.observerData.theme?.primaryColor ?? DEFAULT_THEME_COLOR)}

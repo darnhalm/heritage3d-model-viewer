@@ -60,6 +60,8 @@ export interface ObserverData {
             poi: boolean,
             tour: boolean,
             measure: boolean,
+            /** Show the viewport scale bar in an embed independently of the measurement panel. */
+            scaleBar?: boolean,
             info: boolean,
             fragment: boolean,
             controls: boolean,

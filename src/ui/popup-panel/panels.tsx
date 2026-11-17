@@ -339,8 +339,7 @@ const SelectedObjectRow = (props: { path: string, name?: string | null, lang: st
     );
 };
 
-type InfoTab = 'controls' | 'model' | 'about';
-type ControlsSubTab = 'desktop' | 'touch';
+type InfoTab = 'controls' | 'information';
 type EmbedGeneratorState = {
     embedType: 'responsive' | 'fixed',
     preset: 'full' | 'compact' | 'minimal' | 'none',
@@ -353,6 +352,7 @@ type EmbedGeneratorState = {
     poi: boolean,
     tour: boolean,
     measure: boolean,
+    scaleBar: boolean,
     info: boolean,
     fragment: boolean,
     controls: boolean,
@@ -373,11 +373,11 @@ type EmbedGeneratorState = {
 // не только цветом, но и фоном/рамкой/перечёркиванием.
 const SHARE_FLAG_ICONS: Record<string, string> = {
     panel: 'static/icons/left-panel-icon.svg',
-    autoplay: 'static/icons/embed-play.svg',
     allowFullscreen: 'static/icons/fullscreen-icon.svg',
     poi: 'static/icons/tab-poi-icon.svg',
     tour: 'static/icons/tour-icon.svg',
     measure: 'static/icons/ruler-icon.svg',
+    scaleBar: 'static/icons/fragment-scale-icon.svg',
     info: 'static/icons/info-icon.svg',
     fragment: 'static/icons/fragment-frame-icon.svg',
     controls: 'static/icons/mouse-icon.svg',
@@ -413,17 +413,21 @@ const ShareFlagButton = (props: { flagKey: string, label: string, on: boolean, l
 class InfoPanel extends React.Component <{
     observerData: ObserverData,
     setProperty: SetProperty }> {
-    state: { tab: InfoTab; controlsSubTab: ControlsSubTab } = { tab: 'controls', controlsSubTab: 'desktop' };
+    state: { tab: InfoTab; flightOpen: boolean; aboutOpen: boolean } = {
+        tab: 'controls',
+        flightOpen: this.props.observerData.camera.mode === 'fly',
+        aboutOpen: true
+    };
 
     modelHierarchyRef = React.createRef<HTMLDivElement>();
 
-    componentDidUpdate(prevProps: Readonly<{ observerData: ObserverData }>, prevState: Readonly<{ tab: InfoTab }>) {
+    componentDidUpdate(prevProps: Readonly<{ observerData: ObserverData }>, prevState: Readonly<{ tab: InfoTab; flightOpen: boolean; aboutOpen: boolean }>) {
         const prevPath = prevProps.observerData?.scene?.selectedNode?.path ?? '';
         const path = this.props.observerData?.scene?.selectedNode?.path ?? '';
-        if (path && path !== prevPath && this.state.tab === 'model') {
+        if (path && path !== prevPath && this.state.tab === 'information') {
             const selectedEl = this.modelHierarchyRef.current?.querySelector<HTMLElement>('.pcui-treeview-item.pcui-treeview-item-selected');
             selectedEl?.scrollIntoView({ block: 'nearest' });
-        } else if (this.state.tab === 'model' && prevState.tab !== 'model' && path) {
+        } else if (this.state.tab === 'information' && prevState.tab !== 'information' && path) {
             const selectedEl = this.modelHierarchyRef.current?.querySelector<HTMLElement>('.pcui-treeview-item.pcui-treeview-item-selected');
             selectedEl?.scrollIntoView({ block: 'nearest' });
         }
@@ -436,21 +440,20 @@ class InfoPanel extends React.Component <{
         const lang = observerData?.ui?.language;
         const embed = observerData?.ui?.embed;
         const showControlsTab = !(embed?.enabled) || embed.controls;
-        // На узком экране вкладка «Модель» — это длинное дерево иерархии и таблицы текстур,
-        // которые там нечитаемы; остаются «Управление» и «О программе». Если активной была
-        // именно она, `activeTab` ниже сам перекинет на первую доступную.
-        const showModelTab = (!(embed?.enabled) || embed.info) && !isMobileLayout();
-        const showAboutTab = !(embed?.enabled) || embed.info;
+        const showInformationTab = !(embed?.enabled) || embed.info;
+        // Дерево сцены требует ширины и точного указателя. На узком экране оставляем сведения
+        // о модели, но не показываем технический инструмент выбора узлов.
+        const showModelObjects = !isMobileLayout();
         const showFitControl = !(embed?.enabled) || embed.fit;
         const showResetControl = !(embed?.enabled) || embed.reset;
         const mouseButtonsInverted = observerData.camera.mouseButtonsInverted ?? false;
+        const pointerDevice = String(observerData.camera.pointerDevice ?? 'auto');
+        const showTrackpadGuide = pointerDevice === 'trackpad';
         const activeTab = (() => {
             if (this.state.tab === 'controls' && showControlsTab) return 'controls';
-            if (this.state.tab === 'model' && showModelTab) return 'model';
-            if (this.state.tab === 'about' && showAboutTab) return 'about';
+            if (this.state.tab === 'information' && showInformationTab) return 'information';
             if (showControlsTab) return 'controls';
-            if (showModelTab) return 'model';
-            if (showAboutTab) return 'about';
+            if (showInformationTab) return 'information';
             return null;
         })();
         let variantListOptions: Array<{ v: string, t: string }> = [];
@@ -476,66 +479,79 @@ class InfoPanel extends React.Component <{
                                 onClick={() => this.setState({ tab: 'controls' })}
                             />
                         )}
-                        {showModelTab && (
+                        {showInformationTab && (
                             <Button
-                                class={['info-tab', ...(activeTab === 'model' ? ['active'] : [])]}
-                                text={t('Model', lang)}
-                                onClick={() => this.setState({ tab: 'model' })}
-                            />
-                        )}
-                        {showAboutTab && (
-                            <Button
-                                class={['info-tab', ...(activeTab === 'about' ? ['active'] : [])]}
-                                text={t('About', lang)}
-                                onClick={() => this.setState({ tab: 'about' })}
+                                class={['info-tab', ...(activeTab === 'information' ? ['active'] : [])]}
+                                text={t('Information', lang)}
+                                onClick={() => this.setState({ tab: 'information' })}
                             />
                         )}
                     </div>
                     {activeTab === 'controls' && (
-                        <>
-                            <div className='info-panel-subtabs'>
-                                <Button
-                                    class={['info-subtab', ...(this.state.controlsSubTab === 'desktop' ? ['active'] : [])]}
-                                    text={t('Desktop', lang)}
-                                    onClick={() => this.setState({ controlsSubTab: 'desktop' })}
-                                />
-                                <Button
-                                    class={['info-subtab', ...(this.state.controlsSubTab === 'touch' ? ['active'] : [])]}
-                                    text={t('Touch', lang)}
-                                    onClick={() => this.setState({ controlsSubTab: 'touch' })}
-                                />
-                            </div>
-                            {this.state.controlsSubTab === 'desktop' ? (
-                                <div className='info-controls-content'>
-                                    <Label text={t('Orbit Mode', lang)} class='popup-panel-heading' />
+                        <div className='info-controls-content'>
+                            <Select
+                                label={t('Pointer device', lang)}
+                                type='string'
+                                options={[
+                                    { v: 'auto', t: t('Detect automatically', lang) },
+                                    { v: 'mouse', t: t('Mouse', lang) },
+                                    { v: 'trackpad', t: t('Trackpad', lang) }
+                                ]}
+                                value={pointerDevice}
+                                setProperty={(value: string) => setProperty('camera.pointerDevice', value)}
+                            />
+                            <Label text={t('Navigation', lang)} class='popup-panel-heading' />
+                            {showTrackpadGuide ? (
+                                <>
+                                    <ControlDetail label={t('Orbit', lang)} value={t(mouseButtonsInverted ? 'Two Finger Drag' : 'One Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '2' : '1'} />
+                                    <ControlDetail label={t('Pan', lang)} value={t(mouseButtonsInverted ? 'One Finger Drag' : 'Two Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '1' : '2'} />
+                                    <ControlDetail label={t('Zoom', lang)} value={t('Pinch', lang)} icon='pinch' />
+                                    <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Tap', lang)} icon='touch_double' />
+                                </>
+                            ) : (
+                                <>
                                     <ControlDetail label={t('Orbit', lang)} value={t(mouseButtonsInverted ? 'Right Mouse' : 'Left Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'right_click' : 'left_click']} />
                                     <ControlDetail label={t('Pan', lang)} value={t(mouseButtonsInverted ? 'Left Mouse' : 'Right Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'left_click' : 'right_click']} />
                                     <ControlDetail label={t('Zoom', lang)} value={t('Mouse Wheel', lang)} useMouseIcon icons={['swap_vert']} />
                                     <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Click', lang)} useMouseIcon icons={['touch_double']} />
-                                    <Toggle
-                                        label={t('Surface pivot', lang)}
-                                        value={observerData.camera.surfacePivot ?? true}
-                                        setProperty={(value: boolean) => setProperty('camera.surfacePivot', value)}
-                                    />
-                                    <Toggle
-                                        label={t('Invert mouse buttons', lang)}
-                                        value={mouseButtonsInverted}
-                                        setProperty={(value: boolean) => setProperty('camera.mouseButtonsInverted', value)}
-                                    />
-                                    <Select
-                                        label={t('Pointer device', lang)}
-                                        type='string'
-                                        options={[
-                                            { v: 'auto', t: t('Detect automatically', lang) },
-                                            { v: 'mouse', t: t('Mouse', lang) },
-                                            { v: 'trackpad', t: t('Trackpad', lang) }
-                                        ]}
-                                        value={String(observerData.camera.pointerDevice ?? 'auto')}
-                                        setProperty={(value: string) => setProperty('camera.pointerDevice', value)}
-                                    />
-                                    <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
-                                    <ControlDetail label={t('Look Around', lang)} value={t(mouseButtonsInverted ? 'Right Mouse' : 'Left Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'right_click' : 'left_click']} />
-                                    <ControlDetail label={t('Fly', lang)} value='W, S, A, D' icon='keyboard' />
+                                </>
+                            )}
+                            {(showFitControl || showResetControl) && (
+                                <div className='info-quick-actions'>
+                                    {showFitControl && (
+                                        <button type='button' className='info-quick-action' onClick={() => window.viewer?.frameScene?.()}>
+                                            <span className='material-symbols-outlined'>fit_screen</span>
+                                            <span>{t('Frame Scene', lang)}</span>
+                                            <kbd>F</kbd>
+                                        </button>
+                                    )}
+                                    {showResetControl && (
+                                        <button type='button' className='info-quick-action' onClick={() => window.viewer?.resetCamera?.()}>
+                                            <span className='material-symbols-outlined'>restart_alt</span>
+                                            <span>{t('Reset Camera', lang)}</span>
+                                            <kbd>R</kbd>
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                            <details
+                                className='info-disclosure'
+                                open={this.state.flightOpen}
+                                onToggle={event => this.setState({ flightOpen: event.currentTarget.open })}
+                            >
+                                <summary>{t('Fly Mode', lang)}</summary>
+                                <div className='info-disclosure-content'>
+                                    {showTrackpadGuide ? (
+                                        <>
+                                            <ControlDetail label={t('Look Around', lang)} value={t('Touch on Right', lang)} swipeIcon='right' />
+                                            <ControlDetail label={t('Fly', lang)} value={t('Touch on Left', lang)} swipeIcon='left' />
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ControlDetail label={t('Look Around', lang)} value={t(mouseButtonsInverted ? 'Right Mouse' : 'Left Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'right_click' : 'left_click']} />
+                                            <ControlDetail label={t('Fly', lang)} value='W, S, A, D' icon='keyboard' />
+                                        </>
+                                    )}
                                     <div className='fly-speed-control'>
                                         <Slider
                                             label={t('Movement speed', lang)}
@@ -547,198 +563,202 @@ class InfoPanel extends React.Component <{
                                             setProperty={(value: number) => setProperty('camera.flySpeed', value)}
                                         />
                                     </div>
-                                    {(showFitControl || showResetControl) && (
+                                </div>
+                            </details>
+                            <details className='info-disclosure'>
+                                <summary>{t('Additional', lang)}</summary>
+                                <div className='info-disclosure-content'>
+                                    <Toggle
+                                        label={t('Surface pivot', lang)}
+                                        value={observerData.camera.surfacePivot ?? true}
+                                        setProperty={(value: boolean) => setProperty('camera.surfacePivot', value)}
+                                    />
+                                    <Toggle
+                                        label={t('Invert mouse buttons', lang)}
+                                        value={mouseButtonsInverted}
+                                        setProperty={(value: boolean) => setProperty('camera.mouseButtonsInverted', value)}
+                                    />
+                                    <Toggle
+                                        label={t('Show performance stats', lang)}
+                                        value={observerData?.debug?.stats ?? false}
+                                        setProperty={(value: boolean) => setProperty('debug.stats', value)}
+                                    />
+                                    {scene.isTileset ? (
                                         <>
-                                            <Label text={t('General', lang)} class='popup-panel-heading' />
-                                            {showFitControl && (
-                                                <Container class={['panel-option', 'control-detail']}>
-                                                    <span title={t('Frame Scene', lang)} style={{ display: 'contents' }}><Label class='panel-label' text={t('Frame Scene', lang)} /></span>
-                                                    <div className='panel-value control-value'>
-                                                        <span>F</span>
-                                                        <Button
-                                                            class={['fit-screen-button', 'fit-screen-button-inline']}
-                                                            width={28}
-                                                            height={28}
-                                                            onClick={() => window.viewer?.frameScene?.()}
-                                                        />
-                                                    </div>
-                                                </Container>
-                                            )}
-                                            {showResetControl && (
-                                                <Container class={['panel-option', 'control-detail']}>
-                                                    <span title={t('Reset Camera', lang)} style={{ display: 'contents' }}><Label class='panel-label' text={t('Reset Camera', lang)} /></span>
-                                                    <div className='panel-value control-value'>
-                                                        <span>R</span>
-                                                        <Button
-                                                            class={['reset-camera-button', 'reset-camera-button-inline']}
-                                                            width={28}
-                                                            height={28}
-                                                            onClick={() => window.viewer?.resetCamera?.()}
-                                                        />
-                                                    </div>
-                                                </Container>
-                                            )}
+                                            <Label text={t('Tiles', lang)} class='popup-panel-heading' />
+                                            <Select
+                                                label={t('Tile loading order', lang)}
+                                                type='string'
+                                                options={[
+                                                    { v: 'foveated', t: t('Center of view first', lang) },
+                                                    { v: 'cursor', t: t('Under the cursor first', lang) },
+                                                    { v: 'surface', t: t('Around the grab point first', lang) },
+                                                    { v: 'default', t: t('By error and distance', lang) }
+                                                ]}
+                                                value={String(observerData.camera?.tilePriority ?? 'foveated')}
+                                                setProperty={(value: string) => setProperty('camera.tilePriority', value)}
+                                            />
+                                            <TileOrderIllustration mode={String(observerData.camera?.tilePriority ?? 'foveated')} />
                                         </>
-                                    )}
+                                    ) : null}
                                 </div>
-                            ) : (
-                                <div className='info-controls-content'>
-                                    <Label text={t('Orbit Mode', lang)} class='popup-panel-heading' />
-                                    <ControlDetail label={t('Orbit', lang)} value={t(mouseButtonsInverted ? 'Two Finger Drag' : 'One Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '2' : '1'} />
-                                    <ControlDetail label={t('Pan', lang)} value={t(mouseButtonsInverted ? 'One Finger Drag' : 'Two Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '1' : '2'} />
-                                    <ControlDetail label={t('Zoom', lang)} value={t('Pinch', lang)} icon='pinch' />
-                                    <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Tap', lang)} icon='touch_double' />
-                                    <Label text={t('Fly Mode', lang)} class='popup-panel-heading' />
-                                    <ControlDetail label={t('Look Around', lang)} value={t('Touch on Right', lang)} swipeIcon='right' />
-                                    <ControlDetail label={t('Fly', lang)} value={t('Touch on Left', lang)} swipeIcon='left' />
-                                </div>
-                            )}
-                            {scene.isTileset ? (
-                                <div className='info-controls-content'>
-                                    <Label text={t('Tiles', lang)} class='popup-panel-heading' />
-                                    <Select
-                                        label={t('Tile loading order', lang)}
-                                        type='string'
-                                        options={[
-                                            { v: 'foveated', t: t('Center of view first', lang) },
-                                            { v: 'cursor', t: t('Under the cursor first', lang) },
-                                            { v: 'surface', t: t('Around the grab point first', lang) },
-                                            { v: 'default', t: t('By error and distance', lang) }
-                                        ]}
-                                        value={String(observerData.camera?.tilePriority ?? 'foveated')}
-                                        setProperty={(value: string) => setProperty('camera.tilePriority', value)}
-                                    />
-                                    <TileOrderIllustration mode={String(observerData.camera?.tilePriority ?? 'foveated')} />
-                                </div>
-                            ) : null}
-                        </>
-                    )}
-                    {activeTab === 'model' && (
-                        <div className='info-panel-model-combined'>
-                            <Label text={t('Model', lang)} class='popup-panel-heading' />
-                            <TwinIdRow twinId={scene.twinId} lang={lang} />
-                            {hasModel ? (
-                                <>
-                                    <Detail label={t('Filename', lang)} value={scene.filenames?.join(', ') || '-'} />
-                                    <Detail label={t('Meshes', lang)} value={scene.meshCount ?? '-'} />
-                                    <Detail label={t('Materials', lang)} value={scene.materialCount ?? '-'} />
-                                    <Detail label={t('Textures', lang)} value={scene.textureCount ?? '-'} />
-                                    <Detail label={t('Primitives', lang)} value={scene.primitiveCount ?? '-'} />
-                                    <Detail label={t('Verts', lang)} value={scene.vertexCount ?? '-'} />
-                                    <Detail label={t('Mesh VRAM', lang)} value={bytesToSizeString(scene.meshVRAM ?? 0)} />
-                                    <Detail label={t('Texture VRAM', lang)} value={bytesToSizeString(scene.textureVRAM ?? 0)} />
-                                    <Detail label={t('Load time', lang)} value={scene.loadTime ?? '-'} />
-                                    {scene.bounds && typeof scene.bounds === 'object' ? (
-                                        <Vector label={t('Bounds', lang)} dimensions={3} value={scene.bounds} enabled={false} />
-                                    ) : (
-                                        <Detail label={t('Bounds', lang)} value='-' />
-                                    )}
-                                    <Select
-                                        label={t('Variant', lang)}
-                                        type='string'
-                                        options={variantListOptions}
-                                        value={scene.variant?.selected ?? ''}
-                                        setProperty={(value: string) => setProperty('scene.variant.selected', value)}
-                                        enabled={variantListOptions.length > 0}
-                                    />
-                                </>
-                            ) : (
-                                <div style={{ color: '#888', fontSize: 13 }}>{t('No model loaded. Drag & drop a glTF/GLB file.', lang)}</div>
-                            )}
-                            <Label text={t('Hierarchy', lang)} class='popup-panel-heading' />
-                            {hasModel ? (() => {
-                                let modelHierarchy: Array<HierarchyNode> = [];
-                                const selectedPath = scene?.selectedNode?.path ?? '';
-                                const isSelfOrAncestor = (path: string) => {
-                                    if (!path) return true;
-                                    if (selectedPath === path) return true;
-                                    return selectedPath.startsWith(`${path}/`) ||
-                                           selectedPath.startsWith(`${path}.`) ||
-                                           selectedPath.startsWith(`${path}>`);
-                                };
-                                try {
-                                    modelHierarchy = JSON.parse(scene.nodes || '[]');
-                                    if (!Array.isArray(modelHierarchy)) modelHierarchy = [];
-                                } catch {
-                                    modelHierarchy = [];
-                                }
-                                const mapNodes = (nodes: Array<HierarchyNode>) => nodes.map((node: HierarchyNode) => (
-                                    <TreeViewItem
-                                        key={node.path}
-                                        text={node.name}
-                                        selected={selectedPath === node.path}
-                                        open={isSelfOrAncestor(node.path)}
-                                        onSelect={(deselect: () => void) => {
-                                            setProperty('scene.selectedNode.path', node.path);
-                                            const remove = addEventListenerOnClickOnly(document.body, () => {
-                                                deselect();
-                                                remove();
-                                            }, 4);
-                                        }}
-                                        onDeselect={() => setProperty('scene.selectedNode.path', '')}
-                                    >
-                                        {mapNodes(node.children || [])}
-                                    </TreeViewItem>
-                                ));
-                                return modelHierarchy.length > 0 ? (
-                                    <div className='info-panel-hierarchy' ref={this.modelHierarchyRef}>
-                                        <TreeView key={`model-hierarchy-${selectedPath}`} allowReordering={false} allowDrag={false}>
-                                            {mapNodes(modelHierarchy)}
-                                        </TreeView>
-                                    </div>
-                                ) : (
-                                    <div style={{ color: '#888', fontSize: 13 }}>{t('No hierarchy data.', lang)}</div>
-                                );
-                            })() : (
-                                <div style={{ color: '#888', fontSize: 13 }}>{t('No model loaded.', lang)}</div>
-                            )}
-                            {hasModel && (scene?.selectedNode?.path ?? '') ? (
-                                <>
-                                    <Label text={t('Selected object', lang)} class='popup-panel-heading' />
-                                    <SelectedObjectRow path={scene.selectedNode.path} name={scene.selectedNode.name} lang={lang} />
-                                </>
-                            ) : null}
-                            <Label text={t('Stats', lang)} class='popup-panel-heading' />
-                            <Toggle
-                                label={t('Show performance stats', lang)}
-                                value={observerData?.debug?.stats ?? false}
-                                setProperty={(value: boolean) => setProperty('debug.stats', value)}
-                            />
-                            <MorphTargetPanel
-                                morphs={observerData.morphs}
-                                progress={observerData.animation?.progress ?? 0}
-                                setProperty={setProperty}
-                            />
+                            </details>
                         </div>
                     )}
-                    {activeTab === 'about' && (
-                        <div className='info-about-block'>
-                            <div className='about-header'>
-                                <img src='static/heritage3d-logo.svg?v=2218652' alt='' className='about-logo' />
-                                <div className='about-title'>HERITAGE3D Viewer v1.0</div>
-                            </div>
-                            <div className='about-description'>
-                                {t('This viewer is a modified version of the open-source project PlayCanvas Model Viewer (MIT License):', lang)}
-                            </div>
-                            <a href='https://github.com/playcanvas/model-viewer' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/playcanvas/model-viewer</a>
-                            <div className='about-description'>
-                                {t('UI components are based on PlayCanvas PCUI (MIT License):', lang)}
-                            </div>
-                            <a href='https://github.com/playcanvas/pcui' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/playcanvas/pcui</a>
-                            <div className='about-description'>
-                                {t('Icons: Google Material Icons', lang)} — <a href='https://fonts.google.com/icons' target='_blank' rel='noopener noreferrer' className='about-link'>fonts.google.com/icons</a>
-                            </div>
-                            <div className='about-description'>
-                                {t('Flags: flag-icons', lang)} — <a href='https://github.com/lipis/flag-icons' target='_blank' rel='noopener noreferrer' className='about-link'>github.com/lipis/flag-icons</a>
-                            </div>
-                            <div className='about-description'>
-                                {t('Tile streaming architecture inspired by NASA-AMMOS/3DTilesRendererJS (Apache License 2.0):', lang)}
-                            </div>
-                            <a href='https://github.com/NASA-AMMOS/3DTilesRendererJS' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/NASA-AMMOS/3DTilesRendererJS</a>
-                            <div className='about-description'>
-                                {t('Edge upscaling and sharpening use the AMD FidelityFX FSR 1.0 algorithms, EASU and RCAS (MIT License):', lang)}
-                            </div>
-                            <a href='https://gpuopen.com/fidelityfx-superresolution/' target='_blank' rel='noopener noreferrer' className='about-link'>https://gpuopen.com/fidelityfx-superresolution/</a>
+                    {activeTab === 'information' && (
+                        <div className='info-panel-model-combined'>
+                            <details
+                                className='info-disclosure info-about-disclosure'
+                                open={this.state.aboutOpen}
+                                onToggle={event => this.setState({ aboutOpen: event.currentTarget.open })}
+                            >
+                                <summary>{t('About', lang)}</summary>
+                                <div className='info-disclosure-content info-about-block'>
+                                    <div className='about-header'>
+                                        <img src='static/heritage3d-logo.svg?v=2218652' alt='' className='about-logo' />
+                                        <div className='about-title'>HERITAGE3D Viewer v1.0</div>
+                                    </div>
+                                    <div className='about-description'>
+                                        {t('This viewer is a modified version of the open-source project PlayCanvas Model Viewer (MIT License):', lang)}
+                                    </div>
+                                    <a href='https://github.com/playcanvas/model-viewer' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/playcanvas/model-viewer</a>
+                                    <div className='about-description'>
+                                        {t('UI components are based on PlayCanvas PCUI (MIT License):', lang)}
+                                    </div>
+                                    <a href='https://github.com/playcanvas/pcui' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/playcanvas/pcui</a>
+                                    <div className='about-description'>
+                                        {t('Icons: Google Material Icons', lang)} — <a href='https://fonts.google.com/icons' target='_blank' rel='noopener noreferrer' className='about-link'>fonts.google.com/icons</a>
+                                    </div>
+                                    <div className='about-description'>
+                                        {t('Flags: flag-icons', lang)} — <a href='https://github.com/lipis/flag-icons' target='_blank' rel='noopener noreferrer' className='about-link'>github.com/lipis/flag-icons</a>
+                                    </div>
+                                    <div className='about-description'>
+                                        {t('Tile streaming architecture inspired by NASA-AMMOS/3DTilesRendererJS (Apache License 2.0):', lang)}
+                                    </div>
+                                    <a href='https://github.com/NASA-AMMOS/3DTilesRendererJS' target='_blank' rel='noopener noreferrer' className='about-link'>https://github.com/NASA-AMMOS/3DTilesRendererJS</a>
+                                    <div className='about-description'>
+                                        {t('Edge upscaling and sharpening use the AMD FidelityFX FSR 1.0 algorithms, EASU and RCAS (MIT License):', lang)}
+                                    </div>
+                                    <a href='https://gpuopen.com/fidelityfx-superresolution/' target='_blank' rel='noopener noreferrer' className='about-link'>https://gpuopen.com/fidelityfx-superresolution/</a>
+                                </div>
+                            </details>
+                            <details className='info-disclosure'>
+                                <summary>{t('Model', lang)}</summary>
+                                <div className='info-disclosure-content'>
+                                    {hasModel ? (
+                                        <>
+                                            <Detail label={t('Filename', lang)} value={scene.filenames?.join(', ') || '-'} />
+                                            {variantListOptions.length > 0 ? (
+                                                <Select
+                                                    label={t('Variant', lang)}
+                                                    type='string'
+                                                    options={variantListOptions}
+                                                    value={scene.variant?.selected ?? ''}
+                                                    setProperty={(value: string) => setProperty('scene.variant.selected', value)}
+                                                />
+                                            ) : null}
+                                        </>
+                                    ) : (
+                                        <div style={{ color: '#888', fontSize: 13 }}>{t('No model loaded. Drag & drop a glTF/GLB file.', lang)}</div>
+                                    )}
+                                </div>
+                            </details>
+                            {showModelObjects ? (
+                                <details className='info-disclosure'>
+                                    <summary>{t('Model objects', lang)}</summary>
+                                    <div className='info-disclosure-content'>
+                                        <Label text={t('Hierarchy', lang)} class='popup-panel-heading' />
+                                        {hasModel ? (() => {
+                                            let modelHierarchy: Array<HierarchyNode> = [];
+                                            const selectedPath = scene?.selectedNode?.path ?? '';
+                                            const isSelfOrAncestor = (path: string) => {
+                                                if (!path) return true;
+                                                if (selectedPath === path) return true;
+                                                return selectedPath.startsWith(`${path}/`) ||
+                                           selectedPath.startsWith(`${path}.`) ||
+                                           selectedPath.startsWith(`${path}>`);
+                                            };
+                                            try {
+                                                modelHierarchy = JSON.parse(scene.nodes || '[]');
+                                                if (!Array.isArray(modelHierarchy)) modelHierarchy = [];
+                                            } catch {
+                                                modelHierarchy = [];
+                                            }
+                                            const mapNodes = (nodes: Array<HierarchyNode>) => nodes.map((node: HierarchyNode) => (
+                                                <TreeViewItem
+                                                    key={node.path}
+                                                    text={node.name}
+                                                    selected={selectedPath === node.path}
+                                                    open={isSelfOrAncestor(node.path)}
+                                                    onSelect={(deselect: () => void) => {
+                                                        setProperty('scene.selectedNode.path', node.path);
+                                                        const remove = addEventListenerOnClickOnly(document.body, () => {
+                                                            deselect();
+                                                            remove();
+                                                        }, 4);
+                                                    }}
+                                                    onDeselect={() => setProperty('scene.selectedNode.path', '')}
+                                                >
+                                                    {mapNodes(node.children || [])}
+                                                </TreeViewItem>
+                                            ));
+                                            return modelHierarchy.length > 0 ? (
+                                                <div className='info-panel-hierarchy' ref={this.modelHierarchyRef}>
+                                                    <TreeView key={`model-hierarchy-${selectedPath}`} allowReordering={false} allowDrag={false}>
+                                                        {mapNodes(modelHierarchy)}
+                                                    </TreeView>
+                                                </div>
+                                            ) : (
+                                                <div style={{ color: '#888', fontSize: 13 }}>{t('No hierarchy data.', lang)}</div>
+                                            );
+                                        })() : (
+                                            <div style={{ color: '#888', fontSize: 13 }}>{t('No model loaded.', lang)}</div>
+                                        )}
+                                        {hasModel && (scene?.selectedNode?.path ?? '') ? (
+                                            <>
+                                                <Label text={t('Selected object', lang)} class='popup-panel-heading' />
+                                                <SelectedObjectRow path={scene.selectedNode.path} name={scene.selectedNode.name} lang={lang} />
+                                            </>
+                                        ) : null}
+                                    </div>
+                                </details>
+                            ) : null}
+                            <details className='info-disclosure'>
+                                <summary>{t('Technical details', lang)}</summary>
+                                <div className='info-disclosure-content'>
+                                    <TwinIdRow twinId={scene.twinId} lang={lang} />
+                                    {hasModel ? (
+                                        <>
+                                            <Detail label={t('Meshes', lang)} value={scene.meshCount ?? '-'} />
+                                            <Detail label={t('Materials', lang)} value={scene.materialCount ?? '-'} />
+                                            <Detail label={t('Textures', lang)} value={scene.textureCount ?? '-'} />
+                                            <Detail label={t('Primitives', lang)} value={scene.primitiveCount ?? '-'} />
+                                            <Detail label={t('Verts', lang)} value={scene.vertexCount ?? '-'} />
+                                            <Detail label={t('Mesh VRAM', lang)} value={bytesToSizeString(scene.meshVRAM ?? 0)} />
+                                            <Detail label={t('Texture VRAM', lang)} value={bytesToSizeString(scene.textureVRAM ?? 0)} />
+                                            <Detail label={t('Load time', lang)} value={scene.loadTime ?? '-'} />
+                                            {scene.bounds && typeof scene.bounds === 'object' ? (
+                                                <Vector label={t('Bounds', lang)} dimensions={3} value={scene.bounds} enabled={false} />
+                                            ) : (
+                                                <Detail label={t('Bounds', lang)} value='-' />
+                                            )}
+                                        </>
+                                    ) : null}
+                                </div>
+                            </details>
+                            {observerData.morphs && Object.keys(observerData.morphs).length > 0 ? (
+                                <details className='info-disclosure'>
+                                    <summary>{t('Morph targets', lang)}</summary>
+                                    <div className='info-disclosure-content'>
+                                        <MorphTargetPanel
+                                            morphs={observerData.morphs}
+                                            progress={observerData.animation?.progress ?? 0}
+                                            setProperty={setProperty}
+                                            bare
+                                        />
+                                    </div>
+                                </details>
+                            ) : null}
                         </div>
                     )}
                 </Container>
@@ -874,6 +894,7 @@ class MeasurementsPanel extends React.Component <{
 class ViewPanel extends React.Component <{
     sceneData: ObserverData['scene'],
     uiData: ObserverData['ui'],
+    measureData: ObserverData['measure'],
     runtimeData: ObserverData['runtime'],
     setProperty: SetProperty }> {
     declare state: EmbedGeneratorState;
@@ -924,6 +945,7 @@ class ViewPanel extends React.Component <{
         url.searchParams.set('poi', this.state.poi ? '1' : '0');
         url.searchParams.set('tour', this.state.tour ? '1' : '0');
         url.searchParams.set('measure', this.state.measure ? '1' : '0');
+        url.searchParams.set('scaleBar', this.state.scaleBar ? '1' : '0');
         url.searchParams.set('info', this.state.info ? '1' : '0');
         url.searchParams.set('fragment', this.state.fragment ? '1' : '0');
         url.searchParams.set('controls', this.state.controls ? '1' : '0');
@@ -984,6 +1006,7 @@ class ViewPanel extends React.Component <{
     constructor(props: {
         sceneData: ObserverData['scene'],
         uiData: ObserverData['ui'],
+        measureData: ObserverData['measure'],
         runtimeData: ObserverData['runtime'],
         setProperty: SetProperty
     }) {
@@ -1003,6 +1026,7 @@ class ViewPanel extends React.Component <{
             poi: embed?.poi ?? defaults.poi,
             tour: embed?.tour ?? defaults.tour,
             measure: embed?.measure ?? defaults.measure,
+            scaleBar: embed?.scaleBar ?? props.measureData.scaleBar,
             info: embed?.info ?? defaults.info,
             fragment: embed?.fragment ?? defaults.fragment,
             controls: embed?.controls ?? defaults.controls,
@@ -1022,6 +1046,7 @@ class ViewPanel extends React.Component <{
     shouldComponentUpdate(nextProps: Readonly<{
         sceneData: ObserverData['scene'];
         uiData: ObserverData['ui'];
+        measureData: ObserverData['measure'];
         setProperty: SetProperty; }>, nextState: Readonly<EmbedGeneratorState>): boolean {
         const a = nextProps;
         const b = this.props;
@@ -1033,7 +1058,15 @@ class ViewPanel extends React.Component <{
         }
         return a.uiData?.active !== b.uiData?.active ||
                a.uiData?.language !== b.uiData?.language ||
+               a.measureData?.scaleBar !== b.measureData?.scaleBar ||
                JSON.stringify(nextState) !== JSON.stringify(this.state);
+    }
+
+    componentDidUpdate(prevProps: Readonly<{ uiData: ObserverData['ui'] }>) {
+        if (prevProps.uiData?.active !== 'view' && this.props.uiData?.active === 'view') {
+            const scaleBar = !!this.props.measureData.scaleBar;
+            if (scaleBar !== this.state.scaleBar) this.setState({ scaleBar, copied: false });
+        }
     }
 
     private applyPreset = (preset: 'full' | 'compact' | 'minimal' | 'none') => {
@@ -1098,11 +1131,11 @@ class ViewPanel extends React.Component <{
                     <Label text={t('Interface elements', lang)} class={['popup-panel-heading', 'share-flags-heading']} />
                     <div className='share-flags-grid'>
                         <ShareFlagButton flagKey='panel' label={t('Left panel', lang)} on={this.state.panel} lang={lang} onToggle={() => this.setState({ panel: !this.state.panel })} />
-                        <ShareFlagButton flagKey='autoplay' label={t('Autoplay', lang)} on={this.state.autoplay} lang={lang} onToggle={() => this.setState({ autoplay: !this.state.autoplay })} />
                         <ShareFlagButton flagKey='allowFullscreen' label={t('Fullscreen', lang)} on={this.state.allowFullscreen} lang={lang} onToggle={() => this.setState({ allowFullscreen: !this.state.allowFullscreen })} />
                         <ShareFlagButton flagKey='poi' label={t('POI', lang)} on={this.state.poi} lang={lang} onToggle={() => this.setState({ poi: !this.state.poi })} />
                         <ShareFlagButton flagKey='tour' label={t('Tour', lang)} on={this.state.tour} lang={lang} onToggle={() => this.setState({ tour: !this.state.tour })} />
                         <ShareFlagButton flagKey='measure' label={t('Measure', lang)} on={this.state.measure} lang={lang} onToggle={() => this.setState({ measure: !this.state.measure })} />
+                        <ShareFlagButton flagKey='scaleBar' label={t('Scale bar', lang)} on={this.state.scaleBar} lang={lang} onToggle={() => this.setState({ scaleBar: !this.state.scaleBar })} />
                         <ShareFlagButton flagKey='info' label={t('Info', lang)} on={this.state.info} lang={lang} onToggle={() => this.setState({ info: !this.state.info })} />
                         <ShareFlagButton flagKey='fragment' label={t('Fragment view', lang)} on={this.state.fragment} lang={lang} onToggle={() => this.setState({ fragment: !this.state.fragment })} />
                         <ShareFlagButton flagKey='controls' label={t('Controls', lang)} on={this.state.controls} lang={lang} onToggle={() => this.setState({ controls: !this.state.controls })} />
@@ -1124,6 +1157,11 @@ class ViewPanel extends React.Component <{
                     </button>
                     {this.state.advancedOpen ? (
                         <div className='share-advanced'>
+                            <Toggle
+                                label={t('Autoplay', lang)}
+                                value={this.state.autoplay}
+                                setProperty={(value: boolean) => this.setState({ autoplay: value, copied: false })}
+                            />
                             <div className='share-row-2'>
                                 {this.state.embedType === 'fixed' ? (
                                     <div className='share-field'>
@@ -1206,27 +1244,26 @@ class ViewPanel extends React.Component <{
                             />
                         </div>
                     ) : null}
-                    <Button
-                        class='secondary'
-                        text={t('TAKE A SNAPSHOT AS PNG', lang)}
-                        onClick={() => {
-                            if (window.viewer) window.viewer.downloadPngScreenshot();
-                        }}
-                    />
-                    <Button
-                        class='secondary'
-                        text={t('COVER IMAGE (1:1)', lang)}
-                        onClick={() => {
-                            if (window.viewer) window.viewer.downloadCoverImageScreenshot();
-                        }}
-                    />
-                    <Button
-                        class='secondary'
-                        text={t('EXPORT VIEWER SETTINGS', lang)}
-                        onClick={() => {
-                            if (window.viewer) window.viewer.exportViewerSettings();
-                        }}
-                    />
+                    <div className='share-capture-actions'>
+                        <button
+                            type='button'
+                            className='share-capture-action'
+                            title={t('TAKE A SNAPSHOT AS PNG', lang)}
+                            aria-label={t('TAKE A SNAPSHOT AS PNG', lang)}
+                            onClick={() => window.viewer?.downloadPngScreenshot()}
+                        >
+                            <span className='material-symbols-outlined'>photo_camera</span>
+                        </button>
+                        <button
+                            type='button'
+                            className='share-capture-action'
+                            title={t('COVER IMAGE (1:1)', lang)}
+                            aria-label={t('COVER IMAGE (1:1)', lang)}
+                            onClick={() => window.viewer?.downloadCoverImageScreenshot()}
+                        >
+                            <span className='material-symbols-outlined'>crop_square</span>
+                        </button>
+                    </div>
                 </Container>
             </div>
         );
