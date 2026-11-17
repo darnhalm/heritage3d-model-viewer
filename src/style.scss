@@ -4514,14 +4514,29 @@ body.timeline-open #popup > #popup-buttons-parent {
     display: none;
 }
 
-#panel-toggle > img {
-    z-index: 9999;
-    width: 42px;
+#panel-toggle > .panel-toggle-icon {
+    z-index: 10001;
+    display: block;
+    width: 32px;
+    height: 32px;
     position: fixed;
+    top: 0;
+    left: 0;
+    box-sizing: border-box;
+    padding: 5px;
+    color: #fff;
+    background: rgba(32, 32, 32, 0.9);
+    border-radius: 0 0 6px 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
-#panel-left.expanded > #panel-toggle > img {
-    display: none;
+#panel-toggle:hover > .panel-toggle-icon,
+#panel-toggle:active > .panel-toggle-icon {
+    color: var(--theme-primary);
 }
 
 #view-panel > .pcui-label {
