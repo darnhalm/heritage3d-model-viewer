@@ -78,4 +78,4 @@ jobs:
           # И распаковка должна давать осмысленный файл. Берём index.html: он крошечный,
           # так что проверка не зависит от скорости канала до хранилища.
           curl -sf --max-time 30 --compressed -o /tmp/index.html "$base/index.html"
-          grep -q "HERITAGE3D Viewer" /tmp/index.html
+          grep -Fq '<title>H3D Viewer</title>' /tmp/index.html

@@ -5,26 +5,141 @@ import { addEventListenerOnClickOnly, extract, isMobileLayout } from '../../help
 import { t } from '../../i18n/translations';
 import { SetProperty, ObserverData, HierarchyNode } from '../../types';
 import { Detail, Slider, Toggle, Select, ColorPickerControl, ToggleColor, Numeric, Vector } from '../components';
-const ControlDetail = (props: { label: string, value: string, icon?: string, icons?: string[], useMouseIcon?: boolean, trackpadIcon?: '1' | '2', swipeIcon?: 'left' | 'right' }) => {
-    const iconList = props.icons || (props.icon ? [props.icon] : []);
+import MorphTargetPanel from '../left-panel/morph-target-panel';
+
+type MouseButton = 'left' | 'right' | 'wheel';
+
+// Adapted from PlayCanvas SuperSplat Viewer. See static/icons/LICENSE-SuperSplat-MIT.txt.
+const MouseHint = ({ button, doubleClick }: { button: MouseButton, doubleClick?: boolean }) => (
+    <span className='control-mouse-hint' data-mouse-button={button} aria-hidden='true'>
+        <svg viewBox='0 0 18 26' focusable='false'>
+            {button === 'left' && <path fill='currentColor' d='M1 9a8 8 0 0 1 8-8v8Z' />}
+            {button === 'right' && <path fill='currentColor' d='M17 9a8 8 0 0 0-8-8v8Z' />}
+            <rect x='1' y='1' width='16' height='24' rx='8' fill='none' stroke='currentColor' strokeWidth='1.5' />
+            <path d='M9 1v8M1 9h16' fill='none' stroke='currentColor' strokeOpacity='.55' />
+            {button === 'wheel' && <rect x='7' y='3.5' width='4' height='7.5' rx='2' fill='currentColor' />}
+        </svg>
+        {doubleClick && <span>×2</span>}
+    </span>
+);
+
+const ControlDetail = (props: {
+    label: string,
+    value: string | string[],
+    icon?: string,
+    mouseButton?: MouseButton,
+    doubleClick?: boolean,
+    trackpadIcon?: '1' | '2',
+    swipeIcon?: 'left' | 'right'
+}) => {
     return (
         <Container class={['panel-option', 'control-detail']}>
             <span title={props.label} style={{ display: 'contents' }}><Label class='panel-label' text={props.label} /></span>
             <div className='panel-value control-value'>
-                {props.useMouseIcon && <span className='control-icon control-icon-mouse' />}
-                {props.trackpadIcon === '1' && <span className='control-icon control-icon-trackpad-1' />}
-                {props.trackpadIcon === '2' && <span className='control-icon control-icon-trackpad-2' />}
+                {props.mouseButton && <MouseHint button={props.mouseButton} doubleClick={props.doubleClick} />}
+                {props.trackpadIcon && (
+                    <span className='control-gesture-hint' aria-hidden='true'>
+                        <span className={`control-icon control-icon-trackpad-${props.trackpadIcon}`} />
+                        {props.doubleClick && <span>×2</span>}
+                    </span>
+                )}
                 {props.swipeIcon === 'left' && <span className='control-icon control-icon-swipe-left' />}
                 {props.swipeIcon === 'right' && <span className='control-icon control-icon-swipe-right' />}
-                {iconList.map(ic => (
-                    <span key={ic} className='material-symbols-outlined control-icon'>{ic}</span>
-                ))}
-                <span>{props.value}</span>
+                {props.icon && <span className='material-symbols-outlined control-icon' aria-hidden='true'>{props.icon}</span>}
+                {Array.isArray(props.value) ? (
+                    <span className='control-keys'>{props.value.map(key => <kbd key={key}>{key}</kbd>)}</span>
+                ) : <span>{props.value}</span>}
             </div>
         </Container>
     );
 };
-import MorphTargetPanel from '../left-panel/morph-target-panel';
+
+const NavigationGuide = ({ camera, lang, setProperty }: {
+    camera: ObserverData['camera'],
+    lang: ObserverData['ui']['language'],
+    setProperty: SetProperty
+}) => {
+    const { mode, mouseButtonsInverted, pointerDevice, flySpeed } = camera;
+    const orbit = mode === 'orbit';
+    const walk = mode === 'walk';
+    const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const trackpad = !touch && pointerDevice === 'trackpad';
+    const lookButton = mouseButtonsInverted ? 'right' : 'left';
+    const panButton = mouseButtonsInverted ? 'left' : 'right';
+    const modeLabel = t({ orbit: 'Orbit mode', fly: 'Fly mode', walk: 'Walk mode' }[mode], lang);
+    const dragHint = (button: 'left' | 'right') => (trackpad ? {
+        value: t(button === 'left' ? 'Click and drag' : 'Secondary click and drag', lang),
+        trackpadIcon: button === 'left' ? '1' as const : '2' as const
+    } : {
+        value: t(button === 'left' ? 'Left Mouse' : 'Right Mouse', lang),
+        mouseButton: button
+    });
+
+    return (
+        <section className='info-navigation' aria-label={t('Navigation', lang)}>
+            <div className='info-navigation-heading'>
+                <span>{t('Navigation', lang)}</span>
+                <span className='info-navigation-mode' aria-live='polite'>{modeLabel}</span>
+            </div>
+            {orbit && touch && (
+                <>
+                    <ControlDetail label={t('Orbit', lang)} value={t(mouseButtonsInverted ? 'Two Finger Drag' : 'One Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '2' : '1'} />
+                    <ControlDetail label={t('Pan', lang)} value={t(mouseButtonsInverted ? 'One Finger Drag' : 'Two Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '1' : '2'} />
+                </>
+            )}
+            {!touch && (
+                <>
+                    {orbit && trackpad ? (
+                        <ControlDetail label={t('Orbit', lang)} value={t('Two-finger swipe', lang)} trackpadIcon='2' />
+                    ) : (
+                        <ControlDetail label={t(orbit ? 'Orbit' : 'Look Around', lang)} {...dragHint(lookButton)} />
+                    )}
+                    {!walk && (
+                        <ControlDetail label={t('Pan', lang)} {...dragHint(panButton)} />
+                    )}
+                </>
+            )}
+            {orbit && (
+                touch || trackpad ?
+                    <ControlDetail label={t('Zoom', lang)} value={t('Pinch', lang)} icon='pinch' /> :
+                    <ControlDetail label={t('Zoom', lang)} value={t('Mouse Wheel', lang)} mouseButton='wheel' />
+            )}
+            {!orbit && (
+                touch ? (
+                    <>
+                        {!walk && <ControlDetail label={t('Look Around', lang)} value={t('Drag on right', lang)} swipeIcon='right' />}
+                        <ControlDetail label={t('Move', lang)} value={t('Drag on left', lang)} swipeIcon='left' />
+                    </>
+                ) : (
+                    <>
+                        <ControlDetail label={t('Move', lang)} value={['W', 'A', 'S', 'D']} />
+                        {!walk && <ControlDetail label={t('Descend / ascend', lang)} value={['Q', 'E']} />}
+                    </>
+                )
+            )}
+            {touch ? (
+                <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Tap', lang)} icon='touch_double' />
+            ) : trackpad ? (
+                <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Click', lang)} trackpadIcon='1' doubleClick />
+            ) : (
+                <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Click', lang)} mouseButton='left' doubleClick />
+            )}
+            {!orbit && (
+                <div className='fly-speed-control'>
+                    <Slider
+                        label={t('Movement speed', lang)}
+                        precision={1}
+                        min={0.1}
+                        max={5}
+                        step={0.1}
+                        value={flySpeed}
+                        setProperty={(value: number) => setProperty('camera.flySpeed', value)}
+                    />
+                </div>
+            )}
+        </section>
+    );
+};
 
 declare global {
     interface Navigator {
@@ -413,15 +528,14 @@ const ShareFlagButton = (props: { flagKey: string, label: string, on: boolean, l
 class InfoPanel extends React.Component <{
     observerData: ObserverData,
     setProperty: SetProperty }> {
-    state: { tab: InfoTab; flightOpen: boolean; aboutOpen: boolean } = {
+    state: { tab: InfoTab; aboutOpen: boolean } = {
         tab: 'controls',
-        flightOpen: this.props.observerData.camera.mode === 'fly',
         aboutOpen: true
     };
 
     modelHierarchyRef = React.createRef<HTMLDivElement>();
 
-    componentDidUpdate(prevProps: Readonly<{ observerData: ObserverData }>, prevState: Readonly<{ tab: InfoTab; flightOpen: boolean; aboutOpen: boolean }>) {
+    componentDidUpdate(prevProps: Readonly<{ observerData: ObserverData }>, prevState: Readonly<{ tab: InfoTab; aboutOpen: boolean }>) {
         const prevPath = prevProps.observerData?.scene?.selectedNode?.path ?? '';
         const path = this.props.observerData?.scene?.selectedNode?.path ?? '';
         if (path && path !== prevPath && this.state.tab === 'information') {
@@ -448,7 +562,6 @@ class InfoPanel extends React.Component <{
         const showResetControl = !(embed?.enabled) || embed.reset;
         const mouseButtonsInverted = observerData.camera.mouseButtonsInverted ?? false;
         const pointerDevice = String(observerData.camera.pointerDevice ?? 'auto');
-        const showTrackpadGuide = pointerDevice === 'trackpad';
         const activeTab = (() => {
             if (this.state.tab === 'controls' && showControlsTab) return 'controls';
             if (this.state.tab === 'information' && showInformationTab) return 'information';
@@ -500,71 +613,25 @@ class InfoPanel extends React.Component <{
                                 value={pointerDevice}
                                 setProperty={(value: string) => setProperty('camera.pointerDevice', value)}
                             />
-                            <Label text={t('Navigation', lang)} class='popup-panel-heading' />
-                            {showTrackpadGuide ? (
-                                <>
-                                    <ControlDetail label={t('Orbit', lang)} value={t(mouseButtonsInverted ? 'Two Finger Drag' : 'One Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '2' : '1'} />
-                                    <ControlDetail label={t('Pan', lang)} value={t(mouseButtonsInverted ? 'One Finger Drag' : 'Two Finger Drag', lang)} trackpadIcon={mouseButtonsInverted ? '1' : '2'} />
-                                    <ControlDetail label={t('Zoom', lang)} value={t('Pinch', lang)} icon='pinch' />
-                                    <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Tap', lang)} icon='touch_double' />
-                                </>
-                            ) : (
-                                <>
-                                    <ControlDetail label={t('Orbit', lang)} value={t(mouseButtonsInverted ? 'Right Mouse' : 'Left Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'right_click' : 'left_click']} />
-                                    <ControlDetail label={t('Pan', lang)} value={t(mouseButtonsInverted ? 'Left Mouse' : 'Right Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'left_click' : 'right_click']} />
-                                    <ControlDetail label={t('Zoom', lang)} value={t('Mouse Wheel', lang)} useMouseIcon icons={['swap_vert']} />
-                                    <ControlDetail label={t('Set Focus and Zoom One Step', lang)} value={t('Double Click', lang)} useMouseIcon icons={['touch_double']} />
-                                </>
-                            )}
+                            <NavigationGuide camera={observerData.camera} lang={lang} setProperty={setProperty} />
                             {(showFitControl || showResetControl) && (
                                 <div className='info-quick-actions'>
                                     {showFitControl && (
                                         <button type='button' className='info-quick-action' onClick={() => window.viewer?.frameScene?.()}>
-                                            <span className='material-symbols-outlined'>fit_screen</span>
+                                            <span className='material-symbols-outlined' aria-hidden='true'>fit_screen</span>
                                             <span>{t('Frame Scene', lang)}</span>
                                             <kbd>F</kbd>
                                         </button>
                                     )}
                                     {showResetControl && (
                                         <button type='button' className='info-quick-action' onClick={() => window.viewer?.resetCamera?.()}>
-                                            <span className='material-symbols-outlined'>restart_alt</span>
+                                            <span className='material-symbols-outlined' aria-hidden='true'>restart_alt</span>
                                             <span>{t('Reset Camera', lang)}</span>
                                             <kbd>R</kbd>
                                         </button>
                                     )}
                                 </div>
                             )}
-                            <details
-                                className='info-disclosure'
-                                open={this.state.flightOpen}
-                                onToggle={event => this.setState({ flightOpen: event.currentTarget.open })}
-                            >
-                                <summary>{t('Fly Mode', lang)}</summary>
-                                <div className='info-disclosure-content'>
-                                    {showTrackpadGuide ? (
-                                        <>
-                                            <ControlDetail label={t('Look Around', lang)} value={t('Touch on Right', lang)} swipeIcon='right' />
-                                            <ControlDetail label={t('Fly', lang)} value={t('Touch on Left', lang)} swipeIcon='left' />
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ControlDetail label={t('Look Around', lang)} value={t(mouseButtonsInverted ? 'Right Mouse' : 'Left Mouse', lang)} useMouseIcon icons={[mouseButtonsInverted ? 'right_click' : 'left_click']} />
-                                            <ControlDetail label={t('Fly', lang)} value='W, S, A, D' icon='keyboard' />
-                                        </>
-                                    )}
-                                    <div className='fly-speed-control'>
-                                        <Slider
-                                            label={t('Movement speed', lang)}
-                                            precision={1}
-                                            min={0.1}
-                                            max={5}
-                                            step={0.1}
-                                            value={observerData.camera.flySpeed}
-                                            setProperty={(value: number) => setProperty('camera.flySpeed', value)}
-                                        />
-                                    </div>
-                                </div>
-                            </details>
                             <details className='info-disclosure'>
                                 <summary>{t('Additional', lang)}</summary>
                                 <div className='info-disclosure-content'>

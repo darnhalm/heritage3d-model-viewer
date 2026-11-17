@@ -513,6 +513,8 @@ class App extends React.Component<{ observer: Observer }> {
         const currentPoiIndex = activePoiIndex >= 0 ? activePoiIndex : (poiList.length > 0 ? 0 : -1);
         const currentPoi = currentPoiIndex >= 0 ? poiList[currentPoiIndex] : null;
         const showLeftPanel = !(embed?.enabled && !embed?.panel);
+        const activePopup = this.state.ui.active;
+        const showViewerBackdrop = this.state.scene.nodes !== '[]' && (activePopup === 'info' || activePopup === 'view');
         const showLoadControls = !embed?.enabled && (this.state?.ui?.cta ?? true);
         const showSelectedNode = !embed?.enabled && !!this.state?.debug?.withTextureOnly;
         const showEmbedStartOverlay = !!(embed?.enabled && embed?.waiting);
@@ -531,7 +533,7 @@ class App extends React.Component<{ observer: Observer }> {
         const loadProgressBackdropColor = this.state?.ui?.loadingBackgroundReady && this.state?.skybox?.background === 'Solid Color' ?
             rgbToCssColor(this.state.skybox.backgroundColor) :
             DEFAULT_LOADING_BACKGROUND_COLOR;
-        return <div id="application-container">
+        return <div id="application-container" className={showViewerBackdrop ? 'has-viewer-backdrop' : undefined}>
             {showLeftPanel && (
                 <Container id="panel-left" width={32} flex resizable='right' resizeMin={220} resizeMax={800}>
                     <div className="header" style={{ display: 'none' }}>
@@ -718,6 +720,7 @@ class App extends React.Component<{ observer: Observer }> {
                     </div>
                 )}
             </div>
+            {showViewerBackdrop && <div className='viewer-backdrop' aria-hidden='true' />}
         </div>;
     }
 }

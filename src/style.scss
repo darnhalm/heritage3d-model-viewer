@@ -2870,6 +2870,26 @@ body.timeline-open #popup {
         font-size: 20px;
     }
 
+    .control-mouse-hint,
+    .control-gesture-hint {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        flex: 0 0 auto;
+        color: #fff;
+        font-size: 10px;
+
+        svg {
+            width: 15px;
+            height: 22px;
+        }
+    }
+
+    .control-keys {
+        display: inline-flex;
+        gap: 4px;
+    }
+
     .control-detail {
         min-height: 28px;
     }
@@ -2882,7 +2902,6 @@ body.timeline-open #popup {
         }
     }
 
-    .control-icon-mouse,
     .control-icon-trackpad-1,
     .control-icon-trackpad-2,
     .control-icon-swipe-left,
@@ -2892,18 +2911,6 @@ body.timeline-open #popup {
         flex-shrink: 0;
         display: inline-block;
         background-color: currentColor;
-    }
-
-    .control-icon-mouse {
-        mask-image: url(./static/icons/mouse-icon.svg);
-        mask-repeat: no-repeat;
-        mask-size: contain;
-        mask-position: center;
-        mask-type: luminance;
-        -webkit-mask-image: url(./static/icons/mouse-icon.svg);
-        -webkit-mask-repeat: no-repeat;
-        -webkit-mask-size: contain;
-        -webkit-mask-position: center;
     }
 
     .control-icon-trackpad-1 {
@@ -2955,6 +2962,23 @@ body.timeline-open #popup {
     }
 }
 
+.info-navigation-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 12px 8px 4px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.info-navigation-mode {
+    color: #ddd;
+    font-weight: 400;
+    text-align: right;
+}
+
 .info-quick-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2988,18 +3012,20 @@ body.timeline-open #popup {
     .material-symbols-outlined {
         font-size: 19px;
     }
+}
 
-    kbd {
-        min-width: 18px;
-        padding: 2px 4px;
-        border: 1px solid rgba(255, 255, 255, 0.24);
-        border-radius: 4px;
-        background: rgba(0, 0, 0, 0.25);
-        color: #bbb;
-        font: inherit;
-        font-size: 10px;
-        text-align: center;
-    }
+.info-controls-content kbd {
+    box-sizing: border-box;
+    min-width: 19px;
+    padding: 2px 4px;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.25);
+    color: #ddd;
+    font: inherit;
+    font-size: 10px;
+    line-height: 1.2;
+    text-align: center;
 }
 
 .info-disclosure {
@@ -3516,7 +3542,7 @@ body.timeline-open #popup {
 
 .camera-mode-button {
     background-repeat: no-repeat;
-    background-size: 24px;
+    background-size: 28px;
     background-position: center;
 
     &.orbit {
@@ -4548,6 +4574,32 @@ body.timeline-open #popup {
     z-index: 9999;
 }
 
+.has-viewer-backdrop {
+    position: relative;
+
+    // Сам #popup пропускает клики по фону на общий слой. Окно и тулбар остаются доступны.
+    #popup {
+        position: absolute;
+        inset: 0;
+        z-index: 10003;
+        pointer-events: none;
+    }
+
+    #view-panel,
+    #popup-buttons-parent {
+        pointer-events: auto;
+    }
+}
+
+.viewer-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 10002;
+    background: rgba(0, 0, 0, 0.14);
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+}
+
 #popup.empty {
     display: none;
 }
@@ -4618,7 +4670,8 @@ body.timeline-open #popup {
     }
 
     #panel-left.expanded + #canvas-wrapper > #popup,
-    #panel-left.expanded + #canvas-wrapper > #load-controls > .load-button-panel {
+    #panel-left.expanded + #canvas-wrapper > #load-controls > .load-button-panel,
+    #panel-left.expanded ~ .viewer-backdrop {
         display: none;
     }
 

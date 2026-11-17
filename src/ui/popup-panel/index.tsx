@@ -247,7 +247,8 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
 
 class PopupPanel extends React.Component <{ observerData: ObserverData, setProperty: SetProperty }> {
     render() {
-        return (<div id='popup' className={this.props.observerData.scene.nodes === '[]' ? 'empty' : null}>
+        const { observerData } = this.props;
+        return (<div id='popup' className={observerData.scene.nodes === '[]' ? 'empty' : undefined}>
             <PopupPanelControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
             <PopupButtonControls observerData={this.props.observerData} setProperty={this.props.setProperty} />
         </div>);
