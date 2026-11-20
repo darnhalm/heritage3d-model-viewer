@@ -284,7 +284,20 @@ class CameraControls {
     flySpeed = 1;
 
     /** Walking dimensions are in scene units and updated from the viewer's unit calibration. */
-    walkEyeHeight = 1.7;
+    private _walkEyeHeight = 1.75;
+
+    set walkEyeHeight(height: number) {
+        if (!Number.isFinite(height) || height <= 0 || height === this._walkEyeHeight) return;
+        this._walkEyeHeight = height;
+        // Reacquire the floor even when standing still, including height increases above a step.
+        this._walkGrounded = false;
+        this._walkPlaced = false;
+        this._walkVerticalVelocity = 0;
+    }
+
+    get walkEyeHeight() {
+        return this._walkEyeHeight;
+    }
 
     walkStepHeight = 0.45;
 
@@ -423,6 +436,27 @@ class CameraControls {
 
     get mode() {
         return this._mode;
+    }
+
+    /**
+     * Enter walking at a chosen floor point, looking horizontally in the current heading.
+     *
+     * @param point - Walkable floor point in scene units.
+     */
+    placeOnWalkSurface(point: Vec3) {
+        this.mode = 'walk';
+        const position = point.clone();
+        position.y += this.walkEyeHeight;
+        const angles = this._pose.angles.clone();
+        angles.x = 0;
+        angles.z = 0;
+        this._pose.set(position, angles, 1);
+        this._walkController.attach(this._pose, false);
+        this._walkGrounded = true;
+        this._walkPlaced = true;
+        this._walkVerticalVelocity = 0;
+        this._camera.entity.setPosition(position);
+        this._camera.entity.setEulerAngles(angles);
     }
 
     reset(focus: Vec3, position: Vec3) {
@@ -781,10 +815,6 @@ class CameraControls {
             button[2] = leftButton;
         }
 
-        if (!this.enabled) {
-            return;
-        }
-
         if ((this._surfaceOrbit || this._surfacePan) && this._mode !== 'orbit') this.endSurfaceNavigation();
 
         const { keyCode } = KeyboardMouseSource;
@@ -809,6 +839,10 @@ class CameraControls {
             this._state.mouse[i] += button[i];
         }
         this._state.touches += count[0];
+
+        // Keep held inputs in sync while movement is paused, so releasing a key after
+        // a transition cannot leave an unmatched negative delta and a drifting camera.
+        if (!this.enabled) return;
 
         if (this._mode === 'orbit' && this._state.axis.length() > 0) {
             // if we have any axis input, switch to fly mode

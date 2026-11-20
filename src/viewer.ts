@@ -142,6 +142,7 @@ import type { TileReplayTimeline, TimelineState as TileReplayTimelineState } fro
 import type { TimelineUnit } from './ui/timeline-units';
 import { MeasurementController, PoiController, SelectionController, MicrophoneController, SurfacePivotController, type SceneHelperEntry } from './viewer/controllers';
 import { CachedMeshGeometry, getCachedMeshGeometry, intersectMeshTriangles, intersectMeshTrianglesDetailed } from './viewer/controllers/mesh-raycast';
+import { WalkPlacementController } from './viewer/controllers/walk-placement-controller';
 import { SettingsService } from './viewer/settings-service';
 /**
  * Во сколько раз мельче рисуется сцена, пока камера движется.
@@ -1298,6 +1299,10 @@ class Viewer {
 
     surfacePivotController: SurfacePivotController;
 
+    private walkPlacementController: WalkPlacementController;
+
+    private walkPlacementPreviousMode: CameraMode = 'orbit';
+
     microphoneController: MicrophoneController;
 
     settingsService: SettingsService;
@@ -2163,6 +2168,30 @@ class Viewer {
         // construct the depth reader
         this.picker = new Picker(app, camera);
         this.cursorWorld = new Vec3();
+        this.walkPlacementController = new WalkPlacementController({
+            canvas: this.canvas,
+            pick: (x, y) => {
+                const { origin, direction } = this.getPickRay(x, y);
+                return this.probeWalkSurface(origin, direction, this.camera.camera.farClip);
+            },
+            worldToScreen: (point) => {
+                const screen = this.fragmentWorldToCssScreen(point);
+                // Engine worldToScreen.z is clip-space Z, which may be negative in front of
+                // a close camera. The placement marker needs signed camera-space distance.
+                screen.z = point.clone().sub(this.camera.getPosition()).dot(this.camera.forward);
+                return screen;
+            },
+            radius: () => this.cameraControls.walkRadius,
+            onPlace: (point) => {
+                this.finishWalkPlacement();
+                this.cameraControls.placeOnWalkSurface(point);
+                this.lastTapTime = 0;
+                this.renderNextFrame();
+            },
+            onCancel: () => this.cancelWalkPlacement(),
+            getHint: () => t('Choose a floor point to start walking', this.observer.get('ui.language')),
+            getCancelLabel: () => t('Cancel', this.observer.get('ui.language'))
+        });
         this.surfacePivotController = new SurfacePivotController({
             canvas: this.canvas,
             picker: this.picker,
@@ -2252,6 +2281,7 @@ class Viewer {
 
         // Double click: one depth pick followed by the same short 2x zoom-to-point as NASA-AMMOS.
         canvas.addEventListener('dblclick', (event: MouseEvent) => {
+            if (this.walkPlacementController.active) return;
             if (this.observer.get('measure.enabled') || this.observer.get('debug.tilePick')) return;
             if (this.reopenFragmentPanelAt(event.offsetX, event.offsetY)) return;
             this._pickAndCenterAt(event.offsetX, event.offsetY);
@@ -2259,6 +2289,7 @@ class Viewer {
 
         // double tap (mobile): same as dblclick when second tap within delay and radius
         canvas.addEventListener('touchend', (event: TouchEvent) => {
+            if (this.walkPlacementController.active) return;
             if (this.observer.get('measure.enabled') || this.observer.get('debug.tilePick')) return;
             if (event.changedTouches.length !== 1) return;
             const touch = event.changedTouches[0];
@@ -2468,6 +2499,33 @@ class Viewer {
         const end = this.camera.camera.screenToWorld(x, y, this.camera.camera.farClip);
         const direction = end.sub(origin).normalize();
         return { origin, direction };
+    }
+
+    /** Keep orbit navigation available while the user chooses a walkable destination. */
+    beginWalkPlacement() {
+        if (!this.walkPlacementController || this.walkPlacementController.active || this.activeSceneCamera) return;
+        this.walkPlacementPreviousMode = this.cameraControls.mode;
+        this.stopCameraFlyTransition();
+        this.surfacePivotController?.reset();
+        this.observer.set('poi.playing', false);
+        this.observer.set('ui.active', null);
+        this.configureWalkScale();
+        this.observer.set('camera.mode', 'orbit');
+        this.observer.set('ui.walkPlacement', true);
+        this.walkPlacementController.start();
+        this.renderNextFrame();
+    }
+
+    private finishWalkPlacement() {
+        this.walkPlacementController.stop();
+        this.observer.set('ui.walkPlacement', false);
+        this.surfacePivotController?.reset();
+    }
+
+    cancelWalkPlacement() {
+        this.finishWalkPlacement();
+        this.observer.set('camera.mode', this.walkPlacementPreviousMode);
+        this.renderNextFrame();
     }
 
     /** Enter cursor mode for choosing the center of a new fragment box. */
@@ -2755,6 +2813,7 @@ class Viewer {
         this.poiController?.dispose?.();
         this.selectionController?.dispose?.();
         this.surfacePivotController?.dispose?.();
+        this.walkPlacementController?.dispose();
         this.microphoneController?.dispose?.();
         this.canvas.removeEventListener('mousedown', this.onTilePickMouseDown);
         document.removeEventListener('mousemove', this.onTilePickMouseMove);
@@ -3121,6 +3180,9 @@ class Viewer {
     private bindControlEvents() {
         const controlEvents: Record<string, (...args: unknown[]) => void> = {
             'ui.active': (active: string | null) => {
+                if (active && this.walkPlacementController?.active) {
+                    this.cancelWalkPlacement();
+                }
                 if (active !== 'fragment' && this.observer.get('fragment.selecting')) {
                     this.observer.set('fragment.selecting', false);
                 }
@@ -3235,10 +3297,22 @@ class Viewer {
                 this.renderNextFrame();
             },
             'camera.mode': (mode: CameraMode) => {
+                if (mode !== 'orbit' && this.walkPlacementController?.active) {
+                    this.finishWalkPlacement();
+                }
                 this.cameraControls.mode = mode;
             },
             'camera.flySpeed': (speed: number) => {
                 this.cameraControls.flySpeed = Math.max(0.1, Math.min(5, Number(speed) || 1));
+            },
+            'camera.walkHeight': () => {
+                this.configureWalkScale();
+                this.renderNextFrame();
+            },
+            'ui.language': () => {
+                this.configureWalkScale();
+                this.walkPlacementController?.refresh();
+                this.renderNextFrame();
             },
             'camera.mouseButtonsInverted': (inverted: boolean) => {
                 this.surfacePivotController?.reset();
@@ -4075,6 +4149,7 @@ class Viewer {
 
     // reset the viewer, unloading resources
     resetScene() {
+        this.stopCameraFlyTransition();
         this.clearHdrSurface();
         const app = this.app;
 
@@ -5889,6 +5964,9 @@ class Viewer {
     }
 
     private stopCameraFlyTransition() {
+        if (this.walkPlacementController?.active) {
+            this.cancelWalkPlacement();
+        }
         this.cameraFlyTransition = null;
         this.doubleClickZoomTransition = null;
         this.cameraControls.enabled = true;
@@ -8116,7 +8194,10 @@ class Viewer {
     private configureWalkScale(sceneSize = this.dynamicSceneBounds.halfExtents.length()) {
         const unitScale = Number(this.observer.get('measure.unitScale') ?? 1);
         const metersPerSceneUnit = Number.isFinite(unitScale) && unitScale > 0 ? unitScale : 1;
-        this.cameraControls.walkEyeHeight = 1.7 / metersPerSceneUnit;
+        const heightPreset = this.observer.get('camera.walkHeight');
+        const averageHeight = this.observer.get('ui.language') === 'zh' ? 1.7 : 1.75;
+        const eyeHeight = heightPreset === 'short' ? 1.5 : heightPreset === 'tall' ? 1.9 : averageHeight;
+        this.cameraControls.walkEyeHeight = eyeHeight / metersPerSceneUnit;
         this.cameraControls.walkStepHeight = 0.45 / metersPerSceneUnit;
         this.cameraControls.walkRadius = 0.3 / metersPerSceneUnit;
         this.cameraControls.walkSpeed = 1.8 / metersPerSceneUnit;
@@ -8191,6 +8272,7 @@ class Viewer {
             this.dirtyBounds = true;
             this.fitCameraClipPlanes();
         }
+        this.walkPlacementController?.scheduleRefresh();
         this.renderNextFrame();
         if (this.observer.get('scene.tilesetLit') === null && this.tileManager) {
             const meshInstance = this.tileManager.getVisibleMeshInstances()[0];
@@ -9493,6 +9575,7 @@ class Viewer {
         const cameraWorldTransform = this.camera.getWorldTransform();
         if (maxdiff(cameraWorldTransform, this.prevCameraMat) > 1e-4) {
             this.prevCameraMat.copy(cameraWorldTransform);
+            this.walkPlacementController?.scheduleRefresh();
             this.renderNextFrame();
         }
 

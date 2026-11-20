@@ -451,6 +451,7 @@ class SettingsService {
         o.set('camera.hq', hq);
         o.set('camera.mode', 'orbit');
         o.set('camera.flySpeed', 1);
+        o.set('camera.walkHeight', 'average');
         // Surface pivot and mouse-button mapping are user navigation preferences, not model
         // settings. Keep the cookie-restored values while loading or resetting scene settings.
         o.set('theme.primaryColor', { ...DEFAULT_THEME_COLOR });
@@ -570,6 +571,8 @@ class SettingsService {
                     return clampFinite(value, 35, 150);
                 case 'camera.flySpeed':
                     return clampFinite(value, 0.1, 5);
+                case 'camera.walkHeight':
+                    return value === 'short' || value === 'tall' ? value : 'average';
                 case 'camera.hdrExposure':
                     return clampFinite(value, -16, 16);
                 case 'skybox.exposure':

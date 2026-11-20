@@ -39,6 +39,7 @@ export interface ObserverData {
     ui: {
         fullscreen: boolean,
         active?: string,
+        walkPlacement?: boolean,
         spinner: boolean,
         loadProgress?: number,
         /** Показывать ли экран «перетащите модель»: он для пустого плеера. */
@@ -115,6 +116,8 @@ export interface ObserverData {
         hq: boolean,
         mode: 'orbit' | 'fly' | 'walk',
         flySpeed: number,
+        /** Walking eye-height preset, converted using the measurement scene scale. */
+        walkHeight?: 'short' | 'average' | 'tall',
         /** Orbit around the model surface under the initial drag point. */
         surfacePivot?: boolean,
         /** Swap the orbit and pan assignments of the left and right mouse buttons. */

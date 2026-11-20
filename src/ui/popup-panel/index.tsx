@@ -100,6 +100,7 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
         };
 
         const lang = this.props.observerData?.ui?.language;
+        const cameraMode = this.props.observerData.ui.walkPlacement ? 'walk' : this.props.observerData.camera.mode;
         const embed = this.props.observerData?.ui?.embed;
         // Вне встройки — всегда; во встройке — по флагу animControls (его дефолт
         // зависит от пресета: full/compact → вкл, minimal → выкл).
@@ -209,17 +210,23 @@ class PopupButtonControls extends React.Component <{ observerData: ObserverData,
                     orbit: 'Orbit mode',
                     fly: 'Fly mode',
                     walk: 'Walk mode'
-                }[this.props.observerData.camera.mode] ?? 'Orbit mode', lang), (
+                }[cameraMode] ?? 'Orbit mode', lang), (
                     <Button
-                        class={['popup-button', 'camera-mode-button', ...(this.props.observerData.camera.mode ? [this.props.observerData.camera.mode] : [])]}
+                        class={['popup-button', 'camera-mode-button', ...(cameraMode ? [cameraMode] : [])]}
                         id='camera-mode-button'
                         width={40}
                         height={40}
                         onClick={() => {
                             const modes = ['orbit', 'fly', 'walk'] as const;
-                            const current = modes.indexOf(this.props.observerData.camera.mode);
+                            const currentMode = this.props.observerData.ui.walkPlacement ? 'walk' : this.props.observerData.camera.mode;
+                            const current = modes.indexOf(currentMode);
                             const mode = modes[(current + 1) % modes.length];
-                            this.props.setProperty('camera.mode', mode);
+                            if (mode === 'walk' && window.viewer) {
+                                window.viewer.beginWalkPlacement();
+                            } else {
+                                if (this.props.observerData.ui.walkPlacement) window.viewer?.cancelWalkPlacement();
+                                this.props.setProperty('camera.mode', mode);
+                            }
                         }}
                     />
                 ))}

@@ -129,6 +129,7 @@ const observerData: ObserverData = {
     ui: {
         fullscreen: false,
         active: null,
+        walkPlacement: false,
         spinner: false,
         loadProgress: 0,
         error: null,
@@ -199,6 +200,7 @@ const observerData: ObserverData = {
         hq: !isMobileLayout(),
         mode: 'orbit',
         flySpeed: 1,
+        walkHeight: 'average',
         surfacePivot: true,
         mouseButtonsInverted: false,
         // По умолчанию мышь: автоопределение путает колесо со свайпом на части мышей, и

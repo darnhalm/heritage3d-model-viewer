@@ -137,6 +137,21 @@ const NavigationGuide = ({ camera, lang, setProperty }: {
                     />
                 </div>
             )}
+            {walk && (
+                <div className='walk-height-control' title={t('Walking eye height above the ground', lang)}>
+                    <Select
+                        label={t('Walking height', lang)}
+                        type='string'
+                        options={[
+                            { v: 'short', t: t('Short walking height', lang) },
+                            { v: 'average', t: t('Average walking height', lang) },
+                            { v: 'tall', t: t('Tall walking height', lang) }
+                        ]}
+                        value={camera.walkHeight ?? 'average'}
+                        setProperty={(value: string) => setProperty('camera.walkHeight', value)}
+                    />
+                </div>
+            )}
         </section>
     );
 };

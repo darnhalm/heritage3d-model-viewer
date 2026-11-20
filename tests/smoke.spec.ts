@@ -295,9 +295,11 @@ test('camera mode button cycles orbit, fly and grounded walk', async ({ page }) 
     await expect.poll(() => page.evaluate(() => (window as any).viewer.cameraControls.mode)).toBe('fly');
     await button.click();
     await expect(button).toHaveClass(/walk/);
-    await expect.poll(() => page.evaluate(() => (window as any).viewer.cameraControls.mode)).toBe('walk');
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.cameraControls.mode)).toBe('orbit');
+    await expect(page.locator('.walk-placement-overlay')).toBeVisible();
     await button.click();
     await expect(button).toHaveClass(/orbit/);
+    await expect(page.locator('.walk-placement-overlay')).toBeHidden();
 
     const grounded = await page.evaluate(() => {
         const viewer = (window as any).viewer;
@@ -317,6 +319,103 @@ test('camera mode button cycles orbit, fly and grounded walk', async ({ page }) 
 
     expect(grounded.mode).toBe('walk');
     expect(Math.abs(grounded.y - grounded.expectedY)).toBeLessThan(0.02);
+});
+
+test('walking entry keeps orbit navigation and selects a floor point only on a click', async ({ page }) => {
+    test.setTimeout(budget(120000));
+    await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb&lang=ru');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer?.meshInstances?.length > 0 &&
+        !(window as any).viewer.observer.get('ui.spinner'));
+    await settledCameraPosition(page);
+    await page.evaluate(() => {
+        const v = (window as any).viewer;
+        const bounds = v.meshInstances[0].aabb;
+        const center = bounds.center.clone();
+        const position = center.clone();
+        const size = bounds.halfExtents.length();
+        position.x += size * 2;
+        position.y += size * 3;
+        position.z += size * 4;
+        v.cameraControls.reset(center, position);
+        v.renderNextFrame();
+    });
+    await pumpFrames(page, 2);
+    const button = page.locator('#camera-mode-button');
+    await button.click();
+    const before = await page.evaluate(() => (window as any).viewer.cameraControls.getPosition().toArray());
+    await button.click();
+    const overlay = page.locator('.walk-placement-overlay');
+    const ring = overlay.locator('polygon');
+    await expect(overlay).toBeVisible();
+    expect(await page.evaluate(() => (window as any).viewer.cameraControls.enabled)).toBe(true);
+    expect(await page.evaluate(() => (window as any).viewer.cameraControls.mode)).toBe('orbit');
+
+    const readTargets = () => page.evaluate(() => {
+        const v = (window as any).viewer;
+        const bounds = v.meshInstances[0].aabb;
+        const floor = bounds.center.clone();
+        floor.y = bounds.getMax().y;
+        const wall = bounds.center.clone();
+        wall.z = bounds.getMax().z;
+        const toScreen = (point: any) => {
+            const p = v.camera.camera.worldToScreen(point);
+            const rect = v.canvas.getBoundingClientRect();
+            return { x: p.x + rect.left, y: p.y + rect.top };
+        };
+        return { floor: toScreen(floor), wall: toScreen(wall), point: floor.toArray() };
+    });
+    let targets = await readTargets();
+    await page.mouse.click(targets.wall.x, targets.wall.y);
+    await expect(overlay).toBeVisible();
+    await expect(ring).toHaveAttribute('visibility', 'hidden');
+    const afterWall = await page.evaluate(() => (window as any).viewer.cameraControls.getPosition().toArray());
+    afterWall.forEach((value: number, index: number) => expect(value).toBeCloseTo(before[index], 8));
+    await page.mouse.move(targets.floor.x, targets.floor.y);
+    await expect(ring).toHaveAttribute('visibility', 'visible');
+    await page.keyboard.press('Escape');
+    await expect(overlay).toBeHidden();
+    await expect(button).toHaveClass(/fly/);
+    const afterCancel = await page.evaluate(() => (window as any).viewer.cameraControls.getPosition().toArray());
+    afterCancel.forEach((value: number, index: number) => expect(value).toBeCloseTo(before[index], 8));
+
+    await button.click();
+    // Dragging remains orbit navigation, including a gesture that returns to its starting point.
+    await page.evaluate(() => (window as any).viewer.observer.set('camera.surfacePivot', false));
+    await page.mouse.move(targets.floor.x, targets.floor.y);
+    await page.mouse.down();
+    await page.mouse.move(targets.floor.x + 60, targets.floor.y + 10, { steps: 8 });
+    await pumpFrames(page, 4);
+    const rotated = await page.evaluate(() => (window as any).viewer.cameraControls.getPosition().toArray());
+    expect(rotated.some((value: number, index: number) => Math.abs(value - before[index]) > 0.01)).toBe(true);
+    await page.mouse.move(targets.floor.x, targets.floor.y, { steps: 8 });
+    await page.mouse.up();
+    await expect(overlay).toBeVisible();
+    expect(await page.evaluate(() => (window as any).viewer.cameraControls.mode)).toBe('orbit');
+    await settledCameraPosition(page);
+    const beforeZoom = await page.evaluate(() => (window as any).viewer.cameraControls.getPosition().toArray());
+    await page.mouse.wheel(0, -120);
+    await pumpFrames(page, 6);
+    const afterZoom = await settledCameraPosition(page);
+    expect(afterZoom.some((value: number, index: number) => Math.abs(value - beforeZoom[index]) > 0.01)).toBe(true);
+    await expect(overlay).toBeVisible();
+    targets = await readTargets();
+    await page.keyboard.down('Shift');
+    await pumpFrames(page, 2);
+    await page.mouse.click(targets.floor.x, targets.floor.y);
+    await page.keyboard.up('Shift');
+    await pumpFrames(page, 2);
+    await expect(overlay).toBeHidden();
+    const placed = await page.evaluate(() => {
+        const c = (window as any).viewer.cameraControls;
+        return { mode: c.mode, enabled: c.enabled, position: c.getPosition().toArray(), height: c.walkEyeHeight, shift: c._state.shift };
+    });
+    expect(placed.mode).toBe('walk');
+    expect(placed.enabled).toBe(true);
+    expect(placed.shift).toBe(0);
+    expect(placed.position[0]).toBeCloseTo(targets.point[0], 2);
+    expect(placed.position[2]).toBeCloseTo(targets.point[2], 2);
+    expect(placed.position[1]).toBeCloseTo(targets.point[1] + placed.height, 2);
 });
 
 test('surface pivot uses one pick per drag, keeps the pivot fixed on screen, and cleans up', async ({ page }) => {
