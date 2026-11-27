@@ -27,6 +27,7 @@ import type { DebugLines, DebugSolid } from '../debug-lines';
 import { lodColorAbgr } from '../lod-palette';
 import { expandSubtree, loadSubtreeAt, readImplicitTiling } from './implicit-tiling';
 import { destroyTileContent, gltfUpAxisTransform, loadTileContent, type TileContentResult } from './tile-content';
+import { TileMaterialLighting } from './tile-material-lighting';
 import { distanceToObb, makeWorldObb, screenSpaceError } from './tile-math';
 import { resolutionColorAbgr } from '../resolution-palette';
 import { TileRequestQueue, compareTilePriority } from './tile-request-queue';
@@ -207,6 +208,10 @@ export type TileManagerOptions = {
     onWarning?: (message: string) => void;
     /** Reader for ordinary URLs or entries in a 3TZ container. */
     resourceProvider?: TileResourceProvider;
+    /** Geoscan overviews cover the model, while the root tile box can contain large empty space. */
+    frameRootContent?: boolean;
+    /** Display baked photogrammetry colours even when the source GLB omits KHR_materials_unlit. */
+    forceUnlit?: boolean;
 };
 
 const UP_AXIS_ROTATION = -90;
@@ -409,6 +414,10 @@ export class TileManager {
     private onWarning: (message: string) => void;
 
     private readonly resourceProvider: TileResourceProvider;
+
+    private readonly frameRootContent: boolean;
+
+    private readonly materialLighting: TileMaterialLighting;
 
     /** Корень тайлсета в сцене: несёт поворот осей и рецентровку. */
     readonly root: Entity;
@@ -692,6 +701,8 @@ export class TileManager {
         this.onChange = options.onChange;
         this.onWarning = options.onWarning ?? (() => {});
         this.resourceProvider = options.resourceProvider ?? networkTileResourceProvider;
+        this.frameRootContent = options.frameRootContent ?? false;
+        this.materialLighting = new TileMaterialLighting(options.forceUnlit ?? false);
         this.options = {
             errorTarget: options.errorTarget ?? 16,
             maxConcurrent: options.maxConcurrent ?? 6,
@@ -748,6 +759,10 @@ export class TileManager {
         }
 
         this.tightRootBox = findTightBoundingBox(json, json.root);
+        const contentBox = json.root.content?.boundingVolume?.box;
+        if (!this.tightRootBox && this.frameRootContent && contentBox?.length === 12 && contentBox.every(Number.isFinite)) {
+            this.tightRootBox = contentBox.slice();
+        }
 
         // Корневой геометрической ошибкой тайлсета (`json.geometricError`) считается ошибка
         // «ничего не загружено»; на выбор LOD внутри дерева она не влияет, поэтому её
@@ -1160,7 +1175,10 @@ export class TileManager {
         tile.entity.enabled = false;
         this.root.addChild(tile.entity);
 
-        this.getTileMeshInstances(tile).forEach(meshInstance => this.meshToTile.set(meshInstance, tile));
+        this.getTileMeshInstances(tile).forEach((meshInstance) => {
+            this.materialLighting.apply(meshInstance.material);
+            this.meshToTile.set(meshInstance, tile);
+        });
 
         tile.state = TILE_READY;
         this.markLoadOrder(tile);
@@ -1488,7 +1506,10 @@ export class TileManager {
             tile.loadToken.controller?.abort();
             tile.loadToken = null;
         }
-        this.getTileMeshInstances(tile).forEach(meshInstance => this.meshToTile.delete(meshInstance));
+        this.getTileMeshInstances(tile).forEach((meshInstance) => {
+            this.materialLighting.forget(meshInstance.material);
+            this.meshToTile.delete(meshInstance);
+        });
         if (this.debugPickedTile === tile) {
             this.debugPickedTile = null;
         }
@@ -1610,6 +1631,17 @@ export class TileManager {
             result.push(...this.getTileMeshInstances(tile));
         });
         return result;
+    }
+
+    /**
+     * Change the baked-colour policy for existing content and every subsequently loaded tile.
+     *
+     * @param enabled - Whether to display base colour without additional lighting.
+     */
+    setForceUnlit(enabled: boolean) {
+        this.materialLighting.setUnlit(enabled);
+        if (enabled) this.getLoadedMeshInstances().forEach(mesh => this.materialLighting.apply(mesh.material));
+        this.onChange();
     }
 
     getGeometryBounds(result: BoundingBox): boolean {
@@ -2155,6 +2187,7 @@ export class TileManager {
         }
         this.rootTile = null;
         this.loaded.clear();
+        this.materialLighting.clear();
         this.loadCounter = 0;
         this.loadViews.length = 0;
         this.recordedSelections.length = 0;

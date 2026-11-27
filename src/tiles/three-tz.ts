@@ -54,11 +54,34 @@ interface ArchiveBackend {
     close(): Promise<void>;
 }
 
+// maximumRangeSize windows zip.js streams, but its random-access readUint8Array API
+// still sends one request for the complete read. Large 3TZ indexes use that API too.
+class WindowedHttpRangeReader extends HttpRangeReader {
+    async readUint8Array(index: number, length: number): Promise<Uint8Array> {
+        const windowSize = 512 * 1024;
+        if (length <= windowSize) return super.readUint8Array(index, length);
+        const result = new Uint8Array(length);
+        const concurrency = 4;
+        for (let base = 0; base < length; base += windowSize * concurrency) {
+            const offsets = Array.from({ length: Math.min(concurrency, Math.ceil((length - base) / windowSize)) }, (_, i) => base + i * windowSize);
+            // eslint-disable-next-line no-await-in-loop -- bound parallel requests instead of queueing the entire archive entry
+            await Promise.all(offsets.map(async (offset) => {
+                const bytes = await super.readUint8Array(index + offset, Math.min(windowSize, length - offset));
+                result.set(bytes, offset);
+            }));
+        }
+        return result;
+    }
+}
+
 const createReader = (file: ViewerFile): Reader<unknown> => {
-    const httpOptions: HttpOptions = { combineSizeEocd: true };
+    const httpOptions: HttpOptions = {
+        combineSizeEocd: true,
+        ...(file.archiveFetch ? { fetch: file.archiveFetch, maximumRangeSize: 512 * 1024 } : {})
+    };
     return (file.blob ?
         new BlobReader(file.blob) :
-        new HttpRangeReader(file.url, httpOptions)) as Reader<unknown>;
+        (file.archiveFetch ? new WindowedHttpRangeReader(file.url, httpOptions) : new HttpRangeReader(file.url, httpOptions))) as Reader<unknown>;
 };
 
 class IndexedArchiveBackend implements ArchiveBackend {

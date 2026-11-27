@@ -71,7 +71,7 @@ const NavigationGuide = ({ camera, lang, setProperty }: {
         value: t(button === 'left' ? 'Click and drag' : 'Secondary click and drag', lang),
         trackpadIcon: button === 'left' ? '1' as const : '2' as const
     } : {
-        value: t(button === 'left' ? 'Left Mouse' : 'Right Mouse', lang),
+        value: t(walk ? (button === 'left' ? 'Hold Left Mouse' : 'Hold Right Mouse') : (button === 'left' ? 'Left Mouse' : 'Right Mouse'), lang),
         mouseButton: button
     });
 
@@ -134,6 +134,19 @@ const NavigationGuide = ({ camera, lang, setProperty }: {
                         step={0.1}
                         value={flySpeed}
                         setProperty={(value: number) => setProperty('camera.flySpeed', value)}
+                    />
+                </div>
+            )}
+            {walk && (
+                <div className='walk-look-speed-control' title={t('Look rotation sensitivity in walk mode', lang)}>
+                    <Slider
+                        label={t('Look speed', lang)}
+                        precision={1}
+                        min={0.1}
+                        max={3}
+                        step={0.1}
+                        value={camera.walkLookSpeed ?? 1}
+                        setProperty={(value: number) => setProperty('camera.walkLookSpeed', value)}
                     />
                 </div>
             )}

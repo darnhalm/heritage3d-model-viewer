@@ -2148,6 +2148,22 @@ body.poi-timeline-open.timeline-open #popup {
     opacity: 1;
 }
 
+.geoscan-model-picker {
+    width: min(360px, calc(100vw - 48px));
+    box-sizing: border-box;
+    border: 1px solid #777;
+    border-radius: 12px;
+    background: #292929;
+    color: #fff;
+    padding: 20px;
+
+    &::backdrop { background: rgba(0, 0, 0, 0.55); }
+    label { display: block; font-size: 14px; }
+    select { display: block; width: 100%; margin-top: 14px; padding: 8px; background: #171717; color: #fff; }
+    > div { display: flex; gap: 12px; margin-top: 18px; }
+    button { padding: 8px; border-radius: 6px; cursor: pointer; }
+}
+
 .walk-placement-overlay {
     position: absolute;
     inset: 0;
@@ -2960,7 +2976,8 @@ body.timeline-open #popup {
         min-height: 28px;
     }
 
-    .fly-speed-control {
+    .fly-speed-control,
+    .walk-look-speed-control {
         margin-top: 4px;
 
         .panel-option {

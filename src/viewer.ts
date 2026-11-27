@@ -113,6 +113,7 @@ import { ClipBoxMaterials } from './clip-box';
 import { DebugLines, DebugSolid } from './debug-lines';
 import { CreateDropBlocker, CreateDropHandler } from './drop-handler';
 import { isTrustedViewerMessage, postToViewerParent, replyToViewerMessage } from './embed-messaging';
+import { isGeoscanUrl, prepareGeoscanFile } from './geoscan';
 import { cubeLutToStrip, floatsToHalf, parseCubeLut } from './hdr/cube-lut';
 import { HdrDisplay } from './hdr/display';
 import { EmbeddedHdrDocument, EmbeddedHdrSurface, readEmbeddedHdr } from './hdr/embedded';
@@ -845,6 +846,10 @@ class Viewer {
 
     /** Invalidates an archive that is still opening when the user selects another scene. */
     private tilesetLoadGeneration = 0;
+
+    private tilesetLoadAbortController: AbortController;
+
+    private tilesetIsGeoscan = false;
 
     /** User-adjustable reference bounds used for reliable scene framing. */
     private dimensionBoxEntity: Entity;
@@ -1612,7 +1617,7 @@ class Viewer {
             // Достаёт байты последней загруженной модели (если есть).
             const getModelExport = async (): Promise<{ glb: string; filename: string } | null> => {
                 const mf = this.lastModelFile;
-                if (!mf || !mf.url) return null;
+                if (!mf || !mf.url || mf.archiveFetch) return null;
                 try {
                     const res = await fetch(mf.url);
                     const buf = new Uint8Array(await res.arrayBuffer());
@@ -3305,6 +3310,21 @@ class Viewer {
             'camera.flySpeed': (speed: number) => {
                 this.cameraControls.flySpeed = Math.max(0.1, Math.min(5, Number(speed) || 1));
             },
+            'camera.walkLookSpeed': (speed: number) => {
+                const value = Number(speed);
+                this.cameraControls.walkLookSpeed = Number.isFinite(value) ? Math.max(0.1, Math.min(3, value)) : 1;
+            },
+            'camera.tilesetLighting': () => {
+                if (this.tileManager) {
+                    const unlit = this.useUnlitTileMaterials();
+                    if (unlit && !['default', 'uv0', 'uv_checker'].includes(this.observer.get('debug.renderMode'))) {
+                        this.observer.set('debug.renderMode', 'default');
+                    }
+                    this.observer.set('scene.tilesetLit', null);
+                    this.tileManager.setForceUnlit(unlit);
+                    this.handleTileChange();
+                }
+            },
             'camera.walkHeight': () => {
                 this.configureWalkScale();
                 this.renderNextFrame();
@@ -3809,7 +3829,7 @@ class Viewer {
         return scale * sceneSize + sceneSize;
     }
 
-    private focus(init: boolean, forceAspectRatio?: number) {
+    private focus(init: boolean, forceAspectRatio?: number, initialForward = Vec3.FORWARD) {
         // restore saved orbit camera position when loading
         if (init) {
             const toVec3 = (v: unknown): Vec3 | null => {
@@ -3860,7 +3880,7 @@ class Viewer {
         }
 
         // focus the camera
-        const forward = init ? Vec3.FORWARD : this.camera.forward;
+        const forward = init ? initialForward : this.camera.forward;
         const start = forward.clone().mulScalar(-zoom).add(focus);
         this.cameraControls.reset(focus, start);
     }
@@ -7382,11 +7402,22 @@ class Viewer {
         // добавить в сцену, вместо этого сценой управляет TileManager.
         const tilesetFile = files.find((f) => {
             const name = f.filename ?? f.url ?? '';
-            return this.isTilesetFilename(name) || this.isThreeTzFilename(name);
+            return this.isTilesetFilename(name) || this.isThreeTzFilename(name) || isGeoscanUrl(f.url);
         });
         if (tilesetFile) {
             this.loadTileset(tilesetFile, resetScene);
             return true;
+        }
+
+        // A new model cancels a pending project lookup/picker. Loading an environment or
+        // settings must not abort range reads of the currently displayed Geoscan archive.
+        if (this.tilesetLoadAbortController && !this.tileManager && files.some((file) => {
+            const name = file.filename ?? file.url ?? '';
+            return !this.isViewerSettingsFilename(name) && (this.isModelFilename(name) || this.isGSplatFilename(name));
+        })) {
+            this.tilesetLoadAbortController.abort();
+            this.tilesetLoadAbortController = null;
+            this.tilesetLoadGeneration++;
         }
 
         const hasPrimaryModel = files.some((file) => {
@@ -7713,7 +7744,11 @@ class Viewer {
         this.destroyTileManager();
         const loadGeneration = this.tilesetLoadGeneration;
 
-        const url = file.url ?? file.filename;
+        const loadAbortController = new AbortController();
+        this.tilesetLoadAbortController = loadAbortController;
+        let url = file.url ?? file.filename;
+        const geoscan = isGeoscanUrl(url);
+        this.tilesetIsGeoscan = geoscan;
         const warnings: string[] = [];
 
         this.markSplatScene(url);
@@ -7723,7 +7758,7 @@ class Viewer {
         this.observer.set('ui.error', null);
         this.observer.set('ui.warnings', []);
         this.clearCta();
-        this.preloadLoadingBackgroundFromSettings(url, [file]).catch(() => {});
+        if (!geoscan) this.preloadLoadingBackgroundFromSettings(url, [file]).catch(() => {});
 
         // Ловитель теней — горизонтальная плоскость по низу габаритов сцены. Под одиночной
         // моделью он на месте, а тайлсет приносит собственный рельеф: плоскость режет его
@@ -7731,9 +7766,9 @@ class Viewer {
         // включить её обратно.
         this.observer.set('shadowCatcher.enabled', false);
 
-        // Освещённость контента пока неизвестна — определим по первому пришедшему тайлу
-        // (см. `handleTileChange`). Панель по этому флагу подписывает Lit (PBR) или Unlit.
-        this.observer.set('scene.tilesetLit', null);
+        // Geoscan defaults to baked photogrammetry colours. Other sources are detected
+        // from the first visible material unless the user explicitly chooses Unlit.
+        this.observer.set('scene.tilesetLit', this.useUnlitTileMaterials() ? false : null);
 
         // Tiles Debug — сессионный инструмент. Новый тайлсет всегда открывается в чистом
         // production-виде, даже если на предыдущем были включены контуры или заливка.
@@ -7756,6 +7791,11 @@ class Viewer {
 
         let archiveProvider: ThreeTzResourceProvider | undefined;
         try {
+            if (geoscan) {
+                file = await prepareGeoscanFile(file, this.observer.get('ui.language'), loadAbortController.signal);
+                url = file.url;
+                loadAbortController.signal.throwIfAborted();
+            }
             if (this.isThreeTzFilename(file.filename ?? url)) {
                 archiveProvider = await ThreeTzResourceProvider.open(file);
             }
@@ -7764,6 +7804,12 @@ class Viewer {
                 return;
             }
         } catch (err) {
+            if (loadGeneration !== this.tilesetLoadGeneration) return;
+            if (err instanceof DOMException && err.name === 'AbortError') {
+                this.observer.set('ui.spinner', false);
+                this.observer.set('ui.cta', this.observer.get('scene.nodes') === '[]');
+                return;
+            }
             console.error(err);
             this.observer.set('ui.error', err?.toString() ?? String(err));
             this.observer.set('ui.loadProgress', 100);
@@ -7779,7 +7825,9 @@ class Viewer {
             parent: this.sceneContentRoot,
             onChange: transformChanged => this.handleTileChange(transformChanged),
             onWarning: message => warnings.push(message),
-            resourceProvider: archiveProvider
+            resourceProvider: archiveProvider,
+            frameRootContent: geoscan,
+            forceUnlit: this.useUnlitTileMaterials()
         });
         this.tileManager = manager;
 
@@ -7819,7 +7867,7 @@ class Viewer {
 
             // 3D Tiles use the same sidecar convention as regular models:
             // `tileset.model-viewer-settings.json` beside `tileset.json`.
-            const settingsApplied = await this.tryFetchAndApplySettings(url, [file]);
+            const settingsApplied = !geoscan && await this.tryFetchAndApplySettings(url, [file]);
             if (this.tileManager !== manager) {
                 return;
             }
@@ -7835,7 +7883,7 @@ class Viewer {
             this.dirtyBounds = true;
             this.calcSceneBounds(this.sceneBounds);
             this.calcSceneBounds(this.dynamicSceneBounds);
-            this.focus(true);
+            this.focus(true, undefined, geoscan ? new Vec3(-1, -1, -1).normalize() : Vec3.FORWARD);
             this.fitCameraClipPlanes();
 
             if (warnings.length > 0) {
@@ -8292,12 +8340,20 @@ class Viewer {
 
     private destroyTileManager() {
         this.tilesetLoadGeneration++;
+        this.tilesetLoadAbortController?.abort();
+        this.tilesetLoadAbortController = null;
         if (this.observer.get('debug.tilePick')) {
             this.observer.set('debug.tilePick', false);
         }
         this.tileManager?.destroy();
         this.tileManager = null;
+        this.tilesetIsGeoscan = false;
         this.updateViewCubeVisibility();
+    }
+
+    private useUnlitTileMaterials() {
+        const mode = this.observer.get('camera.tilesetLighting') ?? 'auto';
+        return mode === 'unlit' || (mode === 'auto' && this.tilesetIsGeoscan);
     }
 
     /**

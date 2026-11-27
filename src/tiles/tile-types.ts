@@ -23,6 +23,7 @@ export type TileBoundingVolumeJson = {
 
 export type TileContentJson = {
     uri?: string;
+    boundingVolume?: TileBoundingVolumeJson;
     /** 3D Tiles 1.0 писала `url`; читаем оба. */
     url?: string;
 };

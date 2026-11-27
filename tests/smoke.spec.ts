@@ -282,6 +282,60 @@ test('fly movement speed is configurable from the Controls menu and saved', asyn
     });
 });
 
+test('walking look speed is separate from movement speed and only affects walking', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('h3d.tour.v1.seen', '1'));
+    await page.goto('/?webgl&lang=ru&load=static%2Ftest-assets%2FBoxTextured.glb');
+    await waitForViewer(page);
+    await page.waitForFunction(() => (window as any).viewer.observer.get('ui.spinner') === false);
+    await page.evaluate(() => {
+        const o = (window as any).viewer.observer;
+        o.set('camera.mode', 'walk');
+        o.set('camera.flySpeed', 2.5);
+    });
+    await page.locator('#info-button').click();
+    const control = page.locator('.walk-look-speed-control');
+    await expect(control).toBeVisible();
+    await expect(control).toContainText('Скорость обзора');
+    const input = control.locator('input').first();
+    await input.fill('2');
+    await input.press('Enter');
+    await expect.poll(() => page.evaluate(() => (window as any).viewer.cameraControls.walkLookSpeed)).toBe(2);
+    await page.locator('#info-button').click();
+    const result = await page.evaluate(() => {
+        const v = (window as any).viewer;
+        const c = v.cameraControls;
+        const originalRead = c._desktopInput.read;
+        c._desktopInput.read = () => ({ key: new Array(256).fill(0), button: [0, 0, 0], mouse: [10, 0], wheel: [0] });
+        const Vec3 = c.getPosition().constructor;
+        const turn = (mode: string, multiplier: number) => {
+            c.reset(new Vec3(0, 2, 0), new Vec3(0, 2, 5));
+            v.observer.set('camera.mode', mode);
+            v.observer.set('camera.walkLookSpeed', multiplier);
+            c.update(1 / 60);
+            return Math.abs(c._pose.angles.y);
+        };
+        try {
+            const walk1 = turn('walk', 1);
+            const walk2 = turn('walk', 2);
+            const fly1 = turn('fly', 1);
+            const fly2 = turn('fly', 2);
+            return {
+                walk1, walk2, fly1, fly2,
+                movement: c.flySpeed, saved: v.settingsService.getSettingsData().camera.walkLookSpeed
+            };
+        } finally {
+            c._desktopInput.read = originalRead;
+        }
+    });
+    expect(result.walk1).toBeGreaterThan(0);
+    expect(result.walk2 / result.walk1).toBeCloseTo(2, 4);
+    expect(result.fly2 / result.fly1).toBeCloseTo(1, 4);
+    expect(result.movement).toBe(2.5);
+    expect(result.saved).toBe(2);
+    await page.locator('#info-button').click();
+    await expect(control).toBeHidden();
+});
+
 test('camera mode button cycles orbit, fly and grounded walk', async ({ page }) => {
     test.setTimeout(budget(120000));
     await page.goto('/?webgl&load=static%2Ftest-assets%2FBoxTextured.glb');

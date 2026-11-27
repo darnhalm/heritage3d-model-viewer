@@ -283,6 +283,8 @@ class CameraControls {
     // User-adjustable multiplier for movement while the fly controller is active.
     flySpeed = 1;
 
+    walkLookSpeed = 1;
+
     /** Walking dimensions are in scene units and updated from the viewer's unit calibration. */
     private _walkEyeHeight = 1.75;
 
@@ -852,6 +854,7 @@ class CameraControls {
         const orbit = +(this._mode === 'orbit');
         const fly = +(this._mode === 'fly');
         const walk = +(this._mode === 'walk');
+        const lookSpeed = this.orbitSpeed * (walk ? this.walkLookSpeed : 1);
         const double = +(this._state.touches > 1);
         const desktopPan = this._state.mouse[2] || +(button[2] === -1);
         const touchPan = this._mouseButtonsInverted ? +(this._state.touches === 1) : double;
@@ -903,11 +906,11 @@ class CameraControls {
         } else {
             v.set(0, 0, 0);
             const mouseRotate = new Vec3(mouse[0], mouse[1], 0);
-            v.add(mouseRotate.mulScalar((1 - desktopPan) * this.orbitSpeed * dt));
+            v.add(mouseRotate.mulScalar((1 - desktopPan) * lookSpeed * dt));
             // Свайп двумя пальцами вращает так же, как перетаскивание: содержимое едет за
             // пальцами, поэтому знак обратный прокрутке.
             const swipeRotate = new Vec3(-this._trackpadScroll.x, -this._trackpadScroll.y, 0);
-            v.add(swipeRotate.mulScalar(this.orbitSpeed * dt));
+            v.add(swipeRotate.mulScalar(lookSpeed * dt));
             this._trackpadScroll.set(0, 0);
             deltas.rotate.append([v.x, v.y, v.z]);
         }
@@ -925,9 +928,9 @@ class CameraControls {
         // mobile rotate
         v.set(0, 0, 0);
         const orbitRotate = new Vec3(touch[0], touch[1], 0);
-        v.add(orbitRotate.mulScalar(orbit * (1 - touchPan) * this.orbitSpeed * dt));
+        v.add(orbitRotate.mulScalar(orbit * (1 - touchPan) * lookSpeed * dt));
         const flyRotate = new Vec3(rightInput[0], rightInput[1], 0);
-        v.add(flyRotate.mulScalar(fly * this.orbitSpeed * dt));
+        v.add(flyRotate.mulScalar(fly * lookSpeed * dt));
         deltas.rotate.append([v.x, v.y, v.z]);
 
         // gamepad move
@@ -939,7 +942,7 @@ class CameraControls {
         // gamepad rotate
         v.set(0, 0, 0);
         const stickRotate = new Vec3(rightStick[0], rightStick[1], 0);
-        v.add(stickRotate.mulScalar(this.orbitSpeed * dt));
+        v.add(stickRotate.mulScalar(lookSpeed * dt));
         deltas.rotate.append([v.x, v.y, v.z]);
 
         // Выбег отбирает ввод у штатного контроллера, поэтому любое нажатие кнопки мыши его

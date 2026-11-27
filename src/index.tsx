@@ -200,6 +200,8 @@ const observerData: ObserverData = {
         hq: !isMobileLayout(),
         mode: 'orbit',
         flySpeed: 1,
+        walkLookSpeed: 1,
+        tilesetLighting: 'auto',
         walkHeight: 'average',
         surfacePivot: true,
         mouseButtonsInverted: false,

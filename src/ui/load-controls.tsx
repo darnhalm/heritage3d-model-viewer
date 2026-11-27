@@ -81,7 +81,7 @@ const LoadControls = (props: { observerData: ObserverData; setProperty: SetPrope
                     <Label class='mobile' text={t('Click to open files', lang)} />
                 </div>
                 <Label id='or-text' text={t('OR', lang)} class="centered-label" />
-                <TextInput class='secondary' id='glb-url-input' placeholder='Enter model or .3tz URL' keyChange onValidate={(value: string) => {
+                <TextInput class='secondary' id='glb-url-input' placeholder={t('Enter model URL or public Geoscan link', lang)} keyChange onValidate={(value: string) => {
                     const isValid = validUrl(value);
                     setUrlInputValid(isValid);
                     return isValid;

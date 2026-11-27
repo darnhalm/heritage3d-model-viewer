@@ -9,7 +9,9 @@ export interface File {
     filename?: string,
     sizeBytes?: number,
     /** Original local file, retained for seekable archive readers such as 3TZ. */
-    blob?: Blob
+    blob?: Blob,
+    /** Range requests for public projects whose backing archive URL is refreshed server-side. */
+    archiveFetch?: (input: string, init?: Parameters<typeof fetch>[1]) => Promise<Response>
 }
 
 export interface Option {
@@ -116,6 +118,10 @@ export interface ObserverData {
         hq: boolean,
         mode: 'orbit' | 'fly' | 'walk',
         flySpeed: number,
+        /** Look rotation multiplier used only while walking. */
+        walkLookSpeed?: number,
+        /** Auto treats Geoscan as baked photogrammetry and keeps other tilesets as authored. */
+        tilesetLighting?: 'auto' | 'unlit' | 'source',
         /** Walking eye-height preset, converted using the measurement scene scale. */
         walkHeight?: 'short' | 'average' | 'tall',
         /** Orbit around the model surface under the initial drag point. */

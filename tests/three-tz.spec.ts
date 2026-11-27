@@ -171,6 +171,8 @@ test('opens a local .3tz and streams its GLB content', async ({ page }) => {
         buffer: archive
     });
     await waitForFirstTile(page);
+    await page.waitForFunction(() => (window as any).viewer.tileManager.getVisibleMeshInstances().length > 0);
+    expect(await page.evaluate(() => (window as any).viewer.tileManager.getVisibleMeshInstances()[0].material.useLighting)).toBe(true);
 
     const state = await page.evaluate(() => ({
         filename: (window as any).viewer.observer.get('scene.filenames')[0],

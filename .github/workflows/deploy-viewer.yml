@@ -30,7 +30,12 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit
 
+      - name: Geoscan adapter tests
+        run: node --test server/geoscan.test.mjs
+
       - name: Build
+        env:
+          GEOSCAN_PROXY_URL: ${{ vars.GEOSCAN_PROXY_URL }}
         run: npm run build
 
       - name: Download Harpocrates sample model

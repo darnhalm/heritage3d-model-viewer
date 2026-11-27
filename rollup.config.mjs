@@ -102,6 +102,7 @@ export default {
         copyAndWatch(TARGETS),
         replace({
             values: {
+                __GEOSCAN_PROXY_URL__: JSON.stringify(process.env.GEOSCAN_PROXY_URL || ''),
                 // NOTE: this is required for react (??) - see https://github.com/rollup/rollup/issues/487#issuecomment-177596512
                 'process.env.NODE_ENV': JSON.stringify(BUILD_TYPE === 'release' ? 'production' : 'development')
             },

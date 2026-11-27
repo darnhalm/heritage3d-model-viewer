@@ -1511,6 +1511,21 @@ class LeftPanel extends React.Component <{ observerData: ObserverData, setProper
                     )}
                     {showMaterialsTab && tab === 'materials' && (
                         <Container id='materials-panel' class='tab-panel'>
+                            {observerData.scene.isTileset && (
+                                <div className='tileset-lighting-control'>
+                                    <Select
+                                        label={t('Model lighting', lang)}
+                                        type='string'
+                                        options={[
+                                            { v: 'auto', t: t('Automatic', lang) },
+                                            { v: 'unlit', t: t('Without lighting', lang) },
+                                            { v: 'source', t: t('As in source file', lang) }
+                                        ]}
+                                        value={observerData.camera.tilesetLighting ?? 'auto'}
+                                        setProperty={(value: string) => setProperty('camera.tilesetLighting', value)}
+                                    />
+                                </div>
+                            )}
                             <div className='materials-layer-list'>
                                 {materialVariantNames.length > 0 && (
                                     <div className='materials-layer-category materials-variant-category'>
