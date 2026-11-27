@@ -241,9 +241,11 @@ export function createGeoscanHandler({
         const origin = req.headers.get('origin');
         // Reject other browser origins before any upstream work. CORS is not authentication:
         // same-origin requests and server clients can omit Origin altogether.
-        if (origin && !origins.has(origin)) return json({ error: 'origin_not_allowed' }, 403);
-        const response = await handle(req);
-        if (origin) response.headers.set('access-control-allow-origin', origin);
+        const allowed = origin && origins.has(origin);
+        const response = origin && !allowed ? json({ error: 'origin_not_allowed' }, 403) : await handle(req);
+        // Cloud Functions inserts '*' when the handler omits this header. Always provide
+        // an allowed origin explicitly, including errors and requests without Origin.
+        response.headers.set('access-control-allow-origin', allowed ? origin : (origins.values().next().value ?? PRODUCTION_ORIGIN));
         return response;
     };
 }

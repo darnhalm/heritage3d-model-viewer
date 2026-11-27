@@ -181,7 +181,7 @@ test('rejects foreign origins before upstream access, including preflights and n
             const req = requestFor('resolve', { origin: value });
             const response = await handle(new Request(req, { method }));
             assert.equal(response.status, 403);
-            assert.equal(response.headers.get('access-control-allow-origin'), null);
+            assert.equal(response.headers.get('access-control-allow-origin'), origin);
             assert.equal(response.headers.get('vary'), 'Origin');
         }
     }
@@ -200,5 +200,5 @@ test('CORS varies per response even when archive bytes are shared between allowe
     req.headers.delete('origin');
     const serverResponse = await f.handle(req);
     assert.equal(serverResponse.status, 200);
-    assert.equal(serverResponse.headers.get('access-control-allow-origin'), null);
+    assert.equal(serverResponse.headers.get('access-control-allow-origin'), origin);
 });
