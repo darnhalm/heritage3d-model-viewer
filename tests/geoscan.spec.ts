@@ -25,14 +25,15 @@ test.beforeAll(async () => {
     })));
     await writer.add('tile.glb', new Uint8ArrayReader(await readFile(path.resolve('static/test-assets/BoxTextured.glb'))));
     await writer.add('padding.bin', new Uint8ArrayReader(new Uint8Array(512 * 1024)), { level: 0 });
-    // A large legacy index forces a >512 KiB random-access read before the ZIP fallback.
+    // A large legacy index forces a >1 MiB random-access read before the ZIP fallback.
     // The proxy must still receive only bounded requests, including during index parsing.
     await writer.add('@3dtilesIndex1@', new Uint8ArrayReader(new Uint8Array(24 * 60000)), { level: 0 });
     archive = await writer.close();
 });
 
-const mockGeoscan = async (page: Page, multiple = false, error?: string) => {
+const mockGeoscan = async (page: Page, multiple = false, error?: string, transientFailures = 0) => {
     const ranges: string[] = [];
+    const failedRanges: string[] = [];
     const requestedDatasets: string[] = [];
     let active = 0;
     let peak = 0;
@@ -50,12 +51,17 @@ const mockGeoscan = async (page: Page, multiple = false, error?: string) => {
         requestedDatasets.push(url.searchParams.get('dataset'));
         const range = req.headers().range;
         expect(range).toBeTruthy();
+        if (transientFailures-- > 0) {
+            failedRanges.push(range);
+            await route.fulfill({ status: 503, json: { error: 'archive_unavailable' } });
+            return;
+        }
         ranges.push(range);
         const suffix = /^bytes=-(\d+)$/.exec(range);
         const explicit = /^bytes=(\d+)-(\d+)$/.exec(range);
         const start = suffix ? Math.max(0, archive.length - Number(suffix[1])) : Number(explicit![1]);
         const end = suffix ? archive.length - 1 : Math.min(Number(explicit![2]), archive.length - 1);
-        expect(end - start + 1).toBeLessThanOrEqual(512 * 1024);
+        expect(end - start + 1).toBeLessThanOrEqual(1024 * 1024);
         const body = Buffer.from(archive.subarray(start, end + 1));
         active++;
         peak = Math.max(peak, active);
@@ -66,7 +72,7 @@ const mockGeoscan = async (page: Page, multiple = false, error?: string) => {
         } });
         active--;
     });
-    return { ranges, requestedDatasets, peak: () => peak };
+    return { ranges, failedRanges, requestedDatasets, peak: () => peak };
 };
 
 const waitForTile = async (page: Page) => {
@@ -111,6 +117,30 @@ test('URL input offers a dataset choice and opens the selected model', async ({ 
     await waitForTile(page);
     expect(requestedDatasets.every(value => value === second)).toBe(true);
     expect(await page.evaluate(() => (window as any).viewer.observer.get('scene.filenames'))).toEqual(['Church interior.3tz']);
+});
+
+test('temporary archive failures retry the same range and recover without reloading the scene', async ({ page }) => {
+    const { failedRanges, ranges } = await mockGeoscan(page, false, undefined, 2);
+    await page.goto(`/?webgl&load=${encodeURIComponent(source)}`);
+    await page.waitForFunction(() => (window as any).viewer?.tileManager?.getVisibleMeshInstances().length > 0);
+    expect(failedRanges).toEqual(['bytes=-65557', 'bytes=-65557']);
+    expect(ranges[0]).toBe('bytes=-65557');
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('ui.error'))).toBeFalsy();
+    expect(await page.evaluate(() => (window as any).viewer.getTileStats().failed)).toBe(0);
+});
+
+test('switching models cancels an archive retry backoff', async ({ page }) => {
+    const { failedRanges } = await mockGeoscan(page, false, undefined, 10);
+    await page.goto(`/?webgl&load=${encodeURIComponent(source)}`);
+    await expect.poll(() => failedRanges.length).toBe(1);
+    await page.evaluate(() => (window as any).viewer.loadFiles([{
+        url: new URL('/static/test-assets/BoxTextured.glb', location.href).href,
+        filename: 'BoxTextured.glb'
+    }], true));
+    await page.waitForFunction(() => (window as any).viewer.meshInstances.length > 0 && !(window as any).viewer.observer.get('ui.spinner'));
+    await page.waitForTimeout(1100);
+    expect(failedRanges).toHaveLength(1);
+    expect(await page.evaluate(() => (window as any).viewer.observer.get('ui.error'))).toBeFalsy();
 });
 
 test('Geoscan uses baked colours by default and can restore the authored lighting', async ({ page }) => {

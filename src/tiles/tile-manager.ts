@@ -982,7 +982,9 @@ export class TileManager {
         // Гистерезис: чтобы на границе порога уровень не мигал туда-сюда каждый кадр,
         // начинать уточнение дороже, чем его продолжать.
         const threshold = this.errorTarget() * (tile.wasRefined ? 1 - HYSTERESIS : 1 + HYSTERESIS);
-        const needsDetail = tile.error > threshold;
+        // Structural/external nodes have no drawable fallback of their own. Their children
+        // must be visited even when the wrapper's geometricError is zero.
+        const needsDetail = tile.contentUris.length === 0 || tile.error > threshold;
 
         // Уточняем по экранной ошибке (near/крупные — раньше), но при изоляции не глубже
         // выбранного уровня. Так на больших сценах далёкие/мелкие фрагменты не грузятся
@@ -1080,7 +1082,7 @@ export class TileManager {
      *
      * @param tile - Тайл.
      * @param selection - Список выбранных для отрисовки.
-     * @returns `true`, если тайл нечего ждать: контент готов, его нет вовсе или он упал.
+     * @returns `true`, если область покрыта готовым контентом либо заведомо пуста.
      */
     private selectSelf(tile: Tile, selection: Tile[]): boolean {
         // Изоляция уровня: тайлы не своей глубины не выбираем и не считаем «закрывающими»
@@ -1094,6 +1096,9 @@ export class TileManager {
         if (tile.implicit && !tile.implicit.expanded) {
             return false;
         }
+        // An unresolved external JSON is unknown coverage, including after a failed request.
+        // Treating it as an empty tile lets a REPLACE ancestor disappear too early.
+        if (tile.externalTilesetUri && !tile.externalRoot) return false;
         // Перемотка истории: тайл, доехавший позже отметки, для отбора ещё не существует —
         // ровно как в тот момент времени. Возвращаем «не закрывает», поэтому на экране
         // остаётся родитель, и кадр совпадает с тем, что зритель тогда и видел.
@@ -1103,12 +1108,12 @@ export class TileManager {
         if (tile.contentUris.length === 0) {
             return true;
         }
-        if (tile.state === TILE_READY) {
+        if (tile.state === TILE_READY && tile.entity) {
             selection.push(tile);
             return true;
         }
-        // Упавший контент не ждём вечно — иначе родитель навсегда останется на экране.
-        return tile.state === TILE_FAILED;
+        // A failed child does not cover its region. Keep the nearest ready ancestor visible.
+        return false;
     }
 
     /**
@@ -1256,29 +1261,37 @@ export class TileManager {
      */
     private requestExternalTileset(tile: Tile) {
         const uri = tile.externalTilesetUri;
-        tile.state = TILE_LOADING;
-        fetchTilesetJson(uri, this.resourceProvider)
-        .then((json) => {
-            if (this.disposed) {
-                return;
+        tile.state = TILE_QUEUED;
+        const token = { cancelled: false, controller: new AbortController() };
+        tile.loadToken = token;
+        // External JSON can fan out into hundreds of archive reads. Share the geometry
+        // queue so metadata cannot flood the connection and delay the visible model.
+        this.queue.push({
+            tile,
+            run: async () => {
+                if (token.cancelled || this.disposed) return;
+                tile.state = TILE_LOADING;
+                try {
+                    const json = await fetchTilesetJson(uri, this.resourceProvider, token.controller.signal);
+                    if (token.cancelled || this.disposed) return;
+                    const warnings: string[] = [];
+                    tile.externalRoot = buildTileTree(json.root, {
+                        baseUrl: uri,
+                        parentTransform: tile.transform,
+                        tilesetToWorld: this.tilesetToWorld,
+                        parent: tile,
+                        warnings,
+                        provider: this.resourceProvider
+                    });
+                    tile.state = TILE_READY;
+                    this.markLoadOrder(tile);
+                    [...new Set(warnings)].forEach(w => this.onWarning(w));
+                    this.onChange();
+                } catch (err) {
+                    tile.state = token.cancelled ? TILE_UNLOADED : TILE_FAILED;
+                    if (!token.cancelled) console.warn(`Внешний тайлсет не загрузился: ${uri}`, err);
+                }
             }
-            const warnings: string[] = [];
-            tile.externalRoot = buildTileTree(json.root, {
-                baseUrl: uri,
-                parentTransform: tile.transform,
-                tilesetToWorld: this.tilesetToWorld,
-                parent: tile,
-                warnings,
-                provider: this.resourceProvider
-            });
-            tile.state = TILE_READY;
-            this.markLoadOrder(tile);
-            [...new Set(warnings)].forEach(w => this.onWarning(w));
-            this.onChange();
-        })
-        .catch((err) => {
-            tile.state = TILE_FAILED;
-            console.warn(`Внешний тайлсет не загрузился: ${uri}`, err);
         });
     }
 
@@ -2179,9 +2192,6 @@ export class TileManager {
             forEachTile(this.rootTile, (tile) => {
                 if (tile.state !== TILE_UNLOADED) {
                     this.unloadTile(tile);
-                }
-                if (tile.externalRoot) {
-                    forEachTile(tile.externalRoot, child => this.unloadTile(child));
                 }
             });
         }

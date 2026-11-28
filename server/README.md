@@ -10,12 +10,17 @@ This server component is therefore required; the Object Storage website alone ca
 serve these links. The browser retains the public project URL and the selected dataset,
 and requests archive byte ranges from the adapter. Signed URLs stay on the server, are
 renewed before expiration and retried once on expiration. Each response is limited to
-1 MiB, and full-archive requests are refused. The viewer reads in 512 KiB windows,
+1 MiB, and full-archive requests are refused. The viewer reads in 1 MiB windows,
 with up to four windows per random-access read in parallel. The adapter coalesces
 identical in-flight byte requests and retains up to 32 MiB / 256 ranges for 30 seconds,
 scoped to the public access link, dataset and project version. Public-access metadata
 is still checked before cache lookup; responses remain `no-store` in the browser.
 No model is copied into this repository or uploaded to the viewer's bucket.
+
+The client retries the same range at most twice after a transport error or HTTP
+429/500/502/503/504, with abortable delays of 500 ms and 1 s. Changing scenes cancels
+the backoff. Access errors and changed archives are not retried by this mechanism;
+server-side signature renewal remains a separate single retry.
 
 ## Local preview
 

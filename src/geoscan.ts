@@ -43,6 +43,15 @@ const responseError = async (response: Response, lang?: string): Promise<Error> 
     return new Error(t(key, lang));
 };
 
+const retryDelay = (milliseconds: number, signal: AbortSignal): Promise<void> => new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const wake = AbortSignal.any([signal, AbortSignal.timeout(milliseconds)]);
+    wake.addEventListener('abort', () => {
+        if (signal.aborted) reject(signal.reason);
+        else resolve();
+    }, { once: true });
+});
+
 /**
  * Select one dataset without downloading an archive.
  *
@@ -137,15 +146,33 @@ export async function prepareGeoscanFile(file: ViewerFile, lang: string, signal:
         url: source.href,
         filename: `${dataset.name.replace(/[\\/]/g, '_').replace(/\.3tz$/i, '')}.3tz`,
         archiveFetch: async (_input, init) => {
-            const response = await fetch(archive, {
-                method: init?.method ?? 'GET',
-                headers: init?.headers,
-                signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal,
-                credentials: 'omit',
-                cache: 'no-store'
-            });
-            if (!response.ok) throw await responseError(response, lang);
-            return response;
+            const requestSignal = init?.signal ? AbortSignal.any([signal, init.signal]) : signal;
+            // Keep a temporary transport/upstream failure from permanently failing a tile.
+            // Access errors and changed archives are not retried here.
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    // eslint-disable-next-line no-await-in-loop -- bounded retries of the same byte range
+                    const response = await fetch(archive, {
+                        method: init?.method ?? 'GET',
+                        headers: init?.headers,
+                        signal: requestSignal,
+                        credentials: 'omit',
+                        cache: 'no-store'
+                    });
+                    if (response.ok) return response;
+                    if (attempt === 2 || ![429, 500, 502, 503, 504].includes(response.status)) {
+                        // eslint-disable-next-line no-await-in-loop -- only parse the final error response
+                        throw await responseError(response, lang);
+                    }
+                    // eslint-disable-next-line no-await-in-loop -- release the failed body before retrying
+                    await response.body?.cancel();
+                } catch (error) {
+                    if (requestSignal.aborted || attempt === 2 || !(error instanceof TypeError)) throw error;
+                }
+                // eslint-disable-next-line no-await-in-loop -- abortable backoff, never concurrent duplicate retries
+                await retryDelay(500 * (attempt + 1), requestSignal);
+            }
+            throw new Error(t('Could not connect to Geoscan. Please try again later.', lang));
         }
     };
 }

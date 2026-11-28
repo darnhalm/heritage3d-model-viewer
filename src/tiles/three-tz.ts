@@ -17,6 +17,8 @@ import type { TileResourceProvider } from './tile-resource';
 
 // URL schemes must start with a letter, so the on-disk extension cannot be used verbatim.
 const ARCHIVE_ORIGIN = 'threetz://archive/';
+// Match the adapter's bounded response limit to avoid doubling long-distance round trips.
+const RANGE_WINDOW_SIZE = 1024 * 1024;
 
 const normalizePath = (value: string): string => {
     const parts: string[] = [];
@@ -58,7 +60,7 @@ interface ArchiveBackend {
 // still sends one request for the complete read. Large 3TZ indexes use that API too.
 class WindowedHttpRangeReader extends HttpRangeReader {
     async readUint8Array(index: number, length: number): Promise<Uint8Array> {
-        const windowSize = 512 * 1024;
+        const windowSize = RANGE_WINDOW_SIZE;
         if (length <= windowSize) return super.readUint8Array(index, length);
         const result = new Uint8Array(length);
         const concurrency = 4;
@@ -77,7 +79,7 @@ class WindowedHttpRangeReader extends HttpRangeReader {
 const createReader = (file: ViewerFile): Reader<unknown> => {
     const httpOptions: HttpOptions = {
         combineSizeEocd: true,
-        ...(file.archiveFetch ? { fetch: file.archiveFetch, maximumRangeSize: 512 * 1024 } : {})
+        ...(file.archiveFetch ? { fetch: file.archiveFetch, maximumRangeSize: RANGE_WINDOW_SIZE } : {})
     };
     return (file.blob ?
         new BlobReader(file.blob) :

@@ -786,6 +786,15 @@ class CameraControls {
             return;
         }
 
+        // Missing streamed triangles (or an actual gap) are not evidence of free fall.
+        // Keep the last supported position until a walkable surface is available again.
+        if (this._walkGrounded && !walkable) {
+            this._pose.position.copy(previous);
+            this._walkVerticalVelocity = 0;
+            this._walkController.attach(this._pose, false);
+            return;
+        }
+
         if (canStepUp && floorEyeY >= previous.y - this.walkStepHeight) {
             this._pose.position.y = floorEyeY;
             this._walkGrounded = true;

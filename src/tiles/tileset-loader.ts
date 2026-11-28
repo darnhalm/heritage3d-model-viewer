@@ -34,13 +34,15 @@ export function resolveTileUri(
  *
  * @param url - Адрес tileset.json.
  * @param provider - Источник ресурсов тайлсета.
+ * @param signal - Отмена чтения при смене сцены.
  * @returns Разобранный JSON.
  */
 export async function fetchTilesetJson(
     url: string,
-    provider: TileResourceProvider = networkTileResourceProvider
+    provider: TileResourceProvider = networkTileResourceProvider,
+    signal?: AbortSignal
 ): Promise<TilesetJson> {
-    const response = await provider.fetch(url);
+    const response = await provider.fetch(url, { signal });
     if (!response.ok) {
         throw new Error(`Не удалось загрузить tileset.json (HTTP ${response.status}): ${url}`);
     }
@@ -249,4 +251,5 @@ export function findTightBoundingBox(tilesetJson: TilesetJson, tileJson: TileJso
 export function forEachTile(tile: Tile, fn: (tile: Tile) => void) {
     fn(tile);
     tile.children.forEach(child => forEachTile(child, fn));
+    if (tile.externalRoot) forEachTile(tile.externalRoot, fn);
 }
